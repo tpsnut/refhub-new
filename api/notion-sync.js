@@ -16,6 +16,30 @@
 // ⚠️ ข้อจำกัดของเวอร์ชันนี้ (MVP): sync ได้ทางเดียว (แอป -> Notion) และ sync เฉพาะโน้ตที่ยังไม่เคยส่งไปเท่านั้น
 // (เช็คจาก field notionId ที่ frontend เก็บไว้ในตัวโน้ตหลัง sync สำเร็จ) ถ้าแก้ไขโน้ตหลัง sync แล้ว เนื้อหาใน Notion จะไม่อัปเดตตาม
 // ต้องการฟีเจอร์ update เนื้อหาเดิมใน Notion ด้วย บอกได้ ทำเพิ่มให้ทีหลังได้
+// Notion จำกัดสูงสุด 100 blocks ต่อการสร้างหน้าหนึ่งครั้ง และ 2000 ตัวอักษรต่อ rich_text หนึ่งก้อน — โค้ดด้านล่างตัดให้พอดี
+
+const richText = (text) => [{ type: "text", text: { content: String(text || "").slice(0, 1900) } }];
+
+// แปลง block ของ editor (BlockNote) ให้เป็น block ของ Notion API
+function blockToNotion(b) {
+  const text = Array.isArray(b.content) ? b.content.map((c) => c.text || "").join("") : (typeof b.content === "string" ? b.content : "");
+  if (b.type === "heading") {
+    const lvl = Math.min(Math.max(b.props?.level || 2, 1), 3);
+    return { object: "block", type: `heading_${lvl}`, [`heading_${lvl}`]: { rich_text: richText(text) } };
+  }
+  if (b.type === "bulletListItem") return { object: "block", type: "bulleted_list_item", bulleted_list_item: { rich_text: richText(text) } };
+  if (b.type === "numberedListItem") return { object: "block", type: "numbered_list_item", numbered_list_item: { rich_text: richText(text) } };
+  if (b.type === "checkListItem") return { object: "block", type: "to_do", to_do: { rich_text: richText(text), checked: !!b.props?.checked } };
+  if (b.type === "toggleListItem") return { object: "block", type: "toggle", toggle: { rich_text: richText(text) } };
+  if (b.type === "image" && b.props?.url) return { object: "block", type: "image", image: { type: "external", external: { url: b.props.url } } };
+  if (b.type === "file" && b.props?.url) return { object: "block", type: "file", file: { type: "external", external: { url: b.props.url }, caption: richText(b.props?.name || "") } };
+  return { object: "block", type: "paragraph", paragraph: { rich_text: richText(text) } };
+}
+const migrateBody = (body) => {
+  if (Array.isArray(body) && body.length) return body;
+  if (typeof body === "string" && body) return [{ type: "paragraph", content: body }];
+  return [];
+};
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
@@ -34,6 +58,7 @@ export default async function handler(req, res) {
   const results = [];
   for (const n of notes) {
     try {
+      const children = migrateBody(n.body).map(blockToNotion).slice(0, 100); // Notion จำกัด 100 blocks/ครั้ง
       const r = await fetch("https://api.notion.com/v1/pages", {
         method: "POST",
         headers: {
@@ -49,9 +74,7 @@ export default async function handler(req, res) {
             Pinned: { checkbox: !!n.pinned },
             Date: { date: { start: n.date } },
           },
-          children: n.body
-            ? [{ object: "block", type: "paragraph", paragraph: { rich_text: [{ type: "text", text: { content: n.body.slice(0, 2000) } }] } }]
-            : [],
+          children,
         }),
       });
       const data = await r.json();
