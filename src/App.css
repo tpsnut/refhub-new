@@ -1,0 +1,5 @@
+import RefHub from "./RefHub";
+
+export default function App() {
+  return <RefHub />;
+}

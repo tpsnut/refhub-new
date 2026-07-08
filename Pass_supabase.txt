@@ -1,0 +1,8 @@
+password Project:
+UDIbR6MT1O7oNiPN
+
+API url:
+https://sgcecpzabdafpdfacikk.supabase.co/
+
+Publishable key
+sb_publishable_EvrZ3ZNmw3aBuGkWGiTo0w_q6G7sOth
