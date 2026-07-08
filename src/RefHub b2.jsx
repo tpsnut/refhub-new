@@ -4,7 +4,7 @@ import {
   Sun, Moon, Send, Check, Trash2, X, Wallet, Target, BookOpen, ChevronRight,
   Sparkles, Clock, Search, Volume2, VolumeX, Pencil, Download, ArrowLeft,
   Utensils, Car, ShoppingBag, Receipt, Gamepad2, HeartPulse, Briefcase, Gift, Coffee, Music,
-  Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi
+  Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall
 } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, ResponsiveContainer, Tooltip } from "recharts";
 // 📝 BlockNote — editor แบบ Notion (toggle, checklist, หัวข้อ, แนบรูป/ไฟล์) สำหรับหน้าโน้ตฉบับเต็ม
@@ -14,7 +14,7 @@ import "@blocknote/core/fonts/inter.css";
 import "@blocknote/mantine/style.css";
 // 🌐 ต่อท่อระบบฐานข้อมูล Cloud
 import { supabase } from "./supabaseClient";
-// userId ตอนนี้มาจาก Supabase Auth session แล้ว (ดูใน RefHub component ด้านล่าง) ไม่ใช่ค่าคงที่จาก .env อีกต่อไป
+const USER_ID = import.meta.env.VITE_USER_ID;
 
 // ---------------- Mentors ----------------
 const MENTORS = {
@@ -186,12 +186,6 @@ const thMonth = (ym) => { const [y, m] = ym.split("-"); return ["ม.ค.","ก.
 
 export default function RefHub() {
   const [loaded, setLoaded] = useState(false);
-
-  // 🔐 ระบบล็อกอินจริง (Supabase Auth) — แทนที่ userId คงที่เดิมจาก .env
-  const [session, setSession] = useState(null);       // session ของ Supabase Auth (null = ยังไม่ล็อกอิน)
-  const [authChecked, setAuthChecked] = useState(false); // true เมื่อเช็ค session ครั้งแรกเสร็จแล้ว (กันจอกระพริบ)
-  const [authProfile, setAuthProfile] = useState(null);  // แถวในตาราง profiles: { approved, role, name, ... }
-  const userId = session?.user?.id || null;
   const [themeMode, setThemeMode] = useState("auto");
   const [mentor, setMentor] = useState("loid");
   const [theme, setTheme] = useState("default"); // 🎨 ธีมสีแอป: default | red | navy | twilight — แยกอิสระจาก mentor
@@ -233,7 +227,7 @@ export default function RefHub() {
   // load จาก Supabase Cloud
   useEffect(() => { 
     (async () => {
-      if (!userId) {
+      if (!USER_ID) {
         setLoaded(true);
         return;
       }
@@ -242,7 +236,7 @@ export default function RefHub() {
         const { data: uSettings } = await supabase
           .from("user_settings")
           .select("*")
-          .eq("user_id", userId)
+          .eq("user_id", USER_ID)
           .single();
 
         if (uSettings) {
@@ -254,7 +248,7 @@ export default function RefHub() {
         } else {
           // ถ้าเปิดซิงค์ครั้งแรกแล้วยังไม่มีข้อมูล ให้สร้างข้อมูล Row แรกทิ้งไว้ให้พี่เลย
           await supabase.from("user_settings").insert({
-            user_id: userId, name: profile.name || "Piyanut", mentor: mentor, theme_mode: themeMode, volume: volume
+            user_id: USER_ID, name: profile.name || "Piyanut", mentor: mentor, theme_mode: themeMode, volume: volume
           });
         }
 
@@ -262,7 +256,7 @@ export default function RefHub() {
         const { data: dbTx } = await supabase
           .from("transactions")
           .select("*")
-          .eq("user_id", userId)
+          .eq("user_id", USER_ID)
           .order("date", { ascending: false });
         if (dbTx) setTx(dbTx);
 
@@ -270,14 +264,14 @@ export default function RefHub() {
         const { data: dbGoals } = await supabase
           .from("goals")
           .select("*")
-          .eq("user_id", userId);
+          .eq("user_id", USER_ID);
         if (dbGoals) setGoals(dbGoals.map((g) => ({ ...g, doneDate: g.done_date || null })));
 
         // 4. ดึงสมุดโน้ต (Notes)
         const { data: dbNotes } = await supabase
           .from("notes")
           .select("*")
-          .eq("user_id", userId)
+          .eq("user_id", USER_ID)
           .order("date", { ascending: false });
         if (dbNotes) setNotes(dbNotes.map((n) => ({ ...n, notionId: n.notion_id || null })));
 
@@ -285,7 +279,7 @@ export default function RefHub() {
         const { data: dbPlaylist } = await supabase
           .from("playlists")
           .select("*")
-          .eq("user_id", userId);
+          .eq("user_id", USER_ID);
         if (dbPlaylist) {
           // แปลงชื่อฟิลด์ yt_id จากฐานข้อมูลกลับมาใช้ในแอป
           const mappedPlaylist = dbPlaylist.map(p => ({
@@ -303,7 +297,7 @@ export default function RefHub() {
       try { const fs = JSON.parse(localStorage.getItem("refhub:fontScale") || "null"); if (fs) setFontScale(fs); } catch (e) {}
       setLoaded(true);
     })(); 
-  }, [userId]);
+  }, []);
 
   // เซฟหมวดหมู่เพลงกลับลง localStorage ทุกครั้งที่เปลี่ยน
   useEffect(() => { if (!loaded) return; try { localStorage.setItem("refhub:folders", JSON.stringify(folders)); } catch (e) {} }, [folders, loaded]);
@@ -321,13 +315,13 @@ export default function RefHub() {
   // save ทั้ง Local และระบบ Cloud (Settings)
 // ⚡ ตัว Interceptor: ดักฟังการเปลี่ยนแปลงจากปุ่มเดิมของพี่ แล้วสั่งทำงานขนานคู่กันไปเลย!
 useEffect(() => {
-  if (!loaded || !userId) return;
+  if (!loaded || !USER_ID) return;
   // เมื่อใดก็ตามที่ปุ่มเดิมของพี่ทำฟังก์ชัน setGoals สำเร็จ และข้อมูลเปลี่ยน
   // เราจะใช้จุดนี้ตรวจเช็กและซิงค์ความต่างขึ้นตาราง Supabase ทันทีโดยอัตโนมัติ
   const syncGoalsToCloud = async () => {
     try {
       // ดึงข้อมูลล่าสุดจาก Cloud มาเทียบ
-      const { data: currentDb } = await supabase.from("goals").select("*").eq("user_id", userId);
+      const { data: currentDb } = await supabase.from("goals").select("*").eq("user_id", USER_ID);
       if (!currentDb) return;
 
       const dbMap = Object.fromEntries(currentDb.map((x) => [x.id, x]));
@@ -337,7 +331,7 @@ useEffect(() => {
       for (const g of goals) {
         const match = dbMap[g.id];
         if (!match) {
-          await supabase.from("goals").insert({ id: g.id, user_id: userId, text: g.text, done: g.done, date: g.date || todayStr(), done_date: g.doneDate || null });
+          await supabase.from("goals").insert({ id: g.id, user_id: USER_ID, text: g.text, done: g.done, date: g.date || todayStr(), done_date: g.doneDate || null });
         } else if (match.done !== g.done || (match.done_date || null) !== (g.doneDate || null)) {
           // 2. ตรวจสอบตัวที่สลับสถานะ ติ๊กถูก/เอาออก
           await supabase.from("goals").update({ done: g.done, done_date: g.doneDate || null }).eq("id", g.id);
@@ -357,16 +351,16 @@ useEffect(() => {
 
 // 🌐 sync รายการเงิน (tx) ขึ้น Supabase แบบเดียวกับ goals
 useEffect(() => {
-  if (!loaded || !userId) return;
+  if (!loaded || !USER_ID) return;
   const syncTxToCloud = async () => {
     try {
-      const { data: currentDb } = await supabase.from("transactions").select("id").eq("user_id", userId);
+      const { data: currentDb } = await supabase.from("transactions").select("id").eq("user_id", USER_ID);
       if (!currentDb) return;
       const dbIds = currentDb.map((x) => x.id);
       const localIds = tx.map((x) => x.id);
       for (const x of tx) {
         if (!dbIds.includes(x.id)) {
-          await supabase.from("transactions").insert({ id: x.id, user_id: userId, type: x.type, cat: x.cat, amount: x.amount, note: x.note, date: x.date });
+          await supabase.from("transactions").insert({ id: x.id, user_id: USER_ID, type: x.type, cat: x.cat, amount: x.amount, note: x.note, date: x.date });
         }
       }
       for (const dbX of currentDb) {
@@ -379,17 +373,17 @@ useEffect(() => {
 
 // 🌐 sync โน้ต (notes) ขึ้น Supabase
 useEffect(() => {
-  if (!loaded || !userId) return;
+  if (!loaded || !USER_ID) return;
   const syncNotesToCloud = async () => {
     try {
-      const { data: currentDb } = await supabase.from("notes").select("*").eq("user_id", userId);
+      const { data: currentDb } = await supabase.from("notes").select("*").eq("user_id", USER_ID);
       if (!currentDb) return;
       const dbMap = Object.fromEntries(currentDb.map((x) => [x.id, x]));
       const localIds = notes.map((x) => x.id);
       for (const n of notes) {
         const dbN = dbMap[n.id];
         if (!dbN) {
-          await supabase.from("notes").insert({ id: n.id, user_id: userId, title: n.title, body: n.body, date: n.date, pinned: !!n.pinned, tags: n.tags || [], notion_id: n.notionId || null });
+          await supabase.from("notes").insert({ id: n.id, user_id: USER_ID, title: n.title, body: n.body, date: n.date, pinned: !!n.pinned, tags: n.tags || [], notion_id: n.notionId || null });
         } else if (dbN.title !== n.title || JSON.stringify(dbN.body) !== JSON.stringify(n.body) || !!dbN.pinned !== !!n.pinned || JSON.stringify(dbN.tags || []) !== JSON.stringify(n.tags || []) || (dbN.notion_id || null) !== (n.notionId || null)) {
           // เนื้อหาแก้ไขแล้ว (จากฟีเจอร์แก้ไขโน้ต) หรือเพิ่ง sync ขึ้น Notion -> update ขึ้น cloud ด้วย ไม่ใช่แค่ insert/delete
           await supabase.from("notes").update({ title: n.title, body: n.body, pinned: !!n.pinned, tags: n.tags || [], notion_id: n.notionId || null }).eq("id", n.id);
@@ -405,17 +399,17 @@ useEffect(() => {
 
 // 🌐 sync เพลย์ลิสต์ (playlist) ขึ้น Supabase — ไม่ sync ไฟล์ที่ persist:false (ไฟล์ใหญ่ >1.5MB)
 useEffect(() => {
-  if (!loaded || !userId) return;
+  if (!loaded || !USER_ID) return;
   const syncPlaylistToCloud = async () => {
     try {
       const syncable = playlist.filter((p) => p.kind === "yt" || (p.kind === "file" && p.persist));
-      const { data: currentDb } = await supabase.from("playlists").select("id").eq("user_id", userId);
+      const { data: currentDb } = await supabase.from("playlists").select("id").eq("user_id", USER_ID);
       if (!currentDb) return;
       const dbIds = currentDb.map((x) => x.id);
       const localIds = syncable.map((x) => x.id);
       for (const p of syncable) {
         if (!dbIds.includes(p.id)) {
-          await supabase.from("playlists").insert({ id: p.id, user_id: userId, kind: p.kind, name: p.name, url: p.url || null, yt_id: p.ytId || null, src: p.kind === "file" ? p.src : null, persist: !!p.persist });
+          await supabase.from("playlists").insert({ id: p.id, user_id: USER_ID, kind: p.kind, name: p.name, url: p.url || null, yt_id: p.ytId || null, src: p.kind === "file" ? p.src : null, persist: !!p.persist });
         }
       }
       for (const dbP of currentDb) {
@@ -435,7 +429,7 @@ useEffect(() => {
         localStorage.setItem("refhub:v2", JSON.stringify({ notes, goals, tx, profile, mentor, theme, themeMode, volume, playlist: savePlaylist }));
         
         // 🌐 ยิงอัปเดตสถานะพวกธีม, โค้ด mentor, ระดับเสียง ขึ้นตาราง user_settings บน Cloud ทันที
-        if (userId) {
+        if (USER_ID) {
           await supabase.from("user_settings").update({
             name: profile.name,
             avatar: profile.avatar || "",
@@ -443,7 +437,7 @@ useEffect(() => {
             theme_mode: themeMode,
             theme: theme, // ถ้ายังไม่มีคอลัมน์ "theme" ในตาราง user_settings คำสั่งนี้จะ error เงียบๆ (ถูกดักไว้ใน catch) — เพิ่มคอลัมน์ type text ได้เพื่อให้ธีม sync ข้ามอุปกรณ์
             volume: volume
-          }).eq("user_id", userId);
+          }).eq("user_id", USER_ID);
         }
       } catch (e) {
         console.error("เซฟค่า Settings ลง Cloud ผิดพลาด: ", e);
@@ -457,48 +451,6 @@ useEffect(() => {
     if (audioRef.current) audioRef.current.volume = volume / 100;
     if (ytPlayerRef.current && ytPlayerRef.current.setVolume) ytPlayerRef.current.setVolume(volume);
   }, [volume, curId]);
-
-  // 🔐 เช็ค session ตอนเปิดแอปครั้งแรก + คอยฟังการเปลี่ยนแปลง (ล็อกอิน/ล็อกเอาต์) ตลอดเวลา
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => { setSession(data.session); setAuthChecked(true); });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, s) => { setSession(s); setAuthChecked(true); });
-    return () => listener.subscription.unsubscribe();
-  }, []);
-
-  // 🔐 ดึงแถว profile (สถานะอนุมัติ/role) ทุกครั้งที่ userId เปลี่ยน (ล็อกอิน/ล็อกเอาต์)
-  useEffect(() => {
-    if (!userId) { setAuthProfile(null); return; }
-    (async () => {
-      try {
-        const { data } = await supabase.from("profiles").select("*").eq("id", userId).single();
-        setAuthProfile(data || null);
-        if (data) await supabase.from("profiles").update({ last_login: new Date().toISOString() }).eq("id", userId);
-      } catch (e) { setAuthProfile(null); }
-    })();
-  }, [userId]);
-
-  // 💓 heartbeat — อัปเดต last_seen ทุก 60 วิ ตอนแอปเปิดอยู่ (ใช้บอกสถานะ "ออนไลน์อยู่ไหม" ในหน้า Admin)
-  useEffect(() => {
-    if (!userId) return;
-    const ping = () => supabase.from("profiles").update({ last_seen: new Date().toISOString() }).eq("id", userId).then(() => {}, () => {});
-    ping();
-    const id = setInterval(ping, 60000);
-    return () => clearInterval(id);
-  }, [userId]);
-
-  // 🔔 แจ้งเตือนแอดมินแบบสด — พอมีใครสมัครสมาชิกใหม่ ขึ้นแบนเนอร์ให้เห็นทันทีไม่ว่าจะอยู่หน้าไหนของแอป
-  const [adminAlerts, setAdminAlerts] = useState([]);
-  useEffect(() => {
-    if (!authProfile || authProfile.role !== "admin") return;
-    const channel = supabase
-      .channel("admin-profiles-watch")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "profiles" }, (payload) => {
-        if (payload.new.id === userId) return; // ไม่ต้องแจ้งเตือนตัวเอง
-        setAdminAlerts((a) => [{ id: uid(), text: `${payload.new.name || payload.new.email} สมัครสมาชิกใหม่ รอการอนุมัติ`, time: Date.now() }, ...a].slice(0, 20));
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [authProfile?.role, userId]);
 
   // 🔤 โหลดฟอนต์ IBM Plex Sans Thai จาก Google Fonts ครั้งเดียวตอนแอปเปิด (ตัวเลขชัดสุด อ่านง่ายทุกวัย เหมาะกับหน้าการเงิน)
   useEffect(() => {
@@ -605,11 +557,6 @@ useEffect(() => {
   const balance = tx.reduce((s, x) => s + (x.type === "in" ? x.amount : -x.amount), 0);
   const quote = M.quotes[quoteIdx % M.quotes.length];
 
-  // 🔐 เกตระบบล็อกอิน — เช็คก่อนแสดงแอปจริง
-  if (!authChecked) return <AuthLoadingScreen />;
-  if (!session) return <AuthPage />;
-  if (!authProfile || !authProfile.approved) return <PendingApprovalScreen profile={authProfile} onLogout={() => supabase.auth.signOut()} />;
-
   return (
     <div style={{ minHeight: "100vh", background: t.page, display: "flex", justifyContent: "center", fontFamily: "'IBM Plex Sans Thai','Segoe UI','Helvetica Neue',system-ui,sans-serif", zoom: `${fontScale}%` }}>
       <div style={{ width: "100%", maxWidth: 440, position: "relative", background: t.bg, minHeight: "100vh", overflow: "hidden", transition: "background .5s" }}>
@@ -635,12 +582,6 @@ useEffect(() => {
                 </IconBtn>
                 <IconBtn t={t} onClick={() => setThemePick(true)}><Palette size={17} color={t.text} /></IconBtn>
                 <IconBtn t={t} onClick={() => setFontScale((s) => (s === 100 ? 115 : s === 115 ? 130 : 100))}><ALargeSmall size={18} color={t.text} /></IconBtn>
-                {authProfile?.role === "admin" && (
-                  <button onClick={() => setPage("admin")} style={{ position: "relative", width: 38, height: 38, borderRadius: 19, background: t.surface, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }}>
-                    <ShieldCheck size={17} color={t.text} />
-                    {adminAlerts.length > 0 && <span style={{ position: "absolute", top: 3, right: 3, width: 8, height: 8, borderRadius: 4, background: "#D9534F" }} />}
-                  </button>
-                )}
                 <IconBtn t={t} onClick={() => setThemeMode(themeMode === "auto" ? "day" : themeMode === "day" ? "night" : "auto")}>
                   {isNight ? <Moon size={17} color={t.text} /> : <Sun size={17} color={t.text} />}
                 </IconBtn>
@@ -679,13 +620,12 @@ useEffect(() => {
         <div style={{ position: "relative", zIndex: 2, padding: "16px 18px 120px", height: "calc(100vh - 76px)", overflowY: "auto" }}>
           {page === "home" && <HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, goalDone, goalPct, setGoals, notes, setPage, setChatOpen }} />}
           {page === "ledger" && <FinancePage {...{ t, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt) }} />}
-          {page === "note" && <NotePage {...{ t, notes, setNotes, isNight, userId }} />}
+          {page === "note" && <NotePage {...{ t, notes, setNotes, isNight }} />}
           {page === "ideas" && <IdeasPage t={t} />}
           {page === "trade" && <TradePage t={t} />}
           {page === "news" && <NewsPage t={t} />}
           {page === "lang" && <LangPage t={t} />}
           {page === "goalsReport" && <GoalsReportPage t={t} goals={goals} />}
-          {page === "admin" && <AdminPage t={t} session={session} userId={userId} adminAlerts={adminAlerts} setAdminAlerts={setAdminAlerts} />}
 
           {/* 🎵 การ์ด "กำลังเล่น" ต่อท้ายเนื้อหาหน้า Home (ใต้เป้าหมาย) — div#yt-mini-player mount ค้างตลอด
               ไม่เคย unmount เลย (ซ่อนด้วย display:none เท่านั้น) กันปัญหา React ชนกับ DOM ที่ YouTube API แก้เอง */}
@@ -729,156 +669,6 @@ useEffect(() => {
 
         {/* hidden audio player for file tracks */}
         <audio ref={audioRef} onEnded={nextTrack} onPause={() => setPlaying(false)} onPlay={() => setPlaying(true)} style={{ display: "none" }} />
-      </div>
-    </div>
-  );
-}
-
-// ---------------- 🔐 Auth screens ----------------
-function AuthLoadingScreen() {
-  return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#F6F1E8" }}>
-      <div style={{ width: 64, height: 64, borderRadius: 18, background: "#EA9552" }} />
-    </div>
-  );
-}
-
-function CloverMark({ size = 80 }) {
-  return (
-    <div style={{ width: size, height: size, borderRadius: size * 0.25, background: "#EA9552", display: "flex", alignItems: "center", justifyContent: "center", position: "relative", flexShrink: 0 }}>
-      <span style={{ fontFamily: "'Baloo 2','IBM Plex Sans Thai',sans-serif", fontSize: size * 0.5, fontWeight: 700, color: "#3A2408" }}>R</span>
-      <div style={{ position: "absolute", top: size * 0.1, right: size * 0.08, width: size * 0.22, height: size * 0.22 }}>
-        <div style={{ position: "absolute", left: "35%", top: "0%", width: "40%", height: "40%", borderRadius: "50%", background: "#FFFFFF" }} />
-        <div style={{ position: "absolute", left: "35%", top: "55%", width: "40%", height: "40%", borderRadius: "50%", background: "#FFFFFF" }} />
-        <div style={{ position: "absolute", left: "0%", top: "27%", width: "40%", height: "40%", borderRadius: "50%", background: "#FFFFFF" }} />
-        <div style={{ position: "absolute", left: "65%", top: "27%", width: "40%", height: "40%", borderRadius: "50%", background: "#FFFFFF" }} />
-      </div>
-    </div>
-  );
-}
-
-function AuthPage() {
-  const [mode, setMode] = useState("login"); // login | signup
-  const [loginWith, setLoginWith] = useState("email"); // email | pin (ใช้เฉพาะตอน mode==='login')
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
-  const [familyCode, setFamilyCode] = useState("");
-  const [username, setUsername] = useState("");
-  const [pin, setPin] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState("");
-  const [info, setInfo] = useState("");
-
-  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-
-  const submit = async () => {
-    setErr(""); setInfo("");
-    setLoading(true);
-    try {
-      if (mode === "login" && loginWith === "pin") {
-        if (!username.trim() || !pin) { setErr("กรอกชื่อผู้ใช้และ PIN ให้ครบ"); setLoading(false); return; }
-        const { error } = await supabase.auth.signInWithPassword({ email: `${username.trim().toLowerCase()}@refhub.local`, password: pin });
-        if (error) throw error;
-        setLoading(false); return;
-      }
-      if (!emailOk) { setErr("รูปแบบอีเมลยังไม่ถูกต้อง"); setLoading(false); return; }
-      if (password.length < 6) { setErr("รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร"); setLoading(false); return; }
-      if (mode === "signup") {
-        const { data, error } = await supabase.auth.signUp({ email, password });
-        if (error) throw error;
-        const uid = data.user?.id;
-        if (uid) {
-          // ผู้ใช้คนแรกสุดของระบบ (ยังไม่มีใครในตาราง profiles เลย) ให้เป็นแอดมิน + อนุมัติอัตโนมัติ
-          const { count } = await supabase.from("profiles").select("id", { count: "exact", head: true });
-          const isFirstUser = !count;
-          await supabase.from("profiles").insert({
-            id: uid, email, name: name.trim() || email.split("@")[0],
-            role: isFirstUser ? "admin" : "member", approved: isFirstUser,
-            family_code: familyCode.trim() || null, login_type: "email",
-          });
-        }
-        setInfo(data.session ? "สมัครสำเร็จ กำลังเข้าสู่ระบบ..." : "สมัครสำเร็จ เช็คอีเมลเพื่อยืนยันบัญชีก่อนเข้าใช้งาน");
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-      }
-    } catch (e) {
-      setErr(e.message === "Invalid login credentials" ? "อีเมลหรือรหัสผ่านไม่ถูกต้อง" : e.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div style={{ minHeight: "100vh", display: "flex", justifyContent: "center", background: "#F6F1E8", fontFamily: "'IBM Plex Sans Thai',sans-serif" }}>
-      <div style={{ width: "100%", maxWidth: 440, padding: "56px 24px", display: "flex", flexDirection: "column" }}>
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}><CloverMark size={84} /></div>
-        <div style={{ textAlign: "center", fontSize: 18, fontWeight: 700, color: "#26303F", marginBottom: 2 }}>RefHub</div>
-        <div style={{ textAlign: "center", fontSize: 12.5, color: "#7A828F", marginBottom: 26 }}>ที่พักใจของครอบครัวคุณ</div>
-
-        <div style={{ display: "flex", background: "#FFFFFF", borderRadius: 14, padding: 4, marginBottom: 16, border: "1px solid rgba(0,0,0,0.06)" }}>
-          <button onClick={() => setMode("login")} style={{ flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 11, border: "none", cursor: "pointer", background: mode === "login" ? "#EA9552" : "transparent", color: mode === "login" ? "#3A2408" : "#7A828F", fontWeight: 600, fontSize: 13.5 }}>เข้าสู่ระบบ</button>
-          <button onClick={() => setMode("signup")} style={{ flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 11, border: "none", cursor: "pointer", background: mode === "signup" ? "#EA9552" : "transparent", color: mode === "signup" ? "#3A2408" : "#7A828F", fontWeight: 600, fontSize: 13.5 }}>สมัครสมาชิก</button>
-        </div>
-
-        {mode === "login" && (
-          <div style={{ display: "flex", gap: 14, marginBottom: 16, justifyContent: "center" }}>
-            <button onClick={() => setLoginWith("email")} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, color: loginWith === "email" ? "#EA9552" : "#A7ADB8", borderBottom: loginWith === "email" ? "2px solid #EA9552" : "2px solid transparent", paddingBottom: 4 }}>ด้วยอีเมล</button>
-            <button onClick={() => setLoginWith("pin")} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, color: loginWith === "pin" ? "#EA9552" : "#A7ADB8", borderBottom: loginWith === "pin" ? "2px solid #EA9552" : "2px solid transparent", paddingBottom: 4 }}>ด้วยชื่อ + PIN</button>
-          </div>
-        )}
-
-        {mode === "login" && loginWith === "pin" ? (
-          <>
-            <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="ชื่อผู้ใช้ที่แอดมินตั้งให้ เช่น mom" style={{ background: "#FFFFFF", border: "1px solid rgba(0,0,0,0.06)", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, marginBottom: 10, outline: "none" }} />
-            <input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} type="password" inputMode="numeric" placeholder="PIN 4-6 หลัก" style={{ background: "#FFFFFF", border: "1px solid rgba(0,0,0,0.06)", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, marginBottom: 14, outline: "none", letterSpacing: 3 }} />
-          </>
-        ) : (
-          <>
-            {mode === "signup" && (
-              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="ชื่อของคุณ" style={{ background: "#FFFFFF", border: "1px solid rgba(0,0,0,0.06)", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, marginBottom: 10, outline: "none" }} />
-            )}
-
-            <div style={{ background: "#FFFFFF", border: `1px solid ${email && !emailOk ? "#D9534F" : "rgba(0,0,0,0.06)"}`, borderRadius: 12, padding: "11px 14px", marginBottom: 4, display: "flex", alignItems: "center", gap: 8 }}>
-              <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@email.com" style={{ flex: 1, border: "none", outline: "none", fontSize: 13.5, background: "transparent" }} />
-              {email && <span style={{ fontSize: 13, color: emailOk ? "#2E9E6B" : "#D9534F" }}>{emailOk ? "✓" : "!"}</span>}
-            </div>
-            <div style={{ fontSize: 11, color: email ? (emailOk ? "#2E9E6B" : "#D9534F") : "#A7ADB8", marginBottom: 10, paddingLeft: 2, minHeight: 14 }}>
-              {email ? (emailOk ? "รูปแบบอีเมลถูกต้อง" : "รูปแบบอีเมลยังไม่ถูกต้อง") : "พิมพ์อีเมลของคุณ"}
-            </div>
-
-            <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="รหัสผ่าน (อย่างน้อย 6 ตัว)" style={{ background: "#FFFFFF", border: "1px solid rgba(0,0,0,0.06)", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, marginBottom: 10, outline: "none" }} />
-
-            {mode === "signup" && (
-              <input value={familyCode} onChange={(e) => setFamilyCode(e.target.value)} placeholder="รหัสเชิญครอบครัว (ถ้ามี)" style={{ background: "#FFFFFF", border: "1px solid rgba(0,0,0,0.06)", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, marginBottom: 14, outline: "none" }} />
-            )}
-          </>
-        )}
-
-        {err && <div style={{ fontSize: 12, color: "#D9534F", marginBottom: 10, textAlign: "center" }}>{err}</div>}
-        {info && <div style={{ fontSize: 12, color: "#2E9E6B", marginBottom: 10, textAlign: "center" }}>{info}</div>}
-
-        <button onClick={submit} disabled={loading} style={{ background: loading ? "#F0DCC3" : "#EA9552", border: "none", borderRadius: 14, padding: "13px 0", fontSize: 14, fontWeight: 700, color: "#3A2408", cursor: loading ? "default" : "pointer", marginTop: 6 }}>
-          {loading ? "กำลังดำเนินการ..." : mode === "login" ? "เข้าสู่ระบบ" : "สมัครสมาชิก"}
-        </button>
-
-        <div style={{ textAlign: "center", fontSize: 11, color: "#A7ADB8", marginTop: 18 }}>บัญชีใหม่ต้องรอแอดมินอนุมัติก่อนใช้งาน (ยกเว้นคนแรกสุด)</div>
-      </div>
-    </div>
-  );
-}
-
-function PendingApprovalScreen({ profile, onLogout }) {
-  return (
-    <div style={{ minHeight: "100vh", display: "flex", justifyContent: "center", background: "#F6F1E8", fontFamily: "'IBM Plex Sans Thai',sans-serif" }}>
-      <div style={{ width: "100%", maxWidth: 440, padding: "80px 24px", textAlign: "center" }}>
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}><CloverMark size={72} /></div>
-        <div style={{ fontSize: 16, fontWeight: 700, color: "#26303F", marginBottom: 8 }}>รอแอดมินอนุมัติ</div>
-        <div style={{ fontSize: 13, color: "#7A828F", lineHeight: 1.6, marginBottom: 4 }}>
-          บัญชี {profile?.email ? <b>{profile.email}</b> : "ของคุณ"} สมัครสำเร็จแล้ว<br />แต่ยังใช้งานแอปไม่ได้จนกว่าแอดมินจะกดอนุมัติ
-        </div>
-        <button onClick={onLogout} style={{ marginTop: 24, background: "none", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 12, padding: "10px 20px", fontSize: 13, color: "#7A828F", cursor: "pointer" }}>ออกจากระบบ</button>
       </div>
     </div>
   );
@@ -1303,167 +1093,6 @@ function FinancePage({ t, tx, setTx, categories, openAdd, openExport }) {
   );
 }
 
-function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts }) {
-  const [tab, setTab] = useState("overview"); // overview | members | add
-  const [members, setMembers] = useState([]);
-  const [loadingList, setLoadingList] = useState(true);
-
-  const loadMembers = async () => {
-    setLoadingList(true);
-    try {
-      const { data } = await supabase.from("profiles").select("*").order("created_at", { ascending: false });
-      setMembers(data || []);
-    } catch (e) {}
-    setLoadingList(false);
-  };
-  useEffect(() => { loadMembers(); }, []);
-
-  const isOnline = (lastSeen) => lastSeen && (Date.now() - new Date(lastSeen).getTime()) < 2 * 60 * 1000;
-
-  const setApproved = async (id, approved) => { await supabase.from("profiles").update({ approved }).eq("id", id); loadMembers(); };
-  const setRole = async (id, role) => { await supabase.from("profiles").update({ role }).eq("id", id); loadMembers(); };
-  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
-  const removeMember = async (id) => {
-    await supabase.from("profiles").delete().eq("id", id); setConfirmDeleteId(null); loadMembers();
-  };
-
-  const pendingCount = members.filter((m) => !m.approved).length;
-
-  return (
-    <>
-      <PageHead t={t} title="Admin" sub="จัดการสมาชิกและดูความเคลื่อนไหวของแอป" icon={<ShieldCheck size={20} color={t.accent} />} />
-
-      {adminAlerts.length > 0 && (
-        <div style={{ ...card(t), padding: 14, marginBottom: 14, border: `1px solid ${t.accent}55` }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-            <div style={{ fontSize: 12.5, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 6 }}><Bell size={14} color={t.accent} /> แจ้งเตือนล่าสุด</div>
-            <button onClick={() => setAdminAlerts([])} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: t.sub }}>ล้างทั้งหมด</button>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {adminAlerts.slice(0, 5).map((a) => <div key={a.id} style={{ fontSize: 12, color: t.sub }}>• {a.text}</div>)}
-          </div>
-        </div>
-      )}
-
-      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-        {[["overview", "ภาพรวม"], ["members", "สมาชิก"], ["add", "เพิ่มสมาชิก"]].map(([v, lb]) => (
-          <button key={v} onClick={() => setTab(v)} style={{ flex: 1, padding: "9px 0", borderRadius: 12, cursor: "pointer", border: `1.5px solid ${tab === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 12.5, background: tab === v ? t.accent : "transparent", color: tab === v ? t.onAccent : t.sub }}>{lb}</button>
-        ))}
-      </div>
-
-      {tab === "overview" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <div style={{ display: "flex", gap: 10 }}>
-            <div style={{ ...card(t), flex: 1, padding: 16, textAlign: "center" }}>
-              <div style={{ fontSize: 22, fontWeight: 800, color: t.text }}>{members.length}</div>
-              <div style={{ fontSize: 11, color: t.sub, marginTop: 2 }}>สมาชิกทั้งหมด</div>
-            </div>
-            <div style={{ ...card(t), flex: 1, padding: 16, textAlign: "center" }}>
-              <div style={{ fontSize: 22, fontWeight: 800, color: pendingCount ? "#D9534F" : t.text }}>{pendingCount}</div>
-              <div style={{ fontSize: 11, color: t.sub, marginTop: 2 }}>รออนุมัติ</div>
-            </div>
-            <div style={{ ...card(t), flex: 1, padding: 16, textAlign: "center" }}>
-              <div style={{ fontSize: 22, fontWeight: 800, color: "#2E9E6B" }}>{members.filter((m) => isOnline(m.last_seen)).length}</div>
-              <div style={{ fontSize: 11, color: t.sub, marginTop: 2 }}>ออนไลน์ตอนนี้</div>
-            </div>
-          </div>
-          {pendingCount > 0 && (
-            <button onClick={() => setTab("members")} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "12px 0" }}>ไปอนุมัติสมาชิกที่รออยู่ ({pendingCount})</button>
-          )}
-        </div>
-      )}
-
-      {tab === "members" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {loadingList && <Empty t={t} text="กำลังโหลด..." />}
-          {!loadingList && members.length === 0 && <Empty t={t} text="ยังไม่มีสมาชิก" />}
-          {members.map((m) => (
-            <div key={m.id} style={{ ...card(t), padding: 14 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ width: 10, height: 10, borderRadius: 5, background: isOnline(m.last_seen) ? "#2E9E6B" : t.faint, flexShrink: 0 }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13.5, fontWeight: 700, color: t.text, display: "flex", alignItems: "center", gap: 6 }}>
-                    {m.name || m.email}
-                    {m.role === "admin" && <span style={{ fontSize: 9.5, fontWeight: 800, color: t.accent, background: `${t.accent}18`, padding: "1px 6px", borderRadius: 8 }}>ADMIN</span>}
-                  </div>
-                  <div style={{ fontSize: 11, color: t.sub }}>{m.login_type === "pin" ? `ชื่อผู้ใช้: ${m.username}` : m.email}</div>
-                </div>
-                {!m.approved ? (
-                  <span style={{ fontSize: 10.5, fontWeight: 700, color: "#D9534F", background: "#D9534F18", padding: "3px 8px", borderRadius: 10, flexShrink: 0 }}>รออนุมัติ</span>
-                ) : (
-                  <span style={{ fontSize: 10.5, fontWeight: 700, color: "#2E9E6B", background: "#2E9E6B18", padding: "3px 8px", borderRadius: 10, flexShrink: 0 }}>ใช้งานได้</span>
-                )}
-              </div>
-              <div style={{ fontSize: 10.5, color: t.faint, marginTop: 8 }}>
-                สมัคร {m.created_at ? new Date(m.created_at).toLocaleDateString("th-TH") : "-"} · ล็อกอินล่าสุด {m.last_login ? new Date(m.last_login).toLocaleDateString("th-TH") : "ยังไม่เคย"}
-              </div>
-              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                {!m.approved ? (
-                  <button onClick={() => setApproved(m.id, true)} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "8px 0", borderRadius: 10, border: "none", cursor: "pointer", background: "#2E9E6B", color: "#fff", fontSize: 12, fontWeight: 700 }}><UserCheck size={13} /> อนุมัติ</button>
-                ) : (
-                  m.id !== userId && <button onClick={() => setApproved(m.id, false)} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "8px 0", borderRadius: 10, border: `1px solid ${t.border}`, cursor: "pointer", background: "none", color: t.sub, fontSize: 12, fontWeight: 700 }}><UserX size={13} /> ระงับ</button>
-                )}
-                {m.id !== userId && (
-                  <button onClick={() => setRole(m.id, m.role === "admin" ? "member" : "admin")} style={{ padding: "8px 12px", borderRadius: 10, border: `1px solid ${t.border}`, cursor: "pointer", background: "none", color: t.sub, fontSize: 12, fontWeight: 700 }}>{m.role === "admin" ? "ถอดแอดมิน" : "ตั้งเป็นแอดมิน"}</button>
-                )}
-                {m.id !== userId && (
-                  confirmDeleteId === m.id ? (
-                    <button onClick={() => removeMember(m.id)} style={{ padding: "8px 12px", borderRadius: 10, border: "none", cursor: "pointer", background: "#D9534F", color: "#fff", fontSize: 11.5, fontWeight: 700 }}>ยืนยันลบ?</button>
-                  ) : (
-                    <button onClick={() => setConfirmDeleteId(m.id)} style={ghost}><Trash2 size={15} color={t.faint} /></button>
-                  )
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {tab === "add" && <AdminAddPinMember t={t} session={session} onCreated={loadMembers} />}
-    </>
-  );
-}
-
-function AdminAddPinMember({ t, session, onCreated }) {
-  const [name, setName] = useState("");
-  const [username, setUsername] = useState("");
-  const [pin, setPin] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState("");
-  const [ok, setOk] = useState("");
-
-  const submit = async () => {
-    setErr(""); setOk("");
-    if (!name.trim() || !username.trim() || !pin) { setErr("กรอกให้ครบทุกช่อง"); return; }
-    setLoading(true);
-    try {
-      const r = await fetch("/api/admin-create-user", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, username, pin, callerToken: session?.access_token }),
-      });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error || "สร้างบัญชีไม่สำเร็จ");
-      setOk(`สร้างบัญชีให้ "${name}" สำเร็จ — บอกชื่อผู้ใช้ "${username}" กับ PIN นี้ให้เขาได้เลย`);
-      setName(""); setUsername(""); setPin("");
-      onCreated?.();
-    } catch (e) {
-      setErr(e.message);
-    } finally { setLoading(false); }
-  };
-
-  return (
-    <div style={{ ...card(t), padding: 16 }}>
-      <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 12, lineHeight: 1.6 }}>สำหรับผู้ใหญ่ที่ไม่ถนัดใช้อีเมล — สร้างบัญชีให้ตรงๆ ด้วยชื่อ + PIN แล้วบอกให้เขาไปกรอกที่หน้าล็อกอิน (แท็บ "ด้วยชื่อ + PIN")</div>
-      <input value={name} onChange={(e) => setName(e.target.value)} placeholder="ชื่อที่แสดงในแอป เช่น แม่" style={{ ...input(t), marginBottom: 10 }} />
-      <input value={username} onChange={(e) => setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ""))} placeholder="ชื่อผู้ใช้ (ภาษาอังกฤษ) เช่น mom" style={{ ...input(t), marginBottom: 10 }} />
-      <input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} placeholder="PIN 4-6 หลัก" inputMode="numeric" style={{ ...input(t), marginBottom: 14, letterSpacing: 3 }} />
-      {err && <div style={{ fontSize: 12, color: "#D9534F", marginBottom: 10 }}>{err}</div>}
-      {ok && <div style={{ fontSize: 12, color: "#2E9E6B", marginBottom: 10 }}>{ok}</div>}
-      <button onClick={submit} disabled={loading} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "12px 0" }}>{loading ? "กำลังสร้าง..." : "สร้างบัญชี"}</button>
-    </div>
-  );
-}
-
 function GoalsReportPage({ t, goals }) {
   const dated = goals.filter((g) => g.date);
 
@@ -1743,12 +1372,12 @@ const dateLabel = (d) => { const today = todayStr(); const y = new Date(Date.now
 
 // ---------------- Note ----------------
 // 📝 ตัว editor แบบ Notion — mount ใหม่ทุกครั้งที่ note เปลี่ยน (ใช้ key จากภายนอกคุมการรีเซ็ต)
-function NoteEditor({ content, onChange, theme, userId }) {
+function NoteEditor({ content, onChange, theme }) {
   const editor = useCreateBlockNote({
     initialContent: migrateBody(content),
     uploadFile: async (file) => {
       try {
-        const path = `${userId || "anon"}/${uid()}-${file.name}`;
+        const path = `${USER_ID || "anon"}/${uid()}-${file.name}`;
         const { error } = await supabase.storage.from("attachments").upload(path, file);
         if (error) throw error;
         const { data } = supabase.storage.from("attachments").getPublicUrl(path);
@@ -1762,7 +1391,7 @@ function NoteEditor({ content, onChange, theme, userId }) {
   return <BlockNoteView editor={editor} theme={theme} onChange={() => onChange(editor.document)} />;
 }
 
-function NotePage({ t, notes, setNotes, isNight, userId }) {
+function NotePage({ t, notes, setNotes, isNight }) {
   const [title, setTitle] = useState(""); const [body, setBody] = useState(null); const [tagsInput, setTagsInput] = useState("");
   const [draftKey, setDraftKey] = useState(0); // เปลี่ยนค่านี้เพื่อบังคับให้ NoteEditor ตัวเพิ่มโน้ตใหม่รีเซ็ตเนื้อหาว่าง
   const [editingId, setEditingId] = useState(null);
@@ -1850,7 +1479,7 @@ function NotePage({ t, notes, setNotes, isNight, userId }) {
       <div style={{ ...card(t), padding: 16 }}>
         <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="หัวข้อ" style={{ ...input(t), marginBottom: 8, fontWeight: 700 }} />
         <div style={{ border: `1px solid ${t.border}`, borderRadius: 12, marginBottom: 8, minHeight: 140, overflow: "hidden" }}>
-          <NoteEditor key={`new-${draftKey}`} content={null} onChange={setBody} theme={editorTheme} userId={userId} />
+          <NoteEditor key={`new-${draftKey}`} content={null} onChange={setBody} theme={editorTheme} />
         </div>
         <input value={tagsInput} onChange={(e) => setTagsInput(e.target.value)} placeholder="แท็ก (คั่นด้วยจุลภาค เช่น งาน, ไอเดีย)" style={{ ...input(t), marginBottom: 12, fontSize: 12.5 }} />
         <button onClick={add} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "11px 0" }}>บันทึกโน้ต</button>
@@ -1874,7 +1503,7 @@ function NotePage({ t, notes, setNotes, isNight, userId }) {
               <>
                 <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={{ ...input(t), marginBottom: 8, fontWeight: 700 }} />
                 <div style={{ border: `1px solid ${t.border}`, borderRadius: 12, marginBottom: 8, minHeight: 140, overflow: "hidden" }}>
-                  <NoteEditor key={`edit-${n.id}`} content={editBody} onChange={setEditBody} theme={editorTheme} userId={userId} />
+                  <NoteEditor key={`edit-${n.id}`} content={editBody} onChange={setEditBody} theme={editorTheme} />
                 </div>
                 <input value={editTags} onChange={(e) => setEditTags(e.target.value)} placeholder="แท็ก (คั่นด้วยจุลภาค)" style={{ ...input(t), marginBottom: 10, fontSize: 12.5 }} />
                 <div style={{ display: "flex", gap: 8 }}>
