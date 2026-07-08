@@ -4,7 +4,7 @@ import {
   Sun, Moon, Send, Check, Trash2, X, Wallet, Target, BookOpen, ChevronRight,
   Sparkles, Clock, Search, Volume2, VolumeX, Pencil, Download, ArrowLeft,
   Utensils, Car, ShoppingBag, Receipt, Gamepad2, HeartPulse, Briefcase, Gift, Coffee, Music,
-  Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText
+  Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette
 } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, ResponsiveContainer, Tooltip } from "recharts";
 // 🌐 ต่อท่อระบบฐานข้อมูล Cloud
@@ -106,24 +106,49 @@ class Ambient {
 const ambient = new Ambient();
 
 // ---------------- Theme ----------------
-const BRAND = { accent: "#EA9552", accent2: "#F2B074", onAccent: "#3A2408" }; // สีมาตรฐานของแอป (ไม่เปลี่ยนตามโค้ช)
+// 🎨 ระบบธีมสีแอป (แยกอิสระจากสี Mentor โดยสิ้นเชิง — Mentor ใช้แค่จุดที่เป็นตัวตนโค้ชเท่านั้น เช่น การ์ดเลือกโค้ช/แชท)
+// แต่ละธีมมีเวอร์ชัน day และ night ของตัวเอง อิสระจากกัน (เลือกธีมได้โดยไม่ผูกกับเวลา/โหมดกลางวัน-กลางคืน)
+const THEMES = {
+  default:  {
+    label: "ค่าเริ่มต้น",
+    day:   { accent: "#EA9552", accent2: "#F2B074", onAccent: "#3A2408", page: "#F6F1E8", bgTop: "#F6F1E8", bgBot: "#FBF8F2", surface: "#FFFFFF" },
+    night: { accent: "#EA9552", accent2: "#F2B074", onAccent: "#3A2408", page: "#0A1020", bgTop: "#131E36", bgBot: "#0A1020", surface: "#16223C" },
+  },
+  red: {
+    label: "เรดโบลด์",
+    day:   { accent: "#D64A3D", accent2: "#E8756A", onAccent: "#FFFFFF", page: "#FBF4F3", bgTop: "#FBF4F3", bgBot: "#FFFFFF", surface: "#FFFFFF" },
+    night: { accent: "#E8574A", accent2: "#F2857A", onAccent: "#FFFFFF", page: "#170B0A", bgTop: "#241412", bgBot: "#170B0A", surface: "#271613" },
+  },
+  navy: {
+    label: "เนวี่พรีเมียม",
+    day:   { accent: "#2B3953", accent2: "#44577A", onAccent: "#FFFFFF", page: "#F3F5F9", bgTop: "#F3F5F9", bgBot: "#FAFBFD", surface: "#FFFFFF" },
+    night: { accent: "#D98C4A", accent2: "#E8A868", onAccent: "#241300", page: "#0D1420", bgTop: "#16202E", bgBot: "#0D1420", surface: "#182333" },
+  },
+  twilight: {
+    label: "ทไวไลท์",
+    day:   { accent: "#C2607E", accent2: "#D6839B", onAccent: "#FFFFFF", page: "#FAF3F6", bgTop: "#FAF3F6", bgBot: "#FFFFFF", surface: "#FFFFFF" },
+    night: { accent: "#E0839A", accent2: "#F2A08A", onAccent: "#2A0F1A", page: "#17121B", bgTop: "#241C2B", bgBot: "#17121B", surface: "#2A2130" },
+  },
+};
 
-function palette(mode, mentor) {
-  const common = { accent: BRAND.accent, accent2: BRAND.accent2, onAccent: BRAND.onAccent };
+function palette(mode, themeId) {
+  const th = THEMES[themeId] || THEMES.default;
+  const T = th[mode] || th.day;
+  const common = { accent: T.accent, accent2: T.accent2, onAccent: T.onAccent };
   if (mode === "night") return {
-    ...common, page: "#0A1020", bg: "linear-gradient(180deg,#131E36 0%,#0A1020 100%)",
-    surface: "#16223C", hero: "linear-gradient(135deg,#F2B074 0%,#EA9552 100%)", heroBorder: "transparent",
+    ...common, page: T.page, bg: `linear-gradient(180deg,${T.bgTop} 0%,${T.bgBot} 100%)`,
+    surface: T.surface, hero: `linear-gradient(135deg,${T.accent2} 0%,${T.accent} 100%)`, heroBorder: "transparent",
     text: "#EEF2FB", sub: "#8A93A8", faint: "#5C6680", border: "rgba(255,255,255,0.08)",
-    dock: "#141C33", dockBorder: "rgba(120,140,190,0.28)", star: true, inputBg: "rgba(255,255,255,.06)",
+    dock: T.surface, dockBorder: "rgba(120,140,190,0.28)", star: true, inputBg: "rgba(255,255,255,.06)",
     cat: { green: "#16223C", amber: "#1E2438", coral: "#2A1C24", violet: "#201E33" },
     catTx: { green: "#EAF2EC", amber: "#F0E9D6", coral: "#F6E4DC", violet: "#E7E3F6" },
     catLb: { green: "#8FA79A", amber: "#C6B274", coral: "#D89A86", violet: "#A99CD6" },
   };
   return {
-    ...common, page: "#F6F1E8", bg: "linear-gradient(180deg,#F6F1E8 0%,#FBF8F2 100%)",
-    surface: "#FFFFFF", hero: "linear-gradient(135deg,#F2B074 0%,#EA9552 100%)", heroBorder: "transparent",
+    ...common, page: T.page, bg: `linear-gradient(180deg,${T.bgTop} 0%,${T.bgBot} 100%)`,
+    surface: T.surface, hero: `linear-gradient(135deg,${T.accent2} 0%,${T.accent} 100%)`, heroBorder: "transparent",
     text: "#26303F", sub: "#7A828F", faint: "#A7ADB8", border: "rgba(0,0,0,0.06)",
-    dock: "#FFFFFF", dockBorder: "rgba(0,0,0,0.05)", star: false, inputBg: "#F4F5F7",
+    dock: T.surface, dockBorder: "rgba(0,0,0,0.05)", star: false, inputBg: "#F4F5F7",
     cat: { green: "#E7F1E9", amber: "#FBF0D6", coral: "#FBE4DC", violet: "#E9E7F4" },
     catTx: { green: "#2A3B30", amber: "#3A3320", coral: "#5A3327", violet: "#39316A" },
     catLb: { green: "#5E7A66", amber: "#8A7434", coral: "#A85C42", violet: "#6A5C9A" },
@@ -140,6 +165,7 @@ export default function RefHub() {
   const [loaded, setLoaded] = useState(false);
   const [themeMode, setThemeMode] = useState("auto");
   const [mentor, setMentor] = useState("loid");
+  const [theme, setTheme] = useState("default"); // 🎨 ธีมสีแอป: default | red | navy | twilight — แยกอิสระจาก mentor
   const [page, setPage] = useState("home");
   const [notes, setNotes] = useState([]);
   const [goals, setGoals] = useState([]);
@@ -148,6 +174,7 @@ export default function RefHub() {
   const [autoNight, setAutoNight] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [mentorPick, setMentorPick] = useState(false);
+  const [themePick, setThemePick] = useState(false);
   const [editProfile, setEditProfile] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -166,7 +193,7 @@ export default function RefHub() {
 
   const isNight = themeMode === "night" || (themeMode === "auto" && autoNight);
   const mode = isNight ? "night" : "day";
-  const t = palette(mode, mentor);
+  const t = palette(mode, theme);
   const M = MENTORS[mentor];
 
   useEffect(() => { const c = () => { const h = new Date().getHours(); setAutoNight(h >= 18 || h < 6); }; c(); const id = setInterval(c, 60000); return () => clearInterval(id); }, []);
@@ -192,6 +219,7 @@ export default function RefHub() {
           setProfile({ name: uSettings.name, avatar: uSettings.avatar || "" });
           setMentor(uSettings.mentor || "loid");
           setThemeMode(uSettings.theme_mode || "auto");
+          if (uSettings.theme) setTheme(uSettings.theme);
           if (typeof uSettings.volume === "number") setVolume(uSettings.volume);
         } else {
           // ถ้าเปิดซิงค์ครั้งแรกแล้วยังไม่มีข้อมูล ให้สร้างข้อมูล Row แรกทิ้งไว้ให้พี่เลย
@@ -221,7 +249,7 @@ export default function RefHub() {
           .select("*")
           .eq("user_id", USER_ID)
           .order("date", { ascending: false });
-        if (dbNotes) setNotes(dbNotes);
+        if (dbNotes) setNotes(dbNotes.map((n) => ({ ...n, notionId: n.notion_id || null })));
 
         // 5. ดึงเพลย์ลิสต์เพลง (Playlists)
         const { data: dbPlaylist } = await supabase
@@ -317,13 +345,17 @@ useEffect(() => {
   if (!loaded || !USER_ID) return;
   const syncNotesToCloud = async () => {
     try {
-      const { data: currentDb } = await supabase.from("notes").select("id").eq("user_id", USER_ID);
+      const { data: currentDb } = await supabase.from("notes").select("*").eq("user_id", USER_ID);
       if (!currentDb) return;
-      const dbIds = currentDb.map((x) => x.id);
+      const dbMap = Object.fromEntries(currentDb.map((x) => [x.id, x]));
       const localIds = notes.map((x) => x.id);
       for (const n of notes) {
-        if (!dbIds.includes(n.id)) {
-          await supabase.from("notes").insert({ id: n.id, user_id: USER_ID, title: n.title, body: n.body, date: n.date });
+        const dbN = dbMap[n.id];
+        if (!dbN) {
+          await supabase.from("notes").insert({ id: n.id, user_id: USER_ID, title: n.title, body: n.body, date: n.date, pinned: !!n.pinned, tags: n.tags || [], notion_id: n.notionId || null });
+        } else if (dbN.title !== n.title || dbN.body !== n.body || !!dbN.pinned !== !!n.pinned || JSON.stringify(dbN.tags || []) !== JSON.stringify(n.tags || []) || (dbN.notion_id || null) !== (n.notionId || null)) {
+          // เนื้อหาแก้ไขแล้ว (จากฟีเจอร์แก้ไขโน้ต) หรือเพิ่ง sync ขึ้น Notion -> update ขึ้น cloud ด้วย ไม่ใช่แค่ insert/delete
+          await supabase.from("notes").update({ title: n.title, body: n.body, pinned: !!n.pinned, tags: n.tags || [], notion_id: n.notionId || null }).eq("id", n.id);
         }
       }
       for (const dbN of currentDb) {
@@ -363,7 +395,7 @@ useEffect(() => {
       try {
         const savePlaylist = playlist.filter((p) => p.kind === "yt" || (p.kind === "file" && p.persist));
         // เซฟลงคอมแบบเดิมเผื่อไว้
-        localStorage.setItem("refhub:v2", JSON.stringify({ notes, goals, tx, profile, mentor, themeMode, volume, playlist: savePlaylist }));
+        localStorage.setItem("refhub:v2", JSON.stringify({ notes, goals, tx, profile, mentor, theme, themeMode, volume, playlist: savePlaylist }));
         
         // 🌐 ยิงอัปเดตสถานะพวกธีม, โค้ด mentor, ระดับเสียง ขึ้นตาราง user_settings บน Cloud ทันที
         if (USER_ID) {
@@ -372,6 +404,7 @@ useEffect(() => {
             avatar: profile.avatar || "",
             mentor: mentor,
             theme_mode: themeMode,
+            theme: theme, // ถ้ายังไม่มีคอลัมน์ "theme" ในตาราง user_settings คำสั่งนี้จะ error เงียบๆ (ถูกดักไว้ใน catch) — เพิ่มคอลัมน์ type text ได้เพื่อให้ธีม sync ข้ามอุปกรณ์
             volume: volume
           }).eq("user_id", USER_ID);
         }
@@ -379,7 +412,7 @@ useEffect(() => {
         console.error("เซฟค่า Settings ลง Cloud ผิดพลาด: ", e);
       }
     })(); 
-  }, [notes, goals, tx, profile, mentor, themeMode, volume, playlist, loaded]);
+  }, [notes, goals, tx, profile, mentor, theme, themeMode, volume, playlist, loaded]);
 
   // music reactions
   const cur = playlist.find((p) => p.id === curId) || null;
@@ -387,6 +420,16 @@ useEffect(() => {
     if (audioRef.current) audioRef.current.volume = volume / 100;
     if (ytPlayerRef.current && ytPlayerRef.current.setVolume) ytPlayerRef.current.setVolume(volume);
   }, [volume, curId]);
+
+  // 🔤 โหลดฟอนต์ Anuphan จาก Google Fonts ครั้งเดียวตอนแอปเปิด (ฟอนต์ไทยสมัยใหม่ อ่านตัวเลขชัด เหมาะกับหน้าการเงิน)
+  useEffect(() => {
+    if (document.getElementById("refhub-font-anuphan")) return;
+    const link = document.createElement("link");
+    link.id = "refhub-font-anuphan";
+    link.rel = "stylesheet";
+    link.href = "https://fonts.googleapis.com/css2?family=Anuphan:wght@400;500;600;700;800&display=swap";
+    document.head.appendChild(link);
+  }, []);
 
   // โหลด YouTube IFrame API script ครั้งเดียวตอนแอปเปิด
   useEffect(() => {
@@ -483,7 +526,7 @@ useEffect(() => {
   const quote = M.quotes[quoteIdx % M.quotes.length];
 
   return (
-    <div style={{ minHeight: "100vh", background: t.page, display: "flex", justifyContent: "center", fontFamily: "'Segoe UI','Helvetica Neue',system-ui,sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: t.page, display: "flex", justifyContent: "center", fontFamily: "'Anuphan','Segoe UI','Helvetica Neue',system-ui,sans-serif" }}>
       <div style={{ width: "100%", maxWidth: 440, position: "relative", background: t.bg, minHeight: "100vh", overflow: "hidden", transition: "background .5s" }}>
         {t.star && <Stars />}
 
@@ -502,9 +545,10 @@ useEffect(() => {
               </button>
               <div style={{ display: "flex", gap: 8 }}>
                 <IconBtn t={t} onClick={() => setSearchOpen(true)}><Search size={17} color={t.text} /></IconBtn>
-                <IconBtn t={t} onClick={() => setMusicOpen(true)} active={playing} accent={M.accent}>
-                  <Music size={17} color={playing ? M.accent : t.text} />
+                <IconBtn t={t} onClick={() => setMusicOpen(true)} active={playing} accent={t.accent}>
+                  <Music size={17} color={playing ? t.accent : t.text} />
                 </IconBtn>
+                <IconBtn t={t} onClick={() => setThemePick(true)}><Palette size={17} color={t.text} /></IconBtn>
                 <IconBtn t={t} onClick={() => setThemeMode(themeMode === "auto" ? "day" : themeMode === "day" ? "night" : "auto")}>
                   {isNight ? <Moon size={17} color={t.text} /> : <Sun size={17} color={t.text} />}
                 </IconBtn>
@@ -517,8 +561,8 @@ useEffect(() => {
               </button>
               <div style={{ display: "flex", gap: 8 }}>
                 <IconBtn t={t} onClick={() => setSearchOpen(true)}><Search size={17} color={t.text} /></IconBtn>
-                <IconBtn t={t} onClick={() => setMusicOpen(true)} active={playing} accent={M.accent}>
-                  <Music size={17} color={playing ? M.accent : t.text} />
+                <IconBtn t={t} onClick={() => setMusicOpen(true)} active={playing} accent={t.accent}>
+                  <Music size={17} color={playing ? t.accent : t.text} />
                 </IconBtn>
               </div>
             </div>
@@ -526,14 +570,14 @@ useEffect(() => {
           {/* mini now-playing bar (file tracks play across pages) */}
           {cur && cur.kind === "file" && (
             <div style={{ marginTop: 10, background: t.surface, border: `1px solid ${t.border}`, borderRadius: 16, padding: "9px 12px", display: "flex", alignItems: "center", gap: 10, boxShadow: t.star ? "none" : "0 8px 20px rgba(30,40,70,.1)" }}>
-              <button onClick={togglePlay} style={{ width: 32, height: 32, borderRadius: 16, border: "none", cursor: "pointer", background: M.accent, color: M.onAccent, display: "grid", placeItems: "center", flexShrink: 0 }}>
+              <button onClick={togglePlay} style={{ width: 32, height: 32, borderRadius: 16, border: "none", cursor: "pointer", background: t.accent, color: t.onAccent, display: "grid", placeItems: "center", flexShrink: 0 }}>
                 {playing ? <Pause size={15} /> : <Play size={15} />}
               </button>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: t.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{cur.name}</div>
                 <div style={{ fontSize: 9.5, color: t.sub }}>{cur.kind === "yt" ? "YouTube" : cur.kind === "file" ? "ไฟล์เพลง" : "บรรเลงสด"}</div>
               </div>
-              <input type="range" min="0" max="100" value={volume} onChange={(e) => setVolume(+e.target.value)} style={{ width: 70, accentColor: M.accent }} />
+              <input type="range" min="0" max="100" value={volume} onChange={(e) => setVolume(+e.target.value)} style={{ width: 70, accentColor: t.accent }} />
               <button onClick={() => setMusicOpen(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><Music size={16} color={t.sub} /></button>
             </div>
           )}
@@ -554,7 +598,7 @@ useEffect(() => {
           <div style={{ display: page === "home" && cur && cur.kind === "yt" ? "block" : "none", marginTop: 16 }}>
             <div style={{ ...card(t), padding: 14 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                <div style={{ fontSize: 13, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 6 }}><Music size={15} color={M.accent} /> กำลังเล่น</div>
+                <div style={{ fontSize: 13, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 6 }}><Music size={15} color={t.accent} /> กำลังเล่น</div>
                 <button onClick={() => { stopAll(); setCurId(null); }} style={ghost} title="ปิด"><X size={18} color={t.faint} /></button>
               </div>
               <div style={{ borderRadius: 14, overflow: "hidden", border: `1px solid ${t.border}`, background: "#000" }}>
@@ -562,7 +606,7 @@ useEffect(() => {
               </div>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 14, marginTop: 12 }}>
                 <button onClick={prevTrack} style={ghost} title="ย้อนกลับ"><SkipBack size={19} color={t.text} fill={t.text} /></button>
-                <button onClick={togglePlay} style={{ width: 42, height: 42, borderRadius: 21, border: "none", cursor: "pointer", background: M.accent, color: M.onAccent, display: "grid", placeItems: "center", flexShrink: 0 }}>
+                <button onClick={togglePlay} style={{ width: 42, height: 42, borderRadius: 21, border: "none", cursor: "pointer", background: t.accent, color: t.onAccent, display: "grid", placeItems: "center", flexShrink: 0 }}>
                   {playing ? <Pause size={19} /> : <Play size={19} />}
                 </button>
                 <button onClick={nextTrack} style={ghost} title="เพลงถัดไป"><SkipForward size={19} color={t.text} fill={t.text} /></button>
@@ -570,7 +614,7 @@ useEffect(() => {
               <div style={{ fontSize: 13, fontWeight: 600, color: t.text, textAlign: "center", marginTop: 8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{cur ? cur.name : ""}</div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
                 <button onClick={() => setVolume((v) => Math.max(0, v - 10))} style={ghost} title="ลดเสียง"><VolumeX size={16} color={t.faint} /></button>
-                <input type="range" min="0" max="100" value={volume} onChange={(e) => setVolume(+e.target.value)} style={{ flex: 1, accentColor: M.accent }} />
+                <input type="range" min="0" max="100" value={volume} onChange={(e) => setVolume(+e.target.value)} style={{ flex: 1, accentColor: t.accent }} />
                 <button onClick={() => setVolume((v) => Math.min(100, v + 10))} style={ghost} title="เพิ่มเสียง"><Volume2 size={16} color={t.faint} /></button>
               </div>
               <button onClick={() => setMusicOpen(true)} style={{ ...ghost, width: "100%", textAlign: "center", marginTop: 8, fontSize: 11.5, color: t.sub }}>ดูเพลย์ลิสต์ทั้งหมด <ChevronRight size={13} style={{ verticalAlign: "middle" }} /></button>
@@ -581,7 +625,8 @@ useEffect(() => {
         <Dock t={t} page={page} setPage={setPage} onQuickAdd={() => setAddOpen(true)} />
 
         {mentorPick && <MentorPicker t={t} mentor={mentor} setMentor={setMentor} close={() => setMentorPick(false)} />}
-        {chatOpen && <ChatModal t={t} M={M} close={() => setChatOpen(false)} />}
+        {themePick && <ThemePicker t={t} theme={theme} setTheme={setTheme} mode={mode} close={() => setThemePick(false)} />}
+        {chatOpen && <ChatModal t={t} M={M} mentor={mentor} close={() => setChatOpen(false)} />}
         {editProfile && <EditProfile t={t} M={M} profile={profile} setProfile={setProfile} close={() => setEditProfile(false)} />}
         {searchOpen && <SearchOverlay t={t} notes={notes} goals={goals} tx={tx} categories={categories} setPage={setPage} close={() => setSearchOpen(false)} />}
         {musicOpen && <MusicModal {...{ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, moveTrack, toggleFavorite, volume, setVolume, close: () => setMusicOpen(false) }} />}
@@ -652,20 +697,20 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
 
         {/* ตอนนี้เพลง YouTube เล่นอยู่ที่ mini player ลอยมุมจอ (ไม่ดับตอนสลับหน้าแล้ว) */}
         {cur && cur.kind === "yt" && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, background: `${M.accent}18`, border: `1px dashed ${M.accent}66`, borderRadius: 12, padding: "9px 12px", fontSize: 11.5, color: M.accent, fontWeight: 600, marginBottom: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, background: `${t.accent}18`, border: `1px dashed ${t.accent}66`, borderRadius: 12, padding: "9px 12px", fontSize: 11.5, color: t.accent, fontWeight: 600, marginBottom: 14 }}>
             <Music size={14} /> กำลังเล่น "{cur.name}" อยู่ที่หน้า Home (ใต้เป้าหมายวันนี้)
           </div>
         )}
 
         {/* add controls */}
         <div style={{ ...card(t), padding: 14, marginBottom: 12 }}>
-          <button onClick={() => fileRef.current?.click()} style={{ ...primaryBtn(M), width: "100%", padding: "11px 0", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 10 }}>
+          <button onClick={() => fileRef.current?.click()} style={{ ...primaryBtn(t), width: "100%", padding: "11px 0", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 10 }}>
             <Upload size={17} /> แนบไฟล์เพลง (MP3 / MP4)
           </button>
           <input ref={fileRef} type="file" accept="audio/*,video/mp4,.mp3,.mp4" onChange={addFileInner} style={{ display: "none" }} />
           <div style={{ display: "flex", gap: 8 }}>
             <input value={ytUrl} onChange={(e) => setYtUrl(e.target.value)} placeholder="วางลิงก์ YouTube..." style={input(t)} />
-            <button onClick={addYt} style={{ ...primaryBtn(M), padding: "0 14px", display: "flex", alignItems: "center", gap: 5 }}><Link2 size={15} /> เพิ่ม</button>
+            <button onClick={addYt} style={{ ...primaryBtn(t), padding: "0 14px", display: "flex", alignItems: "center", gap: 5 }}><Link2 size={15} /> เพิ่ม</button>
           </div>
           {activeFolderId && <div style={{ fontSize: 10.5, color: t.faint, marginTop: 8 }}>เพลงที่เพิ่มใหม่จะลงหมวด "{folders.find((f) => f.id === activeFolderId)?.name}" ทันที</div>}
         </div>
@@ -674,18 +719,18 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
         {/* volume */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
           <VolumeX size={16} color={t.faint} />
-          <input type="range" min="0" max="100" value={volume} onChange={(e) => setVolume(+e.target.value)} style={{ flex: 1, accentColor: M.accent }} />
+          <input type="range" min="0" max="100" value={volume} onChange={(e) => setVolume(+e.target.value)} style={{ flex: 1, accentColor: t.accent }} />
           <Volume2 size={16} color={t.faint} />
         </div>
 
         {/* แท็บหมวดหมู่ */}
         <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6, marginBottom: 10 }}>
           {[{ id: "all", name: "ทั้งหมด" }, { id: "fav", name: "❤ โปรด" }, ...folders].map((f) => (
-            <div key={f.id} style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 2, borderRadius: 16, border: `1.5px solid ${tab === f.id ? M.accent : t.border}`, background: tab === f.id ? M.accent : "transparent", paddingRight: f.id !== "all" && f.id !== "fav" ? 4 : 0 }}>
-              <button onClick={() => setTab(f.id)} style={{ padding: "7px 13px", border: "none", background: "none", cursor: "pointer", fontSize: 12, fontWeight: 700, color: tab === f.id ? M.onAccent : t.sub }}>{f.name}</button>
+            <div key={f.id} style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 2, borderRadius: 16, border: `1.5px solid ${tab === f.id ? t.accent : t.border}`, background: tab === f.id ? t.accent : "transparent", paddingRight: f.id !== "all" && f.id !== "fav" ? 4 : 0 }}>
+              <button onClick={() => setTab(f.id)} style={{ padding: "7px 13px", border: "none", background: "none", cursor: "pointer", fontSize: 12, fontWeight: 700, color: tab === f.id ? t.onAccent : t.sub }}>{f.name}</button>
               {f.id !== "all" && f.id !== "fav" && (
                 <button onClick={() => deleteFolder(f.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: 3, display: "grid", placeItems: "center" }} title="ลบหมวดหมู่นี้">
-                  <X size={12} color={tab === f.id ? M.onAccent : t.faint} />
+                  <X size={12} color={tab === f.id ? t.onAccent : t.faint} />
                 </button>
               )}
             </div>
@@ -695,7 +740,7 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
         {addingFolder && (
           <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
             <input autoFocus value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addFolder()} placeholder="ตั้งชื่อหมวดหมู่ เช่น ชิลล์ๆ, ออกกำลังกาย" style={input(t)} />
-            <button onClick={addFolder} style={{ ...primaryBtn(M), padding: "0 14px" }}>สร้าง</button>
+            <button onClick={addFolder} style={{ ...primaryBtn(t), padding: "0 14px" }}>สร้าง</button>
           </div>
         )}
 
@@ -726,11 +771,11 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
 }
 
 function TrackRow({ t, M, track, active, playing, folders, isFirst, isLast, onPlay, onToggle, onDel, onFav, onMoveUp, onMoveDown, onFolder }) {
-  const icon = track.kind === "yt" ? <Music size={16} color="#E0507B" /> : track.kind === "file" ? <Music size={16} color="#3DA5D9" /> : <Sparkles size={16} color={M.accent} />;
+  const icon = track.kind === "yt" ? <Music size={16} color="#E0507B" /> : track.kind === "file" ? <Music size={16} color="#3DA5D9" /> : <Sparkles size={16} color={t.accent} />;
   return (
-    <div style={{ ...card(t), padding: "10px 12px", border: `1px solid ${active ? M.accent : t.border}` }}>
+    <div style={{ ...card(t), padding: "10px 12px", border: `1px solid ${active ? t.accent : t.border}` }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <button onClick={active ? onToggle : onPlay} style={{ width: 34, height: 34, borderRadius: 17, border: "none", cursor: "pointer", background: active ? M.accent : `${M.accent}22`, color: active ? M.onAccent : M.accent, display: "grid", placeItems: "center", flexShrink: 0 }}>
+        <button onClick={active ? onToggle : onPlay} style={{ width: 34, height: 34, borderRadius: 17, border: "none", cursor: "pointer", background: active ? t.accent : `${t.accent}22`, color: active ? t.onAccent : t.accent, display: "grid", placeItems: "center", flexShrink: 0 }}>
           {active && playing ? <Pause size={15} /> : <Play size={15} />}
         </button>
         <span style={{ flexShrink: 0 }}>{icon}</span>
@@ -772,9 +817,9 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, goa
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, gap: 12 }}>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 16.5, fontWeight: 700, color: "#fff", lineHeight: 1.4, minHeight: 46 }}>“{quote}”</div>
-            <button onClick={() => setChatOpen(true)} style={{ marginTop: 14, border: "none", cursor: "pointer", background: `linear-gradient(135deg,${M.accent2},${M.accent})`, color: M.onAccent, fontWeight: 700, fontSize: 13, padding: "9px 16px", borderRadius: 18, display: "inline-flex", alignItems: "center", gap: 6 }}>คุยกับโค้ช <ChevronRight size={15} /></button>
+            <button onClick={() => setChatOpen(true)} style={{ marginTop: 14, border: "none", cursor: "pointer", background: `linear-gradient(135deg,${t.accent2},${t.accent})`, color: t.onAccent, fontWeight: 700, fontSize: 13, padding: "9px 16px", borderRadius: 18, display: "inline-flex", alignItems: "center", gap: 6 }}>คุยกับโค้ช <ChevronRight size={15} /></button>
           </div>
-          <Ring pct={goalPct} color={M.accent} label="เป้าหมาย" />
+          <Ring pct={goalPct} color={t.accent} label="เป้าหมาย" />
         </div>
       </div>
 
@@ -800,13 +845,13 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, goa
 
       <div style={{ ...card(t), marginTop: 16, padding: 16 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text }}>เป้าหมายวันนี้</div><Sparkles size={16} color={M.accent} />
+          <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text }}>เป้าหมายวันนี้</div><Sparkles size={16} color={t.accent} />
         </div>
         <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
           {goals.length === 0 && <div style={{ fontSize: 12.5, color: t.sub }}>ยังไม่มีเป้าหมาย เพิ่มอันแรกเลย 👇</div>}
           {goals.map((g) => (
             <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <button onClick={() => setGoals((gs) => gs.map((x) => (x.id === g.id ? { ...x, done: !x.done } : x)))} style={{ width: 22, height: 22, borderRadius: 7, border: `2px solid ${g.done ? M.accent : t.faint}`, background: g.done ? M.accent : "transparent", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}>{g.done && <Check size={14} color={M.onAccent} />}</button>
+              <button onClick={() => setGoals((gs) => gs.map((x) => (x.id === g.id ? { ...x, done: !x.done } : x)))} style={{ width: 22, height: 22, borderRadius: 7, border: `2px solid ${g.done ? t.accent : t.faint}`, background: g.done ? t.accent : "transparent", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}>{g.done && <Check size={14} color={t.onAccent} />}</button>
               <span style={{ flex: 1, fontSize: 13.5, color: g.done ? t.sub : t.text, textDecoration: g.done ? "line-through" : "none" }}>{g.text}</span>
               <button onClick={() => setGoals((gs) => gs.filter((x) => x.id !== g.id))} style={ghost}><Trash2 size={15} color={t.faint} /></button>
             </div>
@@ -885,8 +930,9 @@ function FinancePage({ t, tx, setTx, categories, openAdd, openExport }) {
   const doExportPdf = () => {
     const rows = periodTx.map((x) => `<tr><td>${x.date}</td><td>${x.type === "in" ? "รับเข้า" : "จ่ายออก"}</td><td>${findCat(categories, x.cat).label}</td><td style="text-align:right">${x.amount.toLocaleString()}</td><td>${(x.note || "").replace(/</g, "&lt;")}</td></tr>`).join("");
     const html = `<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"><title>RefHub - รายงานการเงิน</title>
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anuphan:wght@400;500;600;700;800&display=swap">
       <style>
-        body{font-family:'Sarabun','Segoe UI',sans-serif;padding:24px;color:#222}
+        body{font-family:'Anuphan','Sarabun','Segoe UI',sans-serif;padding:24px;color:#222}
         h1{font-size:20px;margin-bottom:2px} .sub{color:#777;font-size:13px;margin-bottom:18px}
         table{width:100%;border-collapse:collapse;font-size:13px} th,td{padding:7px 8px;border-bottom:1px solid #e5e5e5;text-align:left}
         th{background:#f4f4f4} .summary{display:flex;gap:24px;margin-bottom:18px}
@@ -1021,7 +1067,15 @@ function AddTxModal({ t, tx, setTx, categories, moveCategory, deleteCategory, ad
   const [date, setDate] = useState(todayStr());
   const [withVat, setWithVat] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
-  const quickAmounts = [10, 100, 1000, 5000, 10000];
+  const [amountSign, setAmountSign] = useState("+"); // โหมดกดปุ่มลัด: บวกเพิ่ม หรือ ลบออก จากยอดปัจจุบัน
+  const quickAmounts = [10, 100, 500, 1000, 5000, 10000];
+  const applyQuick = (v) => {
+    setAmount((prev) => {
+      const cur = parseFloat(prev) || 0;
+      const next = amountSign === "+" ? cur + v : Math.max(0, cur - v);
+      return String(next);
+    });
+  };
 
   const amountNum = parseFloat(amount) || 0;
   const vatBase = withVat ? amountNum / 1.07 : 0;
@@ -1062,11 +1116,17 @@ function AddTxModal({ t, tx, setTx, categories, moveCategory, deleteCategory, ad
           ); })}
         </div>
         <input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" placeholder="จำนวนเงิน (บาท)" style={{ ...input(t), marginBottom: 8, fontSize: 18, fontWeight: 700 }} />
-        <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 6, marginBottom: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", borderRadius: 10, overflow: "hidden", border: `1px solid ${t.border}`, flexShrink: 0 }}>
+            <button onClick={() => setAmountSign("+")} style={{ width: 30, padding: "5px 0", border: "none", cursor: "pointer", background: amountSign === "+" ? "#2E9E6B" : t.inputBg, color: amountSign === "+" ? "#fff" : t.sub, fontWeight: 800, fontSize: 14 }}>+</button>
+            <button onClick={() => setAmountSign("-")} style={{ width: 30, padding: "5px 0", border: "none", cursor: "pointer", background: amountSign === "-" ? "#D9534F" : t.inputBg, color: amountSign === "-" ? "#fff" : t.sub, fontWeight: 800, fontSize: 14 }}>−</button>
+          </div>
           {quickAmounts.map((v) => (
-            <button key={v} onClick={() => setAmount(String(v))} style={{ padding: "5px 12px", borderRadius: 10, border: `1px solid ${t.border}`, background: t.inputBg, color: t.sub, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{v.toLocaleString()}</button>
+            <button key={v} onClick={() => applyQuick(v)} style={{ padding: "5px 12px", borderRadius: 10, border: `1px solid ${t.border}`, background: t.inputBg, color: t.sub, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{amountSign}{v.toLocaleString()}</button>
           ))}
+          <button onClick={() => setAmount("")} style={{ padding: "5px 10px", borderRadius: 10, border: "none", background: "none", color: t.faint, fontSize: 11, cursor: "pointer" }}>ล้าง</button>
         </div>
+        <div style={{ fontSize: 10.5, color: t.faint, marginTop: -6, marginBottom: 10 }}>เลือกโหมด + หรือ − แล้วกดปุ่มตัวเลขซ้ำๆ เพื่อสะสมยอดได้เลย เช่น กด +100 สามครั้ง = 300</div>
         <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: withVat ? 6 : 10, cursor: "pointer" }}>
           <input type="checkbox" checked={withVat} onChange={(e) => setWithVat(e.target.checked)} />
           <span style={{ fontSize: 12.5, color: t.sub }}>ยอดนี้รวม VAT 7% แล้ว (แยกยอดภาษีให้อัตโนมัติ)</span>
@@ -1178,26 +1238,120 @@ const dateLabel = (d) => { const today = todayStr(); const y = new Date(Date.now
 
 // ---------------- Note ----------------
 function NotePage({ t, notes, setNotes }) {
-  const [title, setTitle] = useState(""); const [body, setBody] = useState("");
-  const add = () => { if (!title.trim() && !body.trim()) return; setNotes((n) => [{ id: uid(), title: title.trim(), body: body.trim(), date: todayStr() }, ...n]); setTitle(""); setBody(""); };
+  const [title, setTitle] = useState(""); const [body, setBody] = useState(""); const [tagsInput, setTagsInput] = useState("");
+  const [editingId, setEditingId] = useState(null);
+  const [editTitle, setEditTitle] = useState(""); const [editBody, setEditBody] = useState(""); const [editTags, setEditTags] = useState("");
+  const [tagFilter, setTagFilter] = useState(null);
+
+  const parseTags = (str) => str.split(",").map((s) => s.trim()).filter(Boolean);
+
+  const add = () => {
+    if (!title.trim() && !body.trim()) return;
+    setNotes((n) => [{ id: uid(), title: title.trim(), body: body.trim(), date: todayStr(), pinned: false, tags: parseTags(tagsInput) }, ...n]);
+    setTitle(""); setBody(""); setTagsInput("");
+  };
+  const startEdit = (n) => { setEditingId(n.id); setEditTitle(n.title); setEditBody(n.body); setEditTags((n.tags || []).join(", ")); };
+  const saveEdit = () => {
+    setNotes((list) => list.map((n) => (n.id === editingId ? { ...n, title: editTitle.trim(), body: editBody.trim(), tags: parseTags(editTags) } : n)));
+    setEditingId(null);
+  };
+  const togglePin = (id) => setNotes((list) => list.map((n) => (n.id === id ? { ...n, pinned: !n.pinned } : n)));
+
+  // 📤 Export เป็น Markdown — Notion ลากไฟล์ .md ไป import ตรงๆ ได้เลย (ใช้ได้ทันทีไม่ต้องรอ deploy)
+  const noteToMd = (n) => `# ${n.title || "(ไม่มีหัวข้อ)"}\n\n${n.body || ""}\n\n${(n.tags || []).map((tg) => "#" + tg).join(" ")}\n\n_บันทึกเมื่อ ${n.date}_\n`;
+  const downloadText = (filename, text, mime) => { try { const blob = new Blob([text], { type: mime }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); } catch (e) {} };
+  const exportAllMd = () => downloadText("refhub-notes.md", notes.map(noteToMd).join("\n---\n\n"), "text/markdown;charset=utf-8;");
+  const exportOneMd = (n) => downloadText(`${(n.title || "note").slice(0, 40).replace(/[\\/:*?"<>|]/g, "")}.md`, noteToMd(n), "text/markdown;charset=utf-8;");
+
+  // 🔗 Sync ขึ้น Notion จริง (ต้อง deploy ขึ้น Vercel + ตั้งค่า NOTION_TOKEN/NOTION_DATABASE_ID ก่อนถึงจะทำงานได้จริง)
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState(null);
+  const syncToNotion = async () => {
+    const pending = notes.filter((n) => !n.notionId); // sync เฉพาะโน้ตที่ยังไม่เคยส่งไป (กันสร้างซ้ำ)
+    if (pending.length === 0) { setSyncMsg("ไม่มีโน้ตใหม่ที่ต้อง sync"); setTimeout(() => setSyncMsg(null), 2500); return; }
+    setSyncing(true); setSyncMsg(null);
+    try {
+      const r = await fetch("/api/notion-sync", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ notes: pending }) });
+      const data = await r.json();
+      if (!r.ok) { setSyncMsg("Sync ไม่สำเร็จ: " + (data.error || "unknown error")); return; }
+      const okMap = Object.fromEntries((data.results || []).filter((x) => x.ok).map((x) => [x.id, x.notionId]));
+      setNotes((list) => list.map((n) => (okMap[n.id] ? { ...n, notionId: okMap[n.id] } : n)));
+      const failed = (data.results || []).filter((x) => !x.ok);
+      setSyncMsg(failed.length ? `sync สำเร็จ ${Object.keys(okMap).length} อัน, พลาด ${failed.length} อัน` : `sync ขึ้น Notion สำเร็จ ${Object.keys(okMap).length} อัน ✓`);
+    } catch (e) {
+      setSyncMsg("เชื่อมต่อ /api/notion-sync ไม่ได้ (ต้อง deploy ขึ้น Vercel ก่อนถึงจะมี endpoint นี้)");
+    } finally { setSyncing(false); }
+  };
+
+  const allTags = [...new Set(notes.flatMap((n) => n.tags || []))];
+  const shown = [...notes]
+    .filter((n) => !tagFilter || (n.tags || []).includes(tagFilter))
+    .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+
   return (
     <>
       <PageHead t={t} title="โน้ต" sub="จดไอเดีย บันทึกการเรียนรู้" icon={<StickyNote size={20} color={t.accent} />} />
+
+      {notes.length > 0 && (
+        <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+          <button onClick={exportAllMd} style={{ ...card(t), flex: 1, padding: "9px 0", border: `1px solid ${t.border}`, cursor: "pointer", color: t.text, fontWeight: 700, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><FileText size={14} color={t.accent} /> Export .md</button>
+          <button onClick={syncToNotion} disabled={syncing} style={{ ...card(t), flex: 1, padding: "9px 0", border: `1px solid ${t.border}`, cursor: syncing ? "default" : "pointer", color: t.text, fontWeight: 700, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: syncing ? 0.6 : 1 }}>{syncing ? "กำลัง sync..." : "🔗 Sync Notion"}</button>
+        </div>
+      )}
+      {syncMsg && <div style={{ fontSize: 11, color: t.sub, textAlign: "center", marginBottom: 12 }}>{syncMsg}</div>}
       <div style={{ ...card(t), padding: 16 }}>
         <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="หัวข้อ" style={{ ...input(t), marginBottom: 8, fontWeight: 700 }} />
-        <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="เขียนอะไรก็ได้ที่อยากจดไว้..." rows={3} style={{ ...input(t), resize: "vertical", marginBottom: 12, fontFamily: "inherit" }} />
+        <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="เขียนอะไรก็ได้ที่อยากจดไว้..." rows={3} style={{ ...input(t), resize: "vertical", marginBottom: 8, fontFamily: "inherit" }} />
+        <input value={tagsInput} onChange={(e) => setTagsInput(e.target.value)} placeholder="แท็ก (คั่นด้วยจุลภาค เช่น งาน, ไอเดีย)" style={{ ...input(t), marginBottom: 12, fontSize: 12.5 }} />
         <button onClick={add} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "11px 0" }}>บันทึกโน้ต</button>
       </div>
+
+      {allTags.length > 0 && (
+        <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6, marginTop: 14 }}>
+          <button onClick={() => setTagFilter(null)} style={{ flexShrink: 0, padding: "6px 12px", borderRadius: 14, cursor: "pointer", fontSize: 11.5, fontWeight: 700, border: `1.5px solid ${!tagFilter ? t.accent : t.border}`, background: !tagFilter ? t.accent : "transparent", color: !tagFilter ? t.onAccent : t.sub }}>ทั้งหมด</button>
+          {allTags.map((tag) => (
+            <button key={tag} onClick={() => setTagFilter(tag)} style={{ flexShrink: 0, padding: "6px 12px", borderRadius: 14, cursor: "pointer", fontSize: 11.5, fontWeight: 700, border: `1.5px solid ${tagFilter === tag ? t.accent : t.border}`, background: tagFilter === tag ? t.accent : "transparent", color: tagFilter === tag ? t.onAccent : t.sub }}>#{tag}</button>
+          ))}
+        </div>
+      )}
+
       <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
-        {notes.length === 0 && <Empty t={t} text="ยังไม่มีโน้ต เริ่มจดอันแรก" />}
-        {notes.map((n) => (
-          <div key={n.id} style={{ ...card(t), padding: 14 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-              <div style={{ fontSize: 14.5, fontWeight: 800, color: t.text }}>{n.title || "(ไม่มีหัวข้อ)"}</div>
-              <button onClick={() => setNotes((x) => x.filter((y) => y.id !== n.id))} style={ghost}><Trash2 size={15} color={t.faint} /></button>
-            </div>
-            {n.body && <div style={{ fontSize: 13, color: t.sub, marginTop: 6, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{n.body}</div>}
-            <div style={{ fontSize: 10.5, color: t.faint, marginTop: 8 }}>{n.date}</div>
+        {shown.length === 0 && <Empty t={t} text="ยังไม่มีโน้ต เริ่มจดอันแรก" />}
+        {shown.map((n) => (
+          <div key={n.id} style={{ ...card(t), padding: 14, border: `1px solid ${n.pinned ? t.accent : t.border}` }}>
+            {editingId === n.id ? (
+              <>
+                <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={{ ...input(t), marginBottom: 8, fontWeight: 700 }} />
+                <textarea value={editBody} onChange={(e) => setEditBody(e.target.value)} rows={3} style={{ ...input(t), resize: "vertical", marginBottom: 8, fontFamily: "inherit" }} />
+                <input value={editTags} onChange={(e) => setEditTags(e.target.value)} placeholder="แท็ก (คั่นด้วยจุลภาค)" style={{ ...input(t), marginBottom: 10, fontSize: 12.5 }} />
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => setEditingId(null)} style={{ ...card(t), flex: 1, padding: "9px 0", border: `1px solid ${t.border}`, cursor: "pointer", color: t.sub, fontWeight: 700, fontSize: 13 }}>ยกเลิก</button>
+                  <button onClick={saveEdit} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), flex: 1, padding: "9px 0", fontSize: 13 }}>บันทึก</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                  <div style={{ fontSize: 14.5, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 6 }}>
+                    {n.pinned && <Sparkles size={13} color={t.accent} />}{n.title || "(ไม่มีหัวข้อ)"}
+                  </div>
+                  <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
+                    {n.notionId && <span title="sync ขึ้น Notion แล้ว" style={{ display: "grid", placeItems: "center", padding: 4 }}><Check size={14} color="#2E9E6B" /></span>}
+                    <button onClick={() => exportOneMd(n)} style={ghost} title="Export เป็น Markdown"><Download size={15} color={t.faint} /></button>
+                    <button onClick={() => togglePin(n.id)} style={ghost} title="ปักหมุด"><Target size={15} color={n.pinned ? t.accent : t.faint} /></button>
+                    <button onClick={() => startEdit(n)} style={ghost} title="แก้ไข"><Pencil size={15} color={t.faint} /></button>
+                    <button onClick={() => setNotes((x) => x.filter((y) => y.id !== n.id))} style={ghost} title="ลบ"><Trash2 size={15} color={t.faint} /></button>
+                  </div>
+                </div>
+                {n.body && <div style={{ fontSize: 13, color: t.sub, marginTop: 6, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{n.body}</div>}
+                {(n.tags || []).length > 0 && (
+                  <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 8 }}>
+                    {n.tags.map((tag) => <span key={tag} style={{ fontSize: 10, fontWeight: 700, color: t.accent, background: `${t.accent}18`, padding: "2px 8px", borderRadius: 10 }}>#{tag}</span>)}
+                  </div>
+                )}
+                <div style={{ fontSize: 10.5, color: t.faint, marginTop: 8 }}>{n.date}</div>
+              </>
+            )}
           </div>
         ))}
       </div>
@@ -1265,11 +1419,28 @@ function LangPage({ t }) {
 }
 
 // ---------------- Modals ----------------
-function ChatModal({ t, M, close }) {
+function ChatModal({ t, M, mentor, close }) {
   const [msgs, setMsgs] = useState([{ who: "m", text: `สวัสดี ฉันคือ ${M.full} วันนี้อยากให้ช่วยเรื่องอะไร?` }]);
-  const [inp, setInp] = useState(""); const endRef = useRef(null);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs]);
-  const send = () => { if (!inp.trim()) return; const u = inp.trim(); setInp(""); setMsgs((m) => [...m, { who: "u", text: u }]); setTimeout(() => setMsgs((m) => [...m, { who: "m", text: M.replies[Math.floor(Math.random() * M.replies.length)] }]), 500); };
+  const [inp, setInp] = useState(""); const [loading, setLoading] = useState(false); const endRef = useRef(null);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, loading]);
+  const send = async () => {
+    if (!inp.trim() || loading) return;
+    const u = inp.trim(); setInp("");
+    const nextMsgs = [...msgs, { who: "u", text: u }];
+    setMsgs(nextMsgs);
+    setLoading(true);
+    try {
+      const r = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mentor, messages: nextMsgs }) });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "API error");
+      setMsgs((m) => [...m, { who: "m", text: data.text || M.replies[Math.floor(Math.random() * M.replies.length)] }]);
+    } catch (e) {
+      // ยังไม่ deploy หรือ API มีปัญหา -> fallback เป็น mock reply ชั่วคราว ไม่ให้แชทค้าง
+      setMsgs((m) => [...m, { who: "m", text: M.replies[Math.floor(Math.random() * M.replies.length)] }]);
+    } finally {
+      setLoading(false);
+    }
+  };
   return (
     <div style={overlay} onClick={close}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, height: "82vh", background: t.page, borderRadius: "24px 24px 0 0", display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -1280,13 +1451,13 @@ function ChatModal({ t, M, close }) {
         </div>
         <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
           {msgs.map((m, i) => (<div key={i} style={{ alignSelf: m.who === "u" ? "flex-end" : "flex-start", maxWidth: "78%", background: m.who === "u" ? M.accent : t.surface, color: m.who === "u" ? M.onAccent : t.text, padding: "10px 14px", borderRadius: 16, fontSize: 13.5, lineHeight: 1.45, border: m.who === "u" ? "none" : `1px solid ${t.border}` }}>{m.text}</div>))}
+          {loading && <div style={{ alignSelf: "flex-start", color: t.sub, fontSize: 12.5, padding: "4px 14px" }}>{M.name} กำลังพิมพ์...</div>}
           <div ref={endRef} />
         </div>
         <div style={{ padding: 12, background: t.page }}>
-          <div style={{ fontSize: 10.5, color: t.faint, textAlign: "center", marginBottom: 8 }}>โหมดตัวอย่าง — เชื่อม AI จริงภายหลัง</div>
           <div style={{ display: "flex", gap: 8 }}>
-            <input value={inp} onChange={(e) => setInp(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} placeholder={`ถาม ${M.name}...`} style={input(t)} />
-            <button onClick={send} style={{ ...primaryBtn(M), width: 46, padding: 0, display: "grid", placeItems: "center" }}><Send size={18} /></button>
+            <input value={inp} onChange={(e) => setInp(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} placeholder={`ถาม ${M.name}...`} style={input(t)} disabled={loading} />
+            <button onClick={send} disabled={loading} style={{ ...primaryBtn(M), width: 46, padding: 0, display: "grid", placeItems: "center", opacity: loading ? 0.6 : 1 }}><Send size={18} /></button>
           </div>
         </div>
       </div>
@@ -1297,13 +1468,32 @@ function ChatModal({ t, M, close }) {
 function MentorPicker({ t, mentor, setMentor, close }) {
   return (<div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
     <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 4 }}>เลือกโค้ชของคุณ</div>
-    <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>ธีมสี คำคม และเพลง จะเปลี่ยนตามโค้ช</div>
+    <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>คำคมและสไตล์การคุยจะเปลี่ยนตามโค้ช (สีธีมแอปปรับแยกได้ที่ไอคอนจานสี 🎨 ด้านบน)</div>
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {Object.entries(MENTORS).map(([k, m]) => (<button key={k} onClick={() => { setMentor(k); close(); }} style={{ display: "flex", alignItems: "center", gap: 14, padding: 14, borderRadius: 18, cursor: "pointer", textAlign: "left", background: t.surface, border: `2px solid ${mentor === k ? m.accent : t.border}` }}>
         <span style={{ width: 46, height: 46, borderRadius: 23, background: `linear-gradient(135deg,${m.accent2},${m.accent})`, color: m.onAccent, display: "grid", placeItems: "center", fontWeight: 800, fontSize: 18, flexShrink: 0 }}>{m.letter}</span>
         <div style={{ flex: 1 }}><div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>{m.full}</div><div style={{ fontSize: 12, color: t.sub }}>{m.tag}</div></div>
         {mentor === k && <Check size={20} color={m.accent} />}
       </button>))}
+    </div>
+  </div></div>);
+}
+
+function ThemePicker({ t, theme, setTheme, mode, close }) {
+  return (<div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
+    <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 4 }}>เลือกธีมสีแอป</div>
+    <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>แต่ละธีมมีเวอร์ชันกลางวัน/กลางคืนของตัวเอง สลับได้อิสระจากโค้ช</div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {Object.entries(THEMES).map(([k, th]) => { const T = th[mode] || th.day; const on = theme === k; return (
+        <button key={k} onClick={() => { setTheme(k); close(); }} style={{ display: "flex", alignItems: "center", gap: 14, padding: 14, borderRadius: 18, cursor: "pointer", textAlign: "left", background: t.surface, border: `2px solid ${on ? T.accent : t.border}` }}>
+          <span style={{ width: 46, height: 46, borderRadius: 23, background: `linear-gradient(135deg,${T.accent2},${T.accent})`, flexShrink: 0 }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>{th.label}</div>
+            <div style={{ fontSize: 11.5, color: t.sub }}>{mode === "night" ? "เวอร์ชันกลางคืน" : "เวอร์ชันกลางวัน"}</div>
+          </div>
+          {on && <Check size={20} color={T.accent} />}
+        </button>
+      ); })}
     </div>
   </div></div>);
 }
@@ -1316,7 +1506,7 @@ function EditProfile({ t, M, profile, setProfile, close }) {
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, marginBottom: 16 }}>
       <div style={{ position: "relative" }}>
         <Avatar profile={{ name, avatar }} t={t} size={90} />
-        <button onClick={() => fileRef.current?.click()} style={{ position: "absolute", bottom: 0, right: 0, width: 30, height: 30, borderRadius: 15, background: M.accent, border: `2px solid ${t.page}`, cursor: "pointer", display: "grid", placeItems: "center" }}><Pencil size={14} color={M.onAccent} /></button>
+        <button onClick={() => fileRef.current?.click()} style={{ position: "absolute", bottom: 0, right: 0, width: 30, height: 30, borderRadius: 15, background: t.accent, border: `2px solid ${t.page}`, cursor: "pointer", display: "grid", placeItems: "center" }}><Pencil size={14} color={t.onAccent} /></button>
       </div>
       <input ref={fileRef} type="file" accept="image/*" onChange={pick} style={{ display: "none" }} />
       <div style={{ fontSize: 11, color: t.sub }}>แตะรูปดินสอเพื่อเลือกรูปจากเครื่อง</div>
@@ -1328,7 +1518,7 @@ function EditProfile({ t, M, profile, setProfile, close }) {
     </div>
     <div style={{ fontSize: 12, fontWeight: 700, color: t.sub, marginBottom: 6 }}>ชื่อ</div>
     <input value={name} onChange={(e) => setName(e.target.value)} placeholder="ชื่อของคุณ" style={{ ...input(t), marginBottom: 16 }} />
-    <button onClick={() => { setProfile({ name: name.trim() || "ฉัน", avatar }); close(); }} style={{ ...primaryBtn(M), width: "100%", padding: "13px 0", fontSize: 15 }}>บันทึก</button>
+    <button onClick={() => { setProfile({ name: name.trim() || "ฉัน", avatar }); close(); }} style={{ ...primaryBtn(t), width: "100%", padding: "13px 0", fontSize: 15 }}>บันทึก</button>
   </div></div>);
 }
 
@@ -1361,7 +1551,7 @@ function Dock({ t, page, setPage, onQuickAdd }) {
   return (<div style={{ position: "absolute", bottom: 16, left: 0, right: 0, display: "flex", justifyContent: "center", zIndex: 20, pointerEvents: "none" }}>
     <div style={{ pointerEvents: "auto", display: "flex", alignItems: "center", background: t.dock, border: `1px solid ${t.dockBorder}`, borderRadius: 34, padding: "8px 10px", maxWidth: 420, width: "92%", justifyContent: "space-between", boxShadow: "0 8px 26px rgba(20,25,45,.18)" }}>
       {items.map((it) => {
-        if (it.k === "_") return (<button key="c" onClick={onQuickAdd} style={{ width: 50, height: 50, borderRadius: 25, border: "none", cursor: "pointer", background: "linear-gradient(135deg,#F2B074,#EA9552)", color: "#3A2408", display: "grid", placeItems: "center", boxShadow: "0 6px 16px rgba(234,149,82,0.4)", marginTop: -18 }}><Plus size={26} /></button>);
+        if (it.k === "_") return (<button key="c" onClick={onQuickAdd} style={{ width: 50, height: 50, borderRadius: 25, border: "none", cursor: "pointer", background: `linear-gradient(135deg,${t.accent2},${t.accent})`, color: t.onAccent, display: "grid", placeItems: "center", boxShadow: `0 6px 16px ${t.accent}66`, marginTop: -18 }}><Plus size={26} /></button>);
         const A = it.ic; const on = page === it.k;
         return (<button key={it.k} onClick={() => setPage(it.k)} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "4px 6px", flex: 1 }}><A size={20} color={on ? t.accent : t.sub} strokeWidth={on ? 2.6 : 1.9} /><span style={{ fontSize: 8.5, color: on ? t.accent : t.sub, fontWeight: on ? 700 : 500 }}>{it.lb}</span></button>);
       })}

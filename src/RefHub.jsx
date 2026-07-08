@@ -4,9 +4,14 @@ import {
   Sun, Moon, Send, Check, Trash2, X, Wallet, Target, BookOpen, ChevronRight,
   Sparkles, Clock, Search, Volume2, VolumeX, Pencil, Download, ArrowLeft,
   Utensils, Car, ShoppingBag, Receipt, Gamepad2, HeartPulse, Briefcase, Gift, Coffee, Music,
-  Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette
+  Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall
 } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, ResponsiveContainer, Tooltip } from "recharts";
+// 📝 BlockNote — editor แบบ Notion (toggle, checklist, หัวข้อ, แนบรูป/ไฟล์) สำหรับหน้าโน้ตฉบับเต็ม
+import { useCreateBlockNote } from "@blocknote/react";
+import { BlockNoteView } from "@blocknote/mantine";
+import "@blocknote/core/fonts/inter.css";
+import "@blocknote/mantine/style.css";
 // 🌐 ต่อท่อระบบฐานข้อมูล Cloud
 import { supabase } from "./supabaseClient";
 const USER_ID = import.meta.env.VITE_USER_ID;
@@ -122,12 +127,12 @@ const THEMES = {
   navy: {
     label: "เนวี่พรีเมียม",
     day:   { accent: "#2B3953", accent2: "#44577A", onAccent: "#FFFFFF", page: "#F3F5F9", bgTop: "#F3F5F9", bgBot: "#FAFBFD", surface: "#FFFFFF" },
-    night: { accent: "#D98C4A", accent2: "#E8A868", onAccent: "#241300", page: "#0D1420", bgTop: "#16202E", bgBot: "#0D1420", surface: "#182333" },
+    night: { accent: "#6C93D9", accent2: "#8CAEE8", onAccent: "#0D1420", page: "#0D1420", bgTop: "#16202E", bgBot: "#0D1420", surface: "#182333" },
   },
   twilight: {
     label: "ทไวไลท์",
     day:   { accent: "#C2607E", accent2: "#D6839B", onAccent: "#FFFFFF", page: "#FAF3F6", bgTop: "#FAF3F6", bgBot: "#FFFFFF", surface: "#FFFFFF" },
-    night: { accent: "#E0839A", accent2: "#F2A08A", onAccent: "#2A0F1A", page: "#17121B", bgTop: "#241C2B", bgBot: "#17121B", surface: "#2A2130" },
+    night: { accent: "#B48DD9", accent2: "#CBA8E8", onAccent: "#241C2B", page: "#17121B", bgTop: "#241C2B", bgBot: "#17121B", surface: "#2A2130" },
   },
 };
 
@@ -156,6 +161,24 @@ function palette(mode, themeId) {
 }
 
 const uid = () => Math.random().toString(36).slice(2, 9);
+
+// 📝 แปลงเนื้อหาโน้ตเก่า (string ธรรมดา) ให้เป็นรูปแบบ block ที่ editor ใหม่ใช้ได้ — กันโน้ตเก่าพังตอนเปิด
+const migrateBody = (body) => {
+  if (Array.isArray(body) && body.length) return body;
+  if (typeof body === "string" && body) return [{ type: "paragraph", content: body }];
+  return [{ type: "paragraph", content: "" }];
+};
+// ดึงข้อความล้วนออกจาก block ทั้งหมด (ใช้ค้นหา/export .md/แสดงตัวอย่าง)
+const blocksToPlainText = (blocks) => {
+  if (typeof blocks === "string") return blocks;
+  if (!Array.isArray(blocks)) return "";
+  return blocks.map((b) => {
+    const own = Array.isArray(b.content) ? b.content.map((c) => c.text || "").join("") : (typeof b.content === "string" ? b.content : "");
+    const kids = b.children && b.children.length ? blocksToPlainText(b.children) : "";
+    return [own, kids].filter(Boolean).join(" ");
+  }).join(" ");
+};
+
 const fmt = (n) => "฿" + Math.round(n).toLocaleString("en-US");
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const monthOf = (d) => d.slice(0, 7);
@@ -166,6 +189,7 @@ export default function RefHub() {
   const [themeMode, setThemeMode] = useState("auto");
   const [mentor, setMentor] = useState("loid");
   const [theme, setTheme] = useState("default"); // 🎨 ธีมสีแอป: default | red | navy | twilight — แยกอิสระจาก mentor
+  const [fontScale, setFontScale] = useState(100); // 📏 ขนาดตัวอักษร: 100 | 115 | 130 (ปกติ/ใหญ่/ใหญ่มาก)
   const [page, setPage] = useState("home");
   const [notes, setNotes] = useState([]);
   const [goals, setGoals] = useState([]);
@@ -241,7 +265,7 @@ export default function RefHub() {
           .from("goals")
           .select("*")
           .eq("user_id", USER_ID);
-        if (dbGoals) setGoals(dbGoals);
+        if (dbGoals) setGoals(dbGoals.map((g) => ({ ...g, doneDate: g.done_date || null })));
 
         // 4. ดึงสมุดโน้ต (Notes)
         const { data: dbNotes } = await supabase
@@ -270,6 +294,7 @@ export default function RefHub() {
       // หมวดหมู่เพลง (folders) ยังไม่มีตารางบน Supabase — เก็บไว้ใน localStorage ไปก่อน
       try { const f = JSON.parse(localStorage.getItem("refhub:folders") || "[]"); setFolders(f); } catch (e) {}
       try { const c = JSON.parse(localStorage.getItem("refhub:categories") || "null"); if (c && Array.isArray(c) && c.length) setCategories(c); } catch (e) {}
+      try { const fs = JSON.parse(localStorage.getItem("refhub:fontScale") || "null"); if (fs) setFontScale(fs); } catch (e) {}
       setLoaded(true);
     })(); 
   }, []);
@@ -277,6 +302,14 @@ export default function RefHub() {
   // เซฟหมวดหมู่เพลงกลับลง localStorage ทุกครั้งที่เปลี่ยน
   useEffect(() => { if (!loaded) return; try { localStorage.setItem("refhub:folders", JSON.stringify(folders)); } catch (e) {} }, [folders, loaded]);
   useEffect(() => { if (!loaded) return; try { localStorage.setItem("refhub:categories", JSON.stringify(categories)); } catch (e) {} }, [categories, loaded]);
+  useEffect(() => { if (!loaded) return; try { localStorage.setItem("refhub:fontScale", JSON.stringify(fontScale)); } catch (e) {} }, [fontScale, loaded]);
+
+  // 🎯 migration ครั้งเดียว: เป้าหมายเก่าที่ยังไม่มีวันที่ผูกไว้ (จากก่อนมีระบบ report) ให้ใส่วันที่ปัจจุบันให้อัตโนมัติ
+  useEffect(() => {
+    if (!loaded) return;
+    const needsMigration = goals.some((g) => !g.date);
+    if (needsMigration) setGoals((gs) => gs.map((g) => (g.date ? g : { ...g, date: todayStr(), doneDate: g.done ? todayStr() : null })));
+  }, [loaded]);
 
 
   // save ทั้ง Local และระบบ Cloud (Settings)
@@ -288,22 +321,20 @@ useEffect(() => {
   const syncGoalsToCloud = async () => {
     try {
       // ดึงข้อมูลล่าสุดจาก Cloud มาเทียบ
-      const { data: currentDb } = await supabase.from("goals").select("id, done").eq("user_id", USER_ID);
+      const { data: currentDb } = await supabase.from("goals").select("*").eq("user_id", USER_ID);
       if (!currentDb) return;
 
-      const dbIds = currentDb.map(x => x.id);
+      const dbMap = Object.fromEntries(currentDb.map((x) => [x.id, x]));
       const localIds = goals.map(x => x.id);
 
       // 1. ตรวจสอบตัวที่เพิ่มใหม่ในแอป -> ยิงขึ้น Cloud
       for (const g of goals) {
-        if (!dbIds.includes(g.id)) {
-          await supabase.from("goals").insert({ id: g.id, user_id: USER_ID, text: g.text, done: g.done });
-        } else {
+        const match = dbMap[g.id];
+        if (!match) {
+          await supabase.from("goals").insert({ id: g.id, user_id: USER_ID, text: g.text, done: g.done, date: g.date || todayStr(), done_date: g.doneDate || null });
+        } else if (match.done !== g.done || (match.done_date || null) !== (g.doneDate || null)) {
           // 2. ตรวจสอบตัวที่สลับสถานะ ติ๊กถูก/เอาออก
-          const match = currentDb.find(x => x.id === g.id);
-          if (match && match.done !== g.done) {
-            await supabase.from("goals").update({ done: g.done }).eq("id", g.id);
-          }
+          await supabase.from("goals").update({ done: g.done, done_date: g.doneDate || null }).eq("id", g.id);
         }
       }
 
@@ -353,7 +384,7 @@ useEffect(() => {
         const dbN = dbMap[n.id];
         if (!dbN) {
           await supabase.from("notes").insert({ id: n.id, user_id: USER_ID, title: n.title, body: n.body, date: n.date, pinned: !!n.pinned, tags: n.tags || [], notion_id: n.notionId || null });
-        } else if (dbN.title !== n.title || dbN.body !== n.body || !!dbN.pinned !== !!n.pinned || JSON.stringify(dbN.tags || []) !== JSON.stringify(n.tags || []) || (dbN.notion_id || null) !== (n.notionId || null)) {
+        } else if (dbN.title !== n.title || JSON.stringify(dbN.body) !== JSON.stringify(n.body) || !!dbN.pinned !== !!n.pinned || JSON.stringify(dbN.tags || []) !== JSON.stringify(n.tags || []) || (dbN.notion_id || null) !== (n.notionId || null)) {
           // เนื้อหาแก้ไขแล้ว (จากฟีเจอร์แก้ไขโน้ต) หรือเพิ่ง sync ขึ้น Notion -> update ขึ้น cloud ด้วย ไม่ใช่แค่ insert/delete
           await supabase.from("notes").update({ title: n.title, body: n.body, pinned: !!n.pinned, tags: n.tags || [], notion_id: n.notionId || null }).eq("id", n.id);
         }
@@ -421,13 +452,13 @@ useEffect(() => {
     if (ytPlayerRef.current && ytPlayerRef.current.setVolume) ytPlayerRef.current.setVolume(volume);
   }, [volume, curId]);
 
-  // 🔤 โหลดฟอนต์ Anuphan จาก Google Fonts ครั้งเดียวตอนแอปเปิด (ฟอนต์ไทยสมัยใหม่ อ่านตัวเลขชัด เหมาะกับหน้าการเงิน)
+  // 🔤 โหลดฟอนต์ IBM Plex Sans Thai จาก Google Fonts ครั้งเดียวตอนแอปเปิด (ตัวเลขชัดสุด อ่านง่ายทุกวัย เหมาะกับหน้าการเงิน)
   useEffect(() => {
-    if (document.getElementById("refhub-font-anuphan")) return;
+    if (document.getElementById("refhub-font-plex")) return;
     const link = document.createElement("link");
-    link.id = "refhub-font-anuphan";
+    link.id = "refhub-font-plex";
     link.rel = "stylesheet";
-    link.href = "https://fonts.googleapis.com/css2?family=Anuphan:wght@400;500;600;700;800&display=swap";
+    link.href = "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap";
     document.head.appendChild(link);
   }, []);
 
@@ -520,13 +551,14 @@ useEffect(() => {
     setCategories((cats) => [...cats, { id: uid(), label: label.trim(), iconKey, color, kind }]);
   };
 
-  const goalDone = goals.filter((g) => g.done).length;
-  const goalPct = goals.length ? Math.round((goalDone / goals.length) * 100) : 0;
+  const todayGoals = goals.filter((g) => (g.date || todayStr()) === todayStr());
+  const goalDone = todayGoals.filter((g) => g.done).length;
+  const goalPct = todayGoals.length ? Math.round((goalDone / todayGoals.length) * 100) : 0;
   const balance = tx.reduce((s, x) => s + (x.type === "in" ? x.amount : -x.amount), 0);
   const quote = M.quotes[quoteIdx % M.quotes.length];
 
   return (
-    <div style={{ minHeight: "100vh", background: t.page, display: "flex", justifyContent: "center", fontFamily: "'Anuphan','Segoe UI','Helvetica Neue',system-ui,sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: t.page, display: "flex", justifyContent: "center", fontFamily: "'IBM Plex Sans Thai','Segoe UI','Helvetica Neue',system-ui,sans-serif", zoom: `${fontScale}%` }}>
       <div style={{ width: "100%", maxWidth: 440, position: "relative", background: t.bg, minHeight: "100vh", overflow: "hidden", transition: "background .5s" }}>
         {t.star && <Stars />}
 
@@ -549,6 +581,7 @@ useEffect(() => {
                   <Music size={17} color={playing ? t.accent : t.text} />
                 </IconBtn>
                 <IconBtn t={t} onClick={() => setThemePick(true)}><Palette size={17} color={t.text} /></IconBtn>
+                <IconBtn t={t} onClick={() => setFontScale((s) => (s === 100 ? 115 : s === 115 ? 130 : 100))}><ALargeSmall size={18} color={t.text} /></IconBtn>
                 <IconBtn t={t} onClick={() => setThemeMode(themeMode === "auto" ? "day" : themeMode === "day" ? "night" : "auto")}>
                   {isNight ? <Moon size={17} color={t.text} /> : <Sun size={17} color={t.text} />}
                 </IconBtn>
@@ -585,13 +618,14 @@ useEffect(() => {
 
         {/* CONTENT */}
         <div style={{ position: "relative", zIndex: 2, padding: "16px 18px 120px", height: "calc(100vh - 76px)", overflowY: "auto" }}>
-          {page === "home" && <HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals, goalDone, goalPct, setGoals, notes, setPage, setChatOpen }} />}
+          {page === "home" && <HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, goalDone, goalPct, setGoals, notes, setPage, setChatOpen }} />}
           {page === "ledger" && <FinancePage {...{ t, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt) }} />}
-          {page === "note" && <NotePage {...{ t, notes, setNotes }} />}
+          {page === "note" && <NotePage {...{ t, notes, setNotes, isNight }} />}
           {page === "ideas" && <IdeasPage t={t} />}
           {page === "trade" && <TradePage t={t} />}
           {page === "news" && <NewsPage t={t} />}
           {page === "lang" && <LangPage t={t} />}
+          {page === "goalsReport" && <GoalsReportPage t={t} goals={goals} />}
 
           {/* 🎵 การ์ด "กำลังเล่น" ต่อท้ายเนื้อหาหน้า Home (ใต้เป้าหมาย) — div#yt-mini-player mount ค้างตลอด
               ไม่เคย unmount เลย (ซ่อนด้วย display:none เท่านั้น) กันปัญหา React ชนกับ DOM ที่ YouTube API แก้เอง */}
@@ -833,7 +867,7 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, goa
           <div style={{ fontSize: 14, fontWeight: 800, color: t.catTx.amber }}>RPA ขั้นเทพ</div>
           <div style={{ fontSize: 10.5, color: t.catLb.amber, marginTop: 3 }}>4 บทความ · AI คัดให้</div>
         </CatCard>
-        <CatCard t={t} k="coral" icon={<Target size={15} color="#fff" />} label="เป้าหมายวันนี้">
+        <CatCard t={t} k="coral" icon={<Target size={15} color="#fff" />} label="เป้าหมายวันนี้" onClick={() => setPage("goalsReport")}>
           <div style={{ fontSize: 16, fontWeight: 800, color: t.catTx.coral }}>{goalDone} / {goals.length || 0} สำเร็จ</div>
           <div style={{ height: 7, borderRadius: 4, background: "rgba(0,0,0,.1)", marginTop: 8, overflow: "hidden" }}><div style={{ width: `${goalPct}%`, height: "100%", background: "#E07B57" }} /></div>
         </CatCard>
@@ -845,21 +879,22 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, goa
 
       <div style={{ ...card(t), marginTop: 16, padding: 16 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text }}>เป้าหมายวันนี้</div><Sparkles size={16} color={t.accent} />
+          <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text }}>เป้าหมายวันนี้</div>
+          <button onClick={() => setPage("goalsReport")} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, color: t.accent, fontSize: 11, fontWeight: 700 }}>ดูย้อนหลัง <ChevronRight size={13} /></button>
         </div>
         <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
           {goals.length === 0 && <div style={{ fontSize: 12.5, color: t.sub }}>ยังไม่มีเป้าหมาย เพิ่มอันแรกเลย 👇</div>}
           {goals.map((g) => (
             <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <button onClick={() => setGoals((gs) => gs.map((x) => (x.id === g.id ? { ...x, done: !x.done } : x)))} style={{ width: 22, height: 22, borderRadius: 7, border: `2px solid ${g.done ? t.accent : t.faint}`, background: g.done ? t.accent : "transparent", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}>{g.done && <Check size={14} color={t.onAccent} />}</button>
+              <button onClick={() => setGoals((gs) => gs.map((x) => (x.id === g.id ? { ...x, done: !x.done, doneDate: !x.done ? todayStr() : null } : x)))} style={{ width: 22, height: 22, borderRadius: 7, border: `2px solid ${g.done ? t.accent : t.faint}`, background: g.done ? t.accent : "transparent", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}>{g.done && <Check size={14} color={t.onAccent} />}</button>
               <span style={{ flex: 1, fontSize: 13.5, color: g.done ? t.sub : t.text, textDecoration: g.done ? "line-through" : "none" }}>{g.text}</span>
               <button onClick={() => setGoals((gs) => gs.filter((x) => x.id !== g.id))} style={ghost}><Trash2 size={15} color={t.faint} /></button>
             </div>
           ))}
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-          <input value={goalText} onChange={(e) => setGoalText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && goalText.trim()) { setGoals((gs) => [...gs, { id: uid(), text: goalText.trim(), done: false }]); setGoalText(""); } }} placeholder="เพิ่มเป้าหมายวันนี้..." style={input(t)} />
-          <button onClick={() => { if (goalText.trim()) { setGoals((gs) => [...gs, { id: uid(), text: goalText.trim(), done: false }]); setGoalText(""); } }} style={{ ...primaryBtn(t), padding: "0 16px" }}>เพิ่ม</button>
+          <input value={goalText} onChange={(e) => setGoalText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && goalText.trim()) { setGoals((gs) => [...gs, { id: uid(), text: goalText.trim(), done: false, date: todayStr(), doneDate: null }]); setGoalText(""); } }} placeholder="เพิ่มเป้าหมายวันนี้..." style={input(t)} />
+          <button onClick={() => { if (goalText.trim()) { setGoals((gs) => [...gs, { id: uid(), text: goalText.trim(), done: false, date: todayStr(), doneDate: null }]); setGoalText(""); } }} style={{ ...primaryBtn(t), padding: "0 16px" }}>เพิ่ม</button>
         </div>
       </div>
     </>
@@ -930,9 +965,9 @@ function FinancePage({ t, tx, setTx, categories, openAdd, openExport }) {
   const doExportPdf = () => {
     const rows = periodTx.map((x) => `<tr><td>${x.date}</td><td>${x.type === "in" ? "รับเข้า" : "จ่ายออก"}</td><td>${findCat(categories, x.cat).label}</td><td style="text-align:right">${x.amount.toLocaleString()}</td><td>${(x.note || "").replace(/</g, "&lt;")}</td></tr>`).join("");
     const html = `<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"><title>RefHub - รายงานการเงิน</title>
-      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anuphan:wght@400;500;600;700;800&display=swap">
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap">
       <style>
-        body{font-family:'Anuphan','Sarabun','Segoe UI',sans-serif;padding:24px;color:#222}
+        body{font-family:'IBM Plex Sans Thai','Sarabun','Segoe UI',sans-serif;padding:24px;color:#222}
         h1{font-size:20px;margin-bottom:2px} .sub{color:#777;font-size:13px;margin-bottom:18px}
         table{width:100%;border-collapse:collapse;font-size:13px} th,td{padding:7px 8px;border-bottom:1px solid #e5e5e5;text-align:left}
         th{background:#f4f4f4} .summary{display:flex;gap:24px;margin-bottom:18px}
@@ -1054,6 +1089,105 @@ function FinancePage({ t, tx, setTx, categories, openAdd, openExport }) {
           </div>
         </div>
       ))}
+    </>
+  );
+}
+
+function GoalsReportPage({ t, goals }) {
+  const dated = goals.filter((g) => g.date);
+
+  // จัดกลุ่มเป้าหมายที่ข้อความคล้ายกัน (ตัดช่องว่าง+ตัวพิมพ์เล็กใหญ่) ให้นับเป็นเป้าหมายเดียวกันที่ทำซ้ำหลายวัน
+  const groups = {};
+  dated.forEach((g) => {
+    const key = g.text.trim().toLowerCase();
+    if (!key) return;
+    if (!groups[key]) groups[key] = { label: g.text.trim(), total: 0, done: 0, doneDates: [] };
+    groups[key].total += 1;
+    if (g.done) { groups[key].done += 1; groups[key].doneDates.push(g.doneDate || g.date); }
+  });
+  const groupList = Object.values(groups).sort((a, b) => b.total - a.total);
+
+  // นับ streak ปัจจุบัน (ทำต่อเนื่องกี่วันจนถึงวันนี้/เมื่อวาน)
+  const calcStreak = (doneDates) => {
+    const set = new Set(doneDates);
+    let streak = 0; let d = new Date();
+    if (!set.has(todayStr())) d.setDate(d.getDate() - 1); // ถ้าวันนี้ยังไม่ทำ เริ่มนับจากเมื่อวาน
+    while (set.has(d.toISOString().slice(0, 10))) { streak++; d.setDate(d.getDate() - 1); }
+    return streak;
+  };
+
+  // heatmap ปฏิทิน 12 สัปดาห์ล่าสุด (คล้าย GitHub contribution graph)
+  const days = []; for (let i = 83; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); days.push(d.toISOString().slice(0, 10)); }
+  const doneCountByDate = {};
+  dated.forEach((g) => { if (g.done) { const dd = g.doneDate || g.date; doneCountByDate[dd] = (doneCountByDate[dd] || 0) + 1; } });
+  const maxCount = Math.max(1, ...Object.values(doneCountByDate));
+  const weeks = []; for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i + 7));
+
+  // กราฟแท่งแนวโน้ม 14 วันล่าสุด
+  const trend = days.slice(-14).map((d) => { const dt = new Date(d); return { label: `${dt.getDate()}/${dt.getMonth() + 1}`, สำเร็จ: doneCountByDate[d] || 0 }; });
+
+  const heatColor = (n) => {
+    if (!n) return t.star ? "rgba(255,255,255,.06)" : "rgba(0,0,0,.05)";
+    const ratio = n / maxCount;
+    return `${t.accent}${Math.round(30 + ratio * 70).toString(16).padStart(2, "0")}`;
+  };
+
+  return (
+    <>
+      <PageHead t={t} title="รายงานเป้าหมาย" sub="ย้อนดูว่าแต่ละวันทำอะไรไปบ้าง ทำบ่อยแค่ไหน" icon={<Target size={20} color={t.accent} />} />
+
+      {dated.length === 0 ? (
+        <Empty t={t} text="ยังไม่มีข้อมูลเป้าหมายให้ดูย้อนหลัง ลองเพิ่ม/ติ๊กเป้าหมายที่หน้า Home ก่อนนะ" />
+      ) : (
+        <>
+          <div style={{ ...card(t), padding: 16, marginBottom: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: t.text, marginBottom: 10 }}>ภาพรวม 12 สัปดาห์ล่าสุด</div>
+            <div style={{ display: "flex", gap: 3, overflowX: "auto", paddingBottom: 4 }}>
+              {weeks.map((week, wi) => (
+                <div key={wi} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                  {week.map((d) => (
+                    <div key={d} title={`${d}: ทำสำเร็จ ${doneCountByDate[d] || 0} อย่าง`} style={{ width: 12, height: 12, borderRadius: 3, background: heatColor(doneCountByDate[d]) }} />
+                  ))}
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: 10, color: t.faint, marginTop: 8 }}>สีเข้ม = วันที่ทำสำเร็จเยอะ · สีจาง/ว่าง = ยังไม่ได้ทำ</div>
+          </div>
+
+          <div style={{ ...card(t), padding: 16, marginBottom: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: t.text, marginBottom: 10 }}>แนวโน้ม 14 วันล่าสุด</div>
+            <div style={{ width: "100%", height: 140 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={trend}>
+                  <XAxis dataKey="label" tick={{ fontSize: 9, fill: t.sub }} axisLine={false} tickLine={false} />
+                  <Tooltip />
+                  <Bar dataKey="สำเร็จ" fill={t.accent} radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div style={{ fontSize: 13, fontWeight: 800, color: t.sub, margin: "4px 0 10px" }}>เป้าหมายที่ทำบ่อย ({groupList.length})</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {groupList.map((g, i) => {
+              const pct = Math.round((g.done / g.total) * 100);
+              const streak = calcStreak(g.doneDates);
+              return (
+                <div key={i} style={{ ...card(t), padding: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: t.text }}>{g.label}</div>
+                    {streak > 0 && <span style={{ fontSize: 10.5, fontWeight: 800, color: t.accent, background: `${t.accent}18`, padding: "2px 8px", borderRadius: 10, flexShrink: 0, whiteSpace: "nowrap" }}>🔥 {streak} วันติด</span>}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
+                    <div style={{ flex: 1, height: 7, borderRadius: 4, background: "rgba(0,0,0,.08)", overflow: "hidden" }}><div style={{ width: `${pct}%`, height: "100%", background: t.accent }} /></div>
+                    <span style={{ fontSize: 11.5, color: t.sub, flexShrink: 0 }}>{g.done}/{g.total} วัน ({pct}%)</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
     </>
   );
 }
@@ -1237,28 +1371,68 @@ function ExportModal({ t, text, close }) {
 const dateLabel = (d) => { const today = todayStr(); const y = new Date(Date.now() - 86400000).toISOString().slice(0, 10); if (d === today) return "วันนี้"; if (d === y) return "เมื่อวาน"; const dt = new Date(d); return `${dt.getDate()} ${["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."][dt.getMonth()]}`; };
 
 // ---------------- Note ----------------
-function NotePage({ t, notes, setNotes }) {
-  const [title, setTitle] = useState(""); const [body, setBody] = useState(""); const [tagsInput, setTagsInput] = useState("");
+// 📝 ตัว editor แบบ Notion — mount ใหม่ทุกครั้งที่ note เปลี่ยน (ใช้ key จากภายนอกคุมการรีเซ็ต)
+function NoteEditor({ content, onChange, theme }) {
+  const editor = useCreateBlockNote({
+    initialContent: migrateBody(content),
+    uploadFile: async (file) => {
+      try {
+        const path = `${USER_ID || "anon"}/${uid()}-${file.name}`;
+        const { error } = await supabase.storage.from("attachments").upload(path, file);
+        if (error) throw error;
+        const { data } = supabase.storage.from("attachments").getPublicUrl(path);
+        return data.publicUrl;
+      } catch (e) {
+        alert("แนบไฟล์ไม่สำเร็จ: " + e.message + " (เช็คว่าสร้าง Storage bucket ชื่อ 'attachments' ใน Supabase แล้วหรือยัง)");
+        throw e;
+      }
+    },
+  });
+  return <BlockNoteView editor={editor} theme={theme} onChange={() => onChange(editor.document)} />;
+}
+
+function NotePage({ t, notes, setNotes, isNight }) {
+  const [title, setTitle] = useState(""); const [body, setBody] = useState(null); const [tagsInput, setTagsInput] = useState("");
+  const [draftKey, setDraftKey] = useState(0); // เปลี่ยนค่านี้เพื่อบังคับให้ NoteEditor ตัวเพิ่มโน้ตใหม่รีเซ็ตเนื้อหาว่าง
   const [editingId, setEditingId] = useState(null);
-  const [editTitle, setEditTitle] = useState(""); const [editBody, setEditBody] = useState(""); const [editTags, setEditTags] = useState("");
+  const [editTitle, setEditTitle] = useState(""); const [editBody, setEditBody] = useState(null); const [editTags, setEditTags] = useState("");
   const [tagFilter, setTagFilter] = useState(null);
 
   const parseTags = (str) => str.split(",").map((s) => s.trim()).filter(Boolean);
 
   const add = () => {
-    if (!title.trim() && !body.trim()) return;
-    setNotes((n) => [{ id: uid(), title: title.trim(), body: body.trim(), date: todayStr(), pinned: false, tags: parseTags(tagsInput) }, ...n]);
-    setTitle(""); setBody(""); setTagsInput("");
+    const plain = blocksToPlainText(body).trim();
+    if (!title.trim() && !plain) return;
+    setNotes((n) => [{ id: uid(), title: title.trim(), body: body || migrateBody(""), date: todayStr(), pinned: false, tags: parseTags(tagsInput) }, ...n]);
+    setTitle(""); setBody(null); setTagsInput(""); setDraftKey((k) => k + 1);
   };
-  const startEdit = (n) => { setEditingId(n.id); setEditTitle(n.title); setEditBody(n.body); setEditTags((n.tags || []).join(", ")); };
+  const startEdit = (n) => { setEditingId(n.id); setEditTitle(n.title); setEditBody(migrateBody(n.body)); setEditTags((n.tags || []).join(", ")); };
   const saveEdit = () => {
-    setNotes((list) => list.map((n) => (n.id === editingId ? { ...n, title: editTitle.trim(), body: editBody.trim(), tags: parseTags(editTags) } : n)));
+    setNotes((list) => list.map((n) => (n.id === editingId ? { ...n, title: editTitle.trim(), body: editBody, tags: parseTags(editTags) } : n)));
     setEditingId(null);
   };
   const togglePin = (id) => setNotes((list) => list.map((n) => (n.id === id ? { ...n, pinned: !n.pinned } : n)));
 
   // 📤 Export เป็น Markdown — Notion ลากไฟล์ .md ไป import ตรงๆ ได้เลย (ใช้ได้ทันทีไม่ต้องรอ deploy)
-  const noteToMd = (n) => `# ${n.title || "(ไม่มีหัวข้อ)"}\n\n${n.body || ""}\n\n${(n.tags || []).map((tg) => "#" + tg).join(" ")}\n\n_บันทึกเมื่อ ${n.date}_\n`;
+  const blockToMd = (b, depth) => {
+    const text = Array.isArray(b.content) ? b.content.map((c) => c.text || "").join("") : (typeof b.content === "string" ? b.content : "");
+    const indent = "  ".repeat(depth);
+    let line;
+    if (b.type === "heading") line = `${"#".repeat(Math.min(Math.max(b.props?.level || 2, 1), 6))} ${text}`;
+    else if (b.type === "bulletListItem") line = `${indent}- ${text}`;
+    else if (b.type === "numberedListItem") line = `${indent}1. ${text}`;
+    else if (b.type === "checkListItem") line = `${indent}- [${b.props?.checked ? "x" : " "}] ${text}`;
+    else if (b.type === "toggleListItem") line = `${indent}> ${text}`;
+    else if (b.type === "image") line = `![${b.props?.name || "รูปภาพ"}](${b.props?.url || ""})`;
+    else if (b.type === "file") line = `[📎 ${b.props?.name || "ไฟล์แนบ"}](${b.props?.url || ""})`;
+    else line = text;
+    const kids = (b.children || []).map((c) => blockToMd(c, depth + 1)).join("\n");
+    return kids ? line + "\n" + kids : line;
+  };
+  const noteToMd = (n) => {
+    const bodyMd = migrateBody(n.body).map((b) => blockToMd(b, 0)).join("\n");
+    return `# ${n.title || "(ไม่มีหัวข้อ)"}\n\n${bodyMd}\n\n${(n.tags || []).map((tg) => "#" + tg).join(" ")}\n\n_บันทึกเมื่อ ${n.date}_\n`;
+  };
   const downloadText = (filename, text, mime) => { try { const blob = new Blob([text], { type: mime }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); } catch (e) {} };
   const exportAllMd = () => downloadText("refhub-notes.md", notes.map(noteToMd).join("\n---\n\n"), "text/markdown;charset=utf-8;");
   const exportOneMd = (n) => downloadText(`${(n.title || "note").slice(0, 40).replace(/[\\/:*?"<>|]/g, "")}.md`, noteToMd(n), "text/markdown;charset=utf-8;");
@@ -1288,9 +1462,11 @@ function NotePage({ t, notes, setNotes }) {
     .filter((n) => !tagFilter || (n.tags || []).includes(tagFilter))
     .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
 
+  const editorTheme = isNight ? "dark" : "light";
+
   return (
     <>
-      <PageHead t={t} title="โน้ต" sub="จดไอเดีย บันทึกการเรียนรู้" icon={<StickyNote size={20} color={t.accent} />} />
+      <PageHead t={t} title="โน้ต" sub="จดไอเดีย บันทึกการเรียนรู้ · แนบรูป/ไฟล์ได้" icon={<StickyNote size={20} color={t.accent} />} />
 
       {notes.length > 0 && (
         <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
@@ -1299,11 +1475,15 @@ function NotePage({ t, notes, setNotes }) {
         </div>
       )}
       {syncMsg && <div style={{ fontSize: 11, color: t.sub, textAlign: "center", marginBottom: 12 }}>{syncMsg}</div>}
+
       <div style={{ ...card(t), padding: 16 }}>
         <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="หัวข้อ" style={{ ...input(t), marginBottom: 8, fontWeight: 700 }} />
-        <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="เขียนอะไรก็ได้ที่อยากจดไว้..." rows={3} style={{ ...input(t), resize: "vertical", marginBottom: 8, fontFamily: "inherit" }} />
+        <div style={{ border: `1px solid ${t.border}`, borderRadius: 12, marginBottom: 8, minHeight: 140, overflow: "hidden" }}>
+          <NoteEditor key={`new-${draftKey}`} content={null} onChange={setBody} theme={editorTheme} />
+        </div>
         <input value={tagsInput} onChange={(e) => setTagsInput(e.target.value)} placeholder="แท็ก (คั่นด้วยจุลภาค เช่น งาน, ไอเดีย)" style={{ ...input(t), marginBottom: 12, fontSize: 12.5 }} />
         <button onClick={add} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "11px 0" }}>บันทึกโน้ต</button>
+        <div style={{ fontSize: 10.5, color: t.faint, textAlign: "center", marginTop: 8 }}>พิมพ์ "/" ในกล่องข้อความ เพื่อเลือกหัวข้อ, checklist, toggle, แนบรูป/ไฟล์ ฯลฯ</div>
       </div>
 
       {allTags.length > 0 && (
@@ -1322,7 +1502,9 @@ function NotePage({ t, notes, setNotes }) {
             {editingId === n.id ? (
               <>
                 <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={{ ...input(t), marginBottom: 8, fontWeight: 700 }} />
-                <textarea value={editBody} onChange={(e) => setEditBody(e.target.value)} rows={3} style={{ ...input(t), resize: "vertical", marginBottom: 8, fontFamily: "inherit" }} />
+                <div style={{ border: `1px solid ${t.border}`, borderRadius: 12, marginBottom: 8, minHeight: 140, overflow: "hidden" }}>
+                  <NoteEditor key={`edit-${n.id}`} content={editBody} onChange={setEditBody} theme={editorTheme} />
+                </div>
                 <input value={editTags} onChange={(e) => setEditTags(e.target.value)} placeholder="แท็ก (คั่นด้วยจุลภาค)" style={{ ...input(t), marginBottom: 10, fontSize: 12.5 }} />
                 <div style={{ display: "flex", gap: 8 }}>
                   <button onClick={() => setEditingId(null)} style={{ ...card(t), flex: 1, padding: "9px 0", border: `1px solid ${t.border}`, cursor: "pointer", color: t.sub, fontWeight: 700, fontSize: 13 }}>ยกเลิก</button>
@@ -1343,7 +1525,7 @@ function NotePage({ t, notes, setNotes }) {
                     <button onClick={() => setNotes((x) => x.filter((y) => y.id !== n.id))} style={ghost} title="ลบ"><Trash2 size={15} color={t.faint} /></button>
                   </div>
                 </div>
-                {n.body && <div style={{ fontSize: 13, color: t.sub, marginTop: 6, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{n.body}</div>}
+                {blocksToPlainText(n.body).trim() && <div style={{ fontSize: 13, color: t.sub, marginTop: 6, whiteSpace: "pre-wrap", lineHeight: 1.5, maxHeight: 90, overflow: "hidden" }}>{blocksToPlainText(n.body)}</div>}
                 {(n.tags || []).length > 0 && (
                   <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 8 }}>
                     {n.tags.map((tag) => <span key={tag} style={{ fontSize: 10, fontWeight: 700, color: t.accent, background: `${t.accent}18`, padding: "2px 8px", borderRadius: 10 }}>#{tag}</span>)}
@@ -1422,12 +1604,34 @@ function LangPage({ t }) {
 function ChatModal({ t, M, mentor, close }) {
   const [msgs, setMsgs] = useState([{ who: "m", text: `สวัสดี ฉันคือ ${M.full} วันนี้อยากให้ช่วยเรื่องอะไร?` }]);
   const [inp, setInp] = useState(""); const [loading, setLoading] = useState(false); const endRef = useRef(null);
+  const [pendingImg, setPendingImg] = useState(null); // { dataUrl, mime } รูปที่เลือกไว้ รอกดส่ง
+  const fileRef = useRef(null);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, loading]);
+
+  // ย่อรูปก่อนส่ง กันไฟล์ใหญ่เกิน (Vercel จำกัด payload ต่อ request ไว้ไม่กี่ MB)
+  const pickImage = (e) => {
+    const f = e.target.files?.[0]; if (!f) return;
+    const rd = new FileReader();
+    rd.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const max = 1024; const scale = Math.min(1, max / Math.max(img.width, img.height));
+        const c = document.createElement("canvas"); c.width = img.width * scale; c.height = img.height * scale;
+        const ctx = c.getContext("2d"); ctx.drawImage(img, 0, 0, c.width, c.height);
+        setPendingImg({ dataUrl: c.toDataURL("image/jpeg", 0.75), mime: "image/jpeg" });
+      };
+      img.src = rd.result;
+    };
+    rd.readAsDataURL(f);
+    e.target.value = "";
+  };
+
   const send = async () => {
-    if (!inp.trim() || loading) return;
-    const u = inp.trim(); setInp("");
-    const nextMsgs = [...msgs, { who: "u", text: u }];
-    setMsgs(nextMsgs);
+    if ((!inp.trim() && !pendingImg) || loading) return;
+    const u = inp.trim();
+    const userMsg = { who: "u", text: u || "(ส่งรูปภาพ)", image: pendingImg?.dataUrl || null };
+    const nextMsgs = [...msgs, userMsg];
+    setMsgs(nextMsgs); setInp(""); setPendingImg(null);
     setLoading(true);
     try {
       const r = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mentor, messages: nextMsgs }) });
@@ -1450,12 +1654,28 @@ function ChatModal({ t, M, mentor, close }) {
           <button onClick={close} style={{ background: "rgba(255,255,255,.15)", border: "none", borderRadius: 16, width: 32, height: 32, cursor: "pointer", display: "grid", placeItems: "center" }}><X size={18} color="#fff" /></button>
         </div>
         <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
-          {msgs.map((m, i) => (<div key={i} style={{ alignSelf: m.who === "u" ? "flex-end" : "flex-start", maxWidth: "78%", background: m.who === "u" ? M.accent : t.surface, color: m.who === "u" ? M.onAccent : t.text, padding: "10px 14px", borderRadius: 16, fontSize: 13.5, lineHeight: 1.45, border: m.who === "u" ? "none" : `1px solid ${t.border}` }}>{m.text}</div>))}
+          {msgs.map((m, i) => (
+            <div key={i} style={{ alignSelf: m.who === "u" ? "flex-end" : "flex-start", maxWidth: "78%", background: m.who === "u" ? M.accent : t.surface, color: m.who === "u" ? M.onAccent : t.text, padding: "10px 14px", borderRadius: 16, fontSize: 13.5, lineHeight: 1.45, border: m.who === "u" ? "none" : `1px solid ${t.border}` }}>
+              {m.image && <img src={m.image} alt="" style={{ maxWidth: "100%", borderRadius: 10, marginBottom: m.text ? 6 : 0, display: "block" }} />}
+              {m.text}
+            </div>
+          ))}
           {loading && <div style={{ alignSelf: "flex-start", color: t.sub, fontSize: 12.5, padding: "4px 14px" }}>{M.name} กำลังพิมพ์...</div>}
           <div ref={endRef} />
         </div>
         <div style={{ padding: 12, background: t.page }}>
+          {pendingImg && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, background: t.surface, border: `1px solid ${t.border}`, borderRadius: 12, padding: 8 }}>
+              <img src={pendingImg.dataUrl} alt="" style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 8 }} />
+              <span style={{ fontSize: 11.5, color: t.sub, flex: 1 }}>รูปพร้อมส่งแล้ว</span>
+              <button onClick={() => setPendingImg(null)} style={ghost}><X size={15} color={t.faint} /></button>
+            </div>
+          )}
           <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => fileRef.current?.click()} disabled={loading} style={{ width: 42, borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}>
+              <Upload size={16} color={t.sub} />
+            </button>
+            <input ref={fileRef} type="file" accept="image/*" onChange={pickImage} style={{ display: "none" }} />
             <input value={inp} onChange={(e) => setInp(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} placeholder={`ถาม ${M.name}...`} style={input(t)} disabled={loading} />
             <button onClick={send} disabled={loading} style={{ ...primaryBtn(M), width: 46, padding: 0, display: "grid", placeItems: "center", opacity: loading ? 0.6 : 1 }}><Send size={18} /></button>
           </div>
@@ -1524,7 +1744,7 @@ function EditProfile({ t, M, profile, setProfile, close }) {
 
 function SearchOverlay({ t, notes, goals, tx, categories, setPage, close }) {
   const [q, setQ] = useState(""); const ql = q.trim().toLowerCase();
-  const nr = ql ? notes.filter((n) => (n.title + n.body).toLowerCase().includes(ql)) : [];
+  const nr = ql ? notes.filter((n) => (n.title + blocksToPlainText(n.body)).toLowerCase().includes(ql)) : [];
   const gr = ql ? goals.filter((g) => g.text.toLowerCase().includes(ql)) : [];
   const tr = ql ? tx.filter((x) => (x.note + findCat(categories, x.cat).label).toLowerCase().includes(ql)) : [];
   const go = (p) => { setPage(p); close(); };
@@ -1537,7 +1757,7 @@ function SearchOverlay({ t, notes, goals, tx, categories, setPage, close }) {
     {!ql && <div style={{ textAlign: "center", color: t.sub, fontSize: 13, padding: "30px 0" }}>พิมพ์เพื่อค้นหาทุกอย่างในแอป</div>}
     {ql && nr.length + gr.length + tr.length === 0 && <div style={{ textAlign: "center", color: t.sub, fontSize: 13, padding: "30px 0" }}>ไม่พบ "{q}"</div>}
     <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
-      {nr.map((n) => <SR key={n.id} t={t} icon={<StickyNote size={16} color="#7B6CB0" />} title={n.title || n.body} sub="โน้ต" onClick={() => go("note")} />)}
+      {nr.map((n) => <SR key={n.id} t={t} icon={<StickyNote size={16} color="#7B6CB0" />} title={n.title || blocksToPlainText(n.body)} sub="โน้ต" onClick={() => go("note")} />)}
       {gr.map((g) => <SR key={g.id} t={t} icon={<Target size={16} color="#E07B57" />} title={g.text} sub="เป้าหมาย" onClick={() => go("home")} />)}
       {tr.map((x) => <SR key={x.id} t={t} icon={<Wallet size={16} color="#2E9E6B" />} title={`${x.note} · ${x.amount.toLocaleString()}฿`} sub={`การเงิน · ${x.date}`} onClick={() => go("ledger")} />)}
     </div>
