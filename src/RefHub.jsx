@@ -189,6 +189,31 @@ function ModalPortal({ children }) {
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 
+// 🔔 Push Notification — กุญแจสาธารณะ (ปลอดภัยที่จะฝังตรงนี้ ไม่ใช่ความลับ ต่างจาก private key ที่อยู่ฝั่งเซิร์ฟเวอร์เท่านั้น)
+const VAPID_PUBLIC_KEY = "BFy33ifhVn7LbyBEss6YmzFys3ycPicm2QVblaxb7BOBTkpQoWDuihkoz0l7ZSeQvZpdUl5JfWgvvCzt24IFm4Y";
+const urlBase64ToUint8Array = (base64String) => {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
+};
+// สมัครรับ push notification จริงของเครื่องนี้ (ต้องขออนุญาตผู้ใช้ก่อนเสมอ)
+const subscribeToPush = async (userId) => {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) { alert("เบราว์เซอร์นี้ไม่รองรับการแจ้งเตือนแบบ push"); return false; }
+  const permission = await Notification.requestPermission();
+  if (permission !== "granted") { alert("ไม่ได้รับอนุญาตให้แจ้งเตือน ลองกดอนุญาตในตั้งค่าเบราว์เซอร์อีกครั้ง"); return false; }
+  const reg = await navigator.serviceWorker.register("/sw.js");
+  const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) });
+  const subJson = sub.toJSON();
+  await supabase.from("push_subscriptions").upsert({ user_id: userId, endpoint: subJson.endpoint, keys: subJson.keys }, { onConflict: "endpoint" });
+  return true;
+};
+// ยิงแจ้งเตือนไปหาคนอื่น (เรียกหลังส่งข้อความแชทสำเร็จ) — ยิงแบบ fire-and-forget ไม่ต้องรอผล ไม่กระทบ UX
+const notifyPush = (recipientIds, title, body, callerToken) => {
+  if (!recipientIds?.length) return;
+  fetch("/api/push-send", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ recipientIds, title, body, callerToken }) }).catch(() => {});
+};
+
 // 📝 แปลงเนื้อหาโน้ตเก่า (string ธรรมดา) ให้เป็นรูปแบบ block ที่ editor ใหม่ใช้ได้ — กันโน้ตเก่าพังตอนเปิด
 const migrateBody = (body) => {
   if (Array.isArray(body) && body.length) return body;
@@ -778,7 +803,7 @@ useEffect(() => {
           {page === "goalsReport" && <GoalsReportPage t={t} goals={goals} />}
           {page === "admin" && <AdminPage t={t} session={session} userId={userId} adminAlerts={adminAlerts} setAdminAlerts={setAdminAlerts} />}
           {page === "chat" && <ChatEntryPage t={t} M={M} userId={userId} authProfile={authProfile} session={session} openThread={(id, name, isGroup, avatarUrl) => { setActiveThread({ id, name, isGroup: !!isGroup, avatarUrl: avatarUrl || null }); setPage("chatRoom"); }} />}
-          {page === "chatRoom" && activeThread && <ChatRoomPage t={t} userId={userId} thread={activeThread} profile={profile} />}
+          {page === "chatRoom" && activeThread && <ChatRoomPage t={t} userId={userId} thread={activeThread} profile={profile} session={session} />}
 
           {/* 🎵 การ์ด "กำลังเล่น" ต่อท้ายเนื้อหาหน้า Home (ใต้เป้าหมาย) — div#yt-mini-player mount ค้างตลอด
               ไม่เคย unmount เลย (ซ่อนด้วย display:none เท่านั้น) กันปัญหา React ชนกับ DOM ที่ YouTube API แก้เอง */}
@@ -841,7 +866,7 @@ useEffect(() => {
             </div>
           </div>
         )}
-        {accountSettingsOpen && <AccountSettingsModal t={t} authProfile={authProfile} close={() => setAccountSettingsOpen(false)} />}
+        {accountSettingsOpen && <AccountSettingsModal t={t} authProfile={authProfile} userId={userId} close={() => setAccountSettingsOpen(false)} />}
         {chatOpen && <ChatModal t={t} M={M} mentor={mentor} close={() => setChatOpen(false)} />}
         {editProfile && <EditProfile t={t} M={M} profile={profile} setProfile={setProfile} userId={userId} authProfile={authProfile} setAuthProfile={setAuthProfile} close={() => setEditProfile(false)} />}
         {searchOpen && <SearchOverlay t={t} notes={notes} goals={goals} tx={tx} categories={categories} setPage={setPage} close={() => setSearchOpen(false)} />}
@@ -985,11 +1010,13 @@ function AuthPage() {
   );
 }
 
-function AccountSettingsModal({ t, authProfile, close }) {
+function AccountSettingsModal({ t, authProfile, userId, close }) {
   const [newEmail, setNewEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushMsg, setPushMsg] = useState("");
   const isPinAccount = authProfile?.login_type === "pin";
 
   const linkEmail = async () => {
@@ -1005,6 +1032,16 @@ function AccountSettingsModal({ t, authProfile, close }) {
     } finally { setBusy(false); }
   };
 
+  const enableNotifications = async () => {
+    setPushBusy(true); setPushMsg("");
+    try {
+      const ok2 = await subscribeToPush(userId);
+      setPushMsg(ok2 ? "เปิดการแจ้งเตือนสำเร็จ! มีข้อความใหม่จะเด้งแจ้งเตือนแม้ปิดแอปอยู่" : "");
+    } catch (e) {
+      setPushMsg("เปิดไม่สำเร็จ: " + e.message);
+    } finally { setPushBusy(false); }
+  };
+
   return (
     <div style={overlay} onClick={close}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
@@ -1012,6 +1049,13 @@ function AccountSettingsModal({ t, authProfile, close }) {
         <div style={{ ...card(t), padding: 14, marginBottom: 16 }}>
           <div style={{ fontSize: 12, color: t.sub, marginBottom: 4 }}>เข้าสู่ระบบด้วย</div>
           <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{isPinAccount ? `ชื่อผู้ใช้ + PIN (${authProfile?.username})` : authProfile?.email}</div>
+        </div>
+
+        <div style={{ ...card(t), padding: 14, marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}><Bell size={15} color={t.accent} /><span style={{ fontSize: 13, fontWeight: 700, color: t.text }}>การแจ้งเตือน</span></div>
+          <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 10, lineHeight: 1.6 }}>เปิดแล้วจะได้รับแจ้งเตือนทันทีเมื่อมีข้อความแชทใหม่ แม้ปิดแอปอยู่ก็ตาม (เบราว์เซอร์จะขออนุญาตก่อน)</div>
+          {pushMsg && <div style={{ fontSize: 11.5, color: pushMsg.startsWith("เปิดไม่สำเร็จ") ? "#D9534F" : "#2E9E6B", marginBottom: 10 }}>{pushMsg}</div>}
+          <button onClick={enableNotifications} disabled={pushBusy} style={{ width: "100%", padding: "10px 0", borderRadius: 10, border: `1px solid ${t.border}`, background: "none", cursor: "pointer", color: t.text, fontSize: 12.5, fontWeight: 700 }}>{pushBusy ? "กำลังเปิด..." : "เปิดการแจ้งเตือน"}</button>
         </div>
 
         {isPinAccount ? (
@@ -2020,7 +2064,7 @@ function ChatEntryPage({ t, M, userId, authProfile, session, openThread }) {
 }
 
 
-function ChatRoomPage({ t, userId, thread, profile }) {
+function ChatRoomPage({ t, userId, thread, profile, session }) {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
   const [editingId, setEditingId] = useState(null);
@@ -2115,6 +2159,7 @@ function ChatRoomPage({ t, userId, thread, profile }) {
     if (!text.trim()) return;
     const t2 = text.trim(); setText("");
     await supabase.from("chat_messages").insert({ thread_id: thread.id, sender_id: userId, text: t2 });
+    notifyPush(otherMembers.map((m) => m.id), profile?.name || "ข้อความใหม่", t2, session?.access_token);
   };
   const startEdit = (m) => { setEditingId(m.id); setEditText(m.text); };
   const saveEdit = async () => {
@@ -2139,6 +2184,7 @@ function ChatRoomPage({ t, userId, thread, profile }) {
         thread_id: thread.id, sender_id: userId, text: "",
         attachment_url: data.publicUrl, attachment_name: f.name, attachment_type: isImage ? "image" : "file",
       });
+      notifyPush(otherMembers.map((m) => m.id), profile?.name || "ข้อความใหม่", isImage ? "ส่งรูปภาพมา" : `ส่งไฟล์: ${f.name}`, session?.access_token);
     } catch (err) {
       alert("แนบไฟล์ไม่สำเร็จ: " + err.message);
     } finally { setUploading(false); }
