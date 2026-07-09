@@ -171,6 +171,18 @@ function palette(mode, themeId) {
 
 // 🚪 Portal สำหรับ popup ที่สร้างจากข้างในหน้าเพจ (เช่น Admin, Chat) ให้หลุดออกไปแปะที่ document.body ตรงๆ
 // กันปัญหาติดอยู่ใน "เขตซ้อนชั้น" ของกล่องเนื้อหา ซึ่งทำให้ z-index สูงแค่ไหนก็ไม่มีทางซ้อนทับแถบเมนูด้านล่างได้
+// 🖼️ ดูรูปเต็มจอ — ใช้ร่วมกันได้ทุกที่ในแอปที่มีรูป (แชท, avatar ฯลฯ)
+function ImageLightbox({ src, onClose }) {
+  return (
+    <ModalPortal>
+      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.9)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onClose}>
+        <button onClick={onClose} style={{ position: "absolute", top: 20, right: 20, background: "rgba(255,255,255,.15)", border: "none", borderRadius: 20, width: 40, height: 40, cursor: "pointer", display: "grid", placeItems: "center" }}><X size={22} color="#fff" /></button>
+        <img src={src} alt="" style={{ maxWidth: "92vw", maxHeight: "85vh", objectFit: "contain", borderRadius: 8 }} onClick={(e) => e.stopPropagation()} />
+      </div>
+    </ModalPortal>
+  );
+}
+
 function ModalPortal({ children }) {
   return createPortal(children, document.body);
 }
@@ -195,7 +207,8 @@ const blocksToPlainText = (blocks) => {
 };
 
 const fmt = (n) => "฿" + Math.round(n).toLocaleString("en-US");
-const todayStr = () => new Date().toISOString().slice(0, 10);
+const toDateStr = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const todayStr = () => toDateStr(new Date());
 const monthOf = (d) => d.slice(0, 7);
 const thMonth = (ym) => { const [y, m] = ym.split("-"); return ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."][+m - 1] + " " + ((+y) + 543); };
 
@@ -259,20 +272,24 @@ export default function RefHub() {
       }
       try {
         // 1. ดึงข้อมูลเทมเพลตและการตั้งค่า (User Settings)
-        const { data: uSettings } = await supabase
+        const { data: uSettings, error: uSettingsErr } = await supabase
           .from("user_settings")
           .select("*")
           .eq("user_id", userId)
           .maybeSingle();
 
-        if (uSettings) {
+        if (uSettingsErr) {
+          // ดึงข้อมูลไม่สำเร็จเพราะปัญหาชั่วคราว (เน็ต/ระบบ) — ไม่ใช่เพราะไม่มีข้อมูลจริง
+          // ห้ามรีเซ็ตชื่อ/รูปกลับเป็นค่าเริ่มต้นเด็ดขาด ไม่งั้นระบบเซฟอัตโนมัติจะเขียนทับข้อมูลจริงหายถาวร
+          console.error("โหลด user_settings ไม่สำเร็จ (ปัญหาชั่วคราว ไม่แตะข้อมูลโปรไฟล์เดิม):", uSettingsErr.message);
+        } else if (uSettings) {
           setProfile({ name: uSettings.name, avatar: uSettings.avatar || "" });
           setMentor(uSettings.mentor || "loid");
           setThemeMode(uSettings.theme_mode || "auto");
           if (uSettings.theme) setTheme(uSettings.theme);
           if (typeof uSettings.volume === "number") setVolume(uSettings.volume);
         } else {
-          // ถ้าเปิดซิงค์ครั้งแรกแล้วยังไม่มีข้อมูล ให้สร้างข้อมูล Row แรกทิ้งไว้ให้พี่เลย
+          // ยืนยันแล้วว่าไม่มี error และไม่มีแถวจริงๆ (ผู้ใช้ใหม่จริง) ถึงจะสร้างข้อมูลตั้งต้นให้
           // ดึงชื่อจริงจากตาราง profiles (ที่กรอกไว้ตอนสมัคร/สร้างบัญชี PIN) มาใช้ แทนการเดา/hardcode ชื่อ
           const { data: authRow } = await supabase.from("profiles").select("name, email").eq("id", userId).maybeSingle();
           const initialName = authRow?.name || authRow?.email?.split("@")[0] || "ผู้ใช้ใหม่";
@@ -460,7 +477,8 @@ useEffect(() => {
         localStorage.setItem("refhub:v2", JSON.stringify({ notes, goals, tx, profile, mentor, theme, themeMode, volume, playlist: savePlaylist }));
         
         // 🌐 ยิงอัปเดตสถานะพวกธีม, โค้ด mentor, ระดับเสียง ขึ้นตาราง user_settings บน Cloud ทันที
-        if (userId) {
+        // การ์ดกันชั้นที่ 2: ไม่เขียนชื่อว่างเปล่าทับฐานข้อมูลเด็ดขาด (กันข้อมูลจริงหายถาวรจากเหตุไม่คาดคิด)
+        if (userId && profile.name) {
           await supabase.from("user_settings").update({
             name: profile.name,
             avatar: profile.avatar || "",
@@ -469,6 +487,8 @@ useEffect(() => {
             theme: theme, // ถ้ายังไม่มีคอลัมน์ "theme" ในตาราง user_settings คำสั่งนี้จะ error เงียบๆ (ถูกดักไว้ใน catch) — เพิ่มคอลัมน์ type text ได้เพื่อให้ธีม sync ข้ามอุปกรณ์
             volume: volume
           }).eq("user_id", userId);
+          // ซิงค์ชื่อ+รูปไปที่ตาราง profiles ด้วย (ตารางนี้แชท/หน้า Admin ใช้แสดงข้อมูลของแต่ละคน ต้องให้ตรงกันเสมอ)
+          await supabase.from("profiles").update({ name: profile.name, avatar_url: profile.avatar || null }).eq("id", userId);
         }
       } catch (e) {
         console.error("เซฟค่า Settings ลง Cloud ผิดพลาด: ", e);
@@ -757,7 +777,7 @@ useEffect(() => {
           {page === "lang" && <LangPage t={t} />}
           {page === "goalsReport" && <GoalsReportPage t={t} goals={goals} />}
           {page === "admin" && <AdminPage t={t} session={session} userId={userId} adminAlerts={adminAlerts} setAdminAlerts={setAdminAlerts} />}
-          {page === "chat" && <ChatEntryPage t={t} M={M} userId={userId} authProfile={authProfile} session={session} openThread={(id, name, isGroup) => { setActiveThread({ id, name, isGroup: !!isGroup }); setPage("chatRoom"); }} />}
+          {page === "chat" && <ChatEntryPage t={t} M={M} userId={userId} authProfile={authProfile} session={session} openThread={(id, name, isGroup, avatarUrl) => { setActiveThread({ id, name, isGroup: !!isGroup, avatarUrl: avatarUrl || null }); setPage("chatRoom"); }} />}
           {page === "chatRoom" && activeThread && <ChatRoomPage t={t} userId={userId} thread={activeThread} profile={profile} />}
 
           {/* 🎵 การ์ด "กำลังเล่น" ต่อท้ายเนื้อหาหน้า Home (ใต้เป้าหมาย) — div#yt-mini-player mount ค้างตลอด
@@ -823,7 +843,7 @@ useEffect(() => {
         )}
         {accountSettingsOpen && <AccountSettingsModal t={t} authProfile={authProfile} close={() => setAccountSettingsOpen(false)} />}
         {chatOpen && <ChatModal t={t} M={M} mentor={mentor} close={() => setChatOpen(false)} />}
-        {editProfile && <EditProfile t={t} M={M} profile={profile} setProfile={setProfile} close={() => setEditProfile(false)} />}
+        {editProfile && <EditProfile t={t} M={M} profile={profile} setProfile={setProfile} userId={userId} authProfile={authProfile} setAuthProfile={setAuthProfile} close={() => setEditProfile(false)} />}
         {searchOpen && <SearchOverlay t={t} notes={notes} goals={goals} tx={tx} categories={categories} setPage={setPage} close={() => setSearchOpen(false)} />}
         {musicOpen && <MusicModal {...{ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, moveTrack, toggleFavorite, volume, setVolume, close: () => setMusicOpen(false) }} />}
         {addOpen && <AddTxModal t={t} tx={tx} setTx={setTx} categories={categories} moveCategory={moveCategory} deleteCategory={deleteCategory} addCategory={addCategory} close={() => setAddOpen(false)} />}
@@ -1192,19 +1212,48 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, goa
   const [goalText, setGoalText] = useState("");
   const latestNote = notes[0];
   const todayNet = tx.filter((x) => x.date === todayStr()).reduce((s, x) => s + (x.type === "in" ? x.amount : -x.amount), 0);
+
+  // 📢 ป้ายประกาศระบบ — โหลดของที่ active อยู่ + ฟังการเปลี่ยนแปลงแบบสด + จำว่าปิดอันไหนไปแล้ว
+  const [announcements, setAnnouncements] = useState([]);
+  const [dismissed, setDismissed] = useState(() => { try { return JSON.parse(localStorage.getItem("refhub:dismissedAnnounce") || "[]"); } catch (e) { return []; } });
+  useEffect(() => {
+    supabase.from("announcements").select("*").eq("active", true).order("created_at", { ascending: false }).then(({ data }) => setAnnouncements(data || []));
+    const channel = supabase.channel("announce-watch").on("postgres_changes", { event: "*", schema: "public", table: "announcements" }, () => {
+      supabase.from("announcements").select("*").eq("active", true).order("created_at", { ascending: false }).then(({ data }) => setAnnouncements(data || []));
+    }).subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+  const dismiss = (id) => {
+    const next = [...dismissed, id];
+    setDismissed(next);
+    try { localStorage.setItem("refhub:dismissedAnnounce", JSON.stringify(next)); } catch (e) {}
+  };
+  const shownAnnouncements = announcements.filter((a) => !dismissed.includes(a.id));
+
   return (
     <>
-      <div style={{ marginTop: 8, background: t.hero, border: `1px solid ${t.heroBorder}`, borderRadius: 26, padding: 20, boxShadow: isNight ? "none" : "0 10px 24px rgba(30,40,70,.18)" }}>
-        <button onClick={() => setMentorPick(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ fontSize: 11.5, fontWeight: 700, color: M.accent, letterSpacing: .5 }}>{isNight ? "โค้ชคืนนี้" : "โค้ชวันนี้"} · {M.name.toUpperCase()}</span>
-          <span style={{ fontSize: 10, color: "rgba(255,255,255,.5)" }}>เปลี่ยน ▾</span>
-        </button>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, gap: 12 }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 16.5, fontWeight: 700, color: "#fff", lineHeight: 1.4, minHeight: 46 }}>“{quote}”</div>
-            <button onClick={() => setChatOpen(true)} style={{ marginTop: 14, border: "none", cursor: "pointer", background: `linear-gradient(135deg,${t.accent2},${t.accent})`, color: t.onAccent, fontWeight: 700, fontSize: 13, padding: "9px 16px", borderRadius: 18, display: "inline-flex", alignItems: "center", gap: 6 }}>คุยกับโค้ช <ChevronRight size={15} /></button>
+      {shownAnnouncements.map((a) => (
+        <div key={a.id} style={{ background: `${t.accent}14`, border: `1px solid ${t.accent}40`, borderRadius: 16, padding: "10px 12px", marginTop: 8, display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ width: 26, height: 26, borderRadius: 13, background: `${t.accent}22`, display: "grid", placeItems: "center", flexShrink: 0 }}><Bell size={13} color={t.accent} /></span>
+          <div style={{ flex: 1, fontSize: 12, color: t.text, lineHeight: 1.5 }}>{a.message}</div>
+          <button onClick={() => dismiss(a.id)} style={{ background: "none", border: "none", cursor: "pointer", flexShrink: 0, padding: 2 }}><X size={15} color={t.faint} /></button>
+        </div>
+      ))}
+      <div style={{ marginTop: 8, background: t.hero, border: `1px solid ${t.heroBorder}`, borderRadius: 26, padding: 20, position: "relative", overflow: "hidden", boxShadow: isNight ? "none" : "0 10px 24px rgba(30,40,70,.18)" }}>
+        <div style={{ position: "absolute", top: -34, right: -34, width: 130, height: 130, borderRadius: "50%", background: "rgba(255,255,255,.10)", pointerEvents: "none" }} />
+        <div style={{ position: "absolute", bottom: -44, left: -24, width: 105, height: 105, borderRadius: "50%", background: "rgba(255,255,255,.06)", pointerEvents: "none" }} />
+        <div style={{ position: "relative" }}>
+          <button onClick={() => setMentorPick(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 11.5, fontWeight: 700, color: M.accent, letterSpacing: .5 }}>{isNight ? "โค้ชคืนนี้" : "โค้ชวันนี้"} · {M.name.toUpperCase()}</span>
+            <span style={{ fontSize: 10, color: "rgba(255,255,255,.5)" }}>เปลี่ยน ▾</span>
+          </button>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, gap: 14 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 16.5, fontWeight: 700, color: "#fff", lineHeight: 1.4, minHeight: 46 }}>“{quote}”</div>
+              <button onClick={() => setChatOpen(true)} style={{ marginTop: 14, border: "none", cursor: "pointer", background: "rgba(255,255,255,.18)", color: "#fff", fontWeight: 700, fontSize: 13, padding: "9px 16px", borderRadius: 18, display: "inline-flex", alignItems: "center", gap: 6 }}>คุยกับโค้ช <ChevronRight size={15} /></button>
+            </div>
+            <Ring pct={goalPct} color="#fff" label="เป้าหมาย" />
           </div>
-          <Ring pct={goalPct} color={t.accent} label="เป้าหมาย" />
         </div>
       </div>
 
@@ -1499,7 +1548,7 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts }) {
       )}
 
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-        {[["overview", "ภาพรวม"], ["members", "สมาชิก"], ["add", "เพิ่มสมาชิก"]].map(([v, lb]) => (
+        {[["overview", "ภาพรวม"], ["members", "สมาชิก"], ["announce", "ประกาศ"], ["add", "เพิ่มสมาชิก"]].map(([v, lb]) => (
           <button key={v} onClick={() => setTab(v)} style={{ flex: 1, padding: "9px 0", borderRadius: 12, cursor: "pointer", border: `1.5px solid ${tab === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 12.5, background: tab === v ? t.accent : "transparent", color: tab === v ? t.onAccent : t.sub }}>{lb}</button>
         ))}
       </div>
@@ -1580,6 +1629,7 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts }) {
         </div>
       )}
 
+      {tab === "announce" && <AnnouncementsAdmin t={t} userId={userId} />}
       {tab === "add" && <AdminAddPinMember t={t} session={session} onCreated={loadMembers} />}
 
       {detailMember && (
@@ -1684,6 +1734,50 @@ function MemberDetailModal({ t, m, isSelf, isOnline, setApproved, setRole, setCa
   );
 }
 
+function AnnouncementsAdmin({ t, userId }) {
+  const [list, setList] = useState([]);
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = async () => {
+    const { data } = await supabase.from("announcements").select("*").order("created_at", { ascending: false }).limit(20);
+    setList(data || []);
+  };
+  useEffect(() => { load(); }, []);
+
+  const post = async () => {
+    if (!msg.trim()) return;
+    setBusy(true);
+    await supabase.from("announcements").insert({ message: msg.trim(), created_by: userId, active: true });
+    setMsg(""); await load(); setBusy(false);
+  };
+  const toggleActive = async (a) => { await supabase.from("announcements").update({ active: !a.active }).eq("id", a.id); load(); };
+  const del = async (id) => { await supabase.from("announcements").delete().eq("id", id); load(); };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ ...card(t), padding: 16 }}>
+        <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 10 }}>โพสต์ประกาศใหม่ให้ทุกคนเห็นที่หน้า Home</div>
+        <textarea value={msg} onChange={(e) => setMsg(e.target.value)} placeholder="เช่น วันนี้ปิดปรับปรุงระบบ 2 ทุ่ม..." rows={2} style={{ ...input(t), resize: "vertical", marginBottom: 10, fontFamily: "inherit" }} />
+        <button onClick={post} disabled={busy || !msg.trim()} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "11px 0", opacity: msg.trim() ? 1 : 0.5 }}>{busy ? "กำลังโพสต์..." : "โพสต์ประกาศ"}</button>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {list.length === 0 && <Empty t={t} text="ยังไม่มีประกาศ" />}
+        {list.map((a) => (
+          <div key={a.id} style={{ ...card(t), padding: 13, opacity: a.active ? 1 : 0.5 }}>
+            <div style={{ fontSize: 13, color: t.text, lineHeight: 1.5 }}>{a.message}</div>
+            <div style={{ fontSize: 10.5, color: t.faint, marginTop: 6 }}>{new Date(a.created_at).toLocaleString("th-TH")}</div>
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              <button onClick={() => toggleActive(a)} style={{ flex: 1, padding: "7px 0", borderRadius: 9, border: `1px solid ${t.border}`, background: "none", cursor: "pointer", color: t.sub, fontSize: 11.5, fontWeight: 700 }}>{a.active ? "ซ่อน" : "เปิดใช้อีกครั้ง"}</button>
+              <button onClick={() => del(a.id)} style={ghost}><Trash2 size={14} color={t.faint} /></button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function AdminAddPinMember({ t, session, onCreated }) {
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
@@ -1749,13 +1843,13 @@ function ChatEntryPage({ t, M, userId, authProfile, session, openThread }) {
       const { data: threads } = await supabase.from("chat_threads").select("*").in("id", threadIds);
       const { data: allMembers } = await supabase.from("chat_thread_members").select("thread_id, user_id").in("thread_id", threadIds);
       const otherIds = [...new Set((allMembers || []).filter((m) => m.user_id !== userId).map((m) => m.user_id))];
-      const { data: otherProfiles } = otherIds.length ? await supabase.from("profiles").select("id, name").in("id", otherIds) : { data: [] };
+      const { data: otherProfiles } = otherIds.length ? await supabase.from("profiles").select("id, name, avatar_url").in("id", otherIds) : { data: [] };
 
       const list = (threads || []).map((th) => {
         if (th.type === "direct") {
           const otherUserId = (allMembers || []).find((m) => m.thread_id === th.id && m.user_id !== userId)?.user_id;
           const otherProfile = (otherProfiles || []).find((p) => p.id === otherUserId);
-          return { id: th.id, name: otherProfile?.name || "เพื่อน", type: "direct", avatarUrl: null };
+          return { id: th.id, name: otherProfile?.name || "เพื่อน", type: "direct", avatarUrl: otherProfile?.avatar_url || null };
         }
         return { id: th.id, name: th.name || "ห้องแชท", type: "group", avatarUrl: th.avatar_url, joinCode: th.created_by === userId ? th.join_code : null };
       });
@@ -1804,7 +1898,7 @@ function ChatEntryPage({ t, M, userId, authProfile, session, openThread }) {
       if (!r.ok) throw new Error(data.error);
       await loadRooms();
       closeSheet();
-      openThread(data.threadId, data.name, true);
+      openThread(data.threadId, data.name, true, data.avatarUrl);
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
 
@@ -1818,7 +1912,7 @@ function ChatEntryPage({ t, M, userId, authProfile, session, openThread }) {
       if (!r.ok) throw new Error(data.error);
       await loadRooms();
       closeSheet();
-      openThread(data.threadId, data.name, true);
+      openThread(data.threadId, data.name, true, data.avatarUrl);
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
 
@@ -1844,7 +1938,7 @@ function ChatEntryPage({ t, M, userId, authProfile, session, openThread }) {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px 10px", justifyItems: "center" }}>
           {rooms.length === 0 && <div style={{ gridColumn: "1 / -1" }}><Empty t={t} text="ยังไม่มีห้องแชท กด + เพื่อสร้างห้องหรือเข้าร่วมห้องได้เลย" /></div>}
           {rooms.map((r) => (
-            <button key={r.id} onClick={() => openThread(r.id, r.name, r.type === "group")} style={{ background: "none", border: "none", cursor: "pointer", textAlign: "center" }}>
+            <button key={r.id} onClick={() => openThread(r.id, r.name, r.type === "group", r.avatarUrl)} style={{ background: "none", border: "none", cursor: "pointer", textAlign: "center" }}>
               {r.avatarUrl ? (
                 <img src={r.avatarUrl} alt="" style={{ width: 64, height: 64, borderRadius: 18, objectFit: "cover" }} />
               ) : (
@@ -1930,6 +2024,7 @@ function ChatRoomPage({ t, userId, thread, profile }) {
   const [typingName, setTypingName] = useState(null); // ชื่อคนที่กำลังพิมพ์อยู่ (null = ไม่มีใครพิมพ์)
   const [otherMembers, setOtherMembers] = useState([]); // [{id, name}] สมาชิกคนอื่นในห้อง (ไม่รวมตัวเอง) ใช้ทำ "อ่านแล้ว"
   const [reads, setReads] = useState({}); // user_id -> last_read_at ของคนอื่นในห้อง
+  const [lightbox, setLightbox] = useState(null); // url รูปที่กำลังดูเต็มจอ (null = ไม่ได้เปิดดู)
   const fileRef = useRef(null);
   const endRef = useRef(null);
   const typingTimeoutRef = useRef(null);
@@ -1943,7 +2038,7 @@ function ChatRoomPage({ t, userId, thread, profile }) {
       const { data: members } = await supabase.from("chat_thread_members").select("user_id").eq("thread_id", thread.id).neq("user_id", userId);
       const otherIds = (members || []).map((m) => m.user_id);
       if (!otherIds.length) return;
-      const { data: profiles } = await supabase.from("profiles").select("id, name").in("id", otherIds);
+      const { data: profiles } = await supabase.from("profiles").select("id, name, status_message").in("id", otherIds);
       setOtherMembers(profiles || []);
       const { data: readRows } = await supabase.from("chat_reads").select("user_id, last_read_at").eq("thread_id", thread.id).in("user_id", otherIds);
       setReads(Object.fromEntries((readRows || []).map((r) => [r.user_id, r.last_read_at])));
@@ -2002,8 +2097,8 @@ function ChatRoomPage({ t, userId, thread, profile }) {
     const ids = [...new Set(messages.map((m) => m.sender_id))].filter((id) => id && !senderMap[id]);
     if (!ids.length) return;
     (async () => {
-      const { data } = await supabase.from("profiles").select("id, name, email").in("id", ids);
-      if (data) setSenderMap((prev) => ({ ...prev, ...Object.fromEntries(data.map((p) => [p.id, { name: p.name || p.email || "ไม่ทราบชื่อ" }])) }));
+      const { data } = await supabase.from("profiles").select("id, name, email, avatar_url").in("id", ids);
+      if (data) setSenderMap((prev) => ({ ...prev, ...Object.fromEntries(data.map((p) => [p.id, { name: p.name || p.email || "ไม่ทราบชื่อ", avatarUrl: p.avatar_url || null }])) }));
     })();
   }, [messages]);
 
@@ -2044,13 +2139,16 @@ function ChatRoomPage({ t, userId, thread, profile }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 160px)" }}>
-      <div style={{ fontSize: 15, fontWeight: 800, color: t.text, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
         {thread.avatarUrl ? (
-          <img src={thread.avatarUrl} alt="" style={{ width: 32, height: 32, borderRadius: 10, objectFit: "cover" }} />
+          <img src={thread.avatarUrl} alt="" onClick={() => setLightbox(thread.avatarUrl)} style={{ width: 32, height: 32, borderRadius: 10, objectFit: "cover", cursor: "pointer" }} />
         ) : (
           <div style={{ width: 32, height: 32, borderRadius: 10, background: colorFor(thread.name), color: "#fff", display: "grid", placeItems: "center", fontSize: 13, fontWeight: 700 }}>{thread.name[0]}</div>
         )}
-        {thread.name}
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>{thread.name}</div>
+          {!thread.isGroup && otherMembers[0]?.status_message && <div style={{ fontSize: 11, color: t.sub, fontStyle: "italic" }}>{otherMembers[0].status_message}</div>}
+        </div>
       </div>
       <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, paddingBottom: 10 }}>
         {messages.map((m) => {
@@ -2062,7 +2160,11 @@ function ChatRoomPage({ t, userId, thread, profile }) {
             <div key={m.id} style={{ display: "flex", flexDirection: "column", alignItems: mine ? "flex-end" : "flex-start", maxWidth: "84%", alignSelf: mine ? "flex-end" : "flex-start" }}>
               {!mine && thread.isGroup && <div style={{ fontSize: 10.5, color: t.faint, marginBottom: 2, paddingLeft: 34 }}>{senderName}</div>}
               <div style={{ display: "flex", gap: 8, flexDirection: mine ? "row-reverse" : "row" }}>
-                {!mine && <div style={{ width: 26, height: 26, borderRadius: 8, background: colorFor(senderName || thread.name), color: "#fff", display: "grid", placeItems: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{(senderName || thread.name)[0]}</div>}
+                {!mine && (senderMap[m.sender_id]?.avatarUrl ? (
+                  <img src={senderMap[m.sender_id].avatarUrl} alt="" onClick={() => setLightbox(senderMap[m.sender_id].avatarUrl)} style={{ width: 26, height: 26, borderRadius: 8, objectFit: "cover", flexShrink: 0, cursor: "pointer" }} />
+                ) : (
+                  <div style={{ width: 26, height: 26, borderRadius: 8, background: colorFor(senderName || thread.name), color: "#fff", display: "grid", placeItems: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{(senderName || thread.name)[0]}</div>
+                ))}
                 {editingId === m.id ? (
                   <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                     <input value={editText} onChange={(e) => setEditText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveEdit()} style={{ ...input(t), fontSize: 13 }} autoFocus />
@@ -2071,7 +2173,7 @@ function ChatRoomPage({ t, userId, thread, profile }) {
                   </div>
                 ) : (
                   <div style={{ background: mine ? t.accent : t.surface, color: mine ? t.onAccent : t.text, padding: m.attachment_url ? 6 : "9px 13px", borderRadius: 14, fontSize: 13.5, lineHeight: 1.4, border: mine ? "none" : `1px solid ${t.border}` }}>
-                    {m.attachment_type === "image" && <img src={m.attachment_url} alt="" style={{ maxWidth: 200, borderRadius: 10, display: "block" }} />}
+                    {m.attachment_type === "image" && <img src={m.attachment_url} alt="" onClick={() => setLightbox(m.attachment_url)} style={{ maxWidth: 200, borderRadius: 10, display: "block", cursor: "pointer" }} />}
                     {m.attachment_type === "file" && (
                       <a href={m.attachment_url} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: 6, color: "inherit", textDecoration: "underline", padding: "3px 7px" }}><FileText size={14} /> {m.attachment_name}</a>
                     )}
@@ -2108,6 +2210,7 @@ function ChatRoomPage({ t, userId, thread, profile }) {
         <input value={text} onChange={(e) => { setText(e.target.value); notifyTyping(); }} onKeyDown={(e) => e.key === "Enter" && send()} placeholder="พิมพ์ข้อความ..." style={input(t)} />
         <button onClick={send} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: 46, display: "grid", placeItems: "center" }}><Send size={17} /></button>
       </div>
+      {lightbox && <ImageLightbox src={lightbox} onClose={() => setLightbox(null)} />}
     </div>
   );
 }
@@ -2252,8 +2355,8 @@ function AddTxModal({ t, tx, setTx, categories, moveCategory, deleteCategory, ad
           <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
         </div>
         <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-          {[["out", "จ่ายออก"], ["in", "รับเข้า"]].map(([v, lb]) => (
-            <button key={v} onClick={() => { setType(v); setCat(null); setCatError(false); }} style={{ flex: 1, padding: "10px 0", borderRadius: 12, cursor: "pointer", border: `1.5px solid ${type === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 13.5, background: type === v ? t.accent : "transparent", color: type === v ? t.onAccent : t.sub }}>{lb}</button>
+          {[["out", "จ่ายออก", "#D9534F"], ["in", "รับเข้า", "#2E9E6B"]].map(([v, lb, c]) => (
+            <button key={v} onClick={() => { setType(v); setCat(null); setCatError(false); }} style={{ flex: 1, padding: "10px 0", borderRadius: 12, cursor: "pointer", border: `1.5px solid ${type === v ? c : t.border}`, fontWeight: 700, fontSize: 13.5, background: type === v ? c : "transparent", color: type === v ? "#fff" : t.sub }}>{lb}</button>
           ))}
         </div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
@@ -2322,8 +2425,8 @@ function CategoryManagerModal({ t, categories, moveCategory, deleteCategory, add
           <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
         </div>
         <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-          {[["out", "จ่ายออก"], ["in", "รับเข้า"]].map(([v, lb]) => (
-            <button key={v} onClick={() => setKind(v)} style={{ flex: 1, padding: "9px 0", borderRadius: 12, cursor: "pointer", border: `1.5px solid ${kind === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 13, background: kind === v ? t.accent : "transparent", color: kind === v ? t.onAccent : t.sub }}>{lb}</button>
+          {[["out", "จ่ายออก", "#D9534F"], ["in", "รับเข้า", "#2E9E6B"]].map(([v, lb, c]) => (
+            <button key={v} onClick={() => setKind(v)} style={{ flex: 1, padding: "9px 0", borderRadius: 12, cursor: "pointer", border: `1.5px solid ${kind === v ? c : t.border}`, fontWeight: 700, fontSize: 13, background: kind === v ? c : "transparent", color: kind === v ? "#fff" : t.sub }}>{lb}</button>
           ))}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
@@ -2972,9 +3075,29 @@ function ThemePicker({ t, theme, setTheme, mode, close }) {
   </div></div>);
 }
 
-function EditProfile({ t, M, profile, setProfile, close }) {
+function EditProfile({ t, M, profile, setProfile, userId, authProfile, setAuthProfile, close }) {
   const [name, setName] = useState(profile.name); const [avatar, setAvatar] = useState(profile.avatar); const fileRef = useRef(null);
-  const pick = (e) => { const f = e.target.files?.[0]; if (!f) return; const rd = new FileReader(); rd.onload = () => { const img = new Image(); img.onload = () => { const c = document.createElement("canvas"); const s = 200; c.width = s; c.height = s; const ctx = c.getContext("2d"); const min = Math.min(img.width, img.height); ctx.drawImage(img, (img.width - min) / 2, (img.height - min) / 2, min, min, 0, 0, s, s); setAvatar(c.toDataURL("image/jpeg", 0.8)); }; img.src = rd.result; }; rd.readAsDataURL(f); };
+  const [showUrlBox, setShowUrlBox] = useState(false);
+  const [cropSrc, setCropSrc] = useState(null); // dataURL ของรูปที่เพิ่งเลือก รอ crop อยู่
+  const [status, setStatus] = useState(authProfile?.status_message || "");
+
+  const pick = (e) => {
+    const f = e.target.files?.[0]; if (!f) return;
+    e.target.value = "";
+    const rd = new FileReader();
+    rd.onload = () => setCropSrc(rd.result);
+    rd.readAsDataURL(f);
+  };
+
+  const save = async () => {
+    setProfile({ name: name.trim() || "ฉัน", avatar });
+    if (userId) {
+      const { data } = await supabase.from("profiles").update({ status_message: status.trim() || null }).eq("id", userId).select().single();
+      if (data) setAuthProfile(data);
+    }
+    close();
+  };
+
   return (<div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
     <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 16 }}>แก้ไขโปรไฟล์</div>
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, marginBottom: 16 }}>
@@ -2985,15 +3108,106 @@ function EditProfile({ t, M, profile, setProfile, close }) {
       <input ref={fileRef} type="file" accept="image/*" onChange={pick} style={{ display: "none" }} />
       <div style={{ fontSize: 11, color: t.sub }}>แตะรูปดินสอเพื่อเลือกรูปจากเครื่อง</div>
     </div>
-    <div style={{ fontSize: 12, fontWeight: 700, color: t.sub, marginBottom: 6 }}>หรือวางลิงก์รูป (URL)</div>
-    <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-      <input value={avatar && avatar.startsWith("http") ? avatar : ""} onChange={(e) => setAvatar(e.target.value)} placeholder="https://..." style={input(t)} />
-      {avatar && <button onClick={() => setAvatar("")} style={{ ...card(t), border: `1px solid ${t.border}`, padding: "0 14px", cursor: "pointer", color: t.sub, fontSize: 12, fontWeight: 700 }}>ล้าง</button>}
-    </div>
+
     <div style={{ fontSize: 12, fontWeight: 700, color: t.sub, marginBottom: 6 }}>ชื่อ</div>
-    <input value={name} onChange={(e) => setName(e.target.value)} placeholder="ชื่อของคุณ" style={{ ...input(t), marginBottom: 16 }} />
-    <button onClick={() => { setProfile({ name: name.trim() || "ฉัน", avatar }); close(); }} style={{ ...primaryBtn(t), width: "100%", padding: "13px 0", fontSize: 15 }}>บันทึก</button>
-  </div></div>);
+    <input value={name} onChange={(e) => setName(e.target.value)} placeholder="ชื่อของคุณ" style={{ ...input(t), marginBottom: 12 }} />
+
+    <div style={{ fontSize: 12, fontWeight: 700, color: t.sub, marginBottom: 6 }}>สถานะ (คุณกำลังคิดอะไรอยู่?)</div>
+    <input value={status} onChange={(e) => setStatus(e.target.value.slice(0, 60))} placeholder="เช่น กำลังยุ่งๆ, ว่างคุยได้, ขอเวลาส่วนตัวหน่อย..." style={{ ...input(t), marginBottom: 6 }} />
+    <div style={{ fontSize: 10, color: t.faint, marginBottom: 12, textAlign: "right" }}>{status.length}/60 · คนที่แชทกับคุณจะเห็นข้อความนี้</div>
+
+    <button onClick={() => setShowUrlBox((s) => !s)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11.5, color: t.sub, marginBottom: showUrlBox ? 8 : 16, padding: 0 }}>
+      {showUrlBox ? "▾" : "▸"} หรือใส่ลิงก์รูปแทน
+    </button>
+    {showUrlBox && (
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        <input value={avatar && avatar.startsWith("http") ? avatar : ""} onChange={(e) => setAvatar(e.target.value)} placeholder="https://..." style={input(t)} />
+        {avatar && <button onClick={() => setAvatar("")} style={{ ...card(t), border: `1px solid ${t.border}`, padding: "0 14px", cursor: "pointer", color: t.sub, fontSize: 12, fontWeight: 700 }}>ล้าง</button>}
+      </div>
+    )}
+
+    <button onClick={save} style={{ ...primaryBtn(t), width: "100%", padding: "13px 0", fontSize: 15 }}>บันทึก</button>
+  </div>
+
+  {cropSrc && (
+    <ModalPortal>
+      <ImageCropModal t={t} src={cropSrc} onCancel={() => setCropSrc(null)} onConfirm={(dataUrl) => { setAvatar(dataUrl); setCropSrc(null); }} />
+    </ModalPortal>
+  )}
+  </div>);
+}
+
+// 🖼️ ปรับตำแหน่ง/ซูมรูปก่อนบันทึกเป็นรูปโปรไฟล์ (ลาก = ขยับ, สไลเดอร์ = ซูม)
+function ImageCropModal({ t, src, onCancel, onConfirm }) {
+  const V = 260; // ขนาดกรอบวงกลมที่โชว์ตอน crop (px)
+  const OUT = 320; // ขนาดไฟล์ผลลัพธ์สุดท้าย (px)
+  const imgRef = useRef(null);
+  const [imgSize, setImgSize] = useState(null); // { w, h } ขนาดจริงของรูป
+  const [zoom, setZoom] = useState(1);
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const dragRef = useRef(null);
+
+  useEffect(() => {
+    const img = new Image();
+    img.onload = () => setImgSize({ w: img.width, h: img.height });
+    img.src = src;
+  }, [src]);
+
+  if (!imgSize) return null;
+
+  const baseScale = V / Math.min(imgSize.w, imgSize.h);
+  const totalScale = baseScale * zoom;
+  const maxOffX = Math.max(0, (imgSize.w * totalScale - V) / 2);
+  const maxOffY = Math.max(0, (imgSize.h * totalScale - V) / 2);
+  const clamp = (v, m) => Math.max(-m, Math.min(m, v));
+
+  const startDrag = (clientX, clientY) => { dragRef.current = { startX: clientX, startY: clientY, origX: pos.x, origY: pos.y }; };
+  const moveDrag = (clientX, clientY) => {
+    if (!dragRef.current) return;
+    const dx = clientX - dragRef.current.startX, dy = clientY - dragRef.current.startY;
+    setPos({ x: clamp(dragRef.current.origX + dx, maxOffX), y: clamp(dragRef.current.origY + dy, maxOffY) });
+  };
+  const endDrag = () => { dragRef.current = null; };
+
+  const confirm = () => {
+    const c = document.createElement("canvas"); c.width = OUT; c.height = OUT;
+    const ctx = c.getContext("2d");
+    const left = (V - imgSize.w * totalScale) / 2 + pos.x;
+    const top = (V - imgSize.h * totalScale) / 2 + pos.y;
+    const sx = -left / totalScale, sy = -top / totalScale, sw = V / totalScale, sh = V / totalScale;
+    ctx.drawImage(imgRef.current, sx, sy, sw, sh, 0, 0, OUT, OUT);
+    onConfirm(c.toDataURL("image/jpeg", 0.85));
+  };
+
+  return (
+    <div style={overlay} onClick={onCancel}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
+        <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 14 }}>ปรับรูปโปรไฟล์</div>
+        <div
+          style={{ width: V, height: V, borderRadius: "50%", overflow: "hidden", margin: "0 auto 16px", position: "relative", background: "#000", touchAction: "none", cursor: "grab" }}
+          onMouseDown={(e) => startDrag(e.clientX, e.clientY)}
+          onMouseMove={(e) => e.buttons === 1 && moveDrag(e.clientX, e.clientY)}
+          onMouseUp={endDrag} onMouseLeave={endDrag}
+          onTouchStart={(e) => startDrag(e.touches[0].clientX, e.touches[0].clientY)}
+          onTouchMove={(e) => moveDrag(e.touches[0].clientX, e.touches[0].clientY)}
+          onTouchEnd={endDrag}
+        >
+          <img
+            ref={imgRef} src={src} alt="" draggable={false}
+            style={{ position: "absolute", left: "50%", top: "50%", width: imgSize.w * totalScale, height: imgSize.h * totalScale, transform: `translate(calc(-50% + ${pos.x}px), calc(-50% + ${pos.y}px))`, pointerEvents: "none" }}
+          />
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18, padding: "0 4px" }}>
+          <span style={{ fontSize: 11, color: t.sub, flexShrink: 0 }}>ซูม</span>
+          <input type="range" min="1" max="3" step="0.01" value={zoom} onChange={(e) => { setZoom(+e.target.value); setPos((p) => ({ x: clamp(p.x, maxOffX), y: clamp(p.y, maxOffY) })); }} style={{ flex: 1 }} />
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={onCancel} style={{ ...card(t), flex: 1, padding: "12px 0", border: `1px solid ${t.border}`, cursor: "pointer", color: t.sub, fontWeight: 700, fontSize: 13 }}>ยกเลิก</button>
+          <button onClick={confirm} style={{ ...primaryBtn(t), flex: 1, padding: "12px 0", fontSize: 13 }}>ใช้รูปนี้</button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function SearchOverlay({ t, notes, goals, tx, categories, setPage, close }) {
