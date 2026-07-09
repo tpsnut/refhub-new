@@ -25,14 +25,16 @@ export default async function handler(req, res) {
     const admin = createClient(supabaseUrl, serviceKey);
 
     // เช็คว่าผู้เรียกมีสิทธิ์แชทไหม
-    const { data: callerProfile } = await admin.from("profiles").select("can_chat").eq("id", callerId).single();
-    if (!callerProfile?.can_chat) return res.status(403).json({ error: "คุณยังไม่ได้รับสิทธิ์ใช้งานแชท ติดต่อแอดมิน" });
+    const { data: callerProfile } = await admin.from("profiles").select("can_chat, role").eq("id", callerId).single();
+    const callerHasFullAccess = callerProfile?.role === "admin" || callerProfile?.role === "trusted";
+    if (!callerProfile?.can_chat && !callerHasFullAccess) return res.status(403).json({ error: "คุณยังไม่ได้รับสิทธิ์ใช้งานแชท ติดต่อแอดมิน" });
 
     // หาเจ้าของโค้ด
-    const { data: friend } = await admin.from("profiles").select("id, name, can_chat").eq("chat_code", friendCode.trim().toUpperCase()).maybeSingle();
+    const { data: friend } = await admin.from("profiles").select("id, name, can_chat, role").eq("chat_code", friendCode.trim().toUpperCase()).maybeSingle();
     if (!friend) return res.status(404).json({ error: "ไม่พบโค้ดนี้ในระบบ ลองเช็คอีกครั้ง" });
     if (friend.id === callerId) return res.status(400).json({ error: "นี่คือโค้ดของคุณเอง ให้เพื่อนกรอกแทนนะ" });
-    if (!friend.can_chat) return res.status(403).json({ error: `${friend.name} ยังไม่ได้รับสิทธิ์ใช้งานแชท` });
+    const friendHasFullAccess = friend.role === "admin" || friend.role === "trusted";
+    if (!friend.can_chat && !friendHasFullAccess) return res.status(403).json({ error: `${friend.name} ยังไม่ได้รับสิทธิ์ใช้งานแชท` });
 
     // เช็คว่ามีห้องแชทระหว่าง 2 คนนี้อยู่แล้วหรือยัง
     const { data: myThreads } = await admin.from("chat_thread_members").select("thread_id").eq("user_id", callerId);

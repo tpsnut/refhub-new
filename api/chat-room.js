@@ -25,8 +25,9 @@ export default async function handler(req, res) {
 
     const admin = createClient(supabaseUrl, serviceKey);
 
-    const { data: callerProfile } = await admin.from("profiles").select("can_chat").eq("id", callerId).single();
-    if (!callerProfile?.can_chat) return res.status(403).json({ error: "คุณยังไม่ได้รับสิทธิ์ใช้งานแชท ติดต่อแอดมิน" });
+    const { data: callerProfile } = await admin.from("profiles").select("can_chat, role").eq("id", callerId).single();
+    const callerHasFullAccess = callerProfile?.role === "admin" || callerProfile?.role === "trusted";
+    if (!callerProfile?.can_chat && !callerHasFullAccess) return res.status(403).json({ error: "คุณยังไม่ได้รับสิทธิ์ใช้งานแชท ติดต่อแอดมิน" });
 
     if (action === "create") {
       if (!name?.trim()) return res.status(400).json({ error: "ตั้งชื่อห้องก่อน" });

@@ -5,7 +5,7 @@ import {
   Sun, Moon, Send, Check, Trash2, X, Wallet, Target, BookOpen, ChevronRight,
   Sparkles, Clock, Search, Volume2, VolumeX, Pencil, Download, ArrowLeft,
   Utensils, Car, ShoppingBag, Receipt, Gamepad2, HeartPulse, Briefcase, Gift, Coffee, Music,
-  Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi, MessageCircle, MoreVertical, KeyRound
+  Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi, MessageCircle, MoreVertical, KeyRound, MapPin, Copy
 } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, ResponsiveContainer, Tooltip } from "recharts";
 // 📝 BlockNote — editor แบบ Notion (toggle, checklist, หัวข้อ, แนบรูป/ไฟล์) สำหรับหน้าโน้ตฉบับเต็ม
@@ -584,7 +584,23 @@ useEffect(() => {
     return () => clearInterval(id);
   }, [userId]);
 
-  // 🔔 แจ้งเตือนแอดมินแบบสด — พอมีใครสมัครสมาชิกใหม่ ขึ้นแบนเนอร์ให้เห็นทันทีไม่ว่าจะอยู่หน้าไหนของแอป
+  // 📍 อัปเดตตำแหน่งเบื้องหลังทุก 5 นาทีตอนเปิดแอปอยู่ (เฉพาะคนที่เปิดแชร์ตำแหน่งไว้เท่านั้น)
+  useEffect(() => {
+    if (!userId) return;
+    const updateLoc = async () => {
+      try {
+        const { data } = await supabase.from("locations").select("share_enabled").eq("user_id", userId).maybeSingle();
+        if (!data?.share_enabled || !navigator.geolocation) return;
+        navigator.geolocation.getCurrentPosition(
+          (pos) => { supabase.from("locations").update({ lat: pos.coords.latitude, lng: pos.coords.longitude, updated_at: new Date().toISOString() }).eq("user_id", userId).then(() => {}, () => {}); },
+          () => {}, { timeout: 10000 }
+        );
+      } catch (e) {}
+    };
+    updateLoc();
+    const id = setInterval(updateLoc, 5 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [userId]);
   const [adminAlerts, setAdminAlerts] = useState([]);
   useEffect(() => {
     if (!authProfile || authProfile.role !== "admin") return;
@@ -600,12 +616,12 @@ useEffect(() => {
 
   // 💬 คำนวณจำนวนข้อความแชทที่ยังไม่อ่านทั้งหมด (ทุกห้องที่เข้าถึงได้) อัปเดตสดทุกครั้งที่มีข้อความใหม่
   useEffect(() => {
-    if (!userId || !authProfile?.can_chat) { setChatUnread(0); return; }
-    const FAMILY_ID = "00000000-0000-0000-0000-000000000001";
+    const hasChatAccess = authProfile?.can_chat || authProfile?.role === "admin" || authProfile?.role === "trusted";
+    if (!userId || !hasChatAccess) { setChatUnread(0); return; }
     const computeUnread = async () => {
       try {
         const { data: mine } = await supabase.from("chat_thread_members").select("thread_id").eq("user_id", userId);
-        const threadIds = [FAMILY_ID, ...(mine || []).map((m) => m.thread_id)];
+        const threadIds = (mine || []).map((m) => m.thread_id);
         const { data: reads } = await supabase.from("chat_reads").select("thread_id, last_read_at").eq("user_id", userId);
         const readMap = Object.fromEntries((reads || []).map((r) => [r.thread_id, r.last_read_at]));
         let total = 0;
@@ -620,7 +636,7 @@ useEffect(() => {
     computeUnread();
     const channel = supabase.channel("unread-watch").on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages" }, computeUnread).subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [userId, authProfile?.can_chat]);
+  }, [userId, authProfile?.can_chat, authProfile?.role]);
 
   // 🔤 โหลดฟอนต์ IBM Plex Sans Thai จาก Google Fonts ครั้งเดียวตอนแอปเปิด (ตัวเลขชัดสุด อ่านง่ายทุกวัย เหมาะกับหน้าการเงิน)
   useEffect(() => {
@@ -802,6 +818,7 @@ useEffect(() => {
           {page === "lang" && <LangPage t={t} />}
           {page === "goalsReport" && <GoalsReportPage t={t} goals={goals} />}
           {page === "admin" && <AdminPage t={t} session={session} userId={userId} adminAlerts={adminAlerts} setAdminAlerts={setAdminAlerts} />}
+          {page === "locations" && <LocationsPage t={t} userId={userId} />}
           {page === "chat" && <ChatEntryPage t={t} M={M} userId={userId} authProfile={authProfile} session={session} openThread={(id, name, isGroup, avatarUrl) => { setActiveThread({ id, name, isGroup: !!isGroup, avatarUrl: avatarUrl || null }); setPage("chatRoom"); }} />}
           {page === "chatRoom" && activeThread && <ChatRoomPage t={t} userId={userId} thread={activeThread} profile={profile} session={session} />}
 
@@ -856,6 +873,9 @@ useEffect(() => {
                     {adminAlerts.length > 0 && <span style={{ marginLeft: "auto", width: 8, height: 8, borderRadius: 4, background: "#D9534F" }} />}
                   </button>
                 )}
+                <button onClick={() => { setPage("locations"); setMoreMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
+                  <MapPin size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>ตำแหน่งครอบครัว</span>
+                </button>
                 <button onClick={() => { setAccountSettingsOpen(true); setMoreMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
                   <KeyRound size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>ตั้งค่าบัญชี</span>
                 </button>
@@ -1017,7 +1037,33 @@ function AccountSettingsModal({ t, authProfile, userId, close }) {
   const [ok, setOk] = useState("");
   const [pushBusy, setPushBusy] = useState(false);
   const [pushMsg, setPushMsg] = useState("");
+  const [locShare, setLocShare] = useState(false);
+  const [locBusy, setLocBusy] = useState(false);
+  const [locMsg, setLocMsg] = useState("");
   const isPinAccount = authProfile?.login_type === "pin";
+
+  useEffect(() => {
+    supabase.from("locations").select("share_enabled").eq("user_id", userId).maybeSingle().then(({ data }) => setLocShare(data?.share_enabled || false));
+  }, [userId]);
+
+  const toggleLocationShare = async () => {
+    setLocBusy(true); setLocMsg("");
+    try {
+      if (!locShare) {
+        if (!navigator.geolocation) throw new Error("เบราว์เซอร์นี้ไม่รองรับตำแหน่ง");
+        const pos = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 }));
+        await supabase.from("locations").upsert({ user_id: userId, lat: pos.coords.latitude, lng: pos.coords.longitude, updated_at: new Date().toISOString(), share_enabled: true });
+        setLocShare(true);
+        setLocMsg("เปิดแชร์ตำแหน่งแล้ว");
+      } else {
+        await supabase.from("locations").update({ share_enabled: false }).eq("user_id", userId);
+        setLocShare(false);
+        setLocMsg("ปิดแชร์ตำแหน่งแล้ว");
+      }
+    } catch (e) {
+      setLocMsg("ทำรายการไม่สำเร็จ: " + e.message);
+    } finally { setLocBusy(false); }
+  };
 
   const linkEmail = async () => {
     setErr(""); setOk("");
@@ -1056,6 +1102,13 @@ function AccountSettingsModal({ t, authProfile, userId, close }) {
           <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 10, lineHeight: 1.6 }}>เปิดแล้วจะได้รับแจ้งเตือนทันทีเมื่อมีข้อความแชทใหม่ แม้ปิดแอปอยู่ก็ตาม (เบราว์เซอร์จะขออนุญาตก่อน)</div>
           {pushMsg && <div style={{ fontSize: 11.5, color: pushMsg.startsWith("เปิดไม่สำเร็จ") ? "#D9534F" : "#2E9E6B", marginBottom: 10 }}>{pushMsg}</div>}
           <button onClick={enableNotifications} disabled={pushBusy} style={{ width: "100%", padding: "10px 0", borderRadius: 10, border: `1px solid ${t.border}`, background: "none", cursor: "pointer", color: t.text, fontSize: 12.5, fontWeight: 700 }}>{pushBusy ? "กำลังเปิด..." : "เปิดการแจ้งเตือน"}</button>
+        </div>
+
+        <div style={{ ...card(t), padding: 14, marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}><MapPin size={15} color={t.accent} /><span style={{ fontSize: 13, fontWeight: 700, color: t.text }}>แชร์ตำแหน่งของฉัน</span></div>
+          <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 10, lineHeight: 1.6 }}>เปิดแล้วคนที่แอดมินอนุญาตให้ดูได้จะเห็นตำแหน่งล่าสุดของคุณ (อัปเดตทุก 5 นาทีตอนเปิดแอปอยู่) ปิดได้ตลอดเวลา</div>
+          {locMsg && <div style={{ fontSize: 11.5, color: locMsg.startsWith("ทำรายการไม่สำเร็จ") ? "#D9534F" : "#2E9E6B", marginBottom: 10 }}>{locMsg}</div>}
+          <button onClick={toggleLocationShare} disabled={locBusy} style={{ width: "100%", padding: "10px 0", borderRadius: 10, border: `1px solid ${locShare ? "#2E9E6B" : t.border}`, background: locShare ? "#2E9E6B18" : "none", cursor: "pointer", color: locShare ? "#2E9E6B" : t.text, fontSize: 12.5, fontWeight: 700 }}>{locBusy ? "กำลังทำรายการ..." : locShare ? "กำลังแชร์อยู่ (กดเพื่อปิด)" : "เปิดแชร์ตำแหน่ง"}</button>
         </div>
 
         {isPinAccount ? (
@@ -1559,7 +1612,9 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts }) {
   const setApproved = async (id, approved) => { await supabase.from("profiles").update({ approved }).eq("id", id); loadMembers(); };
   const setRole = async (id, role) => { await supabase.from("profiles").update({ role }).eq("id", id); loadMembers(); };
   const setCanChat = async (id, can_chat) => { await supabase.from("profiles").update({ can_chat }).eq("id", id); loadMembers(); };
+  const setCanViewLocations = async (id, can_view_locations) => { await supabase.from("profiles").update({ can_view_locations }).eq("id", id); loadMembers(); };
   const setMentorLimit = async (id, mentor_limit) => { await supabase.from("profiles").update({ mentor_limit }).eq("id", id); loadMembers(); };
+  const resetMentorPick = async (id) => { await supabase.from("profiles").update({ unlocked_mentors: [] }).eq("id", id); loadMembers(); };
   const setTopicLimit = async (id, topic_limit) => { await supabase.from("profiles").update({ topic_limit }).eq("id", id); loadMembers(); };
   const setDailyArticleLimit = async (id, daily_article_limit) => { await supabase.from("profiles").update({ daily_article_limit }).eq("id", id); loadMembers(); };
   const removeMember = async (id) => { await supabase.from("profiles").delete().eq("id", id); setDetailMember(null); loadMembers(); };
@@ -1681,8 +1736,8 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts }) {
           <MemberDetailModal
             t={t} m={detailMember} isSelf={detailMember.id === userId}
             isOnline={isOnline(detailMember.last_seen)}
-            setApproved={setApproved} setRole={setRole} setCanChat={setCanChat}
-            setMentorLimit={setMentorLimit} setTopicLimit={setTopicLimit} setDailyArticleLimit={setDailyArticleLimit}
+            setApproved={setApproved} setRole={setRole} setCanChat={setCanChat} setCanViewLocations={setCanViewLocations}
+            setMentorLimit={setMentorLimit} setTopicLimit={setTopicLimit} setDailyArticleLimit={setDailyArticleLimit} resetMentorPick={resetMentorPick}
             removeMember={removeMember}
             close={() => setDetailMember(null)}
           />
@@ -1692,7 +1747,7 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts }) {
   );
 }
 
-function MemberDetailModal({ t, m, isSelf, isOnline, setApproved, setRole, setCanChat, setMentorLimit, setTopicLimit, setDailyArticleLimit, removeMember, close }) {
+function MemberDetailModal({ t, m, isSelf, isOnline, setApproved, setRole, setCanChat, setCanViewLocations, setMentorLimit, setTopicLimit, setDailyArticleLimit, resetMentorPick, removeMember, close }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const Row = ({ label, children }) => (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: `1px solid ${t.border}` }}>
@@ -1751,11 +1806,19 @@ function MemberDetailModal({ t, m, isSelf, isOnline, setApproved, setRole, setCa
             <Row label="แชท">
               <button onClick={() => setCanChat(m.id, !m.can_chat)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 10, border: `1px solid ${m.can_chat ? "#2E9E6B" : t.border}`, cursor: "pointer", background: m.can_chat ? "#2E9E6B18" : "none", color: m.can_chat ? "#2E9E6B" : t.sub, fontSize: 12, fontWeight: 700 }}><MessageCircle size={13} /> {m.can_chat ? "เปิดใช้งานอยู่" : "ปิดอยู่ (กดเพื่อเปิด)"}</button>
             </Row>
+            <Row label="ดูตำแหน่งคนอื่นได้">
+              <button onClick={() => setCanViewLocations(m.id, !m.can_view_locations)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 10, border: `1px solid ${m.can_view_locations ? "#2E9E6B" : t.border}`, cursor: "pointer", background: m.can_view_locations ? "#2E9E6B18" : "none", color: m.can_view_locations ? "#2E9E6B" : t.sub, fontSize: 12, fontWeight: 700 }}><MapPin size={13} /> {m.can_view_locations ? "เปิดใช้งานอยู่" : "ปิดอยู่ (กดเพื่อเปิด)"}</button>
+            </Row>
             <Row label="จำนวนโค้ชที่ปลดล็อกได้">
-              <select value={m.mentor_limit ?? 1} onChange={(e) => setMentorLimit(m.id, +e.target.value)} style={selectStyle}>
+              <select value={m.mentor_limit ?? 0} onChange={(e) => setMentorLimit(m.id, +e.target.value)} style={selectStyle}>
                 {[0, 1, 2, 3].map((n) => <option key={n} value={n}>{n} คน</option>)}
               </select>
             </Row>
+            {(m.unlocked_mentors || []).length > 0 && (
+              <Row label={`เลือกโค้ชแล้ว: ${MENTORS[m.unlocked_mentors[0]]?.full || m.unlocked_mentors[0]}`}>
+                <button onClick={() => resetMentorPick(m.id)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 10, border: `1px solid ${t.border}`, cursor: "pointer", background: "none", color: t.sub, fontSize: 12, fontWeight: 700 }}>รีเซ็ตให้เลือกใหม่</button>
+              </Row>
+            )}
             <Row label="หมวดความสนใจสูงสุด">
               <select value={m.topic_limit ?? 3} onChange={(e) => setTopicLimit(m.id, +e.target.value)} style={selectStyle}>
                 {Array.from({ length: 14 }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n} หมวด</option>)}
@@ -1906,9 +1969,10 @@ function ChatEntryPage({ t, M, userId, authProfile, session, openThread }) {
       setRooms(list);
     } catch (e) {} finally { setLoading(false); }
   };
-  useEffect(() => { if (authProfile?.can_chat) loadRooms(); }, [authProfile?.can_chat]);
+  const hasFullAccess = authProfile?.role === "admin" || authProfile?.role === "trusted";
+  useEffect(() => { if (authProfile?.can_chat || hasFullAccess) loadRooms(); }, [authProfile?.can_chat, hasFullAccess]);
 
-  const closeSheet = () => { setSheet(null); setErr(""); setFriendCode(""); setJoinCode(""); setRoomName(""); setRoomAvatar(null); setRoomAvatarFile(null); };
+  const closeSheet = () => { setSheet(null); setErr(""); setFriendCode(""); setJoinCode(""); setRoomName(""); setRoomAvatar(null); setRoomAvatarFile(null); setCreatedRoom(null); };
 
   const pickAvatar = (e) => {
     const f = e.target.files?.[0]; if (!f) return;
@@ -1930,6 +1994,12 @@ function ChatEntryPage({ t, M, userId, authProfile, session, openThread }) {
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
 
+  const [createdRoom, setCreatedRoom] = useState(null); // { threadId, name, avatarUrl, joinCode } ห้องที่เพิ่งสร้างเสร็จ รอโชว์โค้ด
+  const [copiedFlag, setCopiedFlag] = useState(""); // ชื่อ field ที่เพิ่งกด copy (โชว์ "คัดลอกแล้ว" ชั่วคราว)
+  const copyText = (text, flag) => {
+    navigator.clipboard?.writeText(text).then(() => { setCopiedFlag(flag); setTimeout(() => setCopiedFlag(""), 1500); });
+  };
+
   const submitCreateRoom = async () => {
     setErr("");
     if (!roomName.trim()) { setErr("ตั้งชื่อห้องก่อน"); return; }
@@ -1947,8 +2017,9 @@ function ChatEntryPage({ t, M, userId, authProfile, session, openThread }) {
       const data = await r.json();
       if (!r.ok) throw new Error(data.error);
       await loadRooms();
-      closeSheet();
-      openThread(data.threadId, data.name, true, data.avatarUrl);
+      setCreatedRoom({ threadId: data.threadId, name: data.name, avatarUrl: data.avatarUrl, joinCode: data.joinCode });
+      setSheet("created");
+      setRoomName(""); setRoomAvatar(null); setRoomAvatarFile(null);
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
 
@@ -1966,7 +2037,6 @@ function ChatEntryPage({ t, M, userId, authProfile, session, openThread }) {
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
 
-  const hasFullAccess = authProfile?.role === "admin" || authProfile?.role === "trusted";
   if (!authProfile?.can_chat && !hasFullAccess) {
     return (
       <>
@@ -1980,23 +2050,33 @@ function ChatEntryPage({ t, M, userId, authProfile, session, openThread }) {
     <>
       <PageHead t={t} title="แชท" sub="สร้างห้องเองหรือแลกโค้ดกับเพื่อน" icon={<MessageCircle size={20} color={t.accent} />} />
       {authProfile.chat_code && (
-        <div style={{ ...card(t), padding: 12, marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ ...card(t), padding: 12, marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
           <div style={{ fontSize: 11.5, color: t.sub }}>โค้ดส่วนตัวของคุณ (แชร์ให้เพื่อนเริ่มแชท 1-1)</div>
-          <div style={{ fontSize: 14, fontWeight: 800, color: t.accent, letterSpacing: 2 }}>{authProfile.chat_code}</div>
+          <button onClick={() => copyText(authProfile.chat_code, "mycode")} style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+            <span style={{ fontSize: 14, fontWeight: 800, color: t.accent, letterSpacing: 2 }}>{authProfile.chat_code}</span>
+            {copiedFlag === "mycode" ? <Check size={14} color="#2E9E6B" /> : <Copy size={14} color={t.faint} />}
+          </button>
         </div>
       )}
       {loading ? <Empty t={t} text="กำลังโหลด..." /> : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px 10px", justifyItems: "center" }}>
           {rooms.length === 0 && <div style={{ gridColumn: "1 / -1" }}><Empty t={t} text="ยังไม่มีห้องแชท กด + เพื่อสร้างห้องหรือเข้าร่วมห้องได้เลย" /></div>}
           {rooms.map((r) => (
-            <button key={r.id} onClick={() => openThread(r.id, r.name, r.type === "group", r.avatarUrl)} style={{ background: "none", border: "none", cursor: "pointer", textAlign: "center" }}>
-              {r.avatarUrl ? (
-                <img src={r.avatarUrl} alt="" style={{ width: 64, height: 64, borderRadius: 18, objectFit: "cover" }} />
-              ) : (
-                <div style={{ width: 64, height: 64, borderRadius: 18, background: colorFor(r.name), display: "grid", placeItems: "center", color: "#fff", fontSize: 20, fontWeight: 700 }}>{r.name[0]}</div>
+            <div key={r.id} style={{ position: "relative" }}>
+              <button onClick={() => openThread(r.id, r.name, r.type === "group", r.avatarUrl)} style={{ background: "none", border: "none", cursor: "pointer", textAlign: "center", width: "100%" }}>
+                {r.avatarUrl ? (
+                  <img src={r.avatarUrl} alt="" style={{ width: 64, height: 64, borderRadius: 18, objectFit: "cover" }} />
+                ) : (
+                  <div style={{ width: 64, height: 64, borderRadius: 18, background: colorFor(r.name), display: "grid", placeItems: "center", color: "#fff", fontSize: 20, fontWeight: 700 }}>{r.name[0]}</div>
+                )}
+                <div style={{ fontSize: 11, color: t.text, marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 70 }}>{r.name}</div>
+              </button>
+              {r.joinCode && (
+                <button onClick={(e) => { e.stopPropagation(); setCreatedRoom({ threadId: r.id, name: r.name, avatarUrl: r.avatarUrl, joinCode: r.joinCode }); setSheet("created"); }} style={{ position: "absolute", top: -2, right: 4, width: 22, height: 22, borderRadius: 11, background: t.surface, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }} title="ดูโค้ดเชิญ">
+                  <KeyRound size={11} color={t.sub} />
+                </button>
               )}
-              <div style={{ fontSize: 11, color: t.text, marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 70 }}>{r.name}</div>
-            </button>
+            </div>
           ))}
           <button onClick={() => setSheet("menu")} style={{ background: "none", border: "none", cursor: "pointer", textAlign: "center" }}>
             <div style={{ width: 64, height: 64, borderRadius: 18, background: "none", border: `1.5px dashed ${t.border}`, display: "grid", placeItems: "center", color: t.faint }}>
@@ -2053,6 +2133,20 @@ function ChatEntryPage({ t, M, userId, authProfile, session, openThread }) {
                   <input value={friendCode} onChange={(e) => setFriendCode(e.target.value.toUpperCase())} placeholder="กรอกโค้ดส่วนตัวของเพื่อน" style={{ ...input(t), marginBottom: 10, letterSpacing: 2, textTransform: "uppercase" }} />
                   {err && <div style={{ fontSize: 12, color: "#D9534F", marginBottom: 10 }}>{err}</div>}
                   <button onClick={submitDirectCode} disabled={busy} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "12px 0" }}>{busy ? "กำลังเชื่อมต่อ..." : "เริ่มแชท"}</button>
+                </>
+              )}
+
+              {sheet === "created" && createdRoom && (
+                <>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 4 }}>สร้างห้อง "{createdRoom.name}" สำเร็จ!</div>
+                  <div style={{ fontSize: 12, color: t.sub, marginBottom: 16 }}>ส่งโค้ดนี้ให้คนที่อยากชวนเข้าห้อง แล้วให้เขากด "เข้าร่วมห้องด้วยโค้ด" ที่หน้าแชทของเขา</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, background: t.inputBg, border: `1px solid ${t.border}`, borderRadius: 14, padding: "14px 16px", marginBottom: 16 }}>
+                    <div style={{ flex: 1, fontSize: 22, fontWeight: 800, color: t.accent, letterSpacing: 3, textAlign: "center" }}>{createdRoom.joinCode}</div>
+                    <button onClick={() => copyText(createdRoom.joinCode, "roomcode")} style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 5, padding: "8px 12px", borderRadius: 10, border: `1px solid ${t.border}`, background: "none", cursor: "pointer", color: t.text, fontSize: 12, fontWeight: 700 }}>
+                      {copiedFlag === "roomcode" ? <><Check size={14} color="#2E9E6B" /> คัดลอกแล้ว</> : <>คัดลอก</>}
+                    </button>
+                  </div>
+                  <button onClick={() => { closeSheet(); openThread(createdRoom.threadId, createdRoom.name, true, createdRoom.avatarUrl); }} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "12px 0" }}>เข้าห้องแชทเลย</button>
                 </>
               )}
             </div>
@@ -2265,6 +2359,52 @@ function ChatRoomPage({ t, userId, thread, profile, session }) {
       </div>
       {lightbox && <ImageLightbox src={lightbox} onClose={() => setLightbox(null)} />}
     </div>
+  );
+}
+
+function LocationsPage({ t, userId }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const { data: locs } = await supabase.from("locations").select("*").neq("user_id", userId);
+      const ids = (locs || []).map((l) => l.user_id);
+      const { data: profiles } = ids.length ? await supabase.from("profiles").select("id, name").in("id", ids) : { data: [] };
+      const merged = (locs || []).map((l) => ({ ...l, name: (profiles || []).find((p) => p.id === l.user_id)?.name || "ไม่ทราบชื่อ" }));
+      setRows(merged);
+    } catch (e) {}
+    setLoading(false);
+  };
+  useEffect(() => {
+    load();
+    const channel = supabase.channel("locations-watch").on("postgres_changes", { event: "*", schema: "public", table: "locations" }, load).subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [userId]);
+
+  const minutesAgo = (iso) => Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+
+  return (
+    <>
+      <PageHead t={t} title="ตำแหน่งครอบครัว" sub="เห็นเฉพาะคนที่แชร์ไว้และแอดมินอนุญาตให้คุณดู" icon={<MapPin size={20} color={t.accent} />} />
+      {loading && <Empty t={t} text="กำลังโหลด..." />}
+      {!loading && rows.length === 0 && <Empty t={t} text="ยังไม่มีใครแชร์ตำแหน่งให้คุณเห็น (หรือคุณยังไม่ได้รับสิทธิ์ดูจากแอดมิน)" />}
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {rows.map((r) => (
+          <div key={r.user_id} style={{ ...card(t), padding: 14, display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ width: 40, height: 40, borderRadius: 12, background: colorFor(r.name), color: "#fff", display: "grid", placeItems: "center", fontSize: 15, fontWeight: 700, flexShrink: 0 }}>{r.name[0]}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: t.text }}>{r.name}</div>
+              <div style={{ fontSize: 11, color: t.sub }}>{r.lat ? `อัปเดตเมื่อ ${minutesAgo(r.updated_at)} นาทีที่แล้ว` : "ยังไม่มีข้อมูลตำแหน่ง"}</div>
+            </div>
+            {r.lat && (
+              <a href={`https://www.google.com/maps?q=${r.lat},${r.lng}`} target="_blank" rel="noreferrer" style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 5, padding: "8px 12px", borderRadius: 10, border: `1px solid ${t.border}`, color: t.accent, fontSize: 11.5, fontWeight: 700, textDecoration: "none" }}>เปิดแผนที่ <ChevronRight size={13} /></a>
+            )}
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -3073,21 +3213,23 @@ function ChatModal({ t, M, mentor, close }) {
 
 function MentorPicker({ t, mentor, setMentor, authProfile, setAuthProfile, userId, close }) {
   const isAdmin = authProfile?.role === "admin" || authProfile?.role === "trusted";
-  const limit = authProfile?.mentor_limit ?? 1;
-  const unlocked = authProfile?.unlocked_mentors || [];
+  const limit = authProfile?.mentor_limit ?? 0;
+  const unlocked = authProfile?.unlocked_mentors || []; // ปกติจะมีได้แค่ 0 หรือ 1 ตัว (ล็อกถาวรตั้งแต่เลือกครั้งแรก)
   const [err, setErr] = useState("");
 
   const pick = async (k) => {
     setErr("");
-    if (isAdmin || k === "none" || unlocked.includes(k)) {
-      setMentor(k); close(); return;
-    }
-    if (unlocked.length >= limit) {
-      setErr(`ตอนนี้ปลดล็อกโค้ชได้สูงสุด ${limit} คน (ให้แอดมินเพิ่มโควตาให้ถ้าอยากปลดล็อกเพิ่ม)`);
+    if (isAdmin || k === "none") { setMentor(k); close(); return; }
+    if (unlocked.includes(k)) { setMentor(k); close(); return; } // กดตัวที่เลือกไปแล้วซ้ำ ใช้ได้ปกติ
+    if (unlocked.length > 0) {
+      setErr(`คุณเลือกโค้ชไปแล้ว (${MENTORS[unlocked[0]]?.full || unlocked[0]}) เปลี่ยนไม่ได้ ต้องให้แอดมินรีเซ็ตให้ก่อนถึงจะเลือกใหม่ได้`);
       return;
     }
-    const nextUnlocked = [...unlocked, k];
-    const { data } = await supabase.from("profiles").update({ unlocked_mentors: nextUnlocked }).eq("id", userId).select().single();
+    if (limit < 1) {
+      setErr("คุณยังไม่ได้รับสิทธิ์เลือกโค้ช ให้แอดมินเปิดสิทธิ์ให้ที่หน้า Admin ก่อนนะ");
+      return;
+    }
+    const { data } = await supabase.from("profiles").update({ unlocked_mentors: [k] }).eq("id", userId).select().single();
     if (data) setAuthProfile(data);
     setMentor(k); close();
   };
@@ -3096,12 +3238,12 @@ function MentorPicker({ t, mentor, setMentor, authProfile, setAuthProfile, userI
     <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 4 }}>เลือกโค้ชของคุณ</div>
     <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>
       คำคมและสไตล์การคุยจะเปลี่ยนตามโค้ช (สีธีมแอปปรับแยกได้ที่ไอคอนจานสี 🎨 ด้านบน)
-      {!isAdmin && <> · ปลดล็อกได้ {unlocked.length}/{limit} คน</>}
+      {!isAdmin && (unlocked.length > 0 ? <> · เลือกไว้แล้ว เปลี่ยนไม่ได้จนกว่าแอดมินจะรีเซ็ต</> : limit < 1 ? <> · ยังไม่ได้รับสิทธิ์เลือกโค้ช</> : <> · เลือกได้ 1 คน (เลือกแล้วเปลี่ยนไม่ได้)</>)}
     </div>
     {err && <div style={{ fontSize: 12, color: "#D9534F", marginBottom: 12 }}>{err}</div>}
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {Object.entries(MENTORS).map(([k, m]) => {
-        const locked = !isAdmin && k !== "none" && !unlocked.includes(k) && unlocked.length >= limit;
+        const locked = !isAdmin && k !== "none" && !unlocked.includes(k) && (unlocked.length > 0 || limit < 1);
         return (
           <button key={k} onClick={() => pick(k)} style={{ display: "flex", alignItems: "center", gap: 14, padding: 14, borderRadius: 18, cursor: "pointer", textAlign: "left", background: t.surface, border: `2px solid ${mentor === k ? m.accent : t.border}`, opacity: locked ? 0.5 : 1 }}>
             <span style={{ width: 46, height: 46, borderRadius: 23, background: `linear-gradient(135deg,${m.accent2},${m.accent})`, color: m.onAccent, display: "grid", placeItems: "center", fontWeight: 800, fontSize: 18, flexShrink: 0 }}>{m.letter}</span>
