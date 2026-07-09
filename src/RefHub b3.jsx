@@ -4,7 +4,7 @@ import {
   Sun, Moon, Send, Check, Trash2, X, Wallet, Target, BookOpen, ChevronRight,
   Sparkles, Clock, Search, Volume2, VolumeX, Pencil, Download, ArrowLeft,
   Utensils, Car, ShoppingBag, Receipt, Gamepad2, HeartPulse, Briefcase, Gift, Coffee, Music,
-  Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi, MessageCircle, MoreVertical, KeyRound
+  Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi
 } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, ResponsiveContainer, Tooltip } from "recharts";
 // 📝 BlockNote — editor แบบ Notion (toggle, checklist, หัวข้อ, แนบรูป/ไฟล์) สำหรับหน้าโน้ตฉบับเต็ม
@@ -207,9 +207,6 @@ export default function RefHub() {
   const [themePick, setThemePick] = useState(false);
   const [editProfile, setEditProfile] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
-  const [chatUnread, setChatUnread] = useState(0); // จำนวนข้อความแชทที่ยังไม่ได้อ่าน (คำนวณจริงในหน้าแชท)
-  const [activeThread, setActiveThread] = useState(null); // { id, name } ห้องแชทที่กำลังเปิดดูอยู่
   const [addOpen, setAddOpen] = useState(false);
   const [exportText, setExportText] = useState(null);
   const [musicOpen, setMusicOpen] = useState(false);
@@ -469,36 +466,14 @@ useEffect(() => {
   }, []);
 
   // 🔐 ดึงแถว profile (สถานะอนุมัติ/role) ทุกครั้งที่ userId เปลี่ยน (ล็อกอิน/ล็อกเอาต์)
-  // ถ้ายังไม่มีแถว (เช่น เพิ่งยืนยันอีเมลเสร็จเป็นครั้งแรก) จะสร้างให้ตอนนี้เลย เพราะรับประกันว่ามี session จริงแล้ว (RLS ผ่านแน่นอน)
   useEffect(() => {
     if (!userId) { setAuthProfile(null); return; }
     (async () => {
       try {
-        let { data } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
-        if (!data) {
-          const meta = session?.user?.user_metadata || {};
-          const { count } = await supabase.from("profiles").select("id", { count: "exact", head: true });
-          const isFirstUser = !count;
-          const { data: created, error: createErr } = await supabase.from("profiles").insert({
-            id: userId,
-            email: session?.user?.email || null,
-            name: meta.name?.trim() || session?.user?.email?.split("@")[0] || "ผู้ใช้ใหม่",
-            role: isFirstUser ? "admin" : "member",
-            approved: isFirstUser,
-            family_code: meta.family_code || null,
-            login_type: "email",
-          }).select().single();
-          if (createErr) console.error("สร้างโปรไฟล์ไม่สำเร็จ:", createErr.message);
-          data = created;
-        }
+        const { data } = await supabase.from("profiles").select("*").eq("id", userId).single();
         setAuthProfile(data || null);
         if (data) await supabase.from("profiles").update({ last_login: new Date().toISOString() }).eq("id", userId);
-        if (data && !data.chat_code) {
-          const code = Math.random().toString(36).slice(2, 8).toUpperCase();
-          const { data: withCode } = await supabase.from("profiles").update({ chat_code: code }).eq("id", userId).select().single();
-          if (withCode) setAuthProfile(withCode);
-        }
-      } catch (e) { console.error("โหลดโปรไฟล์ผิดพลาด:", e.message); setAuthProfile(null); }
+      } catch (e) { setAuthProfile(null); }
     })();
   }, [userId]);
 
@@ -524,30 +499,6 @@ useEffect(() => {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [authProfile?.role, userId]);
-
-  // 💬 คำนวณจำนวนข้อความแชทที่ยังไม่อ่านทั้งหมด (ทุกห้องที่เข้าถึงได้) อัปเดตสดทุกครั้งที่มีข้อความใหม่
-  useEffect(() => {
-    if (!userId || !authProfile?.can_chat) { setChatUnread(0); return; }
-    const FAMILY_ID = "00000000-0000-0000-0000-000000000001";
-    const computeUnread = async () => {
-      try {
-        const { data: mine } = await supabase.from("chat_thread_members").select("thread_id").eq("user_id", userId);
-        const threadIds = [FAMILY_ID, ...(mine || []).map((m) => m.thread_id)];
-        const { data: reads } = await supabase.from("chat_reads").select("thread_id, last_read_at").eq("user_id", userId);
-        const readMap = Object.fromEntries((reads || []).map((r) => [r.thread_id, r.last_read_at]));
-        let total = 0;
-        for (const tid of threadIds) {
-          const since = readMap[tid] || "1970-01-01T00:00:00Z";
-          const { count } = await supabase.from("chat_messages").select("id", { count: "exact", head: true }).eq("thread_id", tid).gt("created_at", since).neq("sender_id", userId);
-          total += count || 0;
-        }
-        setChatUnread(total);
-      } catch (e) {}
-    };
-    computeUnread();
-    const channel = supabase.channel("unread-watch").on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages" }, computeUnread).subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [userId, authProfile?.can_chat]);
 
   // 🔤 โหลดฟอนต์ IBM Plex Sans Thai จาก Google Fonts ครั้งเดียวตอนแอปเปิด (ตัวเลขชัดสุด อ่านง่ายทุกวัย เหมาะกับหน้าการเงิน)
   useEffect(() => {
@@ -679,14 +630,20 @@ useEffect(() => {
               </button>
               <div style={{ display: "flex", gap: 8 }}>
                 <IconBtn t={t} onClick={() => setSearchOpen(true)}><Search size={17} color={t.text} /></IconBtn>
-                <button onClick={() => setPage("chat")} style={{ position: "relative", width: 38, height: 38, borderRadius: 19, background: t.surface, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }}>
-                  <MessageCircle size={17} color={t.text} />
-                  {chatUnread > 0 && <span style={{ position: "absolute", top: 3, right: 3, width: 8, height: 8, borderRadius: 4, background: "#D9534F" }} />}
-                </button>
-                <button onClick={() => setMoreMenuOpen(true)} style={{ position: "relative", width: 38, height: 38, borderRadius: 19, background: t.surface, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }}>
-                  <MoreVertical size={17} color={t.text} />
-                  {adminAlerts.length > 0 && <span style={{ position: "absolute", top: 3, right: 3, width: 8, height: 8, borderRadius: 4, background: "#D9534F" }} />}
-                </button>
+                <IconBtn t={t} onClick={() => setMusicOpen(true)} active={playing} accent={t.accent}>
+                  <Music size={17} color={playing ? t.accent : t.text} />
+                </IconBtn>
+                <IconBtn t={t} onClick={() => setThemePick(true)}><Palette size={17} color={t.text} /></IconBtn>
+                <IconBtn t={t} onClick={() => setFontScale((s) => (s === 100 ? 115 : s === 115 ? 130 : 100))}><ALargeSmall size={18} color={t.text} /></IconBtn>
+                {authProfile?.role === "admin" && (
+                  <button onClick={() => setPage("admin")} style={{ position: "relative", width: 38, height: 38, borderRadius: 19, background: t.surface, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }}>
+                    <ShieldCheck size={17} color={t.text} />
+                    {adminAlerts.length > 0 && <span style={{ position: "absolute", top: 3, right: 3, width: 8, height: 8, borderRadius: 4, background: "#D9534F" }} />}
+                  </button>
+                )}
+                <IconBtn t={t} onClick={() => setThemeMode(themeMode === "auto" ? "day" : themeMode === "day" ? "night" : "auto")}>
+                  {isNight ? <Moon size={17} color={t.text} /> : <Sun size={17} color={t.text} />}
+                </IconBtn>
               </div>
             </div>
           ) : (
@@ -729,8 +686,6 @@ useEffect(() => {
           {page === "lang" && <LangPage t={t} />}
           {page === "goalsReport" && <GoalsReportPage t={t} goals={goals} />}
           {page === "admin" && <AdminPage t={t} session={session} userId={userId} adminAlerts={adminAlerts} setAdminAlerts={setAdminAlerts} />}
-          {page === "chat" && <ChatEntryPage t={t} M={M} authProfile={authProfile} session={session} openThread={(id, name) => { setActiveThread({ id, name }); setPage("chatRoom"); }} />}
-          {page === "chatRoom" && activeThread && <ChatRoomPage t={t} userId={userId} thread={activeThread} profile={profile} />}
 
           {/* 🎵 การ์ด "กำลังเล่น" ต่อท้ายเนื้อหาหน้า Home (ใต้เป้าหมาย) — div#yt-mini-player mount ค้างตลอด
               ไม่เคย unmount เลย (ซ่อนด้วย display:none เท่านั้น) กันปัญหา React ชนกับ DOM ที่ YouTube API แก้เอง */}
@@ -765,31 +720,6 @@ useEffect(() => {
 
         {mentorPick && <MentorPicker t={t} mentor={mentor} setMentor={setMentor} close={() => setMentorPick(false)} />}
         {themePick && <ThemePicker t={t} theme={theme} setTheme={setTheme} mode={mode} close={() => setThemePick(false)} />}
-        {moreMenuOpen && (
-          <div style={overlay} onClick={() => setMoreMenuOpen(false)}>
-            <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
-              <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 14 }}>เพิ่มเติม</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <button onClick={() => { setMusicOpen(true); setMoreMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}><Music size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>เพลง</span></button>
-                <button onClick={() => { setThemePick(true); setMoreMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}><Palette size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>ธีมสีแอป</span></button>
-                <button onClick={() => setFontScale((s) => (s === 100 ? 115 : s === 115 ? 130 : 100))} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}><ALargeSmall size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>ขนาดตัวอักษร ({fontScale}%)</span></button>
-                <button onClick={() => setThemeMode(themeMode === "auto" ? "day" : themeMode === "day" ? "night" : "auto")} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
-                  {isNight ? <Moon size={18} color={t.sub} /> : <Sun size={18} color={t.sub} />}
-                  <span style={{ fontSize: 14, color: t.text }}>โหมด: {themeMode === "auto" ? "อัตโนมัติ" : themeMode === "day" ? "กลางวัน" : "กลางคืน"}</span>
-                </button>
-                {authProfile?.role === "admin" && (
-                  <button onClick={() => { setPage("admin"); setMoreMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
-                    <ShieldCheck size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>หน้า Admin</span>
-                    {adminAlerts.length > 0 && <span style={{ marginLeft: "auto", width: 8, height: 8, borderRadius: 4, background: "#D9534F" }} />}
-                  </button>
-                )}
-                <button onClick={() => supabase.auth.signOut()} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
-                  <X size={18} color="#D9534F" /><span style={{ fontSize: 14, color: "#D9534F" }}>ออกจากระบบ</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
         {chatOpen && <ChatModal t={t} M={M} mentor={mentor} close={() => setChatOpen(false)} />}
         {editProfile && <EditProfile t={t} M={M} profile={profile} setProfile={setProfile} close={() => setEditProfile(false)} />}
         {searchOpen && <SearchOverlay t={t} notes={notes} goals={goals} tx={tx} categories={categories} setPage={setPage} close={() => setSearchOpen(false)} />}
@@ -855,14 +785,20 @@ function AuthPage() {
       if (!emailOk) { setErr("รูปแบบอีเมลยังไม่ถูกต้อง"); setLoading(false); return; }
       if (password.length < 6) { setErr("รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร"); setLoading(false); return; }
       if (mode === "signup") {
-        const { data, error } = await supabase.auth.signUp({
-          email, password,
-          options: { data: { name: name.trim(), family_code: familyCode.trim() || null } },
-        });
+        const { data, error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
-        // ไม่สร้างแถว profiles ตรงนี้ตรงๆ เพราะถ้า Supabase เปิด "Confirm email" ไว้ ตอนนี้ยังไม่มี session จริง
-        // (RLS จะบล็อกเงียบๆ ไม่ error ให้เห็นด้วย) ให้ effect ตอนโหลด profile (ทำงานเมื่อมี session แน่นอนแล้ว) เป็นคนสร้างแทน
-        setInfo(data.session ? "สมัครสำเร็จ กำลังเข้าสู่ระบบ..." : "สมัครสำเร็จ! เช็คอีเมลเพื่อกดยืนยันบัญชีก่อน ถึงจะเข้าใช้งานได้");
+        const uid = data.user?.id;
+        if (uid) {
+          // ผู้ใช้คนแรกสุดของระบบ (ยังไม่มีใครในตาราง profiles เลย) ให้เป็นแอดมิน + อนุมัติอัตโนมัติ
+          const { count } = await supabase.from("profiles").select("id", { count: "exact", head: true });
+          const isFirstUser = !count;
+          await supabase.from("profiles").insert({
+            id: uid, email, name: name.trim() || email.split("@")[0],
+            role: isFirstUser ? "admin" : "member", approved: isFirstUser,
+            family_code: familyCode.trim() || null, login_type: "email",
+          });
+        }
+        setInfo(data.session ? "สมัครสำเร็จ กำลังเข้าสู่ระบบ..." : "สมัครสำเร็จ เช็คอีเมลเพื่อยืนยันบัญชีก่อนเข้าใช้งาน");
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
@@ -1386,7 +1322,6 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts }) {
 
   const setApproved = async (id, approved) => { await supabase.from("profiles").update({ approved }).eq("id", id); loadMembers(); };
   const setRole = async (id, role) => { await supabase.from("profiles").update({ role }).eq("id", id); loadMembers(); };
-  const setCanChat = async (id, can_chat) => { await supabase.from("profiles").update({ can_chat }).eq("id", id); loadMembers(); };
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const removeMember = async (id) => {
     await supabase.from("profiles").delete().eq("id", id); setConfirmDeleteId(null); loadMembers();
@@ -1443,17 +1378,13 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts }) {
           {loadingList && <Empty t={t} text="กำลังโหลด..." />}
           {!loadingList && members.length === 0 && <Empty t={t} text="ยังไม่มีสมาชิก" />}
           {members.map((m) => (
-            <div key={m.id} style={{ ...card(t), padding: 14, borderLeft: `3px solid ${m.approved ? "#2E9E6B" : "#D9534F"}` }}>
+            <div key={m.id} style={{ ...card(t), padding: 14 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ position: "relative", flexShrink: 0 }}>
-                  <div style={{ width: 38, height: 38, borderRadius: 12, background: colorFor(m.name || m.email || "?"), color: "#fff", display: "grid", placeItems: "center", fontSize: 14, fontWeight: 700 }}>{(m.name || m.email || "?")[0].toUpperCase()}</div>
-                  <div style={{ position: "absolute", bottom: -2, right: -2, width: 11, height: 11, borderRadius: 6, background: isOnline(m.last_seen) ? "#2E9E6B" : t.faint, border: `2px solid ${t.surface}` }} />
-                </div>
+                <div style={{ width: 10, height: 10, borderRadius: 5, background: isOnline(m.last_seen) ? "#2E9E6B" : t.faint, flexShrink: 0 }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13.5, fontWeight: 700, color: t.text, display: "flex", alignItems: "center", gap: 6 }}>
                     {m.name || m.email}
                     {m.role === "admin" && <span style={{ fontSize: 9.5, fontWeight: 800, color: t.accent, background: `${t.accent}18`, padding: "1px 6px", borderRadius: 8 }}>ADMIN</span>}
-                    {m.can_chat && <MessageCircle size={11} color={t.sub} />}
                   </div>
                   <div style={{ fontSize: 11, color: t.sub }}>{m.login_type === "pin" ? `ชื่อผู้ใช้: ${m.username}` : m.email}</div>
                 </div>
@@ -1466,14 +1397,11 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts }) {
               <div style={{ fontSize: 10.5, color: t.faint, marginTop: 8 }}>
                 สมัคร {m.created_at ? new Date(m.created_at).toLocaleDateString("th-TH") : "-"} · ล็อกอินล่าสุด {m.last_login ? new Date(m.last_login).toLocaleDateString("th-TH") : "ยังไม่เคย"}
               </div>
-              <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                 {!m.approved ? (
                   <button onClick={() => setApproved(m.id, true)} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "8px 0", borderRadius: 10, border: "none", cursor: "pointer", background: "#2E9E6B", color: "#fff", fontSize: 12, fontWeight: 700 }}><UserCheck size={13} /> อนุมัติ</button>
                 ) : (
                   m.id !== userId && <button onClick={() => setApproved(m.id, false)} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "8px 0", borderRadius: 10, border: `1px solid ${t.border}`, cursor: "pointer", background: "none", color: t.sub, fontSize: 12, fontWeight: 700 }}><UserX size={13} /> ระงับ</button>
-                )}
-                {m.approved && (
-                  <button onClick={() => setCanChat(m.id, !m.can_chat)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "8px 12px", borderRadius: 10, border: `1px solid ${m.can_chat ? "#2E9E6B" : t.border}`, cursor: "pointer", background: m.can_chat ? "#2E9E6B18" : "none", color: m.can_chat ? "#2E9E6B" : t.sub, fontSize: 12, fontWeight: 700 }}><MessageCircle size={13} /> {m.can_chat ? "แชทได้" : "เปิดแชท"}</button>
                 )}
                 {m.id !== userId && (
                   <button onClick={() => setRole(m.id, m.role === "admin" ? "member" : "admin")} style={{ padding: "8px 12px", borderRadius: 10, border: `1px solid ${t.border}`, cursor: "pointer", background: "none", color: t.sub, fontSize: 12, fontWeight: 700 }}>{m.role === "admin" ? "ถอดแอดมิน" : "ตั้งเป็นแอดมิน"}</button>
@@ -1532,198 +1460,6 @@ function AdminAddPinMember({ t, session, onCreated }) {
       {err && <div style={{ fontSize: 12, color: "#D9534F", marginBottom: 10 }}>{err}</div>}
       {ok && <div style={{ fontSize: 12, color: "#2E9E6B", marginBottom: 10 }}>{ok}</div>}
       <button onClick={submit} disabled={loading} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "12px 0" }}>{loading ? "กำลังสร้าง..." : "สร้างบัญชี"}</button>
-    </div>
-  );
-}
-
-const AVATAR_COLORS = ["#C0658C", "#5C7A99", "#7B6CB0", "#4FB286", "#E0507B", "#3DA5D9", "#B07A4B"];
-const colorFor = (str) => AVATAR_COLORS[[...(str || "?")].reduce((a, c) => a + c.charCodeAt(0), 0) % AVATAR_COLORS.length];
-
-function ChatEntryPage({ t, M, authProfile, session, openThread }) {
-  const [rooms, setRooms] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [adding, setAdding] = useState(false);
-  const [friendCode, setFriendCode] = useState("");
-  const [err, setErr] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  const loadRooms = async () => {
-    setLoading(true);
-    try {
-      const { data: mine } = await supabase.from("chat_thread_members").select("thread_id").eq("user_id", authProfile.id);
-      const directIds = (mine || []).map((m) => m.thread_id);
-      let directRooms = [];
-      if (directIds.length) {
-        const { data: allMembers } = await supabase.from("chat_thread_members").select("thread_id, user_id").in("thread_id", directIds);
-        const otherIds = [...new Set((allMembers || []).filter((m) => m.user_id !== authProfile.id).map((m) => m.user_id))];
-        const { data: otherProfiles } = otherIds.length ? await supabase.from("profiles").select("id, name").in("id", otherIds) : { data: [] };
-        directRooms = directIds.map((tid) => {
-          const otherUserId = (allMembers || []).find((m) => m.thread_id === tid && m.user_id !== authProfile.id)?.user_id;
-          const otherProfile = (otherProfiles || []).find((p) => p.id === otherUserId);
-          return { id: tid, name: otherProfile?.name || "เพื่อน", type: "direct" };
-        });
-      }
-      setRooms([{ id: "00000000-0000-0000-0000-000000000001", name: "ครอบครัว", type: "family" }, ...directRooms]);
-    } catch (e) {} finally { setLoading(false); }
-  };
-  useEffect(() => { if (authProfile?.can_chat) loadRooms(); }, [authProfile?.can_chat]);
-
-  const submitCode = async () => {
-    setErr("");
-    if (!friendCode.trim()) { setErr("กรอกโค้ดก่อน"); return; }
-    setBusy(true);
-    try {
-      const r = await fetch("/api/chat-start-direct", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ friendCode, callerToken: session?.access_token }) });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error);
-      await loadRooms();
-      setAdding(false); setFriendCode("");
-      openThread(data.threadId, data.friendName);
-    } catch (e) { setErr(e.message); } finally { setBusy(false); }
-  };
-
-  if (!authProfile?.can_chat) {
-    return (
-      <>
-        <PageHead t={t} title="แชท" sub="คุยกับคนในครอบครัว" icon={<MessageCircle size={20} color={t.accent} />} />
-        <Empty t={t} text="คุณยังไม่ได้รับสิทธิ์ใช้งานแชท — ให้แอดมินเปิดสิทธิ์ให้ที่หน้า Admin ก่อนนะ" />
-      </>
-    );
-  }
-
-  return (
-    <>
-      <PageHead t={t} title="แชท" sub="คุยกับคนในครอบครัว" icon={<MessageCircle size={20} color={t.accent} />} />
-      {authProfile.chat_code && (
-        <div style={{ ...card(t), padding: 12, marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ fontSize: 11.5, color: t.sub }}>โค้ดของคุณ (แชร์ให้เพื่อนเพื่อเริ่มแชท)</div>
-          <div style={{ fontSize: 14, fontWeight: 800, color: t.accent, letterSpacing: 2 }}>{authProfile.chat_code}</div>
-        </div>
-      )}
-      {loading ? <Empty t={t} text="กำลังโหลด..." /> : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px 10px", justifyItems: "center" }}>
-          {rooms.map((r) => (
-            <button key={r.id} onClick={() => openThread(r.id, r.name)} style={{ background: "none", border: "none", cursor: "pointer", textAlign: "center" }}>
-              <div style={{ width: 64, height: 64, borderRadius: 18, background: r.type === "family" ? t.accent : colorFor(r.name), display: "grid", placeItems: "center", color: "#fff", fontSize: r.type === "family" ? 22 : 20, fontWeight: 700 }}>
-                {r.type === "family" ? <Home size={24} /> : r.name[0]}
-              </div>
-              <div style={{ fontSize: 11, color: t.text, marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 70 }}>{r.name}</div>
-            </button>
-          ))}
-          <button onClick={() => setAdding(true)} style={{ background: "none", border: "none", cursor: "pointer", textAlign: "center" }}>
-            <div style={{ width: 64, height: 64, borderRadius: 18, background: "none", border: `1.5px dashed ${t.border}`, display: "grid", placeItems: "center", color: t.faint }}>
-              <Plus size={24} />
-            </div>
-            <div style={{ fontSize: 11, color: t.sub, marginTop: 6 }}>เพิ่มด้วยโค้ด</div>
-          </button>
-        </div>
-      )}
-
-      {adding && (
-        <div style={overlay} onClick={() => setAdding(false)}>
-          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
-            <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 14 }}>เริ่มแชทด้วยโค้ด</div>
-            <input value={friendCode} onChange={(e) => setFriendCode(e.target.value.toUpperCase())} placeholder="กรอกโค้ดของเพื่อน" style={{ ...input(t), marginBottom: 10, letterSpacing: 2, textTransform: "uppercase" }} />
-            {err && <div style={{ fontSize: 12, color: "#D9534F", marginBottom: 10 }}>{err}</div>}
-            <button onClick={submitCode} disabled={busy} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "12px 0" }}>{busy ? "กำลังเชื่อมต่อ..." : "เริ่มแชท"}</button>
-          </div>
-        </div>
-      )}
-    </>
-  );
-}
-
-function ChatRoomPage({ t, userId, thread, profile }) {
-  const [messages, setMessages] = useState([]);
-  const [text, setText] = useState("");
-  const [editingId, setEditingId] = useState(null);
-  const [editText, setEditText] = useState("");
-  const [confirmDeleteMsgId, setConfirmDeleteMsgId] = useState(null);
-  const endRef = useRef(null);
-
-  const markRead = () => supabase.from("chat_reads").upsert({ user_id: userId, thread_id: thread.id, last_read_at: new Date().toISOString() }).then(() => {}, () => {});
-
-  useEffect(() => {
-    (async () => {
-      const { data } = await supabase.from("chat_messages").select("*").eq("thread_id", thread.id).order("created_at", { ascending: true }).limit(200);
-      setMessages(data || []);
-      markRead();
-    })();
-    const channel = supabase
-      .channel(`room-${thread.id}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages", filter: `thread_id=eq.${thread.id}` }, (payload) => {
-        setMessages((m) => [...m, payload.new]);
-        if (payload.new.sender_id !== userId) markRead();
-      })
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "chat_messages", filter: `thread_id=eq.${thread.id}` }, (payload) => {
-        setMessages((m) => m.map((x) => (x.id === payload.new.id ? payload.new : x)));
-      })
-      .on("postgres_changes", { event: "DELETE", schema: "public", table: "chat_messages", filter: `thread_id=eq.${thread.id}` }, (payload) => {
-        setMessages((m) => m.filter((x) => x.id !== payload.old.id));
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [thread.id]);
-
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); markRead(); }, [messages.length]);
-
-  const send = async () => {
-    if (!text.trim()) return;
-    const t2 = text.trim(); setText("");
-    await supabase.from("chat_messages").insert({ thread_id: thread.id, sender_id: userId, text: t2 });
-  };
-  const startEdit = (m) => { setEditingId(m.id); setEditText(m.text); };
-  const saveEdit = async () => {
-    if (!editText.trim()) return;
-    await supabase.from("chat_messages").update({ text: editText.trim(), edited_at: new Date().toISOString() }).eq("id", editingId);
-    setEditingId(null);
-  };
-  const deleteMsg = async (id) => { await supabase.from("chat_messages").delete().eq("id", id); setConfirmDeleteMsgId(null); };
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 160px)" }}>
-      <div style={{ fontSize: 15, fontWeight: 800, color: t.text, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-        <div style={{ width: 32, height: 32, borderRadius: 10, background: colorFor(thread.name), color: "#fff", display: "grid", placeItems: "center", fontSize: 13, fontWeight: 700 }}>{thread.name[0]}</div>
-        {thread.name}
-      </div>
-      <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, paddingBottom: 10 }}>
-        {messages.map((m) => {
-          const mine = m.sender_id === userId;
-          return (
-            <div key={m.id} style={{ display: "flex", flexDirection: "column", alignItems: mine ? "flex-end" : "flex-start", maxWidth: "84%", alignSelf: mine ? "flex-end" : "flex-start" }}>
-              <div style={{ display: "flex", gap: 8, flexDirection: mine ? "row-reverse" : "row" }}>
-                {!mine && <div style={{ width: 26, height: 26, borderRadius: 8, background: colorFor(thread.name), color: "#fff", display: "grid", placeItems: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{thread.name[0]}</div>}
-                {editingId === m.id ? (
-                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                    <input value={editText} onChange={(e) => setEditText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveEdit()} style={{ ...input(t), fontSize: 13 }} autoFocus />
-                    <button onClick={saveEdit} style={{ ...ghost, color: t.accent }}><Check size={16} color={t.accent} /></button>
-                    <button onClick={() => setEditingId(null)} style={ghost}><X size={16} color={t.faint} /></button>
-                  </div>
-                ) : (
-                  <div style={{ background: mine ? t.accent : t.surface, color: mine ? t.onAccent : t.text, padding: "9px 13px", borderRadius: 14, fontSize: 13.5, lineHeight: 1.4, border: mine ? "none" : `1px solid ${t.border}` }}>
-                    {m.text}{m.edited_at && <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 6 }}>(แก้ไขแล้ว)</span>}
-                  </div>
-                )}
-              </div>
-              {mine && editingId !== m.id && (
-                <div style={{ display: "flex", gap: 10, marginTop: 3, paddingRight: 2 }}>
-                  <button onClick={() => startEdit(m)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 10.5, color: t.faint }}>แก้ไข</button>
-                  {confirmDeleteMsgId === m.id ? (
-                    <button onClick={() => deleteMsg(m.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 10.5, color: "#D9534F", fontWeight: 700 }}>ยืนยันลบ?</button>
-                  ) : (
-                    <button onClick={() => setConfirmDeleteMsgId(m.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 10.5, color: t.faint }}>ลบ</button>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
-        <div ref={endRef} />
-      </div>
-      <div style={{ display: "flex", gap: 8, paddingTop: 10 }}>
-        <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} placeholder="พิมพ์ข้อความ..." style={input(t)} />
-        <button onClick={send} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: 46, display: "grid", placeItems: "center" }}><Send size={17} /></button>
-      </div>
     </div>
   );
 }
