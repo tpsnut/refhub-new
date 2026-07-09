@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
   Home, Lightbulb, TrendingUp, Plus, Newspaper, Languages, StickyNote,
   Sun, Moon, Send, Check, Trash2, X, Wallet, Target, BookOpen, ChevronRight,
@@ -166,6 +167,12 @@ function palette(mode, themeId) {
     catTx: { green: "#2A3B30", amber: "#3A3320", coral: "#5A3327", violet: "#39316A" },
     catLb: { green: "#5E7A66", amber: "#8A7434", coral: "#A85C42", violet: "#6A5C9A" },
   };
+}
+
+// 🚪 Portal สำหรับ popup ที่สร้างจากข้างในหน้าเพจ (เช่น Admin, Chat) ให้หลุดออกไปแปะที่ document.body ตรงๆ
+// กันปัญหาติดอยู่ใน "เขตซ้อนชั้น" ของกล่องเนื้อหา ซึ่งทำให้ z-index สูงแค่ไหนก็ไม่มีทางซ้อนทับแถบเมนูด้านล่างได้
+function ModalPortal({ children }) {
+  return createPortal(children, document.body);
 }
 
 const uid = () => Math.random().toString(36).slice(2, 9);
@@ -748,7 +755,7 @@ useEffect(() => {
           {page === "lang" && <LangPage t={t} />}
           {page === "goalsReport" && <GoalsReportPage t={t} goals={goals} />}
           {page === "admin" && <AdminPage t={t} session={session} userId={userId} adminAlerts={adminAlerts} setAdminAlerts={setAdminAlerts} />}
-          {page === "chat" && <ChatEntryPage t={t} M={M} authProfile={authProfile} session={session} openThread={(id, name) => { setActiveThread({ id, name }); setPage("chatRoom"); }} />}
+          {page === "chat" && <ChatEntryPage t={t} M={M} authProfile={authProfile} session={session} openThread={(id, name, isGroup) => { setActiveThread({ id, name, isGroup: !!isGroup }); setPage("chatRoom"); }} />}
           {page === "chatRoom" && activeThread && <ChatRoomPage t={t} userId={userId} thread={activeThread} profile={profile} />}
 
           {/* 🎵 การ์ด "กำลังเล่น" ต่อท้ายเนื้อหาหน้า Home (ใต้เป้าหมาย) — div#yt-mini-player mount ค้างตลอด
@@ -1574,14 +1581,16 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts }) {
       {tab === "add" && <AdminAddPinMember t={t} session={session} onCreated={loadMembers} />}
 
       {detailMember && (
-        <MemberDetailModal
-          t={t} m={detailMember} isSelf={detailMember.id === userId}
-          isOnline={isOnline(detailMember.last_seen)}
-          setApproved={setApproved} setRole={setRole} setCanChat={setCanChat}
-          setMentorLimit={setMentorLimit} setTopicLimit={setTopicLimit} setDailyArticleLimit={setDailyArticleLimit}
-          removeMember={removeMember}
-          close={() => setDetailMember(null)}
-        />
+        <ModalPortal>
+          <MemberDetailModal
+            t={t} m={detailMember} isSelf={detailMember.id === userId}
+            isOnline={isOnline(detailMember.last_seen)}
+            setApproved={setApproved} setRole={setRole} setCanChat={setCanChat}
+            setMentorLimit={setMentorLimit} setTopicLimit={setTopicLimit} setDailyArticleLimit={setDailyArticleLimit}
+            removeMember={removeMember}
+            close={() => setDetailMember(null)}
+          />
+        </ModalPortal>
       )}
     </>
   );
@@ -1780,7 +1789,7 @@ function ChatEntryPage({ t, M, authProfile, session, openThread }) {
       {loading ? <Empty t={t} text="กำลังโหลด..." /> : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px 10px", justifyItems: "center" }}>
           {rooms.map((r) => (
-            <button key={r.id} onClick={() => openThread(r.id, r.name)} style={{ background: "none", border: "none", cursor: "pointer", textAlign: "center" }}>
+            <button key={r.id} onClick={() => openThread(r.id, r.name, r.type === "family")} style={{ background: "none", border: "none", cursor: "pointer", textAlign: "center" }}>
               <div style={{ width: 64, height: 64, borderRadius: 18, background: r.type === "family" ? t.accent : colorFor(r.name), display: "grid", placeItems: "center", color: "#fff", fontSize: r.type === "family" ? 22 : 20, fontWeight: 700 }}>
                 {r.type === "family" ? <Home size={24} /> : r.name[0]}
               </div>
@@ -1797,14 +1806,16 @@ function ChatEntryPage({ t, M, authProfile, session, openThread }) {
       )}
 
       {adding && (
-        <div style={overlay} onClick={() => setAdding(false)}>
-          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
-            <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 14 }}>เริ่มแชทด้วยโค้ด</div>
-            <input value={friendCode} onChange={(e) => setFriendCode(e.target.value.toUpperCase())} placeholder="กรอกโค้ดของเพื่อน" style={{ ...input(t), marginBottom: 10, letterSpacing: 2, textTransform: "uppercase" }} />
-            {err && <div style={{ fontSize: 12, color: "#D9534F", marginBottom: 10 }}>{err}</div>}
-            <button onClick={submitCode} disabled={busy} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "12px 0" }}>{busy ? "กำลังเชื่อมต่อ..." : "เริ่มแชท"}</button>
+        <ModalPortal>
+          <div style={overlay} onClick={() => setAdding(false)}>
+            <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 14 }}>เริ่มแชทด้วยโค้ด</div>
+              <input value={friendCode} onChange={(e) => setFriendCode(e.target.value.toUpperCase())} placeholder="กรอกโค้ดของเพื่อน" style={{ ...input(t), marginBottom: 10, letterSpacing: 2, textTransform: "uppercase" }} />
+              {err && <div style={{ fontSize: 12, color: "#D9534F", marginBottom: 10 }}>{err}</div>}
+              <button onClick={submitCode} disabled={busy} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "12px 0" }}>{busy ? "กำลังเชื่อมต่อ..." : "เริ่มแชท"}</button>
+            </div>
           </div>
-        </div>
+        </ModalPortal>
       )}
     </>
   );
@@ -1816,6 +1827,9 @@ function ChatRoomPage({ t, userId, thread, profile }) {
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState("");
   const [confirmDeleteMsgId, setConfirmDeleteMsgId] = useState(null);
+  const [senderMap, setSenderMap] = useState({}); // sender_id -> { name } กันโชว์ชื่อผิดคนตอนหลายคนคุยในห้องเดียวกัน
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef(null);
   const endRef = useRef(null);
 
   const markRead = () => supabase.from("chat_reads").upsert({ user_id: userId, thread_id: thread.id, last_read_at: new Date().toISOString() }).then(() => {}, () => {});
@@ -1842,6 +1856,16 @@ function ChatRoomPage({ t, userId, thread, profile }) {
     return () => { supabase.removeChannel(channel); };
   }, [thread.id]);
 
+  // ดึงชื่อจริงของทุกคนที่เคยส่งข้อความในห้องนี้ (สำคัญมากสำหรับห้องกลุ่มที่มีมากกว่า 2 คน)
+  useEffect(() => {
+    const ids = [...new Set(messages.map((m) => m.sender_id))].filter((id) => id && !senderMap[id]);
+    if (!ids.length) return;
+    (async () => {
+      const { data } = await supabase.from("profiles").select("id, name, email").in("id", ids);
+      if (data) setSenderMap((prev) => ({ ...prev, ...Object.fromEntries(data.map((p) => [p.id, { name: p.name || p.email || "ไม่ทราบชื่อ" }])) }));
+    })();
+  }, [messages]);
+
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); markRead(); }, [messages.length]);
 
   const send = async () => {
@@ -1857,19 +1881,45 @@ function ChatRoomPage({ t, userId, thread, profile }) {
   };
   const deleteMsg = async (id) => { await supabase.from("chat_messages").delete().eq("id", id); setConfirmDeleteMsgId(null); };
 
+  // 📎 แนบรูป/ไฟล์ในแชท — เก็บผ่าน Supabase Storage bucket "attachments" (ตัวเดียวกับที่ใช้ในโน้ต)
+  const pickFile = async (e) => {
+    const f = e.target.files?.[0]; if (!f) return;
+    e.target.value = "";
+    setUploading(true);
+    try {
+      const isImage = f.type.startsWith("image/");
+      const path = `${userId}/${uid()}-${f.name}`;
+      const { error } = await supabase.storage.from("attachments").upload(path, f);
+      if (error) throw error;
+      const { data } = supabase.storage.from("attachments").getPublicUrl(path);
+      await supabase.from("chat_messages").insert({
+        thread_id: thread.id, sender_id: userId, text: "",
+        attachment_url: data.publicUrl, attachment_name: f.name, attachment_type: isImage ? "image" : "file",
+      });
+    } catch (err) {
+      alert("แนบไฟล์ไม่สำเร็จ: " + err.message);
+    } finally { setUploading(false); }
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 160px)" }}>
       <div style={{ fontSize: 15, fontWeight: 800, color: t.text, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-        <div style={{ width: 32, height: 32, borderRadius: 10, background: colorFor(thread.name), color: "#fff", display: "grid", placeItems: "center", fontSize: 13, fontWeight: 700 }}>{thread.name[0]}</div>
+        {thread.avatarUrl ? (
+          <img src={thread.avatarUrl} alt="" style={{ width: 32, height: 32, borderRadius: 10, objectFit: "cover" }} />
+        ) : (
+          <div style={{ width: 32, height: 32, borderRadius: 10, background: colorFor(thread.name), color: "#fff", display: "grid", placeItems: "center", fontSize: 13, fontWeight: 700 }}>{thread.name[0]}</div>
+        )}
         {thread.name}
       </div>
       <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, paddingBottom: 10 }}>
         {messages.map((m) => {
           const mine = m.sender_id === userId;
+          const senderName = senderMap[m.sender_id]?.name || (mine ? profile?.name : thread.name);
           return (
             <div key={m.id} style={{ display: "flex", flexDirection: "column", alignItems: mine ? "flex-end" : "flex-start", maxWidth: "84%", alignSelf: mine ? "flex-end" : "flex-start" }}>
+              {!mine && thread.isGroup && <div style={{ fontSize: 10.5, color: t.faint, marginBottom: 2, paddingLeft: 34 }}>{senderName}</div>}
               <div style={{ display: "flex", gap: 8, flexDirection: mine ? "row-reverse" : "row" }}>
-                {!mine && <div style={{ width: 26, height: 26, borderRadius: 8, background: colorFor(thread.name), color: "#fff", display: "grid", placeItems: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{thread.name[0]}</div>}
+                {!mine && <div style={{ width: 26, height: 26, borderRadius: 8, background: colorFor(senderName || thread.name), color: "#fff", display: "grid", placeItems: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{(senderName || thread.name)[0]}</div>}
                 {editingId === m.id ? (
                   <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                     <input value={editText} onChange={(e) => setEditText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveEdit()} style={{ ...input(t), fontSize: 13 }} autoFocus />
@@ -1877,12 +1927,16 @@ function ChatRoomPage({ t, userId, thread, profile }) {
                     <button onClick={() => setEditingId(null)} style={ghost}><X size={16} color={t.faint} /></button>
                   </div>
                 ) : (
-                  <div style={{ background: mine ? t.accent : t.surface, color: mine ? t.onAccent : t.text, padding: "9px 13px", borderRadius: 14, fontSize: 13.5, lineHeight: 1.4, border: mine ? "none" : `1px solid ${t.border}` }}>
-                    {m.text}{m.edited_at && <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 6 }}>(แก้ไขแล้ว)</span>}
+                  <div style={{ background: mine ? t.accent : t.surface, color: mine ? t.onAccent : t.text, padding: m.attachment_url ? 6 : "9px 13px", borderRadius: 14, fontSize: 13.5, lineHeight: 1.4, border: mine ? "none" : `1px solid ${t.border}` }}>
+                    {m.attachment_type === "image" && <img src={m.attachment_url} alt="" style={{ maxWidth: 200, borderRadius: 10, display: "block" }} />}
+                    {m.attachment_type === "file" && (
+                      <a href={m.attachment_url} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: 6, color: "inherit", textDecoration: "underline", padding: "3px 7px" }}><FileText size={14} /> {m.attachment_name}</a>
+                    )}
+                    {m.text && <div style={{ padding: m.attachment_url ? "6px 7px 2px" : 0 }}>{m.text}{m.edited_at && <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 6 }}>(แก้ไขแล้ว)</span>}</div>}
                   </div>
                 )}
               </div>
-              {mine && editingId !== m.id && (
+              {mine && editingId !== m.id && !m.attachment_url && (
                 <div style={{ display: "flex", gap: 10, marginTop: 3, paddingRight: 2 }}>
                   <button onClick={() => startEdit(m)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 10.5, color: t.faint }}>แก้ไข</button>
                   {confirmDeleteMsgId === m.id ? (
@@ -1898,6 +1952,10 @@ function ChatRoomPage({ t, userId, thread, profile }) {
         <div ref={endRef} />
       </div>
       <div style={{ display: "flex", gap: 8, paddingTop: 10 }}>
+        <button onClick={() => fileRef.current?.click()} disabled={uploading} style={{ width: 42, borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}>
+          <Upload size={16} color={t.sub} />
+        </button>
+        <input ref={fileRef} type="file" accept="image/*,.pdf,.doc,.docx" onChange={pickFile} style={{ display: "none" }} />
         <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} placeholder="พิมพ์ข้อความ..." style={input(t)} />
         <button onClick={send} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: 46, display: "grid", placeItems: "center" }}><Send size={17} /></button>
       </div>
@@ -2852,4 +2910,4 @@ const input = (t) => ({ flex: 1, background: t.inputBg, border: `1px solid ${t.b
 const primaryBtn = (M) => ({ background: `linear-gradient(135deg,${M.accent2 || M.accent},${M.accent})`, color: M.onAccent, border: "none", borderRadius: 12, fontWeight: 700, fontSize: 13.5, cursor: "pointer" });
 const navBtn = (t) => ({ width: 34, height: 34, borderRadius: 17, border: `1px solid ${t.border}`, background: "none", cursor: "pointer", fontSize: 20, color: t.text, lineHeight: 1 });
 const ghost = { background: "none", border: "none", cursor: "pointer", padding: 4 };
-const overlay = { position: "absolute", inset: 0, background: "rgba(10,14,25,.5)", zIndex: 50, display: "flex", alignItems: "flex-end", justifyContent: "center", backdropFilter: "blur(2px)" };
+const overlay = { position: "fixed", inset: 0, background: "rgba(10,14,25,.5)", zIndex: 50, display: "flex", alignItems: "flex-end", justifyContent: "center", backdropFilter: "blur(2px)" };
