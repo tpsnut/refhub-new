@@ -39,7 +39,15 @@ const MENTORS = {
     quotes: ["ความมั่นใจ คือการก้าวต่อทั้งที่กลัว", "สงบไว้ แล้วโลกจะเป็นของนาย", "รายละเอียดเล็กๆ แยกมืออาชีพออกจากมือสมัครเล่น", "อย่าอธิบายมาก แค่ทำให้ดู"],
     replies: ["เดินเข้าไปด้วยความมั่นใจ ยืดหลังตรง สบตา แล้วพูดให้ช้าและชัด", "ในสถานการณ์กดดัน คนที่นิ่งที่สุดคือคนที่คุมเกม", "เตรียมตัวให้พร้อมกว่าที่ใครคาด แล้วปล่อยให้ผลงานพูดแทน"],
   },
+  none: {
+    name: "ผู้ช่วย", full: "ผู้ช่วยทั่วไป", tag: "ช่วยเหลือทั่วไป · ไม่มีคาแรกเตอร์เฉพาะ", mood: "เป็นกลาง เป็นมิตร",
+    letter: "A", accent: "#8A93A8", accent2: "#A7ADB8", onAccent: "#ffffff",
+    scale: [261.6, 293.7, 329.6, 392.0, 440.0], root: 130.8,
+    quotes: ["พร้อมช่วยเหลือคุณเสมอ", "ถามอะไรมาได้เลย", "มาลองคิดไปด้วยกัน", "ทุกก้าวเล็กๆ มีความหมาย"],
+    replies: ["ลองเล่าเพิ่มเติมได้ไหมครับ จะได้ช่วยได้ตรงจุดขึ้น", "เข้าใจแล้ว ลองมาดูกันทีละขั้นตอนนะครับ", "นี่เป็นมุมมองที่น่าสนใจ ลองคิดต่อดูอีกหน่อยไหมครับ"],
+  },
 };
+
 
 // ---------------- Categories ----------------
 // ไอคอนที่เลือกใช้ได้สำหรับหมวดหมู่ (built-in + ที่ผู้ใช้สร้างเอง) — เก็บเป็น string key ได้ (ใส่ localStorage/DB ได้ตรงๆ)
@@ -200,7 +208,7 @@ export default function RefHub() {
   const [notes, setNotes] = useState([]);
   const [goals, setGoals] = useState([]);
   const [tx, setTx] = useState([]);
-  const [profile, setProfile] = useState({ name: "Piyanut", avatar: "" });
+  const [profile, setProfile] = useState({ name: "", avatar: "" });
   const [autoNight, setAutoNight] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [mentorPick, setMentorPick] = useState(false);
@@ -257,8 +265,12 @@ export default function RefHub() {
           if (typeof uSettings.volume === "number") setVolume(uSettings.volume);
         } else {
           // ถ้าเปิดซิงค์ครั้งแรกแล้วยังไม่มีข้อมูล ให้สร้างข้อมูล Row แรกทิ้งไว้ให้พี่เลย
+          // ดึงชื่อจริงจากตาราง profiles (ที่กรอกไว้ตอนสมัคร/สร้างบัญชี PIN) มาใช้ แทนการเดา/hardcode ชื่อ
+          const { data: authRow } = await supabase.from("profiles").select("name, email").eq("id", userId).maybeSingle();
+          const initialName = authRow?.name || authRow?.email?.split("@")[0] || "ผู้ใช้ใหม่";
+          setProfile({ name: initialName, avatar: "" });
           await supabase.from("user_settings").insert({
-            user_id: userId, name: profile.name || "Piyanut", mentor: mentor, theme_mode: themeMode, volume: volume
+            user_id: userId, name: initialName, mentor: mentor, theme_mode: themeMode, volume: volume
           });
         }
 
@@ -730,7 +742,7 @@ useEffect(() => {
           {page === "home" && <HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, goalDone, goalPct, setGoals, notes, setPage, setChatOpen }} />}
           {page === "ledger" && <FinancePage {...{ t, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt) }} />}
           {page === "note" && <NotePage {...{ t, notes, setNotes, isNight, userId }} />}
-          {page === "ideas" && <IdeasPage t={t} />}
+          {page === "ideas" && <IdeasPage t={t} M={M} userId={userId} session={session} authProfile={authProfile} setAuthProfile={setAuthProfile} setNotes={setNotes} />}
           {page === "trade" && <TradePage t={t} />}
           {page === "news" && <NewsPage t={t} />}
           {page === "lang" && <LangPage t={t} />}
@@ -770,7 +782,7 @@ useEffect(() => {
 
         <Dock t={t} page={page} setPage={setPage} onQuickAdd={() => setAddOpen(true)} />
 
-        {mentorPick && <MentorPicker t={t} mentor={mentor} setMentor={setMentor} close={() => setMentorPick(false)} />}
+        {mentorPick && <MentorPicker t={t} mentor={mentor} setMentor={setMentor} authProfile={authProfile} setAuthProfile={setAuthProfile} userId={userId} close={() => setMentorPick(false)} />}
         {themePick && <ThemePicker t={t} theme={theme} setTheme={setTheme} mode={mode} close={() => setThemePick(false)} />}
         {moreMenuOpen && (
           <div style={overlay} onClick={() => setMoreMenuOpen(false)}>
@@ -890,7 +902,7 @@ function AuthPage() {
       <div style={{ width: "100%", maxWidth: 440, padding: "56px 24px", display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}><CloverMark size={84} /></div>
         <div style={{ textAlign: "center", fontSize: 18, fontWeight: 700, color: "#26303F", marginBottom: 2 }}>RefHub</div>
-        <div style={{ textAlign: "center", fontSize: 12.5, color: "#7A828F", marginBottom: 26 }}>Refection Hub (version 0.0.1) test Only</div>
+        <div style={{ textAlign: "center", fontSize: 12.5, color: "#7A828F", marginBottom: 26 }}>ที่พักใจของครอบครัวคุณ</div>
 
         <div style={{ display: "flex", background: "#FFFFFF", borderRadius: 14, padding: 4, marginBottom: 16, border: "1px solid rgba(0,0,0,0.06)" }}>
           <button onClick={() => setMode("login")} style={{ flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 11, border: "none", cursor: "pointer", background: mode === "login" ? "#EA9552" : "transparent", color: mode === "login" ? "#3A2408" : "#7A828F", fontWeight: 600, fontSize: 13.5 }}>เข้าสู่ระบบ</button>
@@ -938,7 +950,7 @@ function AuthPage() {
           {loading ? "กำลังดำเนินการ..." : mode === "login" ? "เข้าสู่ระบบ" : "สมัครสมาชิก"}
         </button>
 
-        <div style={{ textAlign: "center", fontSize: 11, color: "#A7ADB8", marginTop: 18 }}>บัญชีใหม่ต้องรอแอดมินอนุมัติก่อนใช้งาน (ยกเว้น Admin เพิ่มให้เอง)</div>
+        <div style={{ textAlign: "center", fontSize: 11, color: "#A7ADB8", marginTop: 18 }}>บัญชีใหม่ต้องรอแอดมินอนุมัติก่อนใช้งาน (ยกเว้นคนแรกสุด)</div>
       </div>
     </div>
   );
@@ -1288,7 +1300,7 @@ function FinancePage({ t, tx, setTx, categories, openAdd, openExport }) {
     const rows = periodTx.map((x) => `${x.date},${x.type === "in" ? "income" : "expense"},${findCat(categories, x.cat).label},${x.amount},"${(x.note || "").replace(/"/g, "'")}"`).join("\n");
     return head + rows;
   };
-  const doExportCsv = () => { try { const blob = new Blob([csvText()], { type: "text/csv;charset=utf-8;" }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "refhub-finance.csv"; document.body.appendChild(a); a.click(); a.remove(); } catch (e) { openExport(csvText()); } };
+  const doExportCsv = () => { try { const blob = new Blob(["\uFEFF" + csvText()], { type: "text/csv;charset=utf-8;" }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "refhub-finance.csv"; document.body.appendChild(a); a.click(); a.remove(); } catch (e) { openExport(csvText()); } };
 
   // Export PDF: เปิดหน้าต่าง print ของเบราว์เซอร์เอง (ไม่ต้องเพิ่ม library ใหม่ + รองรับภาษาไทยถูกต้อง 100%
   // เพราะใช้ font จริงของเครื่อง ไม่ใช่ font ฝังใน PDF แบบ library ทำ) ผู้ใช้กด "บันทึกเป็น PDF" ในหน้าต่าง print ได้เลย
@@ -1443,6 +1455,9 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts }) {
   const setApproved = async (id, approved) => { await supabase.from("profiles").update({ approved }).eq("id", id); loadMembers(); };
   const setRole = async (id, role) => { await supabase.from("profiles").update({ role }).eq("id", id); loadMembers(); };
   const setCanChat = async (id, can_chat) => { await supabase.from("profiles").update({ can_chat }).eq("id", id); loadMembers(); };
+  const setMentorLimit = async (id, mentor_limit) => { await supabase.from("profiles").update({ mentor_limit }).eq("id", id); loadMembers(); };
+  const setTopicLimit = async (id, topic_limit) => { await supabase.from("profiles").update({ topic_limit }).eq("id", id); loadMembers(); };
+  const setDailyArticleLimit = async (id, daily_article_limit) => { await supabase.from("profiles").update({ daily_article_limit }).eq("id", id); loadMembers(); };
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const removeMember = async (id) => {
     await supabase.from("profiles").delete().eq("id", id); setConfirmDeleteId(null); loadMembers();
@@ -1530,6 +1545,30 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts }) {
                 )}
                 {m.approved && (
                   <button onClick={() => setCanChat(m.id, !m.can_chat)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "8px 12px", borderRadius: 10, border: `1px solid ${m.can_chat ? "#2E9E6B" : t.border}`, cursor: "pointer", background: m.can_chat ? "#2E9E6B18" : "none", color: m.can_chat ? "#2E9E6B" : t.sub, fontSize: 12, fontWeight: 700 }}><MessageCircle size={13} /> {m.can_chat ? "แชทได้" : "เปิดแชท"}</button>
+                )}
+                {m.approved && m.role !== "admin" && (
+                  <label style={{ display: "flex", alignItems: "center", gap: 5, padding: "8px 12px", borderRadius: 10, border: `1px solid ${t.border}`, fontSize: 12, color: t.sub, fontWeight: 700 }}>
+                    โค้ช
+                    <select value={m.mentor_limit ?? 1} onChange={(e) => setMentorLimit(m.id, +e.target.value)} style={{ border: "none", background: "none", color: t.text, fontWeight: 700, fontSize: 12 }}>
+                      {[0, 1, 2, 3].map((n) => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </label>
+                )}
+                {m.approved && m.role !== "admin" && (
+                  <label style={{ display: "flex", alignItems: "center", gap: 5, padding: "8px 12px", borderRadius: 10, border: `1px solid ${t.border}`, fontSize: 12, color: t.sub, fontWeight: 700 }}>
+                    หมวดสนใจ
+                    <select value={m.topic_limit ?? 3} onChange={(e) => setTopicLimit(m.id, +e.target.value)} style={{ border: "none", background: "none", color: t.text, fontWeight: 700, fontSize: 12 }}>
+                      {[1, 2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </label>
+                )}
+                {m.approved && m.role !== "admin" && (
+                  <label style={{ display: "flex", alignItems: "center", gap: 5, padding: "8px 12px", borderRadius: 10, border: `1px solid ${t.border}`, fontSize: 12, color: t.sub, fontWeight: 700 }}>
+                    บทความ/วัน
+                    <select value={m.daily_article_limit ?? 3} onChange={(e) => setDailyArticleLimit(m.id, +e.target.value)} style={{ border: "none", background: "none", color: t.text, fontWeight: 700, fontSize: 12 }}>
+                      {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </label>
                 )}
                 {m.id !== userId && (
                   <button onClick={() => setRole(m.id, m.role === "admin" ? "member" : "admin")} style={{ padding: "8px 12px", borderRadius: 10, border: `1px solid ${t.border}`, cursor: "pointer", background: "none", color: t.sub, fontSize: 12, fontWeight: 700 }}>{m.role === "admin" ? "ถอดแอดมิน" : "ตั้งเป็นแอดมิน"}</button>
@@ -2124,7 +2163,9 @@ function NotePage({ t, notes, setNotes, isNight, userId }) {
     const bodyMd = migrateBody(n.body).map((b) => blockToMd(b, 0)).join("\n");
     return `# ${n.title || "(ไม่มีหัวข้อ)"}\n\n${bodyMd}\n\n${(n.tags || []).map((tg) => "#" + tg).join(" ")}\n\n_บันทึกเมื่อ ${n.date}_\n`;
   };
-  const downloadText = (filename, text, mime) => { try { const blob = new Blob([text], { type: mime }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); } catch (e) {} };
+  // เติม UTF-8 BOM (\uFEFF) นำหน้าไฟล์เสมอ กันโปรแกรมเปิดไฟล์ (เช่น Notepad บน Windows) เดา encoding ผิด
+  // จนภาษาไทยในไฟล์กลายเป็นตัวอักษรยึกยือ (ปัญหานี้เกิดกับไฟล์ .md/.txt ภาษาไทยบ่อยมาก โดยเฉพาะไม่มี BOM กำกับ)
+  const downloadText = (filename, text, mime) => { try { const blob = new Blob(["\uFEFF" + text], { type: mime }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); } catch (e) {} };
   const exportAllMd = () => downloadText("refhub-notes.md", notes.map(noteToMd).join("\n---\n\n"), "text/markdown;charset=utf-8;");
   const exportOneMd = (n) => downloadText(`${(n.title || "note").slice(0, 40).replace(/[\\/:*?"<>|]/g, "")}.md`, noteToMd(n), "text/markdown;charset=utf-8;");
 
@@ -2233,24 +2274,221 @@ function NotePage({ t, notes, setNotes, isNight, userId }) {
 }
 
 // ---------------- Mock pages ----------------
-function IdeasPage({ t }) {
-  const items = [
-    { tag: "RPA", title: "ออกแบบ bot ให้ maintain ง่ายด้วย Reusable Component", sum: "แยก logic เป็นส่วนๆ ใช้ซ้ำได้ ลดเวลาแก้บั๊ก" },
-    { tag: "AI", title: "ใช้ Prompt Chaining ทำงานซับซ้อนให้แม่นขึ้น", sum: "แตกงานใหญ่เป็น prompt ย่อยๆ ต่อกันเป็นสาย" },
-    { tag: "Career", title: "5 ทักษะที่สาย Automation ควรมีในปี 2026", sum: "REST API, Power Automate, cloud และ soft skill" },
-    { tag: "Mindset", title: "Deep Work: โฟกัส 90 นาที ได้งานเท่าคนอื่นทั้งวัน", sum: "ตัดสิ่งรบกวน จัดบล็อกเวลา ทำทีละอย่าง" },
-  ];
-  return (<>
-    <PageHead t={t} title="คลังความรู้" sub="หัวข้อที่อยากเรียน · AI คัดให้ทุกวัน" icon={<Lightbulb size={20} color={t.accent} />} />
-    <MockBanner t={t} text="ตัวอย่าง — ต่อ AI คัดบทความจริงภายหลัง" />
-    <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 12 }}>
-      {items.map((x, i) => (<div key={i} style={{ ...card(t), padding: 16 }}>
-        <span style={{ fontSize: 10.5, fontWeight: 800, color: t.accent, background: `${t.accent}1A`, padding: "3px 10px", borderRadius: 20 }}>{x.tag}</span>
-        <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginTop: 10, lineHeight: 1.4 }}>{x.title}</div>
-        <div style={{ fontSize: 12.5, color: t.sub, marginTop: 6, lineHeight: 1.5 }}>{x.sum}</div>
-      </div>))}
-    </div>
-  </>);
+const KNOWLEDGE_TOPICS = [
+  { id: "tech", label: "เทคโนโลยี" }, { id: "health", label: "สุขภาพ" }, { id: "finance", label: "การเงิน" },
+  { id: "psychology", label: "จิตวิทยา" }, { id: "history", label: "ประวัติศาสตร์" }, { id: "science", label: "วิทยาศาสตร์" },
+  { id: "business", label: "ธุรกิจ" }, { id: "language", label: "ภาษา" }, { id: "art", label: "ศิลปะ" },
+  { id: "lifestyle", label: "ไลฟ์สไตล์" }, { id: "environment", label: "สิ่งแวดล้อม" }, { id: "cooking", label: "อาหาร/การทำอาหาร" },
+  { id: "travel", label: "ท่องเที่ยว" }, { id: "sports", label: "กีฬา" },
+];
+const topicLabel = (id) => KNOWLEDGE_TOPICS.find((t) => t.id === id)?.label || id;
+
+function IdeasPage({ t, M, userId, session, authProfile, setAuthProfile, setNotes }) {
+  const interests = authProfile?.interests || [];
+  const topicLimit = authProfile?.topic_limit ?? 3;
+  const dailyLimit = authProfile?.daily_article_limit ?? 3;
+
+  const [tab, setTab] = useState("today"); // today | saved
+  const [today, setToday] = useState([]);
+  const [saved, setSaved] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [genMsg, setGenMsg] = useState("");
+  const [expanded, setExpanded] = useState({}); // id -> bool (พับ/กางในคลัง)
+  const [pickedInterests, setPickedInterests] = useState(interests);
+
+  // 🔊 อ่านออกเสียง (ฟรี ใช้ระบบเสียงพูดในตัวเครื่อง/เบราว์เซอร์) + เลือกเสียงได้ จำค่าที่เลือกไว้
+  const [voices, setVoices] = useState([]);
+  const [voiceURI, setVoiceURI] = useState(() => { try { return localStorage.getItem("refhub:ttsVoice") || ""; } catch (e) { return ""; } });
+  const [speakingId, setSpeakingId] = useState(null);
+  useEffect(() => {
+    if (!window.speechSynthesis) return;
+    const load = () => setVoices(window.speechSynthesis.getVoices());
+    load();
+    window.speechSynthesis.addEventListener("voiceschanged", load);
+    return () => window.speechSynthesis.removeEventListener("voiceschanged", load);
+  }, []);
+  useEffect(() => { try { localStorage.setItem("refhub:ttsVoice", voiceURI); } catch (e) {} }, [voiceURI]);
+  const thaiVoices = voices.filter((v) => v.lang?.toLowerCase().startsWith("th"));
+  const otherVoices = voices.filter((v) => !v.lang?.toLowerCase().startsWith("th"));
+  const speak = (id, text) => {
+    if (!window.speechSynthesis) { alert("เบราว์เซอร์นี้ไม่รองรับการอ่านออกเสียง"); return; }
+    if (speakingId === id) { window.speechSynthesis.cancel(); setSpeakingId(null); return; } // กดซ้ำ = หยุด
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    const v = voices.find((x) => x.voiceURI === voiceURI);
+    if (v) u.voice = v; else u.lang = "th-TH";
+    u.onend = () => setSpeakingId(null);
+    u.onerror = () => setSpeakingId(null);
+    setSpeakingId(id);
+    window.speechSynthesis.speak(u);
+  };
+
+  const saveInterests = async () => {
+    const { data } = await supabase.from("profiles").update({ interests: pickedInterests }).eq("id", userId).select().single();
+    if (data) setAuthProfile(data);
+  };
+  const toggleInterest = (id) => {
+    setPickedInterests((cur) => {
+      if (cur.includes(id)) return cur.filter((x) => x !== id);
+      if (cur.length >= topicLimit) return cur; // เกินโควตา ไม่ให้เพิ่ม
+      return [...cur, id];
+    });
+  };
+
+  const loadToday = async () => {
+    const todayStr2 = todayStr();
+    const { data } = await supabase.from("knowledge_articles").select("*").eq("user_id", userId).eq("date", todayStr2).order("created_at", { ascending: true });
+    return data || [];
+  };
+  const loadSaved = async () => {
+    const { data } = await supabase.from("knowledge_articles").select("*").eq("user_id", userId).eq("starred", true).order("created_at", { ascending: false });
+    setSaved(data || []);
+  };
+
+  const generateToday = async () => {
+    setGenMsg("กำลังสร้างบทความความรู้วันนี้ให้...");
+    try {
+      const r = await fetch("/api/knowledge-generate", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ interests: interests.map(topicLabel), count: dailyLimit, callerToken: session?.access_token }),
+      });
+      const data = await r.json();
+      if (!r.ok) { setGenMsg("สร้างไม่สำเร็จ: " + data.error); return; }
+      const rows = data.articles.map((a) => ({
+        user_id: userId, date: todayStr(),
+        topic: KNOWLEDGE_TOPICS.find((x) => x.label === a.topic)?.id || interests[0] || null,
+        title: a.title, bullets: a.bullets, starred: false,
+      }));
+      const { data: inserted } = await supabase.from("knowledge_articles").insert(rows).select();
+      setToday(inserted || []);
+      setGenMsg("");
+    } catch (e) { setGenMsg("สร้างไม่สำเร็จ: " + e.message); }
+  };
+
+  useEffect(() => {
+    if (!interests.length) { setLoading(false); return; }
+    (async () => {
+      setLoading(true);
+      const t2 = await loadToday();
+      if (t2.length > 0) { setToday(t2); } else { await generateToday(); }
+      await loadSaved();
+      setLoading(false);
+    })();
+  }, [interests.length, userId]);
+
+  const toggleStar = async (article) => {
+    const { data } = await supabase.from("knowledge_articles").update({ starred: !article.starred }).eq("id", article.id).select().single();
+    if (data) {
+      setToday((list) => list.map((x) => (x.id === data.id ? data : x)));
+      loadSaved();
+    }
+  };
+
+  const sendToNotes = (article) => {
+    const body = [{
+      type: "toggleListItem",
+      content: article.title,
+      children: (article.bullets || []).map((b) => ({ type: "bulletListItem", content: b })),
+    }];
+    setNotes((n) => [{ id: uid(), title: article.title, body, date: todayStr(), pinned: false, tags: [topicLabel(article.topic)] }, ...n]);
+  };
+
+  // ยังไม่ได้เลือกความสนใจ -> หน้าตั้งค่าความสนใจก่อน
+  if (!interests.length) {
+    return (
+      <>
+        <PageHead t={t} title="คลังความรู้" sub="เลือกความสนใจของคุณก่อนเริ่มได้เลย" icon={<Lightbulb size={20} color={t.accent} />} />
+        <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 14 }}>เลือกได้สูงสุด {topicLimit} หมวด (ให้แอดมินเพิ่มโควตาได้ถ้าอยากได้มากกว่านี้)</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+          {KNOWLEDGE_TOPICS.map((k) => {
+            const on = pickedInterests.includes(k.id);
+            const locked = !on && pickedInterests.length >= topicLimit;
+            return (
+              <button key={k.id} onClick={() => toggleInterest(k.id)} disabled={locked} style={{ padding: "8px 14px", borderRadius: 16, cursor: locked ? "default" : "pointer", border: `1.5px solid ${on ? t.accent : t.border}`, background: on ? t.accent : "transparent", color: on ? t.onAccent : locked ? t.faint : t.sub, fontSize: 12.5, fontWeight: 700, opacity: locked ? 0.5 : 1 }}>{k.label}</button>
+            );
+          })}
+        </div>
+        <div style={{ fontSize: 11, color: t.faint, marginBottom: 14 }}>เลือกแล้ว {pickedInterests.length}/{topicLimit}</div>
+        <button onClick={saveInterests} disabled={!pickedInterests.length} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "12px 0", opacity: pickedInterests.length ? 1 : 0.5 }}>เริ่มเลย</button>
+      </>
+    );
+  }
+
+  const list = tab === "today" ? today : saved;
+
+  return (
+    <>
+      <PageHead t={t} title="คลังความรู้" sub={`AI คัดให้ทุกวันตามความสนใจ (${interests.map(topicLabel).join(", ")})`} icon={<Lightbulb size={20} color={t.accent} />} />
+      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        {[["today", "วันนี้"], ["saved", `บันทึกไว้ (${saved.length})`]].map(([v, lb]) => (
+          <button key={v} onClick={() => setTab(v)} style={{ flex: 1, padding: "9px 0", borderRadius: 12, cursor: "pointer", border: `1.5px solid ${tab === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 12.5, background: tab === v ? t.accent : "transparent", color: tab === v ? t.onAccent : t.sub }}>{lb}</button>
+        ))}
+      </div>
+      {voices.length > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+          <Volume2 size={14} color={t.faint} />
+          <select value={voiceURI} onChange={(e) => setVoiceURI(e.target.value)} style={{ flex: 1, fontSize: 11.5, border: `1px solid ${t.border}`, borderRadius: 8, background: t.inputBg, color: t.sub, padding: "5px 8px" }}>
+            <option value="">เสียงอ่าน: ค่าเริ่มต้นของเครื่อง</option>
+            {thaiVoices.length > 0 && <optgroup label="เสียงไทย">{thaiVoices.map((v) => <option key={v.voiceURI} value={v.voiceURI}>{v.name}</option>)}</optgroup>}
+            <optgroup label="เสียงอื่นๆ">{otherVoices.map((v) => <option key={v.voiceURI} value={v.voiceURI}>{v.name} ({v.lang})</option>)}</optgroup>
+          </select>
+        </div>
+      )}
+
+      {loading && <Empty t={t} text={genMsg || "กำลังโหลด..."} />}
+
+      {!loading && tab === "today" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {today.length === 0 && <Empty t={t} text="วันนี้ยังไม่มีบทความ" />}
+          {today.map((a) => (
+            <div key={a.id} style={{ ...card(t), padding: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                <span style={{ fontSize: 10.5, fontWeight: 800, color: t.accent, background: `${t.accent}1A`, padding: "3px 10px", borderRadius: 20 }}>{topicLabel(a.topic)}</span>
+                <div style={{ display: "flex", gap: 2 }}>
+                  <button onClick={() => speak(a.id, `${a.title}. ${(a.bullets || []).join(". ")}`)} style={ghost} title="อ่านออกเสียง">
+                    {speakingId === a.id ? <Pause size={16} color={t.accent} /> : <Volume2 size={16} color={t.faint} />}
+                  </button>
+                  <button onClick={() => toggleStar(a)} style={ghost}><Sparkles size={17} color={a.starred ? "#E0B24A" : t.faint} fill={a.starred ? "#E0B24A" : "none"} /></button>
+                </div>
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginTop: 10, lineHeight: 1.4 }}>{a.title}</div>
+              <ul style={{ margin: "8px 0 0", paddingLeft: 18 }}>
+                {(a.bullets || []).map((b, i) => <li key={i} style={{ fontSize: 12.5, color: t.sub, lineHeight: 1.6 }}>{b}</li>)}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!loading && tab === "saved" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {saved.length === 0 && <Empty t={t} text="ยังไม่มีบทความที่บันทึกไว้ กดดาว ⭐ ที่บทความวันนี้ได้เลย" />}
+          {saved.map((a) => (
+            <div key={a.id} style={{ ...card(t), padding: 14 }}>
+              <button onClick={() => setExpanded((e) => ({ ...e, [a.id]: !e[a.id] }))} style={{ width: "100%", background: "none", border: "none", cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{a.title}</div>
+                <ChevronRight size={16} color={t.faint} style={{ transform: expanded[a.id] ? "rotate(90deg)" : "none", transition: "transform .15s", flexShrink: 0 }} />
+              </button>
+              {expanded[a.id] && (
+                <>
+                  <ul style={{ margin: "10px 0 0", paddingLeft: 18 }}>
+                    {(a.bullets || []).map((b, i) => <li key={i} style={{ fontSize: 12.5, color: t.sub, lineHeight: 1.6 }}>{b}</li>)}
+                  </ul>
+                  <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                    <button onClick={() => sendToNotes(a)} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 0", borderRadius: 10, border: `1px solid ${t.border}`, cursor: "pointer", background: "none", color: t.text, fontSize: 12, fontWeight: 700 }}><StickyNote size={14} /> ส่งเข้าโน้ต</button>
+                    <button onClick={() => speak(a.id, `${a.title}. ${(a.bullets || []).join(". ")}`)} style={ghost} title="อ่านออกเสียง">
+                      {speakingId === a.id ? <Pause size={16} color={t.accent} /> : <Volume2 size={16} color={t.faint} />}
+                    </button>
+                    <button onClick={() => toggleStar(a)} style={ghost}><Sparkles size={17} color="#E0B24A" fill="#E0B24A" /></button>
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
 }
 function TradePage({ t }) {
   const rows = [{ n: "ทองคำ (Gold Spot)", p: "฿52,400", c: +0.8 }, { n: "SET Index", p: "1,342.50", c: -0.4 }, { n: "Bitcoin", p: "฿2,380,000", c: +2.1 }, { n: "กองทุน SSF/RMF", p: "฿75,025", c: +0.6 }];
@@ -2376,16 +2614,45 @@ function ChatModal({ t, M, mentor, close }) {
   );
 }
 
-function MentorPicker({ t, mentor, setMentor, close }) {
+function MentorPicker({ t, mentor, setMentor, authProfile, setAuthProfile, userId, close }) {
+  const isAdmin = authProfile?.role === "admin";
+  const limit = authProfile?.mentor_limit ?? 1;
+  const unlocked = authProfile?.unlocked_mentors || [];
+  const [err, setErr] = useState("");
+
+  const pick = async (k) => {
+    setErr("");
+    if (isAdmin || k === "none" || unlocked.includes(k)) {
+      setMentor(k); close(); return;
+    }
+    if (unlocked.length >= limit) {
+      setErr(`ตอนนี้ปลดล็อกโค้ชได้สูงสุด ${limit} คน (ให้แอดมินเพิ่มโควตาให้ถ้าอยากปลดล็อกเพิ่ม)`);
+      return;
+    }
+    const nextUnlocked = [...unlocked, k];
+    const { data } = await supabase.from("profiles").update({ unlocked_mentors: nextUnlocked }).eq("id", userId).select().single();
+    if (data) setAuthProfile(data);
+    setMentor(k); close();
+  };
+
   return (<div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
     <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 4 }}>เลือกโค้ชของคุณ</div>
-    <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>คำคมและสไตล์การคุยจะเปลี่ยนตามโค้ช (สีธีมแอปปรับแยกได้ที่ไอคอนจานสี 🎨 ด้านบน)</div>
+    <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>
+      คำคมและสไตล์การคุยจะเปลี่ยนตามโค้ช (สีธีมแอปปรับแยกได้ที่ไอคอนจานสี 🎨 ด้านบน)
+      {!isAdmin && <> · ปลดล็อกได้ {unlocked.length}/{limit} คน</>}
+    </div>
+    {err && <div style={{ fontSize: 12, color: "#D9534F", marginBottom: 12 }}>{err}</div>}
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {Object.entries(MENTORS).map(([k, m]) => (<button key={k} onClick={() => { setMentor(k); close(); }} style={{ display: "flex", alignItems: "center", gap: 14, padding: 14, borderRadius: 18, cursor: "pointer", textAlign: "left", background: t.surface, border: `2px solid ${mentor === k ? m.accent : t.border}` }}>
-        <span style={{ width: 46, height: 46, borderRadius: 23, background: `linear-gradient(135deg,${m.accent2},${m.accent})`, color: m.onAccent, display: "grid", placeItems: "center", fontWeight: 800, fontSize: 18, flexShrink: 0 }}>{m.letter}</span>
-        <div style={{ flex: 1 }}><div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>{m.full}</div><div style={{ fontSize: 12, color: t.sub }}>{m.tag}</div></div>
-        {mentor === k && <Check size={20} color={m.accent} />}
-      </button>))}
+      {Object.entries(MENTORS).map(([k, m]) => {
+        const locked = !isAdmin && k !== "none" && !unlocked.includes(k) && unlocked.length >= limit;
+        return (
+          <button key={k} onClick={() => pick(k)} style={{ display: "flex", alignItems: "center", gap: 14, padding: 14, borderRadius: 18, cursor: "pointer", textAlign: "left", background: t.surface, border: `2px solid ${mentor === k ? m.accent : t.border}`, opacity: locked ? 0.5 : 1 }}>
+            <span style={{ width: 46, height: 46, borderRadius: 23, background: `linear-gradient(135deg,${m.accent2},${m.accent})`, color: m.onAccent, display: "grid", placeItems: "center", fontWeight: 800, fontSize: 18, flexShrink: 0 }}>{m.letter}</span>
+            <div style={{ flex: 1 }}><div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>{m.full}</div><div style={{ fontSize: 12, color: t.sub }}>{m.tag}</div></div>
+            {locked ? <LockKeyhole size={18} color={t.faint} /> : mentor === k && <Check size={20} color={m.accent} />}
+          </button>
+        );
+      })}
     </div>
   </div></div>);
 }
