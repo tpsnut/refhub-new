@@ -755,7 +755,7 @@ useEffect(() => {
           {page === "lang" && <LangPage t={t} />}
           {page === "goalsReport" && <GoalsReportPage t={t} goals={goals} />}
           {page === "admin" && <AdminPage t={t} session={session} userId={userId} adminAlerts={adminAlerts} setAdminAlerts={setAdminAlerts} />}
-          {page === "chat" && <ChatEntryPage t={t} M={M} authProfile={authProfile} session={session} openThread={(id, name, isGroup) => { setActiveThread({ id, name, isGroup: !!isGroup }); setPage("chatRoom"); }} />}
+          {page === "chat" && <ChatEntryPage t={t} M={M} userId={userId} authProfile={authProfile} session={session} openThread={(id, name, isGroup) => { setActiveThread({ id, name, isGroup: !!isGroup }); setPage("chatRoom"); }} />}
           {page === "chatRoom" && activeThread && <ChatRoomPage t={t} userId={userId} thread={activeThread} profile={profile} />}
 
           {/* 🎵 การ์ด "กำลังเล่น" ต่อท้ายเนื้อหาหน้า Home (ใต้เป้าหมาย) — div#yt-mini-player mount ค้างตลอด
@@ -1725,36 +1725,52 @@ function AdminAddPinMember({ t, session, onCreated }) {
 const AVATAR_COLORS = ["#C0658C", "#5C7A99", "#7B6CB0", "#4FB286", "#E0507B", "#3DA5D9", "#B07A4B"];
 const colorFor = (str) => AVATAR_COLORS[[...(str || "?")].reduce((a, c) => a + c.charCodeAt(0), 0) % AVATAR_COLORS.length];
 
-function ChatEntryPage({ t, M, authProfile, session, openThread }) {
+function ChatEntryPage({ t, M, userId, authProfile, session, openThread }) {
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [adding, setAdding] = useState(false);
+  const [sheet, setSheet] = useState(null); // null | "menu" | "create" | "join" | "direct"
   const [friendCode, setFriendCode] = useState("");
+  const [roomName, setRoomName] = useState("");
+  const [roomAvatar, setRoomAvatar] = useState(null); // dataURL preview
+  const [roomAvatarFile, setRoomAvatarFile] = useState(null);
+  const [joinCode, setJoinCode] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const avatarFileRef = useRef(null);
 
   const loadRooms = async () => {
     setLoading(true);
     try {
-      const { data: mine } = await supabase.from("chat_thread_members").select("thread_id").eq("user_id", authProfile.id);
-      const directIds = (mine || []).map((m) => m.thread_id);
-      let directRooms = [];
-      if (directIds.length) {
-        const { data: allMembers } = await supabase.from("chat_thread_members").select("thread_id, user_id").in("thread_id", directIds);
-        const otherIds = [...new Set((allMembers || []).filter((m) => m.user_id !== authProfile.id).map((m) => m.user_id))];
-        const { data: otherProfiles } = otherIds.length ? await supabase.from("profiles").select("id, name").in("id", otherIds) : { data: [] };
-        directRooms = directIds.map((tid) => {
-          const otherUserId = (allMembers || []).find((m) => m.thread_id === tid && m.user_id !== authProfile.id)?.user_id;
+      const { data: mine } = await supabase.from("chat_thread_members").select("thread_id").eq("user_id", userId);
+      const threadIds = (mine || []).map((m) => m.thread_id);
+      if (!threadIds.length) { setRooms([]); setLoading(false); return; }
+      const { data: threads } = await supabase.from("chat_threads").select("*").in("id", threadIds);
+      const { data: allMembers } = await supabase.from("chat_thread_members").select("thread_id, user_id").in("thread_id", threadIds);
+      const otherIds = [...new Set((allMembers || []).filter((m) => m.user_id !== userId).map((m) => m.user_id))];
+      const { data: otherProfiles } = otherIds.length ? await supabase.from("profiles").select("id, name").in("id", otherIds) : { data: [] };
+
+      const list = (threads || []).map((th) => {
+        if (th.type === "direct") {
+          const otherUserId = (allMembers || []).find((m) => m.thread_id === th.id && m.user_id !== userId)?.user_id;
           const otherProfile = (otherProfiles || []).find((p) => p.id === otherUserId);
-          return { id: tid, name: otherProfile?.name || "เพื่อน", type: "direct" };
-        });
-      }
-      setRooms([{ id: "00000000-0000-0000-0000-000000000001", name: "ครอบครัว", type: "family" }, ...directRooms]);
+          return { id: th.id, name: otherProfile?.name || "เพื่อน", type: "direct", avatarUrl: null };
+        }
+        return { id: th.id, name: th.name || "ห้องแชท", type: "group", avatarUrl: th.avatar_url, joinCode: th.created_by === userId ? th.join_code : null };
+      });
+      setRooms(list);
     } catch (e) {} finally { setLoading(false); }
   };
   useEffect(() => { if (authProfile?.can_chat) loadRooms(); }, [authProfile?.can_chat]);
 
-  const submitCode = async () => {
+  const closeSheet = () => { setSheet(null); setErr(""); setFriendCode(""); setJoinCode(""); setRoomName(""); setRoomAvatar(null); setRoomAvatarFile(null); };
+
+  const pickAvatar = (e) => {
+    const f = e.target.files?.[0]; if (!f) return;
+    setRoomAvatarFile(f);
+    const rd = new FileReader(); rd.onload = () => setRoomAvatar(rd.result); rd.readAsDataURL(f);
+  };
+
+  const submitDirectCode = async () => {
     setErr("");
     if (!friendCode.trim()) { setErr("กรอกโค้ดก่อน"); return; }
     setBusy(true);
@@ -1763,8 +1779,44 @@ function ChatEntryPage({ t, M, authProfile, session, openThread }) {
       const data = await r.json();
       if (!r.ok) throw new Error(data.error);
       await loadRooms();
-      setAdding(false); setFriendCode("");
-      openThread(data.threadId, data.friendName);
+      closeSheet();
+      openThread(data.threadId, data.friendName, false);
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
+  const submitCreateRoom = async () => {
+    setErr("");
+    if (!roomName.trim()) { setErr("ตั้งชื่อห้องก่อน"); return; }
+    setBusy(true);
+    try {
+      let avatarUrl = null;
+      if (roomAvatarFile) {
+        const path = `${userId}/room-${uid()}-${roomAvatarFile.name}`;
+        const { error: upErr } = await supabase.storage.from("attachments").upload(path, roomAvatarFile);
+        if (upErr) throw upErr;
+        const { data } = supabase.storage.from("attachments").getPublicUrl(path);
+        avatarUrl = data.publicUrl;
+      }
+      const r = await fetch("/api/chat-room", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create", name: roomName, avatarUrl, callerToken: session?.access_token }) });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error);
+      await loadRooms();
+      closeSheet();
+      openThread(data.threadId, data.name, true);
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
+  const submitJoinRoom = async () => {
+    setErr("");
+    if (!joinCode.trim()) { setErr("กรอกโค้ดห้องก่อน"); return; }
+    setBusy(true);
+    try {
+      const r = await fetch("/api/chat-room", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "join", joinCode, callerToken: session?.access_token }) });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error);
+      await loadRooms();
+      closeSheet();
+      openThread(data.threadId, data.name, true);
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
 
@@ -1779,40 +1831,83 @@ function ChatEntryPage({ t, M, authProfile, session, openThread }) {
 
   return (
     <>
-      <PageHead t={t} title="แชท" sub="คุยกับคนในครอบครัว" icon={<MessageCircle size={20} color={t.accent} />} />
+      <PageHead t={t} title="แชท" sub="สร้างห้องเองหรือแลกโค้ดกับเพื่อน" icon={<MessageCircle size={20} color={t.accent} />} />
       {authProfile.chat_code && (
         <div style={{ ...card(t), padding: 12, marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ fontSize: 11.5, color: t.sub }}>โค้ดของคุณ (แชร์ให้เพื่อนเพื่อเริ่มแชท)</div>
+          <div style={{ fontSize: 11.5, color: t.sub }}>โค้ดส่วนตัวของคุณ (แชร์ให้เพื่อนเริ่มแชท 1-1)</div>
           <div style={{ fontSize: 14, fontWeight: 800, color: t.accent, letterSpacing: 2 }}>{authProfile.chat_code}</div>
         </div>
       )}
       {loading ? <Empty t={t} text="กำลังโหลด..." /> : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px 10px", justifyItems: "center" }}>
+          {rooms.length === 0 && <div style={{ gridColumn: "1 / -1" }}><Empty t={t} text="ยังไม่มีห้องแชท กด + เพื่อสร้างห้องหรือเข้าร่วมห้องได้เลย" /></div>}
           {rooms.map((r) => (
-            <button key={r.id} onClick={() => openThread(r.id, r.name, r.type === "family")} style={{ background: "none", border: "none", cursor: "pointer", textAlign: "center" }}>
-              <div style={{ width: 64, height: 64, borderRadius: 18, background: r.type === "family" ? t.accent : colorFor(r.name), display: "grid", placeItems: "center", color: "#fff", fontSize: r.type === "family" ? 22 : 20, fontWeight: 700 }}>
-                {r.type === "family" ? <Home size={24} /> : r.name[0]}
-              </div>
+            <button key={r.id} onClick={() => openThread(r.id, r.name, r.type === "group")} style={{ background: "none", border: "none", cursor: "pointer", textAlign: "center" }}>
+              {r.avatarUrl ? (
+                <img src={r.avatarUrl} alt="" style={{ width: 64, height: 64, borderRadius: 18, objectFit: "cover" }} />
+              ) : (
+                <div style={{ width: 64, height: 64, borderRadius: 18, background: colorFor(r.name), display: "grid", placeItems: "center", color: "#fff", fontSize: 20, fontWeight: 700 }}>{r.name[0]}</div>
+              )}
               <div style={{ fontSize: 11, color: t.text, marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 70 }}>{r.name}</div>
             </button>
           ))}
-          <button onClick={() => setAdding(true)} style={{ background: "none", border: "none", cursor: "pointer", textAlign: "center" }}>
+          <button onClick={() => setSheet("menu")} style={{ background: "none", border: "none", cursor: "pointer", textAlign: "center" }}>
             <div style={{ width: 64, height: 64, borderRadius: 18, background: "none", border: `1.5px dashed ${t.border}`, display: "grid", placeItems: "center", color: t.faint }}>
               <Plus size={24} />
             </div>
-            <div style={{ fontSize: 11, color: t.sub, marginTop: 6 }}>เพิ่มด้วยโค้ด</div>
+            <div style={{ fontSize: 11, color: t.sub, marginTop: 6 }}>เพิ่มห้อง</div>
           </button>
         </div>
       )}
 
-      {adding && (
+      {sheet && (
         <ModalPortal>
-          <div style={overlay} onClick={() => setAdding(false)}>
+          <div style={overlay} onClick={closeSheet}>
             <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
-              <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 14 }}>เริ่มแชทด้วยโค้ด</div>
-              <input value={friendCode} onChange={(e) => setFriendCode(e.target.value.toUpperCase())} placeholder="กรอกโค้ดของเพื่อน" style={{ ...input(t), marginBottom: 10, letterSpacing: 2, textTransform: "uppercase" }} />
-              {err && <div style={{ fontSize: 12, color: "#D9534F", marginBottom: 10 }}>{err}</div>}
-              <button onClick={submitCode} disabled={busy} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "12px 0" }}>{busy ? "กำลังเชื่อมต่อ..." : "เริ่มแชท"}</button>
+
+              {sheet === "menu" && (
+                <>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 14 }}>เพิ่มห้องแชท</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <button onClick={() => setSheet("create")} style={{ display: "flex", alignItems: "center", gap: 12, padding: 14, borderRadius: 14, border: `1px solid ${t.border}`, background: "none", cursor: "pointer", textAlign: "left" }}><Plus size={18} color={t.accent} /><div><div style={{ fontSize: 13.5, fontWeight: 700, color: t.text }}>สร้างห้องใหม่</div><div style={{ fontSize: 11, color: t.sub }}>ตั้งชื่อ+รูป แล้วชวนคนอื่นด้วยโค้ด</div></div></button>
+                    <button onClick={() => setSheet("join")} style={{ display: "flex", alignItems: "center", gap: 12, padding: 14, borderRadius: 14, border: `1px solid ${t.border}`, background: "none", cursor: "pointer", textAlign: "left" }}><KeyRound size={18} color={t.accent} /><div><div style={{ fontSize: 13.5, fontWeight: 700, color: t.text }}>เข้าร่วมห้องด้วยโค้ด</div><div style={{ fontSize: 11, color: t.sub }}>มีโค้ดห้องจากคนอื่นแล้ว</div></div></button>
+                    <button onClick={() => setSheet("direct")} style={{ display: "flex", alignItems: "center", gap: 12, padding: 14, borderRadius: 14, border: `1px solid ${t.border}`, background: "none", cursor: "pointer", textAlign: "left" }}><MessageCircle size={18} color={t.accent} /><div><div style={{ fontSize: 13.5, fontWeight: 700, color: t.text }}>เริ่มแชทส่วนตัว 1-1</div><div style={{ fontSize: 11, color: t.sub }}>แลกโค้ดส่วนตัวกับเพื่อน</div></div></button>
+                  </div>
+                </>
+              )}
+
+              {sheet === "create" && (
+                <>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 14 }}>สร้างห้องใหม่</div>
+                  <div style={{ display: "flex", justifyContent: "center", marginBottom: 14 }}>
+                    <button onClick={() => avatarFileRef.current?.click()} style={{ width: 72, height: 72, borderRadius: 20, background: roomAvatar ? "none" : t.inputBg, border: `1.5px dashed ${t.border}`, cursor: "pointer", overflow: "hidden", display: "grid", placeItems: "center" }}>
+                      {roomAvatar ? <img src={roomAvatar} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <Upload size={20} color={t.faint} />}
+                    </button>
+                    <input ref={avatarFileRef} type="file" accept="image/*" onChange={pickAvatar} style={{ display: "none" }} />
+                  </div>
+                  <input value={roomName} onChange={(e) => setRoomName(e.target.value)} placeholder="ชื่อห้อง เช่น ครอบครัว, เพื่อนสนิท" style={{ ...input(t), marginBottom: 10 }} />
+                  {err && <div style={{ fontSize: 12, color: "#D9534F", marginBottom: 10 }}>{err}</div>}
+                  <button onClick={submitCreateRoom} disabled={busy} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "12px 0" }}>{busy ? "กำลังสร้าง..." : "สร้างห้อง"}</button>
+                </>
+              )}
+
+              {sheet === "join" && (
+                <>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 14 }}>เข้าร่วมห้องด้วยโค้ด</div>
+                  <input value={joinCode} onChange={(e) => setJoinCode(e.target.value.toUpperCase())} placeholder="กรอกโค้ดห้อง" style={{ ...input(t), marginBottom: 10, letterSpacing: 2, textTransform: "uppercase" }} />
+                  {err && <div style={{ fontSize: 12, color: "#D9534F", marginBottom: 10 }}>{err}</div>}
+                  <button onClick={submitJoinRoom} disabled={busy} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "12px 0" }}>{busy ? "กำลังเข้าร่วม..." : "เข้าร่วมห้อง"}</button>
+                </>
+              )}
+
+              {sheet === "direct" && (
+                <>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 14 }}>เริ่มแชทส่วนตัวด้วยโค้ด</div>
+                  <input value={friendCode} onChange={(e) => setFriendCode(e.target.value.toUpperCase())} placeholder="กรอกโค้ดส่วนตัวของเพื่อน" style={{ ...input(t), marginBottom: 10, letterSpacing: 2, textTransform: "uppercase" }} />
+                  {err && <div style={{ fontSize: 12, color: "#D9534F", marginBottom: 10 }}>{err}</div>}
+                  <button onClick={submitDirectCode} disabled={busy} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "12px 0" }}>{busy ? "กำลังเชื่อมต่อ..." : "เริ่มแชท"}</button>
+                </>
+              )}
             </div>
           </div>
         </ModalPortal>
@@ -1820,6 +1915,7 @@ function ChatEntryPage({ t, M, authProfile, session, openThread }) {
     </>
   );
 }
+
 
 function ChatRoomPage({ t, userId, thread, profile }) {
   const [messages, setMessages] = useState([]);
@@ -1829,10 +1925,53 @@ function ChatRoomPage({ t, userId, thread, profile }) {
   const [confirmDeleteMsgId, setConfirmDeleteMsgId] = useState(null);
   const [senderMap, setSenderMap] = useState({}); // sender_id -> { name } กันโชว์ชื่อผิดคนตอนหลายคนคุยในห้องเดียวกัน
   const [uploading, setUploading] = useState(false);
+  const [typingName, setTypingName] = useState(null); // ชื่อคนที่กำลังพิมพ์อยู่ (null = ไม่มีใครพิมพ์)
+  const [otherMembers, setOtherMembers] = useState([]); // [{id, name}] สมาชิกคนอื่นในห้อง (ไม่รวมตัวเอง) ใช้ทำ "อ่านแล้ว"
+  const [reads, setReads] = useState({}); // user_id -> last_read_at ของคนอื่นในห้อง
   const fileRef = useRef(null);
   const endRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
+  const broadcastRef = useRef(null);
 
   const markRead = () => supabase.from("chat_reads").upsert({ user_id: userId, thread_id: thread.id, last_read_at: new Date().toISOString() }).then(() => {}, () => {});
+
+  // 👥 ดึงสมาชิกคนอื่นในห้อง + เวลาที่แต่ละคนอ่านล่าสุด (สำหรับทำ "อ่านแล้ว") + ฟังการเปลี่ยนแปลงแบบสด
+  useEffect(() => {
+    (async () => {
+      const { data: members } = await supabase.from("chat_thread_members").select("user_id").eq("thread_id", thread.id).neq("user_id", userId);
+      const otherIds = (members || []).map((m) => m.user_id);
+      if (!otherIds.length) return;
+      const { data: profiles } = await supabase.from("profiles").select("id, name").in("id", otherIds);
+      setOtherMembers(profiles || []);
+      const { data: readRows } = await supabase.from("chat_reads").select("user_id, last_read_at").eq("thread_id", thread.id).in("user_id", otherIds);
+      setReads(Object.fromEntries((readRows || []).map((r) => [r.user_id, r.last_read_at])));
+    })();
+    const readsChannel = supabase
+      .channel(`reads-${thread.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "chat_reads", filter: `thread_id=eq.${thread.id}` }, (payload) => {
+        const row = payload.new;
+        if (row && row.user_id !== userId) setReads((r) => ({ ...r, [row.user_id]: row.last_read_at }));
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(readsChannel); };
+  }, [thread.id]);
+
+  // ⌨️ "กำลังพิมพ์..." — ใช้ Realtime Broadcast (ไม่ต้องเก็บลงฐานข้อมูล เบาและไวมาก)
+  useEffect(() => {
+    const channel = supabase.channel(`typing-${thread.id}`);
+    channel.on("broadcast", { event: "typing" }, (payload) => {
+      if (payload.payload.userId === userId) return; // ไม่ต้องโชว์ตัวเองพิมพ์
+      setTypingName(payload.payload.name);
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = setTimeout(() => setTypingName(null), 3000);
+    }).subscribe();
+    broadcastRef.current = channel;
+    return () => { supabase.removeChannel(channel); clearTimeout(typingTimeoutRef.current); };
+  }, [thread.id]);
+
+  const notifyTyping = () => {
+    broadcastRef.current?.send({ type: "broadcast", event: "typing", payload: { userId, name: profile?.name || "เพื่อน" } });
+  };
 
   useEffect(() => {
     (async () => {
@@ -1915,6 +2054,8 @@ function ChatRoomPage({ t, userId, thread, profile }) {
         {messages.map((m) => {
           const mine = m.sender_id === userId;
           const senderName = senderMap[m.sender_id]?.name || (mine ? profile?.name : thread.name);
+          const isLastMine = mine && m.id === [...messages].reverse().find((x) => x.sender_id === userId)?.id;
+          const readByCount = isLastMine ? otherMembers.filter((u) => reads[u.id] && new Date(reads[u.id]) >= new Date(m.created_at)).length : 0;
           return (
             <div key={m.id} style={{ display: "flex", flexDirection: "column", alignItems: mine ? "flex-end" : "flex-start", maxWidth: "84%", alignSelf: mine ? "flex-end" : "flex-start" }}>
               {!mine && thread.isGroup && <div style={{ fontSize: 10.5, color: t.faint, marginBottom: 2, paddingLeft: 34 }}>{senderName}</div>}
@@ -1946,9 +2087,15 @@ function ChatRoomPage({ t, userId, thread, profile }) {
                   )}
                 </div>
               )}
+              {isLastMine && otherMembers.length > 0 && (
+                <div style={{ fontSize: 10, color: t.faint, marginTop: 2, paddingRight: 2 }}>
+                  {readByCount === 0 ? "ส่งแล้ว" : otherMembers.length === 1 ? "อ่านแล้ว ✓✓" : `อ่านแล้ว ${readByCount}/${otherMembers.length} ✓✓`}
+                </div>
+              )}
             </div>
           );
         })}
+        {typingName && <div style={{ fontSize: 11, color: t.faint, paddingLeft: 4, fontStyle: "italic" }}>{typingName} กำลังพิมพ์...</div>}
         <div ref={endRef} />
       </div>
       <div style={{ display: "flex", gap: 8, paddingTop: 10 }}>
@@ -1956,7 +2103,7 @@ function ChatRoomPage({ t, userId, thread, profile }) {
           <Upload size={16} color={t.sub} />
         </button>
         <input ref={fileRef} type="file" accept="image/*,.pdf,.doc,.docx" onChange={pickFile} style={{ display: "none" }} />
-        <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} placeholder="พิมพ์ข้อความ..." style={input(t)} />
+        <input value={text} onChange={(e) => { setText(e.target.value); notifyTyping(); }} onKeyDown={(e) => e.key === "Enter" && send()} placeholder="พิมพ์ข้อความ..." style={input(t)} />
         <button onClick={send} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: 46, display: "grid", placeItems: "center" }}><Send size={17} /></button>
       </div>
     </div>
