@@ -1439,12 +1439,14 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts }) {
   const [tab, setTab] = useState("overview"); // overview | members | add
   const [members, setMembers] = useState([]);
   const [loadingList, setLoadingList] = useState(true);
+  const [detailMember, setDetailMember] = useState(null); // เปิด detail sheet ของสมาชิกคนนี้อยู่
 
   const loadMembers = async () => {
     setLoadingList(true);
     try {
       const { data } = await supabase.from("profiles").select("*").order("created_at", { ascending: false });
       setMembers(data || []);
+      if (detailMember) { const fresh = (data || []).find((x) => x.id === detailMember.id); if (fresh) setDetailMember(fresh); }
     } catch (e) {}
     setLoadingList(false);
   };
@@ -1458,12 +1460,18 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts }) {
   const setMentorLimit = async (id, mentor_limit) => { await supabase.from("profiles").update({ mentor_limit }).eq("id", id); loadMembers(); };
   const setTopicLimit = async (id, topic_limit) => { await supabase.from("profiles").update({ topic_limit }).eq("id", id); loadMembers(); };
   const setDailyArticleLimit = async (id, daily_article_limit) => { await supabase.from("profiles").update({ daily_article_limit }).eq("id", id); loadMembers(); };
-  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
-  const removeMember = async (id) => {
-    await supabase.from("profiles").delete().eq("id", id); setConfirmDeleteId(null); loadMembers();
-  };
+  const removeMember = async (id) => { await supabase.from("profiles").delete().eq("id", id); setDetailMember(null); loadMembers(); };
 
   const pendingCount = members.filter((m) => !m.approved).length;
+  const onlineMembers = members.filter((m) => isOnline(m.last_seen));
+  const recentMembers = [...members].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5);
+
+  const AvatarDot = ({ m, size = 40 }) => (
+    <div style={{ position: "relative", flexShrink: 0 }}>
+      <div style={{ width: size, height: size, borderRadius: size * 0.3, background: colorFor(m.name || m.email || "?"), color: "#fff", display: "grid", placeItems: "center", fontSize: size * 0.4, fontWeight: 700 }}>{(m.name || m.email || "?")[0].toUpperCase()}</div>
+      <div style={{ position: "absolute", bottom: -2, right: -2, width: size * 0.28, height: size * 0.28, borderRadius: size * 0.14, background: isOnline(m.last_seen) ? "#2E9E6B" : t.faint, border: `2px solid ${t.surface}` }} />
+    </div>
+  );
 
   return (
     <>
@@ -1488,7 +1496,7 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts }) {
       </div>
 
       {tab === "overview" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div style={{ display: "flex", gap: 10 }}>
             <div style={{ ...card(t), flex: 1, padding: 16, textAlign: "center" }}>
               <div style={{ fontSize: 22, fontWeight: 800, color: t.text }}>{members.length}</div>
@@ -1499,95 +1507,169 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts }) {
               <div style={{ fontSize: 11, color: t.sub, marginTop: 2 }}>รออนุมัติ</div>
             </div>
             <div style={{ ...card(t), flex: 1, padding: 16, textAlign: "center" }}>
-              <div style={{ fontSize: 22, fontWeight: 800, color: "#2E9E6B" }}>{members.filter((m) => isOnline(m.last_seen)).length}</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: "#2E9E6B" }}>{onlineMembers.length}</div>
               <div style={{ fontSize: 11, color: t.sub, marginTop: 2 }}>ออนไลน์ตอนนี้</div>
             </div>
           </div>
+
           {pendingCount > 0 && (
             <button onClick={() => setTab("members")} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "12px 0" }}>ไปอนุมัติสมาชิกที่รออยู่ ({pendingCount})</button>
           )}
+
+          <div>
+            <div style={{ fontSize: 12.5, fontWeight: 800, color: t.sub, marginBottom: 8 }}>🟢 ออนไลน์ตอนนี้</div>
+            {onlineMembers.length === 0 ? (
+              <div style={{ ...card(t), padding: 14, fontSize: 12.5, color: t.faint, textAlign: "center" }}>ไม่มีใครออนไลน์อยู่ตอนนี้</div>
+            ) : (
+              <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4 }}>
+                {onlineMembers.map((m) => (
+                  <button key={m.id} onClick={() => { setDetailMember(m); setTab("members"); }} style={{ background: "none", border: "none", cursor: "pointer", textAlign: "center", flexShrink: 0 }}>
+                    <AvatarDot m={m} size={46} />
+                    <div style={{ fontSize: 10, color: t.sub, marginTop: 4, maxWidth: 56, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.name}</div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <div style={{ fontSize: 12.5, fontWeight: 800, color: t.sub, marginBottom: 8 }}>สมาชิกล่าสุด</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {recentMembers.map((m) => (
+                <button key={m.id} onClick={() => { setDetailMember(m); setTab("members"); }} style={{ ...card(t), padding: 12, display: "flex", alignItems: "center", gap: 10, cursor: "pointer", border: "none", textAlign: "left", width: "100%" }}>
+                  <AvatarDot m={m} size={36} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{m.name || m.email}</div>
+                    <div style={{ fontSize: 10.5, color: t.sub }}>สมัคร {m.created_at ? new Date(m.created_at).toLocaleDateString("th-TH") : "-"}</div>
+                  </div>
+                  {!m.approved && <span style={{ fontSize: 10, fontWeight: 700, color: "#D9534F", background: "#D9534F18", padding: "2px 8px", borderRadius: 8, flexShrink: 0 }}>รออนุมัติ</span>}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
       {tab === "members" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {loadingList && <Empty t={t} text="กำลังโหลด..." />}
           {!loadingList && members.length === 0 && <Empty t={t} text="ยังไม่มีสมาชิก" />}
           {members.map((m) => (
-            <div key={m.id} style={{ ...card(t), padding: 14, borderLeft: `3px solid ${m.approved ? "#2E9E6B" : "#D9534F"}` }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ position: "relative", flexShrink: 0 }}>
-                  <div style={{ width: 38, height: 38, borderRadius: 12, background: colorFor(m.name || m.email || "?"), color: "#fff", display: "grid", placeItems: "center", fontSize: 14, fontWeight: 700 }}>{(m.name || m.email || "?")[0].toUpperCase()}</div>
-                  <div style={{ position: "absolute", bottom: -2, right: -2, width: 11, height: 11, borderRadius: 6, background: isOnline(m.last_seen) ? "#2E9E6B" : t.faint, border: `2px solid ${t.surface}` }} />
+            <button key={m.id} onClick={() => setDetailMember(m)} style={{ ...card(t), padding: 12, display: "flex", alignItems: "center", gap: 10, cursor: "pointer", border: `1px solid ${t.border}`, borderLeft: `3px solid ${m.approved ? "#2E9E6B" : "#D9534F"}`, textAlign: "left", width: "100%" }}>
+              <AvatarDot m={m} size={38} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: t.text, display: "flex", alignItems: "center", gap: 6 }}>
+                  {m.name || m.email}
+                  {m.role === "admin" && <span style={{ fontSize: 9, fontWeight: 800, color: t.accent, background: `${t.accent}18`, padding: "1px 6px", borderRadius: 8, flexShrink: 0 }}>ADMIN</span>}
                 </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13.5, fontWeight: 700, color: t.text, display: "flex", alignItems: "center", gap: 6 }}>
-                    {m.name || m.email}
-                    {m.role === "admin" && <span style={{ fontSize: 9.5, fontWeight: 800, color: t.accent, background: `${t.accent}18`, padding: "1px 6px", borderRadius: 8 }}>ADMIN</span>}
-                    {m.can_chat && <MessageCircle size={11} color={t.sub} />}
-                  </div>
-                  <div style={{ fontSize: 11, color: t.sub }}>{m.login_type === "pin" ? `ชื่อผู้ใช้: ${m.username}` : m.email}</div>
-                </div>
-                {!m.approved ? (
-                  <span style={{ fontSize: 10.5, fontWeight: 700, color: "#D9534F", background: "#D9534F18", padding: "3px 8px", borderRadius: 10, flexShrink: 0 }}>รออนุมัติ</span>
-                ) : (
-                  <span style={{ fontSize: 10.5, fontWeight: 700, color: "#2E9E6B", background: "#2E9E6B18", padding: "3px 8px", borderRadius: 10, flexShrink: 0 }}>ใช้งานได้</span>
-                )}
+                <div style={{ fontSize: 11, color: t.sub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.login_type === "pin" ? `ชื่อผู้ใช้: ${m.username}` : m.email}</div>
               </div>
-              <div style={{ fontSize: 10.5, color: t.faint, marginTop: 8 }}>
-                สมัคร {m.created_at ? new Date(m.created_at).toLocaleDateString("th-TH") : "-"} · ล็อกอินล่าสุด {m.last_login ? new Date(m.last_login).toLocaleDateString("th-TH") : "ยังไม่เคย"}
-              </div>
-              <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-                {!m.approved ? (
-                  <button onClick={() => setApproved(m.id, true)} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "8px 0", borderRadius: 10, border: "none", cursor: "pointer", background: "#2E9E6B", color: "#fff", fontSize: 12, fontWeight: 700 }}><UserCheck size={13} /> อนุมัติ</button>
-                ) : (
-                  m.id !== userId && <button onClick={() => setApproved(m.id, false)} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "8px 0", borderRadius: 10, border: `1px solid ${t.border}`, cursor: "pointer", background: "none", color: t.sub, fontSize: 12, fontWeight: 700 }}><UserX size={13} /> ระงับ</button>
-                )}
-                {m.approved && (
-                  <button onClick={() => setCanChat(m.id, !m.can_chat)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "8px 12px", borderRadius: 10, border: `1px solid ${m.can_chat ? "#2E9E6B" : t.border}`, cursor: "pointer", background: m.can_chat ? "#2E9E6B18" : "none", color: m.can_chat ? "#2E9E6B" : t.sub, fontSize: 12, fontWeight: 700 }}><MessageCircle size={13} /> {m.can_chat ? "แชทได้" : "เปิดแชท"}</button>
-                )}
-                {m.approved && m.role !== "admin" && (
-                  <label style={{ display: "flex", alignItems: "center", gap: 5, padding: "8px 12px", borderRadius: 10, border: `1px solid ${t.border}`, fontSize: 12, color: t.sub, fontWeight: 700 }}>
-                    โค้ช
-                    <select value={m.mentor_limit ?? 1} onChange={(e) => setMentorLimit(m.id, +e.target.value)} style={{ border: "none", background: "none", color: t.text, fontWeight: 700, fontSize: 12 }}>
-                      {[0, 1, 2, 3].map((n) => <option key={n} value={n}>{n}</option>)}
-                    </select>
-                  </label>
-                )}
-                {m.approved && m.role !== "admin" && (
-                  <label style={{ display: "flex", alignItems: "center", gap: 5, padding: "8px 12px", borderRadius: 10, border: `1px solid ${t.border}`, fontSize: 12, color: t.sub, fontWeight: 700 }}>
-                    หมวดสนใจ
-                    <select value={m.topic_limit ?? 3} onChange={(e) => setTopicLimit(m.id, +e.target.value)} style={{ border: "none", background: "none", color: t.text, fontWeight: 700, fontSize: 12 }}>
-                      {[1, 2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n}</option>)}
-                    </select>
-                  </label>
-                )}
-                {m.approved && m.role !== "admin" && (
-                  <label style={{ display: "flex", alignItems: "center", gap: 5, padding: "8px 12px", borderRadius: 10, border: `1px solid ${t.border}`, fontSize: 12, color: t.sub, fontWeight: 700 }}>
-                    บทความ/วัน
-                    <select value={m.daily_article_limit ?? 3} onChange={(e) => setDailyArticleLimit(m.id, +e.target.value)} style={{ border: "none", background: "none", color: t.text, fontWeight: 700, fontSize: 12 }}>
-                      {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
-                    </select>
-                  </label>
-                )}
-                {m.id !== userId && (
-                  <button onClick={() => setRole(m.id, m.role === "admin" ? "member" : "admin")} style={{ padding: "8px 12px", borderRadius: 10, border: `1px solid ${t.border}`, cursor: "pointer", background: "none", color: t.sub, fontSize: 12, fontWeight: 700 }}>{m.role === "admin" ? "ถอดแอดมิน" : "ตั้งเป็นแอดมิน"}</button>
-                )}
-                {m.id !== userId && (
-                  confirmDeleteId === m.id ? (
-                    <button onClick={() => removeMember(m.id)} style={{ padding: "8px 12px", borderRadius: 10, border: "none", cursor: "pointer", background: "#D9534F", color: "#fff", fontSize: 11.5, fontWeight: 700 }}>ยืนยันลบ?</button>
-                  ) : (
-                    <button onClick={() => setConfirmDeleteId(m.id)} style={ghost}><Trash2 size={15} color={t.faint} /></button>
-                  )
-                )}
-              </div>
-            </div>
+              {!m.approved && <span style={{ fontSize: 10, fontWeight: 700, color: "#D9534F", background: "#D9534F18", padding: "3px 8px", borderRadius: 10, flexShrink: 0 }}>รออนุมัติ</span>}
+              <ChevronRight size={17} color={t.faint} style={{ flexShrink: 0 }} />
+            </button>
           ))}
         </div>
       )}
 
       {tab === "add" && <AdminAddPinMember t={t} session={session} onCreated={loadMembers} />}
+
+      {detailMember && (
+        <MemberDetailModal
+          t={t} m={detailMember} isSelf={detailMember.id === userId}
+          isOnline={isOnline(detailMember.last_seen)}
+          setApproved={setApproved} setRole={setRole} setCanChat={setCanChat}
+          setMentorLimit={setMentorLimit} setTopicLimit={setTopicLimit} setDailyArticleLimit={setDailyArticleLimit}
+          removeMember={removeMember}
+          close={() => setDetailMember(null)}
+        />
+      )}
     </>
+  );
+}
+
+function MemberDetailModal({ t, m, isSelf, isOnline, setApproved, setRole, setCanChat, setMentorLimit, setTopicLimit, setDailyArticleLimit, removeMember, close }) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const Row = ({ label, children }) => (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: `1px solid ${t.border}` }}>
+      <span style={{ fontSize: 13, color: t.sub }}>{label}</span>
+      {children}
+    </div>
+  );
+  const selectStyle = { border: `1px solid ${t.border}`, borderRadius: 8, background: t.inputBg, color: t.text, fontWeight: 700, fontSize: 12.5, padding: "4px 8px" };
+
+  return (
+    <div style={overlay} onClick={close}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "88vh", overflowY: "auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ position: "relative" }}>
+              <div style={{ width: 52, height: 52, borderRadius: 16, background: colorFor(m.name || m.email || "?"), color: "#fff", display: "grid", placeItems: "center", fontSize: 20, fontWeight: 700 }}>{(m.name || m.email || "?")[0].toUpperCase()}</div>
+              <div style={{ position: "absolute", bottom: -2, right: -2, width: 14, height: 14, borderRadius: 7, background: isOnline ? "#2E9E6B" : t.faint, border: `2px solid ${t.page}` }} />
+            </div>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 6 }}>
+                {m.name || "(ไม่มีชื่อ)"}
+                {m.role === "admin" && <span style={{ fontSize: 9.5, fontWeight: 800, color: t.accent, background: `${t.accent}18`, padding: "1px 6px", borderRadius: 8 }}>ADMIN</span>}
+              </div>
+              <div style={{ fontSize: 11.5, color: t.sub }}>{isOnline ? "🟢 ออนไลน์อยู่ตอนนี้" : "ออฟไลน์"}</div>
+            </div>
+          </div>
+          <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+        </div>
+
+        <div style={{ fontSize: 11.5, fontWeight: 800, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>ข้อมูลบัญชี</div>
+        <Row label="เข้าสู่ระบบด้วย"><span style={{ fontSize: 12.5, color: t.text, fontWeight: 600 }}>{m.login_type === "pin" ? `ชื่อผู้ใช้: ${m.username}` : m.email}</span></Row>
+        <Row label="สมัครเมื่อ"><span style={{ fontSize: 12.5, color: t.text }}>{m.created_at ? new Date(m.created_at).toLocaleDateString("th-TH") : "-"}</span></Row>
+        <Row label="ล็อกอินล่าสุด"><span style={{ fontSize: 12.5, color: t.text }}>{m.last_login ? new Date(m.last_login).toLocaleDateString("th-TH") : "ยังไม่เคย"}</span></Row>
+
+        <div style={{ fontSize: 11.5, fontWeight: 800, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, margin: "18px 0 4px" }}>สถานะ</div>
+        <Row label="การอนุมัติ">
+          <button onClick={() => setApproved(m.id, !m.approved)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 10, border: `1px solid ${m.approved ? "#2E9E6B" : "#D9534F"}`, cursor: "pointer", background: m.approved ? "#2E9E6B18" : "#D9534F18", color: m.approved ? "#2E9E6B" : "#D9534F", fontSize: 12, fontWeight: 700 }}>
+            {m.approved ? <UserCheck size={13} /> : <UserX size={13} />} {m.approved ? "อนุมัติแล้ว" : "รออนุมัติ (กดเพื่ออนุมัติ)"}
+          </button>
+        </Row>
+        {!isSelf && (
+          <Row label="สิทธิ์แอดมิน">
+            <button onClick={() => setRole(m.id, m.role === "admin" ? "member" : "admin")} style={{ padding: "6px 12px", borderRadius: 10, border: `1px solid ${t.border}`, cursor: "pointer", background: "none", color: t.sub, fontSize: 12, fontWeight: 700 }}>{m.role === "admin" ? "ถอดสิทธิ์แอดมิน" : "ตั้งเป็นแอดมิน"}</button>
+          </Row>
+        )}
+
+        {m.role !== "admin" && (
+          <>
+            <div style={{ fontSize: 11.5, fontWeight: 800, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, margin: "18px 0 4px" }}>สิทธิ์การใช้งาน</div>
+            <Row label="แชท">
+              <button onClick={() => setCanChat(m.id, !m.can_chat)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 10, border: `1px solid ${m.can_chat ? "#2E9E6B" : t.border}`, cursor: "pointer", background: m.can_chat ? "#2E9E6B18" : "none", color: m.can_chat ? "#2E9E6B" : t.sub, fontSize: 12, fontWeight: 700 }}><MessageCircle size={13} /> {m.can_chat ? "เปิดใช้งานอยู่" : "ปิดอยู่ (กดเพื่อเปิด)"}</button>
+            </Row>
+            <Row label="จำนวนโค้ชที่ปลดล็อกได้">
+              <select value={m.mentor_limit ?? 1} onChange={(e) => setMentorLimit(m.id, +e.target.value)} style={selectStyle}>
+                {[0, 1, 2, 3].map((n) => <option key={n} value={n}>{n} คน</option>)}
+              </select>
+            </Row>
+            <Row label="หมวดความสนใจสูงสุด">
+              <select value={m.topic_limit ?? 3} onChange={(e) => setTopicLimit(m.id, +e.target.value)} style={selectStyle}>
+                {Array.from({ length: 14 }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n} หมวด</option>)}
+              </select>
+            </Row>
+            <Row label="บทความความรู้/วัน">
+              <select value={m.daily_article_limit ?? 3} onChange={(e) => setDailyArticleLimit(m.id, +e.target.value)} style={selectStyle}>
+                {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n} บทความ</option>)}
+              </select>
+            </Row>
+          </>
+        )}
+
+        {!isSelf && (
+          <>
+            <div style={{ fontSize: 11.5, fontWeight: 800, color: "#D9534F", textTransform: "uppercase", letterSpacing: 0.5, margin: "18px 0 8px" }}>โซนอันตราย</div>
+            {confirmDelete ? (
+              <button onClick={() => removeMember(m.id)} style={{ width: "100%", padding: "12px 0", borderRadius: 12, border: "none", cursor: "pointer", background: "#D9534F", color: "#fff", fontSize: 13, fontWeight: 700 }}>ยืนยันลบสมาชิกคนนี้? (กดอีกครั้งเพื่อลบจริง)</button>
+            ) : (
+              <button onClick={() => setConfirmDelete(true)} style={{ width: "100%", padding: "12px 0", borderRadius: 12, border: "1px solid #D9534F55", cursor: "pointer", background: "none", color: "#D9534F", fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Trash2 size={15} /> ลบสมาชิกคนนี้</button>
+            )}
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -2285,8 +2367,9 @@ const topicLabel = (id) => KNOWLEDGE_TOPICS.find((t) => t.id === id)?.label || i
 
 function IdeasPage({ t, M, userId, session, authProfile, setAuthProfile, setNotes }) {
   const interests = authProfile?.interests || [];
-  const topicLimit = authProfile?.topic_limit ?? 3;
-  const dailyLimit = authProfile?.daily_article_limit ?? 3;
+  const isAdmin = authProfile?.role === "admin";
+  const topicLimit = isAdmin ? KNOWLEDGE_TOPICS.length : (authProfile?.topic_limit ?? 3);
+  const dailyLimit = isAdmin ? 10 : (authProfile?.daily_article_limit ?? 3);
 
   const [tab, setTab] = useState("today"); // today | saved
   const [today, setToday] = useState([]);
