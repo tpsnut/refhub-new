@@ -1598,7 +1598,7 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts }) {
                   <AvatarDot m={m} size={36} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{m.name || m.email}</div>
-                    <div style={{ fontSize: 10.5, color: t.sub }}>สมัคร {m.created_at ? new Date(m.created_at).toLocaleDateString("th-TH") : "-"}</div>
+                    <div style={{ fontSize: 10.5, color: t.sub }}>สมัคร {m.created_at ? new Date(m.created_at).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" }) : "-"}</div>
                   </div>
                   {!m.approved && <span style={{ fontSize: 10, fontWeight: 700, color: "#D9534F", background: "#D9534F18", padding: "2px 8px", borderRadius: 8, flexShrink: 0 }}>รออนุมัติ</span>}
                 </button>
@@ -1680,8 +1680,9 @@ function MemberDetailModal({ t, m, isSelf, isOnline, setApproved, setRole, setCa
 
         <div style={{ fontSize: 11.5, fontWeight: 800, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>ข้อมูลบัญชี</div>
         <Row label="เข้าสู่ระบบด้วย"><span style={{ fontSize: 12.5, color: t.text, fontWeight: 600 }}>{m.login_type === "pin" ? `ชื่อผู้ใช้: ${m.username}` : m.email}</span></Row>
-        <Row label="สมัครเมื่อ"><span style={{ fontSize: 12.5, color: t.text }}>{m.created_at ? new Date(m.created_at).toLocaleDateString("th-TH") : "-"}</span></Row>
-        <Row label="ล็อกอินล่าสุด"><span style={{ fontSize: 12.5, color: t.text }}>{m.last_login ? new Date(m.last_login).toLocaleDateString("th-TH") : "ยังไม่เคย"}</span></Row>
+        <Row label="สมัครเมื่อ"><span style={{ fontSize: 12.5, color: t.text }}>{m.created_at ? new Date(m.created_at).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" }) : "-"}</span></Row>
+        <Row label="ล็อกอินล่าสุด"><span style={{ fontSize: 12.5, color: t.text }}>{m.last_login ? new Date(m.last_login).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" }) : "ยังไม่เคย"}</span></Row>
+        <Row label="ออนไลน์ล่าสุด"><span style={{ fontSize: 12.5, color: t.text }}>{m.last_seen ? new Date(m.last_seen).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" }) : "ยังไม่เคย"}</span></Row>
 
         <div style={{ fontSize: 11.5, fontWeight: 800, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, margin: "18px 0 4px" }}>สถานะ</div>
         <Row label="การอนุมัติ">
@@ -1692,6 +1693,11 @@ function MemberDetailModal({ t, m, isSelf, isOnline, setApproved, setRole, setCa
         {!isSelf && (
           <Row label="สิทธิ์แอดมิน">
             <button onClick={() => setRole(m.id, m.role === "admin" ? "member" : "admin")} style={{ padding: "6px 12px", borderRadius: 10, border: `1px solid ${t.border}`, cursor: "pointer", background: "none", color: t.sub, fontSize: 12, fontWeight: 700 }}>{m.role === "admin" ? "ถอดสิทธิ์แอดมิน" : "ตั้งเป็นแอดมิน"}</button>
+          </Row>
+        )}
+        {!isSelf && m.role !== "admin" && (
+          <Row label="ใช้งานเต็มรูปแบบ (ไม่เห็นหน้า Admin)">
+            <button onClick={() => setRole(m.id, m.role === "trusted" ? "member" : "trusted")} style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 10, border: `1px solid ${m.role === "trusted" ? "#2E9E6B" : t.border}`, cursor: "pointer", background: m.role === "trusted" ? "#2E9E6B18" : "none", color: m.role === "trusted" ? "#2E9E6B" : t.sub, fontSize: 12, fontWeight: 700 }}>{m.role === "trusted" ? "เปิดอยู่" : "ปิดอยู่ (กดเพื่อเปิด)"}</button>
           </Row>
         )}
 
@@ -1916,7 +1922,8 @@ function ChatEntryPage({ t, M, userId, authProfile, session, openThread }) {
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
 
-  if (!authProfile?.can_chat) {
+  const hasFullAccess = authProfile?.role === "admin" || authProfile?.role === "trusted";
+  if (!authProfile?.can_chat && !hasFullAccess) {
     return (
       <>
         <PageHead t={t} title="แชท" sub="คุยกับคนในครอบครัว" icon={<MessageCircle size={20} color={t.accent} />} />
@@ -2321,7 +2328,6 @@ function AddTxModal({ t, tx, setTx, categories, moveCategory, deleteCategory, ad
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [date, setDate] = useState(todayStr());
-  const [withVat, setWithVat] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
   const [amountSign, setAmountSign] = useState("+"); // โหมดกดปุ่มลัด: บวกเพิ่ม หรือ ลบออก จากยอดปัจจุบัน
   const quickAmounts = [10, 100, 500, 1000, 5000, 10000];
@@ -2333,16 +2339,11 @@ function AddTxModal({ t, tx, setTx, categories, moveCategory, deleteCategory, ad
     });
   };
 
-  const amountNum = parseFloat(amount) || 0;
-  const vatBase = withVat ? amountNum / 1.07 : 0;
-  const vatPortion = withVat ? amountNum - vatBase : 0;
-
   const add = () => {
     const a = parseFloat(amount);
     if (!a || a <= 0) return;
     if (!cat) { setCatError(true); return; }
-    let finalNote = note.trim() || findCat(categories, cat).label;
-    if (withVat) finalNote += ` (รวม VAT 7%: ฐาน ~${vatBase.toFixed(2)} บาท, ภาษี ~${vatPortion.toFixed(2)} บาท)`;
+    const finalNote = note.trim() || findCat(categories, cat).label;
     setTx((l) => [{ id: uid(), type, cat, amount: a, note: finalNote, date }, ...l]);
     close();
   };
@@ -2383,15 +2384,6 @@ function AddTxModal({ t, tx, setTx, categories, moveCategory, deleteCategory, ad
           <button onClick={() => setAmount("")} style={{ padding: "5px 10px", borderRadius: 10, border: "none", background: "none", color: t.faint, fontSize: 11, cursor: "pointer" }}>ล้าง</button>
         </div>
         <div style={{ fontSize: 10.5, color: t.faint, marginTop: -6, marginBottom: 10 }}>เลือกโหมด + หรือ − แล้วกดปุ่มตัวเลขซ้ำๆ เพื่อสะสมยอดได้เลย เช่น กด +100 สามครั้ง = 300</div>
-        <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: withVat ? 6 : 10, cursor: "pointer" }}>
-          <input type="checkbox" checked={withVat} onChange={(e) => setWithVat(e.target.checked)} />
-          <span style={{ fontSize: 12.5, color: t.sub }}>ยอดนี้รวม VAT 7% แล้ว (แยกยอดภาษีให้อัตโนมัติ)</span>
-        </label>
-        {withVat && amountNum > 0 && (
-          <div style={{ fontSize: 11.5, color: t.faint, marginBottom: 10, background: t.inputBg, borderRadius: 10, padding: "8px 12px" }}>
-            ฐานก่อนภาษี ~{vatBase.toFixed(2)} บาท · VAT 7% ~{vatPortion.toFixed(2)} บาท
-          </div>
-        )}
         <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="รายละเอียด (ไม่ใส่ก็ได้)" style={{ ...input(t), marginBottom: 10 }} />
         <div style={{ fontSize: 12, fontWeight: 700, color: t.sub, marginBottom: 6 }}>วันที่ (ย้อนหลังได้)</div>
         <input value={date} onChange={(e) => setDate(e.target.value)} type="date" style={{ ...input(t), marginBottom: 16 }} />
@@ -2677,7 +2669,7 @@ const topicLabel = (id) => KNOWLEDGE_TOPICS.find((t) => t.id === id)?.label || i
 
 function IdeasPage({ t, M, userId, session, authProfile, setAuthProfile, setNotes }) {
   const interests = authProfile?.interests || [];
-  const isAdmin = authProfile?.role === "admin";
+  const isAdmin = authProfile?.role === "admin" || authProfile?.role === "trusted";
   const topicLimit = isAdmin ? KNOWLEDGE_TOPICS.length : (authProfile?.topic_limit ?? 3);
   const dailyLimit = isAdmin ? 10 : (authProfile?.daily_article_limit ?? 3);
 
@@ -2688,6 +2680,8 @@ function IdeasPage({ t, M, userId, session, authProfile, setAuthProfile, setNote
   const [genMsg, setGenMsg] = useState("");
   const [expanded, setExpanded] = useState({}); // id -> bool (พับ/กางในคลัง)
   const [pickedInterests, setPickedInterests] = useState(interests);
+  const [editingInterests, setEditingInterests] = useState(false);
+  const [customTopic, setCustomTopic] = useState("");
 
   // 🔊 อ่านออกเสียง (ฟรี ใช้ระบบเสียงพูดในตัวเครื่อง/เบราว์เซอร์) + เลือกเสียงได้ จำค่าที่เลือกไว้
   const [voices, setVoices] = useState([]);
@@ -2719,6 +2713,7 @@ function IdeasPage({ t, M, userId, session, authProfile, setAuthProfile, setNote
   const saveInterests = async () => {
     const { data } = await supabase.from("profiles").update({ interests: pickedInterests }).eq("id", userId).select().single();
     if (data) setAuthProfile(data);
+    setEditingInterests(false);
   };
   const toggleInterest = (id) => {
     setPickedInterests((cur) => {
@@ -2726,6 +2721,13 @@ function IdeasPage({ t, M, userId, session, authProfile, setAuthProfile, setNote
       if (cur.length >= topicLimit) return cur; // เกินโควตา ไม่ให้เพิ่ม
       return [...cur, id];
     });
+  };
+  const openEditInterests = () => { setPickedInterests(interests); setEditingInterests(true); };
+  const addCustomTopic = () => {
+    const v = customTopic.trim();
+    if (!v || pickedInterests.includes(v) || pickedInterests.length >= topicLimit) return;
+    setPickedInterests((cur) => [...cur, v]);
+    setCustomTopic("");
   };
 
   const loadToday = async () => {
@@ -2786,23 +2788,30 @@ function IdeasPage({ t, M, userId, session, authProfile, setAuthProfile, setNote
     setNotes((n) => [{ id: uid(), title: article.title, body, date: todayStr(), pinned: false, tags: [topicLabel(article.topic)] }, ...n]);
   };
 
-  // ยังไม่ได้เลือกความสนใจ -> หน้าตั้งค่าความสนใจก่อน
-  if (!interests.length) {
+  // ยังไม่ได้เลือกความสนใจ (ครั้งแรก) หรือกำลังกดแก้ไขอยู่ -> หน้าตั้งค่าความสนใจ
+  if (!interests.length || editingInterests) {
     return (
       <>
         <PageHead t={t} title="คลังความรู้" sub="เลือกความสนใจของคุณก่อนเริ่มได้เลย" icon={<Lightbulb size={20} color={t.accent} />} />
         <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 14 }}>เลือกได้สูงสุด {topicLimit} หมวด (ให้แอดมินเพิ่มโควตาได้ถ้าอยากได้มากกว่านี้)</div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
-          {KNOWLEDGE_TOPICS.map((k) => {
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+          {[...KNOWLEDGE_TOPICS, ...pickedInterests.filter((id) => !KNOWLEDGE_TOPICS.some((k) => k.id === id)).map((id) => ({ id, label: id, custom: true }))].map((k) => {
             const on = pickedInterests.includes(k.id);
             const locked = !on && pickedInterests.length >= topicLimit;
             return (
-              <button key={k.id} onClick={() => toggleInterest(k.id)} disabled={locked} style={{ padding: "8px 14px", borderRadius: 16, cursor: locked ? "default" : "pointer", border: `1.5px solid ${on ? t.accent : t.border}`, background: on ? t.accent : "transparent", color: on ? t.onAccent : locked ? t.faint : t.sub, fontSize: 12.5, fontWeight: 700, opacity: locked ? 0.5 : 1 }}>{k.label}</button>
+              <button key={k.id} onClick={() => toggleInterest(k.id)} disabled={locked} style={{ padding: "8px 14px", borderRadius: 16, cursor: locked ? "default" : "pointer", border: `1.5px solid ${on ? t.accent : t.border}`, background: on ? t.accent : "transparent", color: on ? t.onAccent : locked ? t.faint : t.sub, fontSize: 12.5, fontWeight: 700, opacity: locked ? 0.5 : 1 }}>{k.label}{k.custom && " ✏️"}</button>
             );
           })}
         </div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+          <input value={customTopic} onChange={(e) => setCustomTopic(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addCustomTopic()} placeholder="พิมพ์หมวดที่อยากได้เอง..." style={input(t)} disabled={pickedInterests.length >= topicLimit} />
+          <button onClick={addCustomTopic} disabled={!customTopic.trim() || pickedInterests.length >= topicLimit} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), padding: "0 16px", opacity: customTopic.trim() && pickedInterests.length < topicLimit ? 1 : 0.5 }}>เพิ่ม</button>
+        </div>
         <div style={{ fontSize: 11, color: t.faint, marginBottom: 14 }}>เลือกแล้ว {pickedInterests.length}/{topicLimit}</div>
-        <button onClick={saveInterests} disabled={!pickedInterests.length} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "12px 0", opacity: pickedInterests.length ? 1 : 0.5 }}>เริ่มเลย</button>
+        <div style={{ display: "flex", gap: 8 }}>
+          {interests.length > 0 && <button onClick={() => setEditingInterests(false)} style={{ ...card(t), flex: 1, padding: "12px 0", border: `1px solid ${t.border}`, cursor: "pointer", color: t.sub, fontWeight: 700, fontSize: 13 }}>ยกเลิก</button>}
+          <button onClick={saveInterests} disabled={!pickedInterests.length} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), flex: 2, padding: "12px 0", opacity: pickedInterests.length ? 1 : 0.5 }}>{interests.length > 0 ? "บันทึก" : "เริ่มเลย"}</button>
+        </div>
       </>
     );
   }
@@ -2811,7 +2820,10 @@ function IdeasPage({ t, M, userId, session, authProfile, setAuthProfile, setNote
 
   return (
     <>
-      <PageHead t={t} title="คลังความรู้" sub={`AI คัดให้ทุกวันตามความสนใจ (${interests.map(topicLabel).join(", ")})`} icon={<Lightbulb size={20} color={t.accent} />} />
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 16 }}>
+        <PageHead t={t} title="คลังความรู้" sub={`AI คัดให้ทุกวันตามความสนใจ (${interests.map(topicLabel).join(", ")})`} icon={<Lightbulb size={20} color={t.accent} />} />
+        <button onClick={openEditInterests} style={{ ...card(t), flexShrink: 0, width: 38, height: 38, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }} title="แก้ไขหมวดสนใจ"><Pencil size={15} color={t.sub} /></button>
+      </div>
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
         {[["today", "วันนี้"], ["saved", `บันทึกไว้ (${saved.length})`]].map(([v, lb]) => (
           <button key={v} onClick={() => setTab(v)} style={{ flex: 1, padding: "9px 0", borderRadius: 12, cursor: "pointer", border: `1.5px solid ${tab === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 12.5, background: tab === v ? t.accent : "transparent", color: tab === v ? t.onAccent : t.sub }}>{lb}</button>
@@ -3014,7 +3026,7 @@ function ChatModal({ t, M, mentor, close }) {
 }
 
 function MentorPicker({ t, mentor, setMentor, authProfile, setAuthProfile, userId, close }) {
-  const isAdmin = authProfile?.role === "admin";
+  const isAdmin = authProfile?.role === "admin" || authProfile?.role === "trusted";
   const limit = authProfile?.mentor_limit ?? 1;
   const unlocked = authProfile?.unlocked_mentors || [];
   const [err, setErr] = useState("");

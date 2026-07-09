@@ -43,7 +43,7 @@ export default async function handler(req, res) {
         headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
         body: JSON.stringify({
           contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 8000 },
+          generationConfig: { maxOutputTokens: 10000 },
         }),
       }
     );
