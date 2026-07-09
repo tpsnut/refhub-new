@@ -43,7 +43,7 @@ export default async function handler(req, res) {
         headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
         body: JSON.stringify({
           contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 2000 },
+          generationConfig: { maxOutputTokens: 4000 },
         }),
       }
     );
@@ -57,7 +57,19 @@ export default async function handler(req, res) {
     }
     const cleaned = raw.replace(/^```json\s*|```\s*$/g, "").trim();
     let parsed;
-    try { parsed = JSON.parse(cleaned); } catch (e) { return res.status(500).json({ error: "แปลงผลลัพธ์จาก AI ไม่สำเร็จ ลองใหม่อีกครั้ง" }); }
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch (e) {
+      // ลองอีกที: ตัดเอาเฉพาะช่วง { ... } เผื่อ AI แถมข้อความอื่นมาด้วยทั้งที่สั่งห้ามแล้ว
+      const start = cleaned.indexOf("{");
+      const end = cleaned.lastIndexOf("}");
+      if (start !== -1 && end > start) {
+        try { parsed = JSON.parse(cleaned.slice(start, end + 1)); } catch (e2) {}
+      }
+      if (!parsed) {
+        return res.status(500).json({ error: `แปลงผลลัพธ์จาก AI ไม่สำเร็จ (อาจตอบยาวเกินจนถูกตัดตอน) ตัวอย่างที่ได้รับ: "${cleaned.slice(0, 150)}"` });
+      }
+    }
 
     const articles = (parsed.articles || []).slice(0, n).map((a) => ({
       topic: a.topic || interests[0],
