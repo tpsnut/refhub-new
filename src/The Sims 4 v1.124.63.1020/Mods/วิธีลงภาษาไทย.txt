@@ -1,0 +1,8 @@
+﻿วิธีลงภาษาไทย
+1. ก๊อปไฟล์ [SIMSCOLONY]_SIMS4_THAI_2024.package
+2.ไปวางไว้ที่ Documents\Electronic Arts\The Sims 4\Mods (วางทับไปได้เลย)
+3.เข้าเกม
+4. เข้า Option > Game Option > Other > ติ๊ก Enable Custom Content and Mods และ Script Mods Allow
+
+หมายเหตุ: ถ้าหากไม่มีโฟลเดอร์ Electronic Arts ให้เข้าเกมก่อนหนึ่งครั้ง
+

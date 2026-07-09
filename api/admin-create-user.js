@@ -28,12 +28,12 @@ export default async function handler(req, res) {
     const { data: userData, error: userErr } = await callerClient.auth.getUser(callerToken);
     if (userErr || !userData?.user) return res.status(401).json({ error: "ยืนยันตัวตนไม่สำเร็จ ลองล็อกอินใหม่" });
 
-    const { data: callerProfile } = await callerClient
-      .from("profiles").select("role").eq("id", userData.user.id).single();
+    // ใช้ service role เช็ค role แทน (callerClient ไม่มี auth header แนบไปตอน query ทำให้ RLS มองเป็น anon แล้วเห็นข้อมูลว่างเปล่าเสมอ)
+    const admin = createClient(supabaseUrl, serviceKey);
+    const { data: callerProfile } = await admin.from("profiles").select("role").eq("id", userData.user.id).single();
     if (callerProfile?.role !== "admin") return res.status(403).json({ error: "เฉพาะแอดมินเท่านั้นที่สร้างบัญชีแบบนี้ได้" });
 
     // 2) ใช้ service role (สิทธิ์เต็ม) สร้างบัญชีจริง + แถว profile ให้
-    const admin = createClient(supabaseUrl, serviceKey);
     const email = `${username.toLowerCase().trim()}@refhub.local`; // อีเมลปลอมภายใน ใช้แค่เป็น key ล็อกอิน ไม่มีการส่งเมลจริง
 
     const { data: created, error: createErr } = await admin.auth.admin.createUser({
