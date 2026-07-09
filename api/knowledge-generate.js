@@ -43,7 +43,7 @@ export default async function handler(req, res) {
         headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
         body: JSON.stringify({
           contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 2000, responseMimeType: "application/json" },
+          generationConfig: { maxOutputTokens: 2000 },
         }),
       }
     );
@@ -51,6 +51,10 @@ export default async function handler(req, res) {
     if (!r.ok) return res.status(r.status).json({ error: data?.error?.message || "Gemini API error" });
 
     const raw = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("").trim();
+    if (!raw) {
+      const reason = data.candidates?.[0]?.finishReason || data.promptFeedback?.blockReason;
+      return res.status(500).json({ error: reason ? `AI ไม่ตอบกลับเนื้อหา (สาเหตุ: ${reason})` : "AI ไม่ตอบกลับเนื้อหาใดๆ ลองใหม่อีกครั้ง" });
+    }
     const cleaned = raw.replace(/^```json\s*|```\s*$/g, "").trim();
     let parsed;
     try { parsed = JSON.parse(cleaned); } catch (e) { return res.status(500).json({ error: "แปลงผลลัพธ์จาก AI ไม่สำเร็จ ลองใหม่อีกครั้ง" }); }

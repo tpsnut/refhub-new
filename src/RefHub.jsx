@@ -2726,6 +2726,12 @@ function IdeasPage({ t, M, userId, session, authProfile, setAuthProfile, setNote
       )}
 
       {loading && <Empty t={t} text={genMsg || "กำลังโหลด..."} />}
+      {!loading && genMsg && (
+        <div style={{ ...card(t), padding: 14, marginBottom: 14, border: "1px solid #D9534F55", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+          <div style={{ fontSize: 12.5, color: "#D9534F" }}>{genMsg}</div>
+          <button onClick={() => { setGenMsg(""); setLoading(true); generateToday().finally(() => setLoading(false)); }} style={{ background: "none", border: `1px solid #D9534F55`, borderRadius: 8, padding: "5px 10px", fontSize: 11.5, fontWeight: 700, color: "#D9534F", cursor: "pointer", flexShrink: 0 }}>ลองใหม่</button>
+        </div>
+      )}
 
       {!loading && tab === "today" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
