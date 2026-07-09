@@ -29,7 +29,7 @@ export default async function handler(req, res) {
     if (!callerProfile?.can_chat) return res.status(403).json({ error: "คุณยังไม่ได้รับสิทธิ์ใช้งานแชท ติดต่อแอดมิน" });
 
     // หาเจ้าของโค้ด
-    const { data: friend } = await admin.from("profiles").select("id, name, can_chat").eq("chat_code", friendCode.trim().toUpperCase()).single();
+    const { data: friend } = await admin.from("profiles").select("id, name, can_chat").eq("chat_code", friendCode.trim().toUpperCase()).maybeSingle();
     if (!friend) return res.status(404).json({ error: "ไม่พบโค้ดนี้ในระบบ ลองเช็คอีกครั้ง" });
     if (friend.id === callerId) return res.status(400).json({ error: "นี่คือโค้ดของคุณเอง ให้เพื่อนกรอกแทนนะ" });
     if (!friend.can_chat) return res.status(403).json({ error: `${friend.name} ยังไม่ได้รับสิทธิ์ใช้งานแชท` });

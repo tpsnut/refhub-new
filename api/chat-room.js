@@ -47,7 +47,7 @@ export default async function handler(req, res) {
 
     if (action === "join") {
       if (!joinCode?.trim()) return res.status(400).json({ error: "กรอกโค้ดห้องก่อน" });
-      const { data: thread } = await admin.from("chat_threads").select("*").eq("join_code", joinCode.trim().toUpperCase()).single();
+      const { data: thread } = await admin.from("chat_threads").select("*").eq("join_code", joinCode.trim().toUpperCase()).maybeSingle();
       if (!thread) return res.status(404).json({ error: "ไม่พบห้องที่ใช้โค้ดนี้ ลองเช็คอีกครั้ง" });
       const { data: already } = await admin.from("chat_thread_members").select("*").eq("thread_id", thread.id).eq("user_id", callerId).maybeSingle();
       if (!already) await admin.from("chat_thread_members").insert({ thread_id: thread.id, user_id: callerId });
