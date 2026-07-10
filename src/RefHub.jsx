@@ -203,6 +203,7 @@ const subscribeToPush = async (userId) => {
   const permission = await Notification.requestPermission();
   if (permission !== "granted") { alert("ไม่ได้รับอนุญาตให้แจ้งเตือน ลองกดอนุญาตในตั้งค่าเบราว์เซอร์อีกครั้ง"); return false; }
   const reg = await navigator.serviceWorker.register("/sw.js");
+  await navigator.serviceWorker.ready; // รอจนกว่า Service Worker จะ active จริงๆ ก่อนค่อย subscribe (ไม่งั้น subscribe จะพังเงียบๆ)
   const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) });
   const subJson = sub.toJSON();
   await supabase.from("push_subscriptions").upsert({ user_id: userId, endpoint: subJson.endpoint, keys: subJson.keys }, { onConflict: "endpoint" });
@@ -577,6 +578,20 @@ useEffect(() => {
       finally { setAuthProfileChecked(true); }
     })();
   }, [userId]);
+
+  // 🔔 เด้งขอสิทธิ์แจ้งเตือนอัตโนมัติ ครั้งแรกที่เข้าแอปหลังได้รับอนุมัติ + ตอบสนองถ้าแอดมินกด "เตือนให้เปิดแจ้งเตือน" ซ้ำ
+  useEffect(() => {
+    if (!userId || !authProfile?.approved) return;
+    if (!("Notification" in window) || Notification.permission !== "default") return;
+    let already = false;
+    try { already = localStorage.getItem("refhub:notifReminderHandled") === (authProfile.notif_reminder_at || "first"); } catch (e) {}
+    if (already) return;
+    const timer = setTimeout(async () => {
+      await subscribeToPush(userId);
+      try { localStorage.setItem("refhub:notifReminderHandled", authProfile.notif_reminder_at || "first"); } catch (e) {}
+    }, 1500); // หน่วงนิดหน่อยกันดูรีบร้อนทันทีที่เข้าแอป
+    return () => clearTimeout(timer);
+  }, [userId, authProfile?.approved, authProfile?.notif_reminder_at]);
 
   // 💓 heartbeat — อัปเดต last_seen ทุก 60 วิ ตอนแอปเปิดอยู่ (ใช้บอกสถานะ "ออนไลน์อยู่ไหม" ในหน้า Admin)
   useEffect(() => {
@@ -1606,8 +1621,13 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts }) {
     setLoadingList(true);
     try {
       const { data } = await supabase.from("profiles").select("*").order("created_at", { ascending: false });
-      setMembers(data || []);
-      if (detailMember) { const fresh = (data || []).find((x) => x.id === detailMember.id); if (fresh) setDetailMember(fresh); }
+      const { data: locs } = await supabase.from("locations").select("user_id").eq("share_enabled", true);
+      const { data: subs } = await supabase.from("push_subscriptions").select("user_id");
+      const sharingIds = new Set((locs || []).map((l) => l.user_id));
+      const notifIds = new Set((subs || []).map((s) => s.user_id));
+      const merged = (data || []).map((m) => ({ ...m, locationShared: sharingIds.has(m.id), notifEnabled: notifIds.has(m.id) }));
+      setMembers(merged);
+      if (detailMember) { const fresh = merged.find((x) => x.id === detailMember.id); if (fresh) setDetailMember(fresh); }
     } catch (e) {}
     setLoadingList(false);
   };
@@ -1619,6 +1639,7 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts }) {
   const setRole = async (id, role) => { await supabase.from("profiles").update({ role }).eq("id", id); loadMembers(); };
   const setCanChat = async (id, can_chat) => { await supabase.from("profiles").update({ can_chat }).eq("id", id); loadMembers(); };
   const setCanViewLocations = async (id, can_view_locations) => { await supabase.from("profiles").update({ can_view_locations }).eq("id", id); loadMembers(); };
+  const remindNotification = async (id) => { await supabase.from("profiles").update({ notif_reminder_at: new Date().toISOString() }).eq("id", id); loadMembers(); };
   const setMentorLimit = async (id, mentor_limit) => { await supabase.from("profiles").update({ mentor_limit }).eq("id", id); loadMembers(); };
   const resetMentorPick = async (id) => { await supabase.from("profiles").update({ unlocked_mentors: [] }).eq("id", id); loadMembers(); };
   const setTopicLimit = async (id, topic_limit) => { await supabase.from("profiles").update({ topic_limit }).eq("id", id); loadMembers(); };
@@ -1742,7 +1763,7 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts }) {
           <MemberDetailModal
             t={t} m={detailMember} isSelf={detailMember.id === userId}
             isOnline={isOnline(detailMember.last_seen)}
-            setApproved={setApproved} setRole={setRole} setCanChat={setCanChat} setCanViewLocations={setCanViewLocations}
+            setApproved={setApproved} setRole={setRole} setCanChat={setCanChat} setCanViewLocations={setCanViewLocations} remindNotification={remindNotification}
             setMentorLimit={setMentorLimit} setTopicLimit={setTopicLimit} setDailyArticleLimit={setDailyArticleLimit} resetMentorPick={resetMentorPick}
             removeMember={removeMember}
             close={() => setDetailMember(null)}
@@ -1753,7 +1774,7 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts }) {
   );
 }
 
-function MemberDetailModal({ t, m, isSelf, isOnline, setApproved, setRole, setCanChat, setCanViewLocations, setMentorLimit, setTopicLimit, setDailyArticleLimit, resetMentorPick, removeMember, close }) {
+function MemberDetailModal({ t, m, isSelf, isOnline, setApproved, setRole, setCanChat, setCanViewLocations, setMentorLimit, setTopicLimit, setDailyArticleLimit, resetMentorPick, removeMember, remindNotification, close }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const Row = ({ label, children }) => (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: `1px solid ${t.border}` }}>
@@ -1815,6 +1836,17 @@ function MemberDetailModal({ t, m, isSelf, isOnline, setApproved, setRole, setCa
             <Row label="ดูตำแหน่งคนอื่นได้">
               <button onClick={() => setCanViewLocations(m.id, !m.can_view_locations)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 10, border: `1px solid ${m.can_view_locations ? "#2E9E6B" : t.border}`, cursor: "pointer", background: m.can_view_locations ? "#2E9E6B18" : "none", color: m.can_view_locations ? "#2E9E6B" : t.sub, fontSize: 12, fontWeight: 700 }}><MapPin size={13} /> {m.can_view_locations ? "เปิดใช้งานอยู่" : "ปิดอยู่ (กดเพื่อเปิด)"}</button>
             </Row>
+            <Row label="แชร์ตำแหน่งของตัวเอง (ที่เขาเปิดเอง)">
+              <span style={{ fontSize: 11.5, fontWeight: 700, color: m.locationShared ? "#2E9E6B" : t.faint }}>{m.locationShared ? "🟢 เปิดอยู่" : "⚪ ยังไม่เปิด"}</span>
+            </Row>
+            <Row label="เปิดรับแจ้งเตือน (push)">
+              <span style={{ fontSize: 11.5, fontWeight: 700, color: m.notifEnabled ? "#2E9E6B" : t.faint }}>{m.notifEnabled ? "🟢 เปิดอยู่" : "⚪ ยังไม่เปิด"}</span>
+            </Row>
+            {!m.notifEnabled && (
+              <Row label="แจ้งเตือน (push)">
+                <button onClick={() => remindNotification(m.id)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 10, border: `1px solid ${t.border}`, cursor: "pointer", background: "none", color: t.sub, fontSize: 12, fontWeight: 700 }}><Bell size={13} /> เตือนให้เปิดแจ้งเตือน</button>
+              </Row>
+            )}
             <Row label="จำนวนโค้ชที่ปลดล็อกได้">
               <select value={m.mentor_limit ?? 0} onChange={(e) => setMentorLimit(m.id, +e.target.value)} style={selectStyle}>
                 {[0, 1, 2, 3].map((n) => <option key={n} value={n}>{n} คน</option>)}
