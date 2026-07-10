@@ -4,8 +4,22 @@
   box-sizing: border-box;
 }
 
+html, body {
+  height: 100%;
+  overflow: hidden; /* กัน scroll เด้ง (rubber-band) ของ iOS Safari — เนื้อหาจริงเลื่อนในกล่องข้างในของแอปแทน */
+  position: fixed;  /* กันหน้าจอขยับ/ลากได้ตอนอยู่บน iOS */
+  width: 100%;
+  overscroll-behavior: none; /* กัน scroll เด้งเวลาเลื่อนสุดขอบ */
+  touch-action: manipulation; /* กันซูมนิ้ว (pinch-zoom) และดับเบิลแท็ปซูม แต่ยังลาก/เลื่อนปกติได้ */
+}
+
 body {
   margin: 0;
   font-family: sans-serif;
   background-color: #f3f4f6;
+}
+
+#root {
+  height: 100%;
+  overflow: hidden;
 }

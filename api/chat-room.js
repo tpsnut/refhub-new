@@ -68,6 +68,38 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
+    if (action === "members") {
+      const { threadId } = req.body || {};
+      if (!threadId) return res.status(400).json({ error: "ไม่พบห้อง" });
+      const { data: thread } = await admin.from("chat_threads").select("created_by").eq("id", threadId).maybeSingle();
+      if (!thread) return res.status(404).json({ error: "ไม่พบห้องนี้" });
+      const { data: members } = await admin.from("chat_thread_members").select("user_id, muted").eq("thread_id", threadId);
+      const ids = (members || []).map((m) => m.user_id);
+      const { data: profiles } = ids.length ? await admin.from("profiles").select("id, name, avatar_url").in("id", ids) : { data: [] };
+      const list = (members || []).map((m) => ({
+        userId: m.user_id, muted: m.muted,
+        name: (profiles || []).find((p) => p.id === m.user_id)?.name || "ไม่ทราบชื่อ",
+        avatarUrl: (profiles || []).find((p) => p.id === m.user_id)?.avatar_url || null,
+        isCreator: m.user_id === thread.created_by,
+      }));
+      return res.status(200).json({ ok: true, members: list, isCreator: thread.created_by === callerId });
+    }
+
+    if (action === "kick" || action === "toggle_mute") {
+      const { threadId, targetUserId, muted } = req.body || {};
+      if (!threadId || !targetUserId) return res.status(400).json({ error: "ข้อมูลไม่ครบ" });
+      const { data: thread } = await admin.from("chat_threads").select("created_by").eq("id", threadId).maybeSingle();
+      if (!thread) return res.status(404).json({ error: "ไม่พบห้องนี้" });
+      if (thread.created_by !== callerId) return res.status(403).json({ error: "ทำได้เฉพาะคนที่สร้างห้องเท่านั้น" });
+      if (targetUserId === callerId) return res.status(400).json({ error: "จัดการตัวเองด้วยวิธีนี้ไม่ได้" });
+      if (action === "kick") {
+        await admin.from("chat_thread_members").delete().eq("thread_id", threadId).eq("user_id", targetUserId);
+      } else {
+        await admin.from("chat_thread_members").update({ muted: !!muted }).eq("thread_id", threadId).eq("user_id", targetUserId);
+      }
+      return res.status(200).json({ ok: true });
+    }
+
     return res.status(400).json({ error: "ไม่รู้จัก action นี้" });
   } catch (e) {
     return res.status(500).json({ error: e.message });

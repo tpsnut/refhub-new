@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import {
   Home, Lightbulb, TrendingUp, Plus, Newspaper, Languages, StickyNote,
   Sun, Moon, Send, Check, Trash2, X, Wallet, Target, BookOpen, ChevronRight,
-  Sparkles, Clock, Search, Volume2, VolumeX, Pencil, Download, ArrowLeft,
+  Sparkles, Clock, Search, Volume2, VolumeX, Pencil, Download, ArrowLeft, Users,
   Utensils, Car, ShoppingBag, Receipt, Gamepad2, HeartPulse, Briefcase, Gift, Coffee, Music,
   Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi, MessageCircle, MoreVertical, KeyRound, MapPin, Copy, LockKeyhole, LogOut
 } from "lucide-react";
@@ -403,28 +403,8 @@ export default function RefHub() {
 // (นำระบบ background sync แบบ diff-เทียบ ของโน้ต ออกไปแล้ว เหตุผลเดียวกับเป้าหมาย/รายรับ-รายจ่าย
 // ตอนนี้ทุกการเพิ่ม/แก้ไข/ลบ/ปักหมุด โน้ต จะยิงบันทึกตรงไปที่ Supabase ทันทีที่จุดเกิดเหตุแทน)
 
-// 🌐 sync เพลย์ลิสต์ (playlist) ขึ้น Supabase — ไม่ sync ไฟล์ที่ persist:false (ไฟล์ใหญ่ >1.5MB)
-useEffect(() => {
-  if (!loaded || !userId) return;
-  const syncPlaylistToCloud = async () => {
-    try {
-      const syncable = playlist.filter((p) => p.kind === "yt" || (p.kind === "file" && p.persist));
-      const { data: currentDb } = await supabase.from("playlists").select("id").eq("user_id", userId);
-      if (!currentDb) return;
-      const dbIds = currentDb.map((x) => x.id);
-      const localIds = syncable.map((x) => x.id);
-      for (const p of syncable) {
-        if (!dbIds.includes(p.id)) {
-          await supabase.from("playlists").insert({ id: p.id, user_id: userId, kind: p.kind, name: p.name, url: p.url || null, yt_id: p.ytId || null, src: p.kind === "file" ? p.src : null, persist: !!p.persist });
-        }
-      }
-      for (const dbP of currentDb) {
-        if (!localIds.includes(dbP.id)) await supabase.from("playlists").delete().eq("id", dbP.id);
-      }
-    } catch (e) {}
-  };
-  syncPlaylistToCloud();
-}, [playlist, loaded]);
+// (นำระบบ background sync แบบ diff-เทียบ ของเพลย์ลิสต์ ออกไปแล้ว เหตุผลเดียวกับเป้าหมาย/รายรับ-รายจ่าย/โน้ต
+// ตอนนี้ทุกการเพิ่ม/ลบเพลง จะยิงบันทึกตรงไปที่ Supabase ทันทีที่จุดเกิดเหตุแทน)
 
   useEffect(() => { 
     if (!loaded) return; 
@@ -583,7 +563,10 @@ useEffect(() => {
       } catch (e) {}
     };
     computeUnread();
-    const channel = supabase.channel("unread-watch").on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages" }, computeUnread).subscribe();
+    const channel = supabase.channel("unread-watch")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages" }, computeUnread)
+      .on("postgres_changes", { event: "*", schema: "public", table: "chat_reads", filter: `user_id=eq.${userId}` }, computeUnread)
+      .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [userId, authProfile?.can_chat, authProfile?.role]);
 
@@ -664,6 +647,10 @@ useEffect(() => {
     });
   };
   const toggleFavorite = (id) => setPlaylist((p) => p.map((x) => (x.id === id ? { ...x, favorite: !x.favorite } : x)));
+  const renameTrack = (id, name) => {
+    setPlaylist((p) => p.map((x) => (x.id === id ? { ...x, name } : x)));
+    if (userId) supabase.from("playlists").update({ name }).eq("id", id).then(() => {}, () => {});
+  };
 
   // 💰 จัดการหมวดหมู่การเงิน (เพิ่ม/ลบ/สลับลำดับ) — ใช้ได้ทั้งฝั่งรับเข้าและจ่ายออก
   const moveCategory = (id, dir) => {
@@ -840,7 +827,7 @@ useEffect(() => {
         {chatOpen && <ChatModal t={t} M={M} mentor={mentor} userId={userId} session={session} close={() => setChatOpen(false)} />}
         {editProfile && <EditProfile t={t} M={M} profile={profile} setProfile={setProfile} userId={userId} authProfile={authProfile} setAuthProfile={setAuthProfile} close={() => setEditProfile(false)} />}
         {searchOpen && <SearchOverlay t={t} notes={notes} goals={goals} tx={tx} categories={categories} setPage={setPage} close={() => setSearchOpen(false)} />}
-        {musicOpen && <MusicModal {...{ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, moveTrack, toggleFavorite, volume, setVolume, close: () => setMusicOpen(false) }} />}
+        {musicOpen && <MusicModal {...{ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, moveTrack, toggleFavorite, volume, setVolume, userId, close: () => setMusicOpen(false) }} />}
         {addOpen && <AddTxModal t={t} tx={tx} setTx={setTx} categories={categories} moveCategory={moveCategory} deleteCategory={deleteCategory} addCategory={addCategory} userId={userId} close={() => setAddOpen(false)} />}
         {exportText != null && <ExportModal t={t} text={exportText} close={() => setExportText(null)} />}
 
@@ -1099,24 +1086,53 @@ function ytExtract(url) {
   return m ? m[1] : null;
 }
 
-function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, moveTrack, toggleFavorite, volume, setVolume, close }) {
+function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, moveTrack, toggleFavorite, volume, setVolume, userId, close }) {
   const [ytUrl, setYtUrl] = useState("");
   const fileRef = useRef(null);
   const [saved, setSaved] = useState(false);
   const [tab, setTab] = useState("all"); // "all" | "fav" | folder.id
   const flashSaved = () => { setSaved(true); setTimeout(() => setSaved(false), 1800); };
+  const [pendingYt, setPendingYt] = useState(null); // { id, url, name } รอยืนยัน/แก้ชื่อก่อนบันทึกจริง
+  const [ytLoading, setYtLoading] = useState(false);
 
   const activeFolderId = tab === "all" || tab === "fav" ? null : tab;
-  const addYt = () => {
+  const addYt = async () => {
     const id = ytExtract(ytUrl.trim());
     if (!id) { alert("ลิงก์ YouTube ไม่ถูกต้อง ลองก๊อปลิงก์จากปุ่ม Share ของ YouTube"); return; }
-    setPlaylist((p) => [...p, { id: uid(), kind: "yt", name: "YouTube · " + id, ytId: id, url: ytUrl.trim(), favorite: false, folderId: activeFolderId }]); setYtUrl(""); flashSaved();
+    setYtLoading(true);
+    let realName = "YouTube · " + id;
+    try {
+      // oEmbed ของ YouTube ดึงชื่อวิดีโอจริงได้ฟรี ไม่ต้องใช้ API key
+      const r = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(ytUrl.trim())}&format=json`);
+      if (r.ok) { const data = await r.json(); if (data.title) realName = data.title; }
+    } catch (e) {}
+    setYtLoading(false);
+    setPendingYt({ id, url: ytUrl.trim(), name: realName });
+  };
+  const confirmAddYt = () => {
+    if (!pendingYt) return;
+    const track = { id: uid(), kind: "yt", name: pendingYt.name.trim() || "YouTube · " + pendingYt.id, ytId: pendingYt.id, url: pendingYt.url, favorite: false, folderId: activeFolderId };
+    setPlaylist((p) => [...p, track]);
+    if (userId) supabase.from("playlists").insert({ id: track.id, user_id: userId, kind: track.kind, name: track.name, url: track.url, yt_id: track.ytId, persist: true }).then(() => {}, () => {});
+    setYtUrl(""); setPendingYt(null); flashSaved();
   };
   const addFileInner = (e) => {
     const f = e.target.files?.[0]; if (!f) return;
     const small = f.size < 1.5 * 1024 * 1024;
-    if (small) { const rd = new FileReader(); rd.onload = () => { setPlaylist((p) => [...p, { id: uid(), kind: "file", name: f.name, src: rd.result, persist: true, favorite: false, folderId: activeFolderId }]); flashSaved(); }; rd.readAsDataURL(f); }
-    else { const url = URL.createObjectURL(f); setPlaylist((p) => [...p, { id: uid(), kind: "file", name: f.name + " (ไม่บันทึกถาวร)", src: url, persist: false, favorite: false, folderId: activeFolderId }]); flashSaved(); }
+    if (small) {
+      const rd = new FileReader();
+      rd.onload = () => {
+        const track = { id: uid(), kind: "file", name: f.name, src: rd.result, persist: true, favorite: false, folderId: activeFolderId };
+        setPlaylist((p) => [...p, track]);
+        if (userId) supabase.from("playlists").insert({ id: track.id, user_id: userId, kind: track.kind, name: track.name, src: track.src, persist: true }).then(() => {}, () => {});
+        flashSaved();
+      };
+      rd.readAsDataURL(f);
+    } else {
+      const url = URL.createObjectURL(f);
+      setPlaylist((p) => [...p, { id: uid(), kind: "file", name: f.name + " (ไม่บันทึกถาวร)", src: url, persist: false, favorite: false, folderId: activeFolderId }]);
+      flashSaved();
+    }
   };
   const [newFolderName, setNewFolderName] = useState("");
   const [addingFolder, setAddingFolder] = useState(false);
@@ -1164,8 +1180,18 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
           <input ref={fileRef} type="file" accept="audio/*,video/mp4,.mp3,.mp4" onChange={addFileInner} style={{ display: "none" }} />
           <div style={{ display: "flex", gap: 8 }}>
             <input value={ytUrl} onChange={(e) => setYtUrl(e.target.value)} placeholder="วางลิงก์ YouTube..." style={input(t)} />
-            <button onClick={addYt} style={{ ...primaryBtn(t), padding: "0 14px", display: "flex", alignItems: "center", gap: 5 }}><Link2 size={15} /> เพิ่ม</button>
+            <button onClick={addYt} disabled={ytLoading} style={{ ...primaryBtn(t), padding: "0 14px", display: "flex", alignItems: "center", gap: 5, opacity: ytLoading ? 0.6 : 1 }}><Link2 size={15} /> {ytLoading ? "กำลังดึงชื่อ..." : "เพิ่ม"}</button>
           </div>
+          {pendingYt && (
+            <div style={{ marginTop: 10, padding: 12, borderRadius: 12, background: t.inputBg, border: `1px solid ${t.border}` }}>
+              <div style={{ fontSize: 11, color: t.sub, marginBottom: 6 }}>ตั้งชื่อเพลงนี้ (แก้ได้ก่อนบันทึก):</div>
+              <input value={pendingYt.name} onChange={(e) => setPendingYt((p) => ({ ...p, name: e.target.value }))} onKeyDown={(e) => e.key === "Enter" && confirmAddYt()} style={{ ...input(t), marginBottom: 8 }} autoFocus />
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => setPendingYt(null)} style={{ flex: 1, padding: "9px 0", borderRadius: 10, border: `1px solid ${t.border}`, background: "none", color: t.sub, cursor: "pointer", fontSize: 12.5, fontWeight: 700 }}>ยกเลิก</button>
+                <button onClick={confirmAddYt} style={{ ...primaryBtn(t), flex: 1, padding: "9px 0" }}>บันทึกเพลงนี้</button>
+              </div>
+            </div>
+          )}
           {activeFolderId && <div style={{ fontSize: 10.5, color: t.faint, marginTop: 8 }}>เพลงที่เพิ่มใหม่จะลงหมวด "{folders.find((f) => f.id === activeFolderId)?.name}" ทันที</div>}
         </div>
         {saved && <div style={{ textAlign: "center", fontSize: 12, fontWeight: 700, color: "#2E9E6B", marginBottom: 10 }}>✓ บันทึกลงเพลย์ลิสต์แล้ว</div>}
@@ -1207,13 +1233,13 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
               folders={folders} isFirst={i === 0} isLast={i === shown.length - 1}
               onPlay={() => playTrack(tr)} onToggle={togglePlay}
               onDel={() => {
-                if (tab === "all") setPlaylist((p) => p.filter((x) => x.id !== tr.id));       // แท็บทั้งหมด -> ลบจริง
+                if (tab === "all") { setPlaylist((p) => p.filter((x) => x.id !== tr.id)); if (userId) supabase.from("playlists").delete().eq("id", tr.id).then(() => {}, () => {}); } // แท็บทั้งหมด -> ลบจริง
                 else if (tab === "fav") toggleFavorite(tr.id);                                   // แท็บโปรด -> แค่เอาออกจากโปรด
                 else setTrackFolder(tr.id, null);                                                 // แท็บหมวดหมู่ -> แค่เอาออกจากหมวด ไม่ลบต้นฉบับ
               }}
               onFav={() => toggleFavorite(tr.id)}
               onMoveUp={() => moveTrack(tr.id, -1)} onMoveDown={() => moveTrack(tr.id, 1)}
-              onFolder={(fid) => setTrackFolder(tr.id, fid)} />
+              onFolder={(fid) => setTrackFolder(tr.id, fid)} onRename={(name) => renameTrack(tr.id, name)} />
           ))}
         </div>
         <div style={{ fontSize: 10.5, color: t.faint, textAlign: "center", marginTop: 14 }}>
@@ -1224,8 +1250,11 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
   );
 }
 
-function TrackRow({ t, M, track, active, playing, folders, isFirst, isLast, onPlay, onToggle, onDel, onFav, onMoveUp, onMoveDown, onFolder }) {
+function TrackRow({ t, M, track, active, playing, folders, isFirst, isLast, onPlay, onToggle, onDel, onFav, onMoveUp, onMoveDown, onFolder, onRename }) {
   const icon = track.kind === "yt" ? <Music size={16} color="#E0507B" /> : track.kind === "file" ? <Music size={16} color="#3DA5D9" /> : <Sparkles size={16} color={t.accent} />;
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState(track.name);
+  const saveRename = () => { if (editName.trim()) onRename?.(editName.trim()); setEditing(false); };
   return (
     <div style={{ ...card(t), padding: "10px 12px", border: `1px solid ${active ? t.accent : t.border}` }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -1233,7 +1262,11 @@ function TrackRow({ t, M, track, active, playing, folders, isFirst, isLast, onPl
           {active && playing ? <Pause size={15} /> : <Play size={15} />}
         </button>
         <span style={{ flexShrink: 0 }}>{icon}</span>
-        <div style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: t.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{track.name}</div>
+        {editing ? (
+          <input value={editName} onChange={(e) => setEditName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveRename()} onBlur={saveRename} autoFocus style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, border: `1px solid ${t.accent}`, borderRadius: 8, padding: "3px 6px", background: t.inputBg, color: t.text }} />
+        ) : (
+          <div onClick={() => { setEditName(track.name); setEditing(true); }} style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: t.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", cursor: "pointer" }} title="กดเพื่อแก้ชื่อ">{track.name}</div>
+        )}
         <button onClick={onFav} style={ghost} title="โปรด"><Sparkles size={15} color={track.favorite ? "#E0B24A" : t.faint} fill={track.favorite ? "#E0B24A" : "none"} /></button>
         {track.kind === "file" && (
           <a href={track.src} download={track.name} style={{ ...ghost, display: "grid", placeItems: "center" }} title="ดาวน์โหลด"><Download size={15} color={t.faint} /></a>
@@ -1939,20 +1972,37 @@ function ChatEntryPage({ t, M, userId, authProfile, session, openThread }) {
       const { data: allMembers } = await supabase.from("chat_thread_members").select("thread_id, user_id").in("thread_id", threadIds);
       const otherIds = [...new Set((allMembers || []).filter((m) => m.user_id !== userId).map((m) => m.user_id))];
       const { data: otherProfiles } = otherIds.length ? await supabase.from("profiles").select("id, name, avatar_url").in("id", otherIds) : { data: [] };
+      const { data: reads } = await supabase.from("chat_reads").select("thread_id, last_read_at").eq("user_id", userId);
+      const readMap = Object.fromEntries((reads || []).map((r) => [r.thread_id, r.last_read_at]));
+      const unreadCounts = {};
+      await Promise.all(threadIds.map(async (tid) => {
+        const since = readMap[tid] || "1970-01-01T00:00:00Z";
+        const { count } = await supabase.from("chat_messages").select("id", { count: "exact", head: true }).eq("thread_id", tid).gt("created_at", since).neq("sender_id", userId);
+        unreadCounts[tid] = count || 0;
+      }));
 
       const list = (threads || []).map((th) => {
         if (th.type === "direct") {
           const otherUserId = (allMembers || []).find((m) => m.thread_id === th.id && m.user_id !== userId)?.user_id;
           const otherProfile = (otherProfiles || []).find((p) => p.id === otherUserId);
-          return { id: th.id, name: otherProfile?.name || "เพื่อน", type: "direct", avatarUrl: otherProfile?.avatar_url || null };
+          return { id: th.id, name: otherProfile?.name || "เพื่อน", type: "direct", avatarUrl: otherProfile?.avatar_url || null, unread: unreadCounts[th.id] || 0 };
         }
-        return { id: th.id, name: th.name || "ห้องแชท", type: "group", avatarUrl: th.avatar_url, joinCode: th.created_by === userId ? th.join_code : null, createdBy: th.created_by };
+        return { id: th.id, name: th.name || "ห้องแชท", type: "group", avatarUrl: th.avatar_url, joinCode: th.created_by === userId ? th.join_code : null, createdBy: th.created_by, unread: unreadCounts[th.id] || 0 };
       });
       setRooms(list);
     } catch (e) {} finally { setLoading(false); }
   };
   const hasFullAccess = authProfile?.role === "admin" || authProfile?.role === "trusted";
   useEffect(() => { if (authProfile?.can_chat || hasFullAccess) loadRooms(); }, [authProfile?.can_chat, hasFullAccess]);
+  // 🔴 อัปเดตจุดแดงแบบสด ทั้งตอนมีข้อความใหม่เข้ามา และตอนอ่านแล้ว (ไม่ต้องรอรีเฟรช)
+  useEffect(() => {
+    if (!authProfile?.can_chat && !hasFullAccess) return;
+    const channel = supabase.channel("room-list-unread-watch")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages" }, loadRooms)
+      .on("postgres_changes", { event: "*", schema: "public", table: "chat_reads", filter: `user_id=eq.${userId}` }, loadRooms)
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [authProfile?.can_chat, hasFullAccess, userId]);
 
   const closeSheet = () => { setSheet(null); setErr(""); setFriendCode(""); setJoinCode(""); setRoomName(""); setRoomAvatar(null); setRoomAvatarFile(null); setCreatedRoom(null); };
 
@@ -2053,6 +2103,9 @@ function ChatEntryPage({ t, M, userId, authProfile, session, openThread }) {
                 )}
                 <div style={{ fontSize: 11, color: t.text, marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 70 }}>{r.name}</div>
               </button>
+              {r.unread > 0 && (
+                <div style={{ position: "absolute", top: -4, left: -2, minWidth: 18, height: 18, borderRadius: 9, background: "#D9534F", color: "#fff", fontSize: 10, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px", border: `2px solid ${t.page}` }}>{r.unread > 9 ? "9+" : r.unread}</div>
+              )}
               {r.joinCode && (
                 <button onClick={(e) => { e.stopPropagation(); setCreatedRoom({ threadId: r.id, name: r.name, avatarUrl: r.avatarUrl, joinCode: r.joinCode }); setSheet("created"); }} style={{ position: "absolute", top: -2, right: 4, width: 22, height: 22, borderRadius: 11, background: t.surface, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }} title="ดูโค้ดเชิญ">
                   <KeyRound size={11} color={t.sub} />
@@ -2153,6 +2206,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack }) 
   const [reads, setReads] = useState({}); // user_id -> last_read_at ของคนอื่นในห้อง
   const [lightbox, setLightbox] = useState(null); // url รูปที่กำลังดูเต็มจอ (null = ไม่ได้เปิดดู)
   const [confirmLeave, setConfirmLeave] = useState(false); // "ยืนยัน" | "" -> โหมด: "leave" (ออกจากห้อง) หรือ "delete" (ลบถาวร)
+  const [showMembers, setShowMembers] = useState(false);
   const [leaveErr, setLeaveErr] = useState("");
   const isCreator = thread.createdBy && thread.createdBy === userId;
   const leaveRoom = async () => {
@@ -2250,8 +2304,9 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack }) 
   const send = async () => {
     if (!text.trim()) return;
     const t2 = text.trim(); setText("");
-    await supabase.from("chat_messages").insert({ thread_id: thread.id, sender_id: userId, text: t2 });
-    notifyPush(otherMembers.map((m) => m.id), profile?.name || "ข้อความใหม่", t2, session?.access_token);
+    const { error } = await supabase.from("chat_messages").insert({ thread_id: thread.id, sender_id: userId, text: t2 });
+    if (error) { setLeaveErr("ส่งข้อความไม่สำเร็จ (อาจถูกปิดไม่ให้พิมพ์ในห้องนี้): " + error.message); setText(t2); return; }
+    notifyPush(otherMembers.map((m) => m.id), `${profile?.name || "ข้อความใหม่"} · ${thread.name}`, t2, session?.access_token);
   };
   const startEdit = (m) => { setEditingId(m.id); setEditText(m.text); };
   const saveEdit = async () => {
@@ -2276,7 +2331,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack }) 
         thread_id: thread.id, sender_id: userId, text: "",
         attachment_url: data.publicUrl, attachment_name: f.name, attachment_type: isImage ? "image" : "file",
       });
-      notifyPush(otherMembers.map((m) => m.id), profile?.name || "ข้อความใหม่", isImage ? "ส่งรูปภาพมา" : `ส่งไฟล์: ${f.name}`, session?.access_token);
+      notifyPush(otherMembers.map((m) => m.id), `${profile?.name || "ข้อความใหม่"} · ${thread.name}`, isImage ? "ส่งรูปภาพมา" : `ส่งไฟล์: ${f.name}`, session?.access_token);
     } catch (err) {
       alert("แนบไฟล์ไม่สำเร็จ: " + err.message);
     } finally { setUploading(false); }
@@ -2295,6 +2350,9 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack }) 
           <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>{thread.name}</div>
           {!thread.isGroup && otherMembers[0]?.status_message && <div style={{ fontSize: 11, color: t.sub, fontStyle: "italic" }}>{otherMembers[0].status_message}</div>}
         </div>
+        {isCreator && (
+          <button onClick={() => setShowMembers(true)} style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 17, background: t.surface, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }} title="จัดการสมาชิกห้อง"><Users size={16} color={t.sub} /></button>
+        )}
         {confirmLeave === "leave" ? (
           <button onClick={leaveRoom} style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 5, padding: "7px 12px", borderRadius: 10, border: "none", background: "#D9534F", color: "#fff", cursor: "pointer", fontSize: 11.5, fontWeight: 700 }}>ยืนยันออก?</button>
         ) : confirmLeave === "delete" ? (
@@ -2370,7 +2428,78 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack }) 
         <button onClick={send} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: 46, display: "grid", placeItems: "center" }}><Send size={17} /></button>
       </div>
       {lightbox && <ImageLightbox src={lightbox} onClose={() => setLightbox(null)} />}
+      {showMembers && <RoomMembersModal t={t} threadId={thread.id} session={session} close={() => setShowMembers(false)} />}
     </div>
+  );
+}
+
+function RoomMembersModal({ t, threadId, session, close }) {
+  const [members, setMembers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
+  const [confirmKickId, setConfirmKickId] = useState(null);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const r = await fetch("/api/chat-room", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "members", threadId, callerToken: session?.access_token }) });
+      const data = await r.json();
+      if (!r.ok) { setErr(data.error); setLoading(false); return; }
+      setMembers(data.members || []);
+    } catch (e) { setErr(e.message); }
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
+
+  const kick = async (targetUserId) => {
+    await fetch("/api/chat-room", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "kick", threadId, targetUserId, callerToken: session?.access_token }) });
+    setConfirmKickId(null);
+    load();
+  };
+  const toggleMute = async (targetUserId, muted) => {
+    await fetch("/api/chat-room", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "toggle_mute", threadId, targetUserId, muted, callerToken: session?.access_token }) });
+    load();
+  };
+
+  return (
+    <ModalPortal>
+      <div style={overlay} onClick={close}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "80vh", overflowY: "auto" }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 4 }}>จัดการสมาชิกห้อง</div>
+          <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 16 }}>เตะออก หรือปิดไม่ให้พิมพ์ (mute) ได้เฉพาะคนที่ไม่ใช่ตัวคุณเอง</div>
+          {err && <div style={{ fontSize: 12, color: "#D9534F", marginBottom: 10 }}>{err}</div>}
+          {loading && <Empty t={t} text="กำลังโหลด..." />}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {members.map((m) => (
+              <div key={m.userId} style={{ ...card(t), padding: 12, display: "flex", alignItems: "center", gap: 10 }}>
+                {m.avatarUrl ? (
+                  <img src={m.avatarUrl} alt="" style={{ width: 34, height: 34, borderRadius: 10, objectFit: "cover" }} />
+                ) : (
+                  <div style={{ width: 34, height: 34, borderRadius: 10, background: colorFor(m.name), color: "#fff", display: "grid", placeItems: "center", fontSize: 13, fontWeight: 700 }}>{m.name[0]}</div>
+                )}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: t.text, display: "flex", alignItems: "center", gap: 6 }}>
+                    {m.name}
+                    {m.isCreator && <span style={{ fontSize: 9, fontWeight: 800, color: t.accent, background: `${t.accent}18`, padding: "1px 6px", borderRadius: 8 }}>หัวห้อง</span>}
+                  </div>
+                  {m.muted && <div style={{ fontSize: 10.5, color: "#D9534F" }}>ปิดไม่ให้พิมพ์อยู่</div>}
+                </div>
+                {!m.isCreator && (
+                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                    <button onClick={() => toggleMute(m.userId, !m.muted)} style={{ padding: "6px 10px", borderRadius: 9, border: `1px solid ${m.muted ? "#D9534F" : t.border}`, background: m.muted ? "#D9534F18" : "none", color: m.muted ? "#D9534F" : t.sub, cursor: "pointer", fontSize: 11, fontWeight: 700 }}>{m.muted ? "เปิดพิมพ์" : "ปิดพิมพ์"}</button>
+                    {confirmKickId === m.userId ? (
+                      <button onClick={() => kick(m.userId)} style={{ padding: "6px 10px", borderRadius: 9, border: "none", background: "#D9534F", color: "#fff", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>ยืนยัน?</button>
+                    ) : (
+                      <button onClick={() => setConfirmKickId(m.userId)} style={{ padding: "6px 10px", borderRadius: 9, border: "1px solid #D9534F", background: "none", color: "#D9534F", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>เตะออก</button>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </ModalPortal>
   );
 }
 
