@@ -7,10 +7,8 @@
 html, body {
   height: 100%;
   overflow: hidden; /* กัน scroll เด้ง (rubber-band) ของ iOS Safari — เนื้อหาจริงเลื่อนในกล่องข้างในของแอปแทน */
-  position: fixed;  /* กันหน้าจอขยับ/ลากได้ตอนอยู่บน iOS */
-  width: 100%;
-  overscroll-behavior: none; /* กัน scroll เด้งเวลาเลื่อนสุดขอบ */
-  touch-action: manipulation; /* กันซูมนิ้ว (pinch-zoom) และดับเบิลแท็ปซูม แต่ยังลาก/เลื่อนปกติได้ */
+  overscroll-behavior: none; /* กัน scroll เด้งเวลาเลื่อนสุดขอบ (ผลข้างเคียง: android จะดึงลง refresh ไม่ได้ ซึ่งตั้งใจแบบนี้) */
+  touch-action: pan-y; /* อนุญาตแค่เลื่อนขึ้น-ลงปกติ ปิดซูมนิ้ว (pinch-zoom) จริงๆ ทั้งสองระบบ (manipulation เดิมไม่ได้ปิดซูมนิ้ว เป็นความเข้าใจผิดของรอบก่อน) */
 }
 
 body {

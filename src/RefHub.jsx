@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import {
   Home, Lightbulb, TrendingUp, Plus, Newspaper, Languages, StickyNote,
   Sun, Moon, Send, Check, Trash2, X, Wallet, Target, BookOpen, ChevronRight,
-  Sparkles, Clock, Search, Volume2, VolumeX, Pencil, Download, ArrowLeft, Users, Camera, Phone,
+  Sparkles, Clock, Search, Volume2, VolumeX, Pencil, Download, ArrowLeft, Users, Camera, Phone, Mic, MicOff, PhoneOff,
   Utensils, Car, ShoppingBag, Receipt, Gamepad2, HeartPulse, Briefcase, Gift, Coffee, Music,
   Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi, MessageCircle, MoreVertical, KeyRound, MapPin, Copy, LockKeyhole, LogOut
 } from "lucide-react";
@@ -173,45 +173,158 @@ function palette(mode, themeId) {
 // กันปัญหาติดอยู่ใน "เขตซ้อนชั้น" ของกล่องเนื้อหา ซึ่งทำให้ z-index สูงแค่ไหนก็ไม่มีทางซ้อนทับแถบเมนูด้านล่างได้
 // 🖼️ ดูรูปเต็มจอ — ใช้ร่วมกันได้ทุกที่ในแอปที่มีรูป (แชท, avatar ฯลฯ)
 // 📞 คุยด้วยเสียง/วิดีโอ — ฝัง Jitsi Meet ไว้ในแอป (ฟรี ไม่ต้องมี API key) ทุกคนในห้องแชทเดียวกันเจอห้องคุยเดียวกันอัตโนมัติ
-function VideoCallModal({ t, roomName, displayName, onClose }) {
-  const containerRef = useRef(null);
-  const apiRef = useRef(null);
-  const [loading, setLoading] = useState(true);
+// 📞 คุยด้วยเสียง — ทำเอง ไม่พึ่งบริการนอก (WebRTC + Supabase Realtime ส่งสัญญาณเชื่อมสาย) ไม่มีการบังคับล็อกอินใดๆ
+// ใช้ STUN สาธารณะฟรีของ Google เชื่อมสายตรง (ไม่มี TURN server สำรอง เผื่อบางเครือข่ายที่เข้มงวดมากอาจเชื่อมไม่ติด แต่ฟรี 100%)
+function AudioCallModal({ t, threadId, userId, displayName, onClose }) {
+  const [participants, setParticipants] = useState([]); // [{userId, name}]
+  const [muted, setMuted] = useState(false);
+  const [connecting, setConnecting] = useState(true);
+  const [err, setErr] = useState("");
+  const [volumeBoost, setVolumeBoost] = useState(1.6); // 1 = ปกติ, มากกว่า 1 = ดังขึ้น (ปรับได้ด้วยปุ่ม 🔊)
+  const localStreamRef = useRef(null);
+  const peersRef = useRef({});
+  const audioCtxRef = useRef(null);
+  const gainNodesRef = useRef({}); // userId -> GainNode ของแต่ละคน ปรับความดังพร้อมกันทีเดียวได้
+  const channelRef = useRef(null);
+  const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }];
+  const VOLUME_LEVELS = [1, 1.6, 2.2]; // ปกติ -> ดัง -> ดังมาก -> วนกลับ
+
+  // ปรับความดังของทุกคนที่กำลังคุยอยู่ทันทีเมื่อเปลี่ยนระดับเสียง
+  useEffect(() => {
+    Object.values(gainNodesRef.current).forEach((g) => { g.gain.value = volumeBoost; });
+  }, [volumeBoost]);
 
   useEffect(() => {
     let cancelled = false;
-    const start = () => {
-      if (cancelled || !containerRef.current) return;
-      apiRef.current = new window.JitsiMeetExternalAPI("meet.jit.si", {
-        roomName: `refhub-${roomName}`,
-        parentNode: containerRef.current,
-        width: "100%",
-        height: "100%",
-        userInfo: { displayName: displayName || "ฉัน" },
-        configOverwrite: { prejoinPageEnabled: false, disableDeepLinking: true },
-        interfaceConfigOverwrite: { SHOW_JITSI_WATERMARK: false, SHOW_WATERMARK_FOR_GUESTS: false, MOBILE_APP_PROMO: false },
-      });
-      apiRef.current.addEventListener("videoConferenceJoined", () => setLoading(false));
-      apiRef.current.addEventListener("readyToClose", onClose);
+    const init = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, // autoGainControl = ขยายเสียงพูดที่เบา/ไกลจากไมค์ให้ดังขึ้นอัตโนมัติ ไม่ต้องจ่อไมค์
+          video: false,
+        });
+        if (cancelled) { stream.getTracks().forEach((tr) => tr.stop()); return; }
+        localStreamRef.current = stream;
+        setConnecting(false);
+
+        // 🔊 ตั้ง AudioContext ไว้ขยายเสียงที่ได้ยินจากอีกฝ่ายให้ดังขึ้นกว่าปกติ (ทำตอนนี้เลยเพราะเพิ่งมี user gesture จากการกดปุ่มโทร ทำให้ iOS ยอมให้เล่นเสียงได้)
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioCtx();
+        await audioCtx.resume().catch(() => {});
+        audioCtxRef.current = audioCtx;
+
+        const channel = supabase.channel(`call-${threadId}`, { config: { broadcast: { self: false } } });
+        channelRef.current = channel;
+
+        const createPeer = (otherId, otherName) => {
+          const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+          stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+          pc.onicecandidate = (e) => { if (e.candidate) channel.send({ type: "broadcast", event: "signal", payload: { kind: "ice", from: userId, to: otherId, candidate: e.candidate } }); };
+          pc.ontrack = (e) => {
+            // ขยายเสียงที่ได้ยินจากอีกฝ่ายด้วย GainNode (ดังกว่าเล่นผ่าน <audio> ธรรมดาตรงๆ) ปรับได้จากปุ่ม 🔊 ในหน้าคอล
+            const source = audioCtx.createMediaStreamSource(e.streams[0]);
+            const gainNode = audioCtx.createGain();
+            gainNode.gain.value = volumeBoost;
+            source.connect(gainNode).connect(audioCtx.destination);
+            gainNodesRef.current[otherId] = gainNode;
+          };
+          peersRef.current[otherId] = pc;
+          setParticipants((p) => (p.find((x) => x.userId === otherId) ? p : [...p, { userId: otherId, name: otherName || "เพื่อน" }]));
+          return pc;
+        };
+
+        channel.on("broadcast", { event: "signal" }, async ({ payload }) => {
+          if (payload.to !== userId) return;
+          if (payload.kind === "offer") {
+            const pc = createPeer(payload.from, payload.fromName);
+            await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            channel.send({ type: "broadcast", event: "signal", payload: { kind: "answer", from: userId, to: payload.from, sdp: answer } });
+          } else if (payload.kind === "answer") {
+            await peersRef.current[payload.from]?.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+          } else if (payload.kind === "ice") {
+            try { await peersRef.current[payload.from]?.addIceCandidate(payload.candidate); } catch (e) {}
+          }
+        });
+
+        channel.on("broadcast", { event: "join" }, async ({ payload }) => {
+          if (payload.userId === userId) return;
+          const pc = createPeer(payload.userId, payload.name);
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          channel.send({ type: "broadcast", event: "signal", payload: { kind: "offer", from: userId, fromName: displayName, to: payload.userId, sdp: offer } });
+        });
+
+        channel.on("broadcast", { event: "leave" }, ({ payload }) => {
+          peersRef.current[payload.userId]?.close();
+          delete peersRef.current[payload.userId];
+          delete gainNodesRef.current[payload.userId];
+          setParticipants((p) => p.filter((x) => x.userId !== payload.userId));
+        });
+
+        channel.subscribe((status) => {
+          if (status === "SUBSCRIBED") channel.send({ type: "broadcast", event: "join", payload: { userId, name: displayName } });
+        });
+      } catch (e) {
+        setErr("เปิดไมค์ไม่สำเร็จ (เช็คว่าอนุญาตสิทธิ์ไมค์ให้เว็บนี้หรือยัง): " + e.message);
+      }
     };
-    if (window.JitsiMeetExternalAPI) { start(); } else {
-      const script = document.createElement("script");
-      script.src = "https://meet.jit.si/external_api.js";
-      script.onload = start;
-      document.body.appendChild(script);
-    }
-    return () => { cancelled = true; apiRef.current?.dispose(); };
-  }, [roomName]);
+    init();
+    return () => {
+      cancelled = true;
+      channelRef.current?.send({ type: "broadcast", event: "leave", payload: { userId } });
+      Object.values(peersRef.current).forEach((pc) => pc.close());
+      localStreamRef.current?.getTracks().forEach((tr) => tr.stop());
+      audioCtxRef.current?.close().catch(() => {});
+      if (channelRef.current) supabase.removeChannel(channelRef.current);
+    };
+  }, [threadId]);
+
+  const toggleMute = () => {
+    const tracks = localStreamRef.current?.getAudioTracks() || [];
+    const newEnabled = !tracks[0]?.enabled;
+    tracks.forEach((tr) => { tr.enabled = newEnabled; });
+    setMuted(!newEnabled);
+  };
 
   return (
     <ModalPortal>
-      <div style={{ position: "fixed", inset: 0, background: "#000", zIndex: 100, display: "flex", flexDirection: "column" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", background: t.page }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>📞 กำลังคุยอยู่</div>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer" }}><X size={22} color={t.text} /></button>
-        </div>
-        {loading && <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", color: "#fff", fontSize: 13 }}>กำลังเชื่อมต่อ...</div>}
-        <div ref={containerRef} style={{ flex: 1 }} />
+      <div style={{ position: "fixed", inset: 0, background: "#1A1F2E", zIndex: 100, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#fff" }}>
+        {err ? (
+          <>
+            <div style={{ fontSize: 13, color: "#F0A0A0", textAlign: "center", padding: "0 30px", marginBottom: 20 }}>{err}</div>
+            <button onClick={onClose} style={{ padding: "10px 20px", borderRadius: 12, border: "none", background: "#D9534F", color: "#fff", cursor: "pointer", fontWeight: 700 }}>ปิด</button>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: 13, opacity: .65, marginBottom: 24 }}>{connecting ? "กำลังเชื่อมต่อ..." : `🔊 กำลังคุยด้วยเสียง · ${participants.length + 1} คน`}</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 18, justifyContent: "center", marginBottom: 48, maxWidth: 320 }}>
+              <div style={{ textAlign: "center" }}>
+                <div style={{ width: 64, height: 64, borderRadius: 32, background: "#EA9552", display: "grid", placeItems: "center", fontSize: 22, fontWeight: 700, margin: "0 auto 6px" }}>{(displayName || "ฉ")[0]}</div>
+                <div style={{ fontSize: 11 }}>{displayName || "ฉัน"} (คุณ)</div>
+              </div>
+              {participants.map((p) => (
+                <div key={p.userId} style={{ textAlign: "center" }}>
+                  <div style={{ width: 64, height: 64, borderRadius: 32, background: "#5C7A99", display: "grid", placeItems: "center", fontSize: 22, fontWeight: 700, margin: "0 auto 6px" }}>{(p.name || "?")[0]}</div>
+                  <div style={{ fontSize: 11 }}>{p.name}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 22 }}>
+              <button onClick={toggleMute} style={{ width: 58, height: 58, borderRadius: 29, background: muted ? "#D9534F" : "rgba(255,255,255,.15)", border: "none", cursor: "pointer", display: "grid", placeItems: "center" }} title={muted ? "เปิดไมค์" : "ปิดไมค์"}>
+                {muted ? <MicOff size={22} color="#fff" /> : <Mic size={22} color="#fff" />}
+              </button>
+              <button onClick={() => setVolumeBoost((v) => VOLUME_LEVELS[(VOLUME_LEVELS.indexOf(v) + 1) % VOLUME_LEVELS.length])} style={{ width: 58, height: 58, borderRadius: 29, background: volumeBoost > 1 ? "#2E9E6B" : "rgba(255,255,255,.15)", border: "none", cursor: "pointer", display: "grid", placeItems: "center", position: "relative" }} title="ปรับเสียงดังขึ้น">
+                <Volume2 size={22} color="#fff" />
+                {volumeBoost > 1 && <span style={{ position: "absolute", top: -2, right: -2, background: "#fff", color: "#2E9E6B", fontSize: 9, fontWeight: 800, borderRadius: 8, padding: "1px 5px" }}>{volumeBoost === 2.2 ? "MAX" : "+"}</span>}
+              </button>
+              <button onClick={onClose} style={{ width: 58, height: 58, borderRadius: 29, background: "#D9534F", border: "none", cursor: "pointer", display: "grid", placeItems: "center" }} title="วางสาย">
+                <PhoneOff size={22} color="#fff" />
+              </button>
+            </div>
+            <div style={{ fontSize: 10.5, opacity: .5, marginTop: 14 }}>{volumeBoost === 1 ? "เสียงปกติ" : volumeBoost === 1.6 ? "เสียงดังขึ้น" : "เสียงดังมาก"} · ไมค์ปรับความดังอัตโนมัติ (ไม่ต้องจ่อ)</div>
+          </>
+        )}
       </div>
     </ModalPortal>
   );
@@ -894,9 +1007,11 @@ export default function RefHub() {
                     {adminAlerts.length > 0 && <span style={{ marginLeft: "auto", width: 8, height: 8, borderRadius: 4, background: "#D9534F" }} />}
                   </button>
                 )}
-                <button onClick={() => { setPage("locations"); setMoreMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
-                  <MapPin size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>ตำแหน่งครอบครัว</span>
-                </button>
+                {(authProfile?.can_view_locations || authProfile?.role === "admin") && (
+                  <button onClick={() => { setPage("locations"); setMoreMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
+                    <MapPin size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>ตำแหน่งล่าสุด</span>
+                  </button>
+                )}
                 <button onClick={() => { setAccountSettingsOpen(true); setMoreMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
                   <KeyRound size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>ตั้งค่าบัญชี</span>
                 </button>
@@ -1696,7 +1811,7 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts }) {
   const setApproved = async (id, approved) => { await supabase.from("profiles").update({ approved }).eq("id", id); loadMembers(); };
   const setRole = async (id, role) => { await supabase.from("profiles").update({ role }).eq("id", id); loadMembers(); };
   const setCanChat = async (id, can_chat) => { await supabase.from("profiles").update({ can_chat }).eq("id", id); loadMembers(); };
-  const setCanViewLocations = async (id, can_view_locations) => { await supabase.from("profiles").update({ can_view_locations }).eq("id", id); loadMembers(); };
+  const setCanViewLocations = async (id, can_view_locations) => { const { error } = await supabase.from("profiles").update({ can_view_locations }).eq("id", id); if (error) { alert("ตั้งสิทธิ์ดูตำแหน่งไม่สำเร็จ: " + error.message); console.error(error); } loadMembers(); };
   const remindNotification = async (id) => { await supabase.from("profiles").update({ notif_reminder_at: new Date().toISOString() }).eq("id", id); loadMembers(); };
   const setPremiumAi = async (id, premium_ai) => { await supabase.from("profiles").update({ premium_ai }).eq("id", id); loadMembers(); };
   const setMentorLimit = async (id, mentor_limit) => { await supabase.from("profiles").update({ mentor_limit }).eq("id", id); loadMembers(); };
@@ -1711,7 +1826,11 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts }) {
 
   const AvatarDot = ({ m, size = 40 }) => (
     <div style={{ position: "relative", flexShrink: 0 }}>
-      <div style={{ width: size, height: size, borderRadius: size * 0.3, background: colorFor(m.name || m.email || "?"), color: "#fff", display: "grid", placeItems: "center", fontSize: size * 0.4, fontWeight: 700 }}>{(m.name || m.email || "?")[0].toUpperCase()}</div>
+      {m.avatar_url ? (
+        <img src={m.avatar_url} alt="" style={{ width: size, height: size, borderRadius: size * 0.3, objectFit: "cover", display: "block" }} />
+      ) : (
+        <div style={{ width: size, height: size, borderRadius: size * 0.3, background: colorFor(m.name || m.email || "?"), color: "#fff", display: "grid", placeItems: "center", fontSize: size * 0.4, fontWeight: 700 }}>{(m.name || m.email || "?")[0].toUpperCase()}</div>
+      )}
       <div style={{ position: "absolute", bottom: -2, right: -2, width: size * 0.28, height: size * 0.28, borderRadius: size * 0.14, background: isOnline(m.last_seen) ? "#2E9E6B" : t.faint, border: `2px solid ${t.surface}` }} />
     </div>
   );
@@ -1849,7 +1968,11 @@ function MemberDetailModal({ t, m, isSelf, isOnline, setApproved, setRole, setCa
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <div style={{ position: "relative" }}>
-              <div style={{ width: 52, height: 52, borderRadius: 16, background: colorFor(m.name || m.email || "?"), color: "#fff", display: "grid", placeItems: "center", fontSize: 20, fontWeight: 700 }}>{(m.name || m.email || "?")[0].toUpperCase()}</div>
+              {m.avatar_url ? (
+                <img src={m.avatar_url} alt="" style={{ width: 52, height: 52, borderRadius: 16, objectFit: "cover", display: "block" }} />
+              ) : (
+                <div style={{ width: 52, height: 52, borderRadius: 16, background: colorFor(m.name || m.email || "?"), color: "#fff", display: "grid", placeItems: "center", fontSize: 20, fontWeight: 700 }}>{(m.name || m.email || "?")[0].toUpperCase()}</div>
+              )}
               <div style={{ position: "absolute", bottom: -2, right: -2, width: 14, height: 14, borderRadius: 7, background: isOnline ? "#2E9E6B" : t.faint, border: `2px solid ${t.page}` }} />
             </div>
             <div>
@@ -2434,7 +2557,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack }) 
           <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>{thread.name}</div>
           {!thread.isGroup && otherMembers[0]?.status_message && <div style={{ fontSize: 11, color: t.sub, fontStyle: "italic" }}>{otherMembers[0].status_message}</div>}
         </div>
-        <button onClick={() => setShowCall(true)} style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 17, background: "#2E9E6B18", border: "1px solid #2E9E6B55", cursor: "pointer", display: "grid", placeItems: "center" }} title="เริ่ม/เข้าร่วมคุยด้วยเสียง-วิดีโอ"><Phone size={15} color="#2E9E6B" /></button>
+        <button onClick={() => setShowCall(true)} style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 17, background: "#2E9E6B18", border: "1px solid #2E9E6B55", cursor: "pointer", display: "grid", placeItems: "center" }} title="เริ่ม/เข้าร่วมคุยด้วยเสียง"><Phone size={15} color="#2E9E6B" /></button>
         {isCreator && (
           <button onClick={() => setShowMembers(true)} style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 17, background: t.surface, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }} title="จัดการสมาชิกห้อง"><Users size={16} color={t.sub} /></button>
         )}
@@ -2514,7 +2637,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack }) 
       </div>
       {lightbox && <ImageLightbox src={lightbox} onClose={() => setLightbox(null)} />}
       {showMembers && <RoomMembersModal t={t} threadId={thread.id} session={session} close={() => setShowMembers(false)} />}
-      {showCall && <VideoCallModal t={t} roomName={thread.id} displayName={profile?.name} onClose={() => setShowCall(false)} />}
+      {showCall && <AudioCallModal t={t} threadId={thread.id} userId={userId} displayName={profile?.name} onClose={() => setShowCall(false)} />}
     </div>
   );
 }
@@ -2614,7 +2737,7 @@ function LocationsPage({ t, userId }) {
 
   return (
     <>
-      <PageHead t={t} title="ตำแหน่งครอบครัว" sub="เห็นเฉพาะคนที่แชร์ไว้และแอดมินอนุญาตให้คุณดู" icon={<MapPin size={20} color={t.accent} />} />
+      <PageHead t={t} title="ตำแหน่งล่าสุด" sub="เห็นเฉพาะคนที่แชร์ไว้และแอดมินอนุญาตให้คุณดู" icon={<MapPin size={20} color={t.accent} />} />
       {loading && <Empty t={t} text="กำลังโหลด..." />}
       {!loading && rows.length === 0 && <Empty t={t} text="ยังไม่มีใครแชร์ตำแหน่งให้คุณเห็น (หรือคุณยังไม่ได้รับสิทธิ์ดูจากแอดมิน)" />}
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
