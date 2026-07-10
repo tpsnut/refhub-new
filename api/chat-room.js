@@ -55,6 +55,19 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, threadId: thread.id, name: thread.name, avatarUrl: thread.avatar_url });
     }
 
+    if (action === "delete") {
+      const { threadId } = req.body || {};
+      if (!threadId) return res.status(400).json({ error: "ไม่พบห้องที่จะลบ" });
+      const { data: thread } = await admin.from("chat_threads").select("created_by").eq("id", threadId).maybeSingle();
+      if (!thread) return res.status(404).json({ error: "ไม่พบห้องนี้" });
+      if (thread.created_by !== callerId) return res.status(403).json({ error: "ลบห้องนี้ได้เฉพาะคนที่สร้างห้องเท่านั้น" });
+      await admin.from("chat_messages").delete().eq("thread_id", threadId);
+      await admin.from("chat_reads").delete().eq("thread_id", threadId);
+      await admin.from("chat_thread_members").delete().eq("thread_id", threadId);
+      await admin.from("chat_threads").delete().eq("id", threadId);
+      return res.status(200).json({ ok: true });
+    }
+
     return res.status(400).json({ error: "ไม่รู้จัก action นี้" });
   } catch (e) {
     return res.status(500).json({ error: e.message });

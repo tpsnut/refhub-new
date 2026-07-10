@@ -380,98 +380,28 @@ export default function RefHub() {
   useEffect(() => { if (!loaded) return; try { localStorage.setItem("refhub:fontScale", JSON.stringify(fontScale)); } catch (e) {} }, [fontScale, loaded]);
   useEffect(() => { try { sessionStorage.setItem("refhub:page", page); } catch (e) {} }, [page]);
 
-  // 🎯 migration ครั้งเดียว: เป้าหมายเก่าที่ยังไม่มีวันที่ผูกไว้ (จากก่อนมีระบบ report) ให้ใส่วันที่ปัจจุบันให้อัตโนมัติ
+  // 🎯 migration ครั้งเดียว: เป้าหมายเก่าที่ยังไม่มีวันที่ผูกไว้ (จากก่อนมีระบบ report) ให้ใส่วันที่ปัจจุบันให้อัตโนมัติ พร้อมบันทึกกลับ Supabase จริง
   useEffect(() => {
-    if (!loaded) return;
-    const needsMigration = goals.some((g) => !g.date);
-    if (needsMigration) setGoals((gs) => gs.map((g) => (g.date ? g : { ...g, date: todayStr(), doneDate: g.done ? todayStr() : null })));
-  }, [loaded]);
+    if (!loaded || !userId) return;
+    const needsMigration = goals.filter((g) => !g.date);
+    if (needsMigration.length) {
+      const nowDate = todayStr();
+      setGoals((gs) => gs.map((g) => (g.date ? g : { ...g, date: nowDate, doneDate: g.done ? nowDate : null })));
+      needsMigration.forEach((g) => {
+        supabase.from("goals").update({ date: nowDate, done_date: g.done ? nowDate : null }).eq("id", g.id).then(() => {}, () => {});
+      });
+    }
+  }, [loaded, userId]);
 
 
-  // save ทั้ง Local และระบบ Cloud (Settings)
-// ⚡ ตัว Interceptor: ดักฟังการเปลี่ยนแปลงจากปุ่มเดิมของพี่ แล้วสั่งทำงานขนานคู่กันไปเลย!
-useEffect(() => {
-  if (!loaded || !userId) return;
-  // เมื่อใดก็ตามที่ปุ่มเดิมของพี่ทำฟังก์ชัน setGoals สำเร็จ และข้อมูลเปลี่ยน
-  // เราจะใช้จุดนี้ตรวจเช็กและซิงค์ความต่างขึ้นตาราง Supabase ทันทีโดยอัตโนมัติ
-  const syncGoalsToCloud = async () => {
-    try {
-      // ดึงข้อมูลล่าสุดจาก Cloud มาเทียบ
-      const { data: currentDb } = await supabase.from("goals").select("*").eq("user_id", userId);
-      if (!currentDb) return;
+  // ⚠️ (นำระบบ background sync แบบ diff-เทียบเป้าหมายเก่าที่นี่ออกไปแล้ว — มันมี race condition ทำให้เป้าหมายหาย/โผล่คืนมาแบบสุ่มเวลามีการเปลี่ยนแปลงเร็วๆ ติดกัน
+  // ตอนนี้ทุกการเพิ่ม/ติ๊ก/ลบ เป้าหมาย จะยิงบันทึกตรงไปที่ Supabase ทันทีที่จุดเกิดเหตุแทน ไม่ต้องพึ่ง background sync ที่เดายากอีกต่อไป)
 
-      const dbMap = Object.fromEntries(currentDb.map((x) => [x.id, x]));
-      const localIds = goals.map(x => x.id);
+// (นำระบบ background sync แบบ diff-เทียบ ของรายรับ-รายจ่าย (tx) ออกไปแล้ว เหตุผลเดียวกับเป้าหมาย
+// ตอนนี้ทุกการเพิ่ม/ลบ รายการเงิน จะยิงบันทึกตรงไปที่ Supabase ทันทีที่จุดเกิดเหตุแทน)
 
-      // 1. ตรวจสอบตัวที่เพิ่มใหม่ในแอป -> ยิงขึ้น Cloud
-      for (const g of goals) {
-        const match = dbMap[g.id];
-        if (!match) {
-          await supabase.from("goals").insert({ id: g.id, user_id: userId, text: g.text, done: g.done, date: g.date || todayStr(), done_date: g.doneDate || null });
-        } else if (match.done !== g.done || (match.done_date || null) !== (g.doneDate || null)) {
-          // 2. ตรวจสอบตัวที่สลับสถานะ ติ๊กถูก/เอาออก
-          await supabase.from("goals").update({ done: g.done, done_date: g.doneDate || null }).eq("id", g.id);
-        }
-      }
-
-      // 3. ตรวจสอบตัวที่โดนลบออกไปจากแอป -> สั่งลบใน Cloud
-      for (const dbG of currentDb) {
-        if (!localIds.includes(dbG.id)) {
-          await supabase.from("goals").delete().eq("id", dbG.id);
-        }
-      }
-    } catch (e) {}
-  };
-  syncGoalsToCloud();
-}, [goals, loaded]);
-
-// 🌐 sync รายการเงิน (tx) ขึ้น Supabase แบบเดียวกับ goals
-useEffect(() => {
-  if (!loaded || !userId) return;
-  const syncTxToCloud = async () => {
-    try {
-      const { data: currentDb } = await supabase.from("transactions").select("id").eq("user_id", userId);
-      if (!currentDb) return;
-      const dbIds = currentDb.map((x) => x.id);
-      const localIds = tx.map((x) => x.id);
-      for (const x of tx) {
-        if (!dbIds.includes(x.id)) {
-          await supabase.from("transactions").insert({ id: x.id, user_id: userId, type: x.type, cat: x.cat, amount: x.amount, note: x.note, date: x.date });
-        }
-      }
-      for (const dbX of currentDb) {
-        if (!localIds.includes(dbX.id)) await supabase.from("transactions").delete().eq("id", dbX.id);
-      }
-    } catch (e) {}
-  };
-  syncTxToCloud();
-}, [tx, loaded]);
-
-// 🌐 sync โน้ต (notes) ขึ้น Supabase
-useEffect(() => {
-  if (!loaded || !userId) return;
-  const syncNotesToCloud = async () => {
-    try {
-      const { data: currentDb } = await supabase.from("notes").select("*").eq("user_id", userId);
-      if (!currentDb) return;
-      const dbMap = Object.fromEntries(currentDb.map((x) => [x.id, x]));
-      const localIds = notes.map((x) => x.id);
-      for (const n of notes) {
-        const dbN = dbMap[n.id];
-        if (!dbN) {
-          await supabase.from("notes").insert({ id: n.id, user_id: userId, title: n.title, body: n.body, date: n.date, pinned: !!n.pinned, tags: n.tags || [], notion_id: n.notionId || null });
-        } else if (dbN.title !== n.title || JSON.stringify(dbN.body) !== JSON.stringify(n.body) || !!dbN.pinned !== !!n.pinned || JSON.stringify(dbN.tags || []) !== JSON.stringify(n.tags || []) || (dbN.notion_id || null) !== (n.notionId || null)) {
-          // เนื้อหาแก้ไขแล้ว (จากฟีเจอร์แก้ไขโน้ต) หรือเพิ่ง sync ขึ้น Notion -> update ขึ้น cloud ด้วย ไม่ใช่แค่ insert/delete
-          await supabase.from("notes").update({ title: n.title, body: n.body, pinned: !!n.pinned, tags: n.tags || [], notion_id: n.notionId || null }).eq("id", n.id);
-        }
-      }
-      for (const dbN of currentDb) {
-        if (!localIds.includes(dbN.id)) await supabase.from("notes").delete().eq("id", dbN.id);
-      }
-    } catch (e) {}
-  };
-  syncNotesToCloud();
-}, [notes, loaded]);
+// (นำระบบ background sync แบบ diff-เทียบ ของโน้ต ออกไปแล้ว เหตุผลเดียวกับเป้าหมาย/รายรับ-รายจ่าย
+// ตอนนี้ทุกการเพิ่ม/แก้ไข/ลบ/ปักหมุด โน้ต จะยิงบันทึกตรงไปที่ Supabase ทันทีที่จุดเกิดเหตุแทน)
 
 // 🌐 sync เพลย์ลิสต์ (playlist) ขึ้น Supabase — ไม่ sync ไฟล์ที่ persist:false (ไฟล์ใหญ่ >1.5MB)
 useEffect(() => {
@@ -830,7 +760,7 @@ useEffect(() => {
         {/* CONTENT */}
         <div style={{ position: "relative", zIndex: 2, padding: "16px 18px 120px", height: "calc(100vh - 76px)", overflowY: "auto" }}>
           {page === "home" && <HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, goalDone, goalPct, setGoals, notes, setPage, setChatOpen, userId }} />}
-          {page === "ledger" && <FinancePage {...{ t, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt) }} />}
+          {page === "ledger" && <FinancePage {...{ t, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt), userId }} />}
           {page === "note" && <NotePage {...{ t, notes, setNotes, isNight, userId }} />}
           {page === "ideas" && <IdeasPage t={t} M={M} userId={userId} session={session} authProfile={authProfile} setAuthProfile={setAuthProfile} setNotes={setNotes} />}
           {page === "trade" && <TradePage t={t} />}
@@ -839,8 +769,8 @@ useEffect(() => {
           {page === "goalsReport" && <GoalsReportPage t={t} goals={goals} />}
           {page === "admin" && <AdminPage t={t} session={session} userId={userId} adminAlerts={adminAlerts} setAdminAlerts={setAdminAlerts} />}
           {page === "locations" && <LocationsPage t={t} userId={userId} />}
-          {page === "chat" && <ChatEntryPage t={t} M={M} userId={userId} authProfile={authProfile} session={session} openThread={(id, name, isGroup, avatarUrl) => { setActiveThread({ id, name, isGroup: !!isGroup, avatarUrl: avatarUrl || null }); setPage("chatRoom"); }} />}
-          {page === "chatRoom" && activeThread && <ChatRoomPage t={t} userId={userId} thread={activeThread} profile={profile} session={session} onLeave={() => { setActiveThread(null); setPage("chat"); }} />}
+          {page === "chat" && <ChatEntryPage t={t} M={M} userId={userId} authProfile={authProfile} session={session} openThread={(id, name, isGroup, avatarUrl, createdBy) => { setActiveThread({ id, name, isGroup: !!isGroup, avatarUrl: avatarUrl || null, createdBy: createdBy || null }); setPage("chatRoom"); }} />}
+          {page === "chatRoom" && activeThread && <ChatRoomPage t={t} userId={userId} thread={activeThread} profile={profile} session={session} onLeave={() => { setActiveThread(null); setPage("chat"); }} onBack={() => { setActiveThread(null); setPage("chat"); }} />}
 
           {/* 🎵 การ์ด "กำลังเล่น" ต่อท้ายเนื้อหาหน้า Home (ใต้เป้าหมาย) — div#yt-mini-player mount ค้างตลอด
               ไม่เคย unmount เลย (ซ่อนด้วย display:none เท่านั้น) กันปัญหา React ชนกับ DOM ที่ YouTube API แก้เอง */}
@@ -907,11 +837,11 @@ useEffect(() => {
           </div>
         )}
         {accountSettingsOpen && <AccountSettingsModal t={t} authProfile={authProfile} userId={userId} close={() => setAccountSettingsOpen(false)} />}
-        {chatOpen && <ChatModal t={t} M={M} mentor={mentor} close={() => setChatOpen(false)} />}
+        {chatOpen && <ChatModal t={t} M={M} mentor={mentor} userId={userId} session={session} close={() => setChatOpen(false)} />}
         {editProfile && <EditProfile t={t} M={M} profile={profile} setProfile={setProfile} userId={userId} authProfile={authProfile} setAuthProfile={setAuthProfile} close={() => setEditProfile(false)} />}
         {searchOpen && <SearchOverlay t={t} notes={notes} goals={goals} tx={tx} categories={categories} setPage={setPage} close={() => setSearchOpen(false)} />}
         {musicOpen && <MusicModal {...{ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, moveTrack, toggleFavorite, volume, setVolume, close: () => setMusicOpen(false) }} />}
-        {addOpen && <AddTxModal t={t} tx={tx} setTx={setTx} categories={categories} moveCategory={moveCategory} deleteCategory={deleteCategory} addCategory={addCategory} close={() => setAddOpen(false)} />}
+        {addOpen && <AddTxModal t={t} tx={tx} setTx={setTx} categories={categories} moveCategory={moveCategory} deleteCategory={deleteCategory} addCategory={addCategory} userId={userId} close={() => setAddOpen(false)} />}
         {exportText != null && <ExportModal t={t} text={exportText} close={() => setExportText(null)} />}
 
         {/* hidden audio player for file tracks */}
@@ -1414,9 +1344,9 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, goa
           {goals.length === 0 && <div style={{ fontSize: 12.5, color: t.sub }}>ยังไม่มีเป้าหมาย เพิ่มอันแรกเลย 👇</div>}
           {goals.map((g) => (
             <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <button onClick={() => setGoals((gs) => gs.map((x) => (x.id === g.id ? { ...x, done: !x.done, doneDate: !x.done ? todayStr() : null } : x)))} style={{ width: 22, height: 22, borderRadius: 7, border: `2px solid ${g.done ? t.accent : t.faint}`, background: g.done ? t.accent : "transparent", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}>{g.done && <Check size={14} color={t.onAccent} />}</button>
+              <button onClick={() => { const nd = !g.done; const dd = nd ? todayStr() : null; setGoals((gs) => gs.map((x) => (x.id === g.id ? { ...x, done: nd, doneDate: dd } : x))); if (userId) supabase.from("goals").update({ done: nd, done_date: dd }).eq("id", g.id).then(() => {}, () => {}); }} style={{ width: 22, height: 22, borderRadius: 7, border: `2px solid ${g.done ? t.accent : t.faint}`, background: g.done ? t.accent : "transparent", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}>{g.done && <Check size={14} color={t.onAccent} />}</button>
               <span style={{ flex: 1, fontSize: 13.5, color: g.done ? t.sub : t.text, textDecoration: g.done ? "line-through" : "none" }}>{g.text}</span>
-              <button onClick={() => setGoals((gs) => gs.filter((x) => x.id !== g.id))} style={ghost}><Trash2 size={15} color={t.faint} /></button>
+              <button onClick={() => { setGoals((gs) => gs.filter((x) => x.id !== g.id)); if (userId) supabase.from("goals").delete().eq("id", g.id).then(() => {}, () => {}); }} style={ghost}><Trash2 size={15} color={t.faint} /></button>
             </div>
           ))}
         </div>
@@ -1430,7 +1360,7 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, goa
 }
 
 // ---------------- Finance (full) ----------------
-function FinancePage({ t, tx, setTx, categories, openAdd, openExport }) {
+function FinancePage({ t, tx, setTx, categories, openAdd, openExport, userId }) {
   const [periodMode, setPeriodMode] = useState("month"); // day | week | month | range
   const [anchor, setAnchor] = useState(todayStr());       // วันที่อ้างอิงสำหรับ day/week/month
   const [rangeStart, setRangeStart] = useState(todayStr());
@@ -1610,7 +1540,7 @@ function FinancePage({ t, tx, setTx, categories, openAdd, openExport }) {
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <div style={{ fontSize: 14.5, fontWeight: 800, color: x.type === "in" ? "#2E9E6B" : t.text }}>{x.type === "in" ? "+" : "−"}{x.amount.toLocaleString()}</div>
-                  <button onClick={() => setTx((l) => l.filter((y) => y.id !== x.id))} style={ghost}><Trash2 size={15} color={t.faint} /></button>
+                  <button onClick={() => { setTx((l) => l.filter((y) => y.id !== x.id)); if (userId) supabase.from("transactions").delete().eq("id", x.id).then(() => {}, () => {}); }} style={ghost}><Trash2 size={15} color={t.faint} /></button>
                 </div>
               </div>
             ); })}
@@ -1650,6 +1580,7 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts }) {
   const setCanChat = async (id, can_chat) => { await supabase.from("profiles").update({ can_chat }).eq("id", id); loadMembers(); };
   const setCanViewLocations = async (id, can_view_locations) => { await supabase.from("profiles").update({ can_view_locations }).eq("id", id); loadMembers(); };
   const remindNotification = async (id) => { await supabase.from("profiles").update({ notif_reminder_at: new Date().toISOString() }).eq("id", id); loadMembers(); };
+  const setPremiumAi = async (id, premium_ai) => { await supabase.from("profiles").update({ premium_ai }).eq("id", id); loadMembers(); };
   const setMentorLimit = async (id, mentor_limit) => { await supabase.from("profiles").update({ mentor_limit }).eq("id", id); loadMembers(); };
   const resetMentorPick = async (id) => { await supabase.from("profiles").update({ unlocked_mentors: [] }).eq("id", id); loadMembers(); };
   const setTopicLimit = async (id, topic_limit) => { await supabase.from("profiles").update({ topic_limit }).eq("id", id); loadMembers(); };
@@ -1773,7 +1704,7 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts }) {
           <MemberDetailModal
             t={t} m={detailMember} isSelf={detailMember.id === userId}
             isOnline={isOnline(detailMember.last_seen)}
-            setApproved={setApproved} setRole={setRole} setCanChat={setCanChat} setCanViewLocations={setCanViewLocations} remindNotification={remindNotification}
+            setApproved={setApproved} setRole={setRole} setCanChat={setCanChat} setCanViewLocations={setCanViewLocations} remindNotification={remindNotification} setPremiumAi={setPremiumAi}
             setMentorLimit={setMentorLimit} setTopicLimit={setTopicLimit} setDailyArticleLimit={setDailyArticleLimit} resetMentorPick={resetMentorPick}
             removeMember={removeMember}
             close={() => setDetailMember(null)}
@@ -1784,7 +1715,7 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts }) {
   );
 }
 
-function MemberDetailModal({ t, m, isSelf, isOnline, setApproved, setRole, setCanChat, setCanViewLocations, setMentorLimit, setTopicLimit, setDailyArticleLimit, resetMentorPick, removeMember, remindNotification, close }) {
+function MemberDetailModal({ t, m, isSelf, isOnline, setApproved, setRole, setCanChat, setCanViewLocations, setMentorLimit, setTopicLimit, setDailyArticleLimit, resetMentorPick, removeMember, remindNotification, setPremiumAi, close }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const Row = ({ label, children }) => (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: `1px solid ${t.border}` }}>
@@ -1831,6 +1762,9 @@ function MemberDetailModal({ t, m, isSelf, isOnline, setApproved, setRole, setCa
             <button onClick={() => setRole(m.id, m.role === "admin" ? "member" : "admin")} style={{ padding: "6px 12px", borderRadius: 10, border: `1px solid ${t.border}`, cursor: "pointer", background: "none", color: t.sub, fontSize: 12, fontWeight: 700 }}>{m.role === "admin" ? "ถอดสิทธิ์แอดมิน" : "ตั้งเป็นแอดมิน"}</button>
           </Row>
         )}
+        <Row label="AI พรีเมียม (Gemini จ่ายเงิน/DeepSeek)">
+          <button onClick={() => setPremiumAi(m.id, !m.premium_ai)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 10, border: `1px solid ${m.premium_ai ? "#2E9E6B" : t.border}`, cursor: "pointer", background: m.premium_ai ? "#2E9E6B18" : "none", color: m.premium_ai ? "#2E9E6B" : t.sub, fontSize: 12, fontWeight: 700 }}>{m.premium_ai ? "เปิดอยู่" : "ปิดอยู่ (กดเพื่อเปิด)"}</button>
+        </Row>
         {!isSelf && m.role !== "admin" && (
           <Row label="ใช้งานเต็มรูปแบบ (ไม่เห็นหน้า Admin)">
             <button onClick={() => setRole(m.id, m.role === "trusted" ? "member" : "trusted")} style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 10, border: `1px solid ${m.role === "trusted" ? "#2E9E6B" : t.border}`, cursor: "pointer", background: m.role === "trusted" ? "#2E9E6B18" : "none", color: m.role === "trusted" ? "#2E9E6B" : t.sub, fontSize: 12, fontWeight: 700 }}>{m.role === "trusted" ? "เปิดอยู่" : "ปิดอยู่ (กดเพื่อเปิด)"}</button>
@@ -2012,7 +1946,7 @@ function ChatEntryPage({ t, M, userId, authProfile, session, openThread }) {
           const otherProfile = (otherProfiles || []).find((p) => p.id === otherUserId);
           return { id: th.id, name: otherProfile?.name || "เพื่อน", type: "direct", avatarUrl: otherProfile?.avatar_url || null };
         }
-        return { id: th.id, name: th.name || "ห้องแชท", type: "group", avatarUrl: th.avatar_url, joinCode: th.created_by === userId ? th.join_code : null };
+        return { id: th.id, name: th.name || "ห้องแชท", type: "group", avatarUrl: th.avatar_url, joinCode: th.created_by === userId ? th.join_code : null, createdBy: th.created_by };
       });
       setRooms(list);
     } catch (e) {} finally { setLoading(false); }
@@ -2111,7 +2045,7 @@ function ChatEntryPage({ t, M, userId, authProfile, session, openThread }) {
           {rooms.length === 0 && <div style={{ gridColumn: "1 / -1" }}><Empty t={t} text="ยังไม่มีห้องแชท กด + เพื่อสร้างห้องหรือเข้าร่วมห้องได้เลย" /></div>}
           {rooms.map((r) => (
             <div key={r.id} style={{ position: "relative" }}>
-              <button onClick={() => openThread(r.id, r.name, r.type === "group", r.avatarUrl)} style={{ background: "none", border: "none", cursor: "pointer", textAlign: "center", width: "100%" }}>
+              <button onClick={() => openThread(r.id, r.name, r.type === "group", r.avatarUrl, r.createdBy)} style={{ background: "none", border: "none", cursor: "pointer", textAlign: "center", width: "100%" }}>
                 {r.avatarUrl ? (
                   <img src={r.avatarUrl} alt="" style={{ width: 64, height: 64, borderRadius: 18, objectFit: "cover" }} />
                 ) : (
@@ -2206,7 +2140,7 @@ function ChatEntryPage({ t, M, userId, authProfile, session, openThread }) {
 }
 
 
-function ChatRoomPage({ t, userId, thread, profile, session, onLeave }) {
+function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack }) {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
   const [editingId, setEditingId] = useState(null);
@@ -2218,10 +2152,21 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave }) {
   const [otherMembers, setOtherMembers] = useState([]); // [{id, name}] สมาชิกคนอื่นในห้อง (ไม่รวมตัวเอง) ใช้ทำ "อ่านแล้ว"
   const [reads, setReads] = useState({}); // user_id -> last_read_at ของคนอื่นในห้อง
   const [lightbox, setLightbox] = useState(null); // url รูปที่กำลังดูเต็มจอ (null = ไม่ได้เปิดดู)
-  const [confirmLeave, setConfirmLeave] = useState(false);
+  const [confirmLeave, setConfirmLeave] = useState(false); // "ยืนยัน" | "" -> โหมด: "leave" (ออกจากห้อง) หรือ "delete" (ลบถาวร)
+  const [leaveErr, setLeaveErr] = useState("");
+  const isCreator = thread.createdBy && thread.createdBy === userId;
   const leaveRoom = async () => {
-    await supabase.from("chat_thread_members").delete().eq("thread_id", thread.id).eq("user_id", userId);
+    const { error } = await supabase.from("chat_thread_members").delete().eq("thread_id", thread.id).eq("user_id", userId);
+    if (error) { setLeaveErr("ออกจากห้องไม่สำเร็จ: " + error.message); setConfirmLeave(false); return; }
     onLeave?.();
+  };
+  const deleteRoomForever = async () => {
+    try {
+      const r = await fetch("/api/chat-room", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "delete", threadId: thread.id, callerToken: session?.access_token }) });
+      const data = await r.json();
+      if (!r.ok) { setLeaveErr("ลบห้องไม่สำเร็จ: " + data.error); setConfirmLeave(false); return; }
+      onLeave?.();
+    } catch (e) { setLeaveErr("ลบห้องไม่สำเร็จ: " + e.message); setConfirmLeave(false); }
   };
   const fileRef = useRef(null);
   const endRef = useRef(null);
@@ -2340,6 +2285,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 160px)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <button onClick={onBack} style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 17, background: t.surface, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }} title="กลับไปรายการห้อง"><ArrowLeft size={18} color={t.text} /></button>
         {thread.avatarUrl ? (
           <img src={thread.avatarUrl} alt="" onClick={() => setLightbox(thread.avatarUrl)} style={{ width: 32, height: 32, borderRadius: 10, objectFit: "cover", cursor: "pointer" }} />
         ) : (
@@ -2349,12 +2295,20 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave }) {
           <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>{thread.name}</div>
           {!thread.isGroup && otherMembers[0]?.status_message && <div style={{ fontSize: 11, color: t.sub, fontStyle: "italic" }}>{otherMembers[0].status_message}</div>}
         </div>
-        {confirmLeave ? (
-          <button onClick={leaveRoom} style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 5, padding: "6px 10px", borderRadius: 10, border: "none", background: "#D9534F", color: "#fff", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>ยืนยันออก?</button>
+        {confirmLeave === "leave" ? (
+          <button onClick={leaveRoom} style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 5, padding: "7px 12px", borderRadius: 10, border: "none", background: "#D9534F", color: "#fff", cursor: "pointer", fontSize: 11.5, fontWeight: 700 }}>ยืนยันออก?</button>
+        ) : confirmLeave === "delete" ? (
+          <button onClick={deleteRoomForever} style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 5, padding: "7px 12px", borderRadius: 10, border: "none", background: "#D9534F", color: "#fff", cursor: "pointer", fontSize: 11.5, fontWeight: 700 }}>ยืนยันลบถาวร?</button>
+        ) : confirmLeave === "menu" ? (
+          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+            <button onClick={() => setConfirmLeave("leave")} style={{ padding: "7px 10px", borderRadius: 10, border: `1px solid ${t.border}`, background: "none", color: t.sub, cursor: "pointer", fontSize: 11, fontWeight: 700 }}>ออกจากห้อง</button>
+            <button onClick={() => setConfirmLeave("delete")} style={{ padding: "7px 10px", borderRadius: 10, border: "1px solid #D9534F", background: "#D9534F18", color: "#D9534F", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>ลบถาวร</button>
+          </div>
         ) : (
-          <button onClick={() => setConfirmLeave(true)} style={{ flexShrink: 0, background: "none", border: "none", cursor: "pointer", padding: 6 }} title="ออกจากห้อง"><LogOut size={17} color={t.faint} /></button>
+          <button onClick={() => setConfirmLeave(isCreator ? "menu" : "leave")} style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 17, background: "#D9534F18", border: "1px solid #D9534F55", cursor: "pointer", display: "grid", placeItems: "center" }} title={isCreator ? "ออกจากห้อง / ลบห้อง" : "ออกจากห้อง"}><LogOut size={17} color="#D9534F" /></button>
         )}
       </div>
+      {leaveErr && <div style={{ fontSize: 11.5, color: "#D9534F", marginBottom: 10 }}>{leaveErr}</div>}
       <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, paddingBottom: 10 }}>
         {messages.map((m) => {
           const mine = m.sender_id === userId;
@@ -2565,7 +2519,7 @@ function GoalsReportPage({ t, goals }) {
   );
 }
 
-function AddTxModal({ t, tx, setTx, categories, moveCategory, deleteCategory, addCategory, close }) {
+function AddTxModal({ t, tx, setTx, categories, moveCategory, deleteCategory, addCategory, userId, close }) {
   const [type, setType] = useState("out");
   const [cat, setCat] = useState(null); // ไม่ default หมวดหมู่ไว้แล้ว ต้องให้ผู้ใช้เลือกเอง
   const [catError, setCatError] = useState(false);
@@ -2588,7 +2542,9 @@ function AddTxModal({ t, tx, setTx, categories, moveCategory, deleteCategory, ad
     if (!a || a <= 0) return;
     if (!cat) { setCatError(true); return; }
     const finalNote = note.trim() || findCat(categories, cat).label;
-    setTx((l) => [{ id: uid(), type, cat, amount: a, note: finalNote, date }, ...l]);
+    const newTx = { id: uid(), type, cat, amount: a, note: finalNote, date };
+    setTx((l) => [newTx, ...l]);
+    if (userId) supabase.from("transactions").insert({ id: newTx.id, user_id: userId, type: newTx.type, cat: newTx.cat, amount: newTx.amount, note: newTx.note, date: newTx.date }).then(() => {}, () => {});
     close();
   };
 
@@ -2761,15 +2717,25 @@ function NotePage({ t, notes, setNotes, isNight, userId }) {
   const add = () => {
     const plain = blocksToPlainText(body).trim();
     if (!title.trim() && !plain) return;
-    setNotes((n) => [{ id: uid(), title: title.trim(), body: body || migrateBody(""), date: todayStr(), pinned: false, tags: parseTags(tagsInput) }, ...n]);
+    const newNote = { id: uid(), title: title.trim(), body: body || migrateBody(""), date: todayStr(), pinned: false, tags: parseTags(tagsInput) };
+    setNotes((n) => [newNote, ...n]);
+    if (userId) supabase.from("notes").insert({ id: newNote.id, user_id: userId, title: newNote.title, body: newNote.body, date: newNote.date, pinned: newNote.pinned, tags: newNote.tags }).then(() => {}, () => {});
     setTitle(""); setBody(null); setTagsInput(""); setDraftKey((k) => k + 1);
   };
   const startEdit = (n) => { setEditingId(n.id); setEditTitle(n.title); setEditBody(migrateBody(n.body)); setEditTags((n.tags || []).join(", ")); };
   const saveEdit = () => {
-    setNotes((list) => list.map((n) => (n.id === editingId ? { ...n, title: editTitle.trim(), body: editBody, tags: parseTags(editTags) } : n)));
+    const newTitle = editTitle.trim(), newTags = parseTags(editTags);
+    setNotes((list) => list.map((n) => (n.id === editingId ? { ...n, title: newTitle, body: editBody, tags: newTags } : n)));
+    if (userId) supabase.from("notes").update({ title: newTitle, body: editBody, tags: newTags }).eq("id", editingId).then(() => {}, () => {});
     setEditingId(null);
   };
-  const togglePin = (id) => setNotes((list) => list.map((n) => (n.id === id ? { ...n, pinned: !n.pinned } : n)));
+  const togglePin = (id) => {
+    const target = notes.find((n) => n.id === id);
+    if (!target) return;
+    const nextPinned = !target.pinned;
+    setNotes((list) => list.map((n) => (n.id === id ? { ...n, pinned: nextPinned } : n)));
+    if (userId) supabase.from("notes").update({ pinned: nextPinned }).eq("id", id).then(() => {}, () => {});
+  };
 
   // 📤 Export เป็น Markdown — Notion ลากไฟล์ .md ไป import ตรงๆ ได้เลย (ใช้ได้ทันทีไม่ต้องรอ deploy)
   const blockToMd = (b, depth) => {
@@ -2810,6 +2776,7 @@ function NotePage({ t, notes, setNotes, isNight, userId }) {
       if (!r.ok) { setSyncMsg("Sync ไม่สำเร็จ: " + (data.error || "unknown error")); return; }
       const okMap = Object.fromEntries((data.results || []).filter((x) => x.ok).map((x) => [x.id, x.notionId]));
       setNotes((list) => list.map((n) => (okMap[n.id] ? { ...n, notionId: okMap[n.id] } : n)));
+      if (userId) Object.entries(okMap).forEach(([id, notionId]) => { supabase.from("notes").update({ notion_id: notionId }).eq("id", id).then(() => {}, () => {}); });
       const failed = (data.results || []).filter((x) => !x.ok);
       setSyncMsg(failed.length ? `sync สำเร็จ ${Object.keys(okMap).length} อัน, พลาด ${failed.length} อัน` : `sync ขึ้น Notion สำเร็จ ${Object.keys(okMap).length} อัน ✓`);
     } catch (e) {
@@ -2882,7 +2849,7 @@ function NotePage({ t, notes, setNotes, isNight, userId }) {
                     <button onClick={() => exportOneMd(n)} style={ghost} title="Export เป็น Markdown"><Download size={15} color={t.faint} /></button>
                     <button onClick={() => togglePin(n.id)} style={ghost} title="ปักหมุด"><Target size={15} color={n.pinned ? t.accent : t.faint} /></button>
                     <button onClick={() => startEdit(n)} style={ghost} title="แก้ไข"><Pencil size={15} color={t.faint} /></button>
-                    <button onClick={() => setNotes((x) => x.filter((y) => y.id !== n.id))} style={ghost} title="ลบ"><Trash2 size={15} color={t.faint} /></button>
+                    <button onClick={() => { setNotes((x) => x.filter((y) => y.id !== n.id)); if (userId) supabase.from("notes").delete().eq("id", n.id).then(() => {}, () => {}); }} style={ghost} title="ลบ"><Trash2 size={15} color={t.faint} /></button>
                   </div>
                 </div>
                 {blocksToPlainText(n.body).trim() && <div style={{ fontSize: 13, color: t.sub, marginTop: 6, whiteSpace: "pre-wrap", lineHeight: 1.5, maxHeight: 90, overflow: "hidden" }}>{blocksToPlainText(n.body)}</div>}
@@ -3029,7 +2996,9 @@ function IdeasPage({ t, M, userId, session, authProfile, setAuthProfile, setNote
       content: article.title,
       children: (article.bullets || []).map((b) => ({ type: "bulletListItem", content: b })),
     }];
-    setNotes((n) => [{ id: uid(), title: article.title, body, date: todayStr(), pinned: false, tags: [topicLabel(article.topic)] }, ...n]);
+    const newNote = { id: uid(), title: article.title, body, date: todayStr(), pinned: false, tags: [topicLabel(article.topic)] };
+    setNotes((n) => [newNote, ...n]);
+    if (userId) supabase.from("notes").insert({ id: newNote.id, user_id: userId, title: newNote.title, body: newNote.body, date: newNote.date, pinned: newNote.pinned, tags: newNote.tags }).then(() => {}, () => {});
   };
 
   // ยังไม่ได้เลือกความสนใจ (ครั้งแรก) หรือกำลังกดแก้ไขอยู่ -> หน้าตั้งค่าความสนใจ
@@ -3185,7 +3154,7 @@ function LangPage({ t }) {
 }
 
 // ---------------- Modals ----------------
-function ChatModal({ t, M, mentor, close }) {
+function ChatModal({ t, M, mentor, userId, session, close }) {
   const [msgs, setMsgs] = useState([{ who: "m", text: `สวัสดี ฉันคือ ${M.full} วันนี้อยากให้ช่วยเรื่องอะไร?` }]);
   const [inp, setInp] = useState(""); const [loading, setLoading] = useState(false); const endRef = useRef(null);
   const [pendingImg, setPendingImg] = useState(null); // { dataUrl, mime } รูปที่เลือกไว้ รอกดส่ง
@@ -3218,7 +3187,7 @@ function ChatModal({ t, M, mentor, close }) {
     setMsgs(nextMsgs); setInp(""); setPendingImg(null);
     setLoading(true);
     try {
-      const r = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mentor, messages: nextMsgs }) });
+      const r = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mentor, messages: nextMsgs, userId, callerToken: session?.access_token }) });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "API error");
       setMsgs((m) => [...m, { who: "m", text: data.text || M.replies[Math.floor(Math.random() * M.replies.length)], source: data.source }]);
