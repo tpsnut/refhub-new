@@ -5,7 +5,7 @@ import {
   Sun, Moon, Send, Check, Trash2, X, Wallet, Target, BookOpen, ChevronRight,
   Sparkles, Clock, Search, Volume2, VolumeX, Pencil, Download, ArrowLeft,
   Utensils, Car, ShoppingBag, Receipt, Gamepad2, HeartPulse, Briefcase, Gift, Coffee, Music,
-  Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi, MessageCircle, MoreVertical, KeyRound, MapPin, Copy, LockKeyhole
+  Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi, MessageCircle, MoreVertical, KeyRound, MapPin, Copy, LockKeyhole, LogOut
 } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, ResponsiveContainer, Tooltip } from "recharts";
 // 📝 BlockNote — editor แบบ Notion (toggle, checklist, หัวข้อ, แนบรูป/ไฟล์) สำหรับหน้าโน้ตฉบับเต็ม
@@ -265,8 +265,9 @@ export default function RefHub() {
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   const [chatUnread, setChatUnread] = useState(0); // จำนวนข้อความแชทที่ยังไม่ได้อ่าน (คำนวณจริงในหน้าแชท)
-  const [activeThread, setActiveThread] = useState(null); // { id, name } ห้องแชทที่กำลังเปิดดูอยู่
+  const [activeThread, setActiveThread] = useState(() => { try { return JSON.parse(sessionStorage.getItem("refhub:activeThread") || "null"); } catch (e) { return null; } });
   useEffect(() => { if (page === "chatRoom" && !activeThread) setPage("chat"); }, []);
+  useEffect(() => { try { if (activeThread) sessionStorage.setItem("refhub:activeThread", JSON.stringify(activeThread)); else sessionStorage.removeItem("refhub:activeThread"); } catch (e) {} }, [activeThread]);
   const [addOpen, setAddOpen] = useState(false);
   const [exportText, setExportText] = useState(null);
   const [musicOpen, setMusicOpen] = useState(false);
@@ -828,7 +829,7 @@ useEffect(() => {
 
         {/* CONTENT */}
         <div style={{ position: "relative", zIndex: 2, padding: "16px 18px 120px", height: "calc(100vh - 76px)", overflowY: "auto" }}>
-          {page === "home" && <HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, goalDone, goalPct, setGoals, notes, setPage, setChatOpen }} />}
+          {page === "home" && <HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, goalDone, goalPct, setGoals, notes, setPage, setChatOpen, userId }} />}
           {page === "ledger" && <FinancePage {...{ t, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt) }} />}
           {page === "note" && <NotePage {...{ t, notes, setNotes, isNight, userId }} />}
           {page === "ideas" && <IdeasPage t={t} M={M} userId={userId} session={session} authProfile={authProfile} setAuthProfile={setAuthProfile} setNotes={setNotes} />}
@@ -839,7 +840,7 @@ useEffect(() => {
           {page === "admin" && <AdminPage t={t} session={session} userId={userId} adminAlerts={adminAlerts} setAdminAlerts={setAdminAlerts} />}
           {page === "locations" && <LocationsPage t={t} userId={userId} />}
           {page === "chat" && <ChatEntryPage t={t} M={M} userId={userId} authProfile={authProfile} session={session} openThread={(id, name, isGroup, avatarUrl) => { setActiveThread({ id, name, isGroup: !!isGroup, avatarUrl: avatarUrl || null }); setPage("chatRoom"); }} />}
-          {page === "chatRoom" && activeThread && <ChatRoomPage t={t} userId={userId} thread={activeThread} profile={profile} session={session} />}
+          {page === "chatRoom" && activeThread && <ChatRoomPage t={t} userId={userId} thread={activeThread} profile={profile} session={session} onLeave={() => { setActiveThread(null); setPage("chat"); }} />}
 
           {/* 🎵 การ์ด "กำลังเล่น" ต่อท้ายเนื้อหาหน้า Home (ใต้เป้าหมาย) — div#yt-mini-player mount ค้างตลอด
               ไม่เคย unmount เลย (ซ่อนด้วย display:none เท่านั้น) กันปัญหา React ชนกับ DOM ที่ YouTube API แก้เอง */}
@@ -1326,10 +1327,19 @@ function TrackRow({ t, M, track, active, playing, folders, isFirst, isLast, onPl
 const greet = (night) => { const h = new Date().getHours(); return h < 6 ? "ดึกแล้ว พักบ้างนะ 🌙" : h < 12 ? "สวัสดีตอนเช้า ☀️" : h < 18 ? "สวัสดีตอนบ่าย 🌤️" : "ค่ำแล้ว วันนี้เป็นไงบ้าง 🌙"; };
 
 // ---------------- Home ----------------
-function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, goalDone, goalPct, setGoals, notes, setPage, setChatOpen }) {
+function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, goalDone, goalPct, setGoals, notes, setPage, setChatOpen, userId }) {
   const [goalText, setGoalText] = useState("");
   const latestNote = notes[0];
   const todayNet = tx.filter((x) => x.date === todayStr()).reduce((s, x) => s + (x.type === "in" ? x.amount : -x.amount), 0);
+
+  // เพิ่มเป้าหมายพร้อมบันทึกลง Supabase ทันที (กันหายถ้ารีเฟรชเร็วเกินกว่า background sync จะทันบันทึก)
+  const addGoal = () => {
+    if (!goalText.trim()) return;
+    const g = { id: uid(), text: goalText.trim(), done: false, date: todayStr(), doneDate: null };
+    setGoals((gs) => [...gs, g]);
+    setGoalText("");
+    if (userId) supabase.from("goals").insert({ id: g.id, user_id: userId, text: g.text, done: g.done, date: g.date, done_date: g.doneDate }).then(() => {}, () => {});
+  };
 
   // 📢 ป้ายประกาศระบบ — โหลดของที่ active อยู่ + ฟังการเปลี่ยนแปลงแบบสด + จำว่าปิดอันไหนไปแล้ว
   const [announcements, setAnnouncements] = useState([]);
@@ -1411,8 +1421,8 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, goa
           ))}
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-          <input value={goalText} onChange={(e) => setGoalText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && goalText.trim()) { setGoals((gs) => [...gs, { id: uid(), text: goalText.trim(), done: false, date: todayStr(), doneDate: null }]); setGoalText(""); } }} placeholder="เพิ่มเป้าหมายวันนี้..." style={input(t)} />
-          <button onClick={() => { if (goalText.trim()) { setGoals((gs) => [...gs, { id: uid(), text: goalText.trim(), done: false, date: todayStr(), doneDate: null }]); setGoalText(""); } }} style={{ ...primaryBtn(t), padding: "0 16px" }}>เพิ่ม</button>
+          <input value={goalText} onChange={(e) => setGoalText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addGoal(); }} placeholder="เพิ่มเป้าหมายวันนี้..." style={input(t)} />
+          <button onClick={addGoal} style={{ ...primaryBtn(t), padding: "0 16px" }}>เพิ่ม</button>
         </div>
       </div>
     </>
@@ -2196,7 +2206,7 @@ function ChatEntryPage({ t, M, userId, authProfile, session, openThread }) {
 }
 
 
-function ChatRoomPage({ t, userId, thread, profile, session }) {
+function ChatRoomPage({ t, userId, thread, profile, session, onLeave }) {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
   const [editingId, setEditingId] = useState(null);
@@ -2208,6 +2218,11 @@ function ChatRoomPage({ t, userId, thread, profile, session }) {
   const [otherMembers, setOtherMembers] = useState([]); // [{id, name}] สมาชิกคนอื่นในห้อง (ไม่รวมตัวเอง) ใช้ทำ "อ่านแล้ว"
   const [reads, setReads] = useState({}); // user_id -> last_read_at ของคนอื่นในห้อง
   const [lightbox, setLightbox] = useState(null); // url รูปที่กำลังดูเต็มจอ (null = ไม่ได้เปิดดู)
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  const leaveRoom = async () => {
+    await supabase.from("chat_thread_members").delete().eq("thread_id", thread.id).eq("user_id", userId);
+    onLeave?.();
+  };
   const fileRef = useRef(null);
   const endRef = useRef(null);
   const typingTimeoutRef = useRef(null);
@@ -2330,10 +2345,15 @@ function ChatRoomPage({ t, userId, thread, profile, session }) {
         ) : (
           <div style={{ width: 32, height: 32, borderRadius: 10, background: colorFor(thread.name), color: "#fff", display: "grid", placeItems: "center", fontSize: 13, fontWeight: 700 }}>{thread.name[0]}</div>
         )}
-        <div>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>{thread.name}</div>
           {!thread.isGroup && otherMembers[0]?.status_message && <div style={{ fontSize: 11, color: t.sub, fontStyle: "italic" }}>{otherMembers[0].status_message}</div>}
         </div>
+        {confirmLeave ? (
+          <button onClick={leaveRoom} style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 5, padding: "6px 10px", borderRadius: 10, border: "none", background: "#D9534F", color: "#fff", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>ยืนยันออก?</button>
+        ) : (
+          <button onClick={() => setConfirmLeave(true)} style={{ flexShrink: 0, background: "none", border: "none", cursor: "pointer", padding: 6 }} title="ออกจากห้อง"><LogOut size={17} color={t.faint} /></button>
+        )}
       </div>
       <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, paddingBottom: 10 }}>
         {messages.map((m) => {
