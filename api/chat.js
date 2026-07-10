@@ -89,12 +89,12 @@ async function callDeepSeek(system, messages) {
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { mentor, messages, userId, callerToken, mentorName, mentorDescription } = req.body || {};
-  const system = PERSONAS[mentor] || (
+  const { mentor, messages, userId, callerToken, mentorName, mentorDescription, goalsContext } = req.body || {};
+  const system = (PERSONAS[mentor] || (
     mentorName
       ? `คุณคือ ${mentorName} โค้ช/ผู้ช่วยส่วนตัวของผู้ใช้คนนี้${mentorDescription ? ` โดยมีความเชี่ยวชาญ/บุคลิกดังนี้: ${mentorDescription}` : ""} ตอบเป็นภาษาไทยเท่านั้น ให้คำแนะนำแบบเจาะลึก ละเอียด เป็นขั้นเป็นตอน ไม่ต้องกลัวยาว ตอบให้ครบถ้วนเต็มที่เหมือนโค้ชมืออาชีพที่ทุ่มเทให้ลูกศิษย์จริงๆ สวมบทบาทตามที่กำหนดไว้ข้างต้นอย่างสม่ำเสมอตลอดบทสนทนา`
       : PERSONAS.none
-  );
+  )) + (goalsContext ? `\n\n[ข้อมูลเป้าหมายจริงของผู้ใช้ ณ ตอนนี้ — ใช้ประกอบการให้คำแนะนำแบบธรรมชาติ ไม่ต้องพูดถึงทุกครั้งหรือฟังดูเหมือนอ่านสคริปต์ แค่หยิบมาใช้เวลาที่เกี่ยวข้องกับสิ่งที่คุยกันจริงๆ เช่น ถ้าผู้ใช้ถามเรื่องแรงจูงใจ/ผัดวันประกันพรุ่ง ให้ลองอ้างอิงเป้าหมายจริงของเขาได้เลย]\n${goalsContext}` : "");
   if (!Array.isArray(messages) || messages.length === 0) return res.status(400).json({ error: "ไม่มีข้อความส่งมา" });
 
   // เช็คสิทธิ์พรีเมียม (ถ้ามี userId+token ส่งมา — ถ้าไม่มีถือว่าไม่มีสิทธิ์พรีเมียม ไม่ error เพราะฟีเจอร์ฟรียังใช้ได้ปกติ)

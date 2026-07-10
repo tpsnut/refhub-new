@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import {
   Home, Lightbulb, TrendingUp, Plus, Newspaper, Languages, StickyNote,
   Sun, Moon, Send, Check, Trash2, X, Wallet, Target, BookOpen, ChevronRight,
-  Sparkles, Clock, Search, Volume2, VolumeX, Pencil, Download, ArrowLeft, Users,
+  Sparkles, Clock, Search, Volume2, VolumeX, Pencil, Download, ArrowLeft, Users, Camera, Phone,
   Utensils, Car, ShoppingBag, Receipt, Gamepad2, HeartPulse, Briefcase, Gift, Coffee, Music,
   Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi, MessageCircle, MoreVertical, KeyRound, MapPin, Copy, LockKeyhole, LogOut
 } from "lucide-react";
@@ -172,6 +172,51 @@ function palette(mode, themeId) {
 // 🚪 Portal สำหรับ popup ที่สร้างจากข้างในหน้าเพจ (เช่น Admin, Chat) ให้หลุดออกไปแปะที่ document.body ตรงๆ
 // กันปัญหาติดอยู่ใน "เขตซ้อนชั้น" ของกล่องเนื้อหา ซึ่งทำให้ z-index สูงแค่ไหนก็ไม่มีทางซ้อนทับแถบเมนูด้านล่างได้
 // 🖼️ ดูรูปเต็มจอ — ใช้ร่วมกันได้ทุกที่ในแอปที่มีรูป (แชท, avatar ฯลฯ)
+// 📞 คุยด้วยเสียง/วิดีโอ — ฝัง Jitsi Meet ไว้ในแอป (ฟรี ไม่ต้องมี API key) ทุกคนในห้องแชทเดียวกันเจอห้องคุยเดียวกันอัตโนมัติ
+function VideoCallModal({ t, roomName, displayName, onClose }) {
+  const containerRef = useRef(null);
+  const apiRef = useRef(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    const start = () => {
+      if (cancelled || !containerRef.current) return;
+      apiRef.current = new window.JitsiMeetExternalAPI("meet.jit.si", {
+        roomName: `refhub-${roomName}`,
+        parentNode: containerRef.current,
+        width: "100%",
+        height: "100%",
+        userInfo: { displayName: displayName || "ฉัน" },
+        configOverwrite: { prejoinPageEnabled: false, disableDeepLinking: true },
+        interfaceConfigOverwrite: { SHOW_JITSI_WATERMARK: false, SHOW_WATERMARK_FOR_GUESTS: false, MOBILE_APP_PROMO: false },
+      });
+      apiRef.current.addEventListener("videoConferenceJoined", () => setLoading(false));
+      apiRef.current.addEventListener("readyToClose", onClose);
+    };
+    if (window.JitsiMeetExternalAPI) { start(); } else {
+      const script = document.createElement("script");
+      script.src = "https://meet.jit.si/external_api.js";
+      script.onload = start;
+      document.body.appendChild(script);
+    }
+    return () => { cancelled = true; apiRef.current?.dispose(); };
+  }, [roomName]);
+
+  return (
+    <ModalPortal>
+      <div style={{ position: "fixed", inset: 0, background: "#000", zIndex: 100, display: "flex", flexDirection: "column" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", background: t.page }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>📞 กำลังคุยอยู่</div>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer" }}><X size={22} color={t.text} /></button>
+        </div>
+        {loading && <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", color: "#fff", fontSize: 13 }}>กำลังเชื่อมต่อ...</div>}
+        <div ref={containerRef} style={{ flex: 1 }} />
+      </div>
+    </ModalPortal>
+  );
+}
+
 function ImageLightbox({ src, onClose }) {
   return (
     <ModalPortal>
@@ -235,6 +280,28 @@ const blocksToPlainText = (blocks) => {
 const fmt = (n) => "฿" + Math.round(n).toLocaleString("en-US");
 const toDateStr = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const todayStr = () => toDateStr(new Date());
+
+// 🎯 สร้างบทสรุปเป้าหมายของ user ให้โค้ช AI อ่านและวิเคราะห์ได้ (ทำวันนี้ + แนวโน้มย้อนหลัง)
+const buildGoalsContext = (goals) => {
+  if (!goals || !goals.length) return "ผู้ใช้ยังไม่เคยตั้งเป้าหมายในแอปเลยสักครั้ง";
+  const today = todayStr();
+  const todays = goals.filter((g) => g.date === today);
+  const last7 = [...new Set([0, 1, 2, 3, 4, 5, 6].map((d) => { const dt = new Date(); dt.setDate(dt.getDate() - d); return toDateStr(dt); }))];
+  const recentGoals = goals.filter((g) => last7.includes(g.date));
+  const doneCount = recentGoals.filter((g) => g.done).length;
+  const rate = recentGoals.length ? Math.round((doneCount / recentGoals.length) * 100) : null;
+
+  // หาเป้าหมายที่ทำซ้ำๆ (ชื่อเดียวกัน) แต่ไม่เคยติ๊กสำเร็จเลยใน 3 วันล่าสุดที่ตั้งไว้
+  const byText = {};
+  recentGoals.forEach((g) => { const key = g.text.trim().toLowerCase(); (byText[key] = byText[key] || []).push(g); });
+  const stuck = Object.entries(byText).filter(([, arr]) => arr.length >= 2 && arr.every((g) => !g.done)).map(([, arr]) => arr[0].text);
+
+  let ctx = "";
+  ctx += todays.length ? `เป้าหมายวันนี้ของผู้ใช้: ${todays.map((g) => `"${g.text}" (${g.done ? "ทำสำเร็จแล้ว" : "ยังไม่ติ๊กว่าสำเร็จ"})`).join(", ")}` : "วันนี้ผู้ใช้ยังไม่ได้ตั้งเป้าหมายไว้เลย";
+  if (rate !== null) ctx += ` | อัตราทำสำเร็จ 7 วันล่าสุด: ${rate}%`;
+  if (stuck.length) ctx += ` | เป้าหมายที่ค้างไม่สำเร็จซ้ำๆ หลายวัน: ${stuck.map((s) => `"${s}"`).join(", ")}`;
+  return ctx;
+};
 const monthOf = (d) => d.slice(0, 7);
 const thMonth = (ym) => { const [y, m] = ym.split("-"); return ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."][+m - 1] + " " + ((+y) + 543); };
 
@@ -262,6 +329,7 @@ export default function RefHub() {
   const [mentorPick, setMentorPick] = useState(false);
   const [themePick, setThemePick] = useState(false);
   const [editProfile, setEditProfile] = useState(false);
+  const [profileLightbox, setProfileLightbox] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
@@ -706,15 +774,19 @@ export default function RefHub() {
         <div style={{ position: "relative", zIndex: 3, padding: "18px 18px 0" }}>
           {page === "home" ? (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <button onClick={() => setEditProfile(true)} style={{ display: "flex", alignItems: "center", gap: 11, background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-                <Avatar profile={profile} t={t} size={46} />
-                <div style={{ textAlign: "left" }}>
-                  <div style={{ fontSize: 11.5, color: t.sub }}>{greet(isNight)}</div>
-                  <div style={{ fontSize: 17, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 5 }}>
-                    {profile.name || (loaded ? "ผู้ใช้ใหม่" : "กำลังโหลด...")} <Pencil size={12} color={t.faint} />
+              <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
+                <button onClick={() => profile.avatar && setProfileLightbox(true)} style={{ background: "none", border: "none", cursor: profile.avatar ? "pointer" : "default", padding: 0 }}>
+                  <Avatar profile={profile} t={t} size={46} />
+                </button>
+                <button onClick={() => setEditProfile(true)} style={{ display: "flex", alignItems: "center", background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}>
+                  <div>
+                    <div style={{ fontSize: 11.5, color: t.sub }}>{greet(isNight)}</div>
+                    <div style={{ fontSize: 17, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 5 }}>
+                      {profile.name || (loaded ? "ผู้ใช้ใหม่" : "กำลังโหลด...")} <Pencil size={12} color={t.faint} />
+                    </div>
                   </div>
-                </div>
-              </button>
+                </button>
+              </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <IconBtn t={t} onClick={() => setSearchOpen(true)}><Search size={17} color={t.text} /></IconBtn>
                 <button onClick={() => setPage("chat")} style={{ position: "relative", width: 38, height: 38, borderRadius: 19, background: t.surface, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }}>
@@ -757,7 +829,7 @@ export default function RefHub() {
         </div>
 
         {/* CONTENT */}
-        <div style={{ position: "relative", zIndex: 2, padding: "16px 18px 120px", height: "calc(100vh - 76px)", overflowY: "auto" }}>
+        <div style={{ position: "relative", zIndex: 2, padding: `16px 18px ${page === "chat" || page === "chatRoom" ? 16 : 120}px`, height: "calc(100vh - 76px)", overflowY: "auto" }}>
           {page === "home" && <HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, goalDone, goalPct, setGoals, notes, setPage, setChatOpen, userId }} />}
           {page === "ledger" && <FinancePage {...{ t, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt), userId }} />}
           {page === "note" && <NotePage {...{ t, notes, setNotes, isNight, userId }} />}
@@ -800,7 +872,7 @@ export default function RefHub() {
           </div>
         </div>
 
-        <Dock t={t} page={page} setPage={setPage} onQuickAdd={() => setAddOpen(true)} />
+        {page !== "chat" && page !== "chatRoom" && <Dock t={t} page={page} setPage={setPage} onQuickAdd={() => setAddOpen(true)} />}
 
         {mentorPick && <MentorPicker t={t} mentor={mentor} setMentor={setMentor} authProfile={authProfile} setAuthProfile={setAuthProfile} userId={userId} customMentors={customMentors} setCustomMentors={setCustomMentors} close={() => setMentorPick(false)} />}
         {themePick && <ThemePicker t={t} theme={theme} setTheme={setTheme} mode={mode} close={() => setThemePick(false)} />}
@@ -836,8 +908,9 @@ export default function RefHub() {
           </div>
         )}
         {accountSettingsOpen && <AccountSettingsModal t={t} authProfile={authProfile} userId={userId} close={() => setAccountSettingsOpen(false)} />}
-        {chatOpen && <ChatModal t={t} M={M} mentor={mentor} userId={userId} session={session} close={() => setChatOpen(false)} />}
+        {chatOpen && <ChatModal t={t} M={M} mentor={mentor} setMentor={setMentor} authProfile={authProfile} setAuthProfile={setAuthProfile} customMentors={customMentors} setCustomMentors={setCustomMentors} userId={userId} session={session} goals={goals} close={() => setChatOpen(false)} />}
         {editProfile && <EditProfile t={t} M={M} profile={profile} setProfile={setProfile} userId={userId} authProfile={authProfile} setAuthProfile={setAuthProfile} close={() => setEditProfile(false)} />}
+        {profileLightbox && profile.avatar && <ImageLightbox src={profile.avatar} onClose={() => setProfileLightbox(false)} />}
         {searchOpen && <SearchOverlay t={t} notes={notes} goals={goals} tx={tx} categories={categories} setPage={setPage} close={() => setSearchOpen(false)} />}
         {musicOpen && <MusicModal {...{ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, moveTrack, toggleFavorite, volume, setVolume, userId, close: () => setMusicOpen(false) }} />}
         {addOpen && <AddTxModal t={t} tx={tx} setTx={setTx} categories={categories} moveCategory={moveCategory} deleteCategory={deleteCategory} addCategory={addCategory} userId={userId} close={() => setAddOpen(false)} />}
@@ -2217,6 +2290,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack }) 
   const [lightbox, setLightbox] = useState(null); // url รูปที่กำลังดูเต็มจอ (null = ไม่ได้เปิดดู)
   const [confirmLeave, setConfirmLeave] = useState(false); // "ยืนยัน" | "" -> โหมด: "leave" (ออกจากห้อง) หรือ "delete" (ลบถาวร)
   const [showMembers, setShowMembers] = useState(false);
+  const [showCall, setShowCall] = useState(false);
   const [leaveErr, setLeaveErr] = useState("");
   const isCreator = thread.createdBy && thread.createdBy === userId;
   const leaveRoom = async () => {
@@ -2360,6 +2434,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack }) 
           <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>{thread.name}</div>
           {!thread.isGroup && otherMembers[0]?.status_message && <div style={{ fontSize: 11, color: t.sub, fontStyle: "italic" }}>{otherMembers[0].status_message}</div>}
         </div>
+        <button onClick={() => setShowCall(true)} style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 17, background: "#2E9E6B18", border: "1px solid #2E9E6B55", cursor: "pointer", display: "grid", placeItems: "center" }} title="เริ่ม/เข้าร่วมคุยด้วยเสียง-วิดีโอ"><Phone size={15} color="#2E9E6B" /></button>
         {isCreator && (
           <button onClick={() => setShowMembers(true)} style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 17, background: t.surface, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }} title="จัดการสมาชิกห้อง"><Users size={16} color={t.sub} /></button>
         )}
@@ -2439,6 +2514,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack }) 
       </div>
       {lightbox && <ImageLightbox src={lightbox} onClose={() => setLightbox(null)} />}
       {showMembers && <RoomMembersModal t={t} threadId={thread.id} session={session} close={() => setShowMembers(false)} />}
+      {showCall && <VideoCallModal t={t} roomName={thread.id} displayName={profile?.name} onClose={() => setShowCall(false)} />}
     </div>
   );
 }
@@ -3293,12 +3369,20 @@ function LangPage({ t }) {
 }
 
 // ---------------- Modals ----------------
-function ChatModal({ t, M, mentor, userId, session, close }) {
+function ChatModal({ t, M, mentor, setMentor, authProfile, setAuthProfile, customMentors, setCustomMentors, userId, session, goals, close }) {
+  const [switchPick, setSwitchPick] = useState(false);
   const [msgs, setMsgs] = useState([{ who: "m", text: `สวัสดี ฉันคือ ${M.full} วันนี้อยากให้ช่วยเรื่องอะไร?` }]);
   const [inp, setInp] = useState(""); const [loading, setLoading] = useState(false); const endRef = useRef(null);
   const [pendingImg, setPendingImg] = useState(null); // { dataUrl, mime } รูปที่เลือกไว้ รอกดส่ง
   const fileRef = useRef(null);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, loading]);
+  const prevMentorRef = useRef(mentor);
+  useEffect(() => {
+    if (prevMentorRef.current !== mentor) {
+      setMsgs([{ who: "m", text: `สวัสดี ฉันคือ ${M.full} วันนี้อยากให้ช่วยเรื่องอะไร?` }]);
+      prevMentorRef.current = mentor;
+    }
+  }, [mentor]);
 
   // ย่อรูปก่อนส่ง กันไฟล์ใหญ่เกิน (Vercel จำกัด payload ต่อ request ไว้ไม่กี่ MB)
   const pickImage = (e) => {
@@ -3326,7 +3410,7 @@ function ChatModal({ t, M, mentor, userId, session, close }) {
     setMsgs(nextMsgs); setInp(""); setPendingImg(null);
     setLoading(true);
     try {
-      const r = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mentor, messages: nextMsgs, userId, callerToken: session?.access_token, mentorName: M.full, mentorDescription: M.tag }) });
+      const r = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mentor, messages: nextMsgs, userId, callerToken: session?.access_token, mentorName: M.full, mentorDescription: M.tag, goalsContext: buildGoalsContext(goals) }) });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "API error");
       setMsgs((m) => [...m, { who: "m", text: data.text || M.replies[Math.floor(Math.random() * M.replies.length)], source: data.source }]);
@@ -3343,10 +3427,20 @@ function ChatModal({ t, M, mentor, userId, session, close }) {
     <div style={overlay} onClick={close}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, height: "82vh", background: t.page, borderRadius: "24px 24px 0 0", display: "flex", flexDirection: "column", overflow: "hidden" }}>
         <div style={{ padding: 16, display: "flex", alignItems: "center", gap: 12, background: t.hero }}>
-          <span style={{ width: 40, height: 40, borderRadius: 20, background: `linear-gradient(135deg,${M.accent2},${M.accent})`, color: M.onAccent, display: "grid", placeItems: "center", fontWeight: 800 }}>{M.letter}</span>
-          <div style={{ flex: 1 }}><div style={{ fontSize: 15, fontWeight: 800, color: "#fff" }}>{M.full}</div><div style={{ fontSize: 11, color: "rgba(255,255,255,.7)" }}>{M.tag}</div></div>
-          <button onClick={close} style={{ background: "rgba(255,255,255,.15)", border: "none", borderRadius: 16, width: 32, height: 32, cursor: "pointer", display: "grid", placeItems: "center" }}><X size={18} color="#fff" /></button>
+          <button onClick={() => setSwitchPick(true)} style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0, background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}>
+            {M.avatarUrl ? (
+              <img src={M.avatarUrl} alt="" style={{ width: 40, height: 40, borderRadius: 20, objectFit: "cover", flexShrink: 0 }} />
+            ) : (
+              <span style={{ width: 40, height: 40, borderRadius: 20, background: `linear-gradient(135deg,${M.accent2},${M.accent})`, color: M.onAccent, display: "grid", placeItems: "center", fontWeight: 800, flexShrink: 0 }}>{M.letter}</span>
+            )}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: "#fff", display: "flex", alignItems: "center", gap: 5 }}>{M.full} <ChevronRight size={13} color="rgba(255,255,255,.6)" style={{ transform: "rotate(90deg)" }} /></div>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,.7)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{M.tag}</div>
+            </div>
+          </button>
+          <button onClick={close} style={{ background: "rgba(255,255,255,.15)", border: "none", borderRadius: 16, width: 32, height: 32, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}><X size={18} color="#fff" /></button>
         </div>
+        {switchPick && <MentorPicker t={t} mentor={mentor} setMentor={setMentor} authProfile={authProfile} setAuthProfile={setAuthProfile} userId={userId} customMentors={customMentors} setCustomMentors={setCustomMentors} close={() => setSwitchPick(false)} />}
         <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
           {msgs.map((m, i) => (
             <div key={i} style={{ alignSelf: m.who === "u" ? "flex-end" : "flex-start", maxWidth: "78%", background: m.who === "u" ? M.accent : t.surface, color: m.who === "u" ? M.onAccent : t.text, padding: "10px 14px", borderRadius: 16, fontSize: 13.5, lineHeight: 1.45, border: m.who === "u" ? "none" : `1px solid ${t.border}` }}>
@@ -3388,6 +3482,28 @@ function MentorPicker({ t, mentor, setMentor, authProfile, setAuthProfile, userI
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
   const [busy, setBusy] = useState(false);
+  const avatarFileRef = useRef(null);
+  const [avatarTargetId, setAvatarTargetId] = useState(null);
+  const [avatarCropSrc, setAvatarCropSrc] = useState(null);
+
+  const pickAvatarFile = (e) => {
+    const f = e.target.files?.[0]; if (!f) return;
+    e.target.value = "";
+    const rd = new FileReader(); rd.onload = () => setAvatarCropSrc(rd.result); rd.readAsDataURL(f);
+  };
+  const confirmMentorAvatar = async (dataUrl) => {
+    setAvatarCropSrc(null);
+    const id = avatarTargetId;
+    try {
+      const blob = await (await fetch(dataUrl)).blob();
+      const path = `${userId}/mentor-${id}-${uid()}.jpg`;
+      const { error: upErr } = await supabase.storage.from("attachments").upload(path, blob);
+      if (upErr) throw upErr;
+      const { data } = supabase.storage.from("attachments").getPublicUrl(path);
+      await supabase.from("custom_mentors").update({ avatar_url: data.publicUrl }).eq("id", id);
+      setCustomMentors((cs) => cs.map((c) => (c.id === id ? { ...c, avatarUrl: data.publicUrl } : c)));
+    } catch (e) { setErr("เปลี่ยนรูปไม่สำเร็จ: " + e.message); }
+  };
 
   const pick = (id) => { setMentor(id); close(); };
 
@@ -3429,15 +3545,26 @@ function MentorPicker({ t, mentor, setMentor, authProfile, setAuthProfile, userI
         </button>
         {customMentors.map((c) => (
           <button key={c.id} onClick={() => pick(c.id)} style={{ display: "flex", alignItems: "center", gap: 14, padding: 14, borderRadius: 18, cursor: "pointer", textAlign: "left", background: t.surface, border: `2px solid ${mentor === c.id ? "#8A93A8" : t.border}` }}>
-            {c.avatarUrl ? (
-              <img src={c.avatarUrl} alt="" style={{ width: 46, height: 46, borderRadius: 23, objectFit: "cover", flexShrink: 0 }} />
-            ) : (
-              <span style={{ width: 46, height: 46, borderRadius: 23, background: "linear-gradient(135deg,#A7ADB8,#8A93A8)", color: "#fff", display: "grid", placeItems: "center", fontWeight: 800, fontSize: 18, flexShrink: 0 }}>{(c.name || "?")[0].toUpperCase()}</span>
-            )}
+            <div style={{ position: "relative", flexShrink: 0 }}>
+              {c.avatarUrl ? (
+                <img src={c.avatarUrl} alt="" style={{ width: 46, height: 46, borderRadius: 23, objectFit: "cover" }} />
+              ) : (
+                <span style={{ width: 46, height: 46, borderRadius: 23, background: "linear-gradient(135deg,#A7ADB8,#8A93A8)", color: "#fff", display: "grid", placeItems: "center", fontWeight: 800, fontSize: 18 }}>{(c.name || "?")[0].toUpperCase()}</span>
+              )}
+              <button onClick={(e) => { e.stopPropagation(); setAvatarTargetId(c.id); avatarFileRef.current?.click(); }} style={{ position: "absolute", bottom: -3, right: -3, width: 20, height: 20, borderRadius: 10, background: t.accent, border: `2px solid ${t.surface}`, cursor: "pointer", display: "grid", placeItems: "center" }}>
+                <Camera size={10} color={t.onAccent} />
+              </button>
+            </div>
             <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>{c.name}</div><div style={{ fontSize: 12, color: t.sub, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.description || "โค้ชส่วนตัวของคุณ"}</div></div>
             {mentor === c.id && <Check size={20} color="#8A93A8" />}
           </button>
         ))}
+        <input ref={avatarFileRef} type="file" accept="image/*" onChange={pickAvatarFile} style={{ display: "none" }} />
+        {avatarCropSrc && (
+          <ModalPortal>
+            <ImageCropModal t={t} src={avatarCropSrc} onCancel={() => setAvatarCropSrc(null)} onConfirm={confirmMentorAvatar} />
+          </ModalPortal>
+        )}
         {(isAdmin || customMentors.length < limit) && (
           <button onClick={() => setCreating(true)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: 16, borderRadius: 18, cursor: "pointer", background: "none", border: `1.5px dashed ${t.border}`, color: t.sub, fontSize: 13.5, fontWeight: 700 }}>
             <Plus size={18} /> สร้างโค้ชใหม่
