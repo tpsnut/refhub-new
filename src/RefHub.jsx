@@ -244,6 +244,7 @@ export default function RefHub() {
   const [session, setSession] = useState(null);       // session ของ Supabase Auth (null = ยังไม่ล็อกอิน)
   const [authChecked, setAuthChecked] = useState(false); // true เมื่อเช็ค session ครั้งแรกเสร็จแล้ว (กันจอกระพริบ)
   const [authProfile, setAuthProfile] = useState(null);  // แถวในตาราง profiles: { approved, role, name, ... }
+  const [authProfileChecked, setAuthProfileChecked] = useState(false); // true เมื่อเช็ค authProfile ครั้งแรกเสร็จแล้ว (กันโชว์ "รออนุมัติ" ผิดๆ ระหว่างกำลังโหลดจริง)
   const userId = session?.user?.id || null;
   const [themeMode, setThemeMode] = useState("auto");
   const [mentor, setMentor] = useState("loid");
@@ -538,7 +539,8 @@ useEffect(() => {
   // 🔐 ดึงแถว profile (สถานะอนุมัติ/role) ทุกครั้งที่ userId เปลี่ยน (ล็อกอิน/ล็อกเอาต์)
   // ถ้ายังไม่มีแถว (เช่น เพิ่งยืนยันอีเมลเสร็จเป็นครั้งแรก) จะสร้างให้ตอนนี้เลย เพราะรับประกันว่ามี session จริงแล้ว (RLS ผ่านแน่นอน)
   useEffect(() => {
-    if (!userId) { setAuthProfile(null); return; }
+    if (!userId) { setAuthProfile(null); setAuthProfileChecked(false); return; }
+    setAuthProfileChecked(false);
     (async () => {
       try {
         let { data } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
@@ -572,6 +574,7 @@ useEffect(() => {
           if (withCode) setAuthProfile(withCode);
         }
       } catch (e) { console.error("โหลดโปรไฟล์ผิดพลาด:", e.message); setAuthProfile(null); }
+      finally { setAuthProfileChecked(true); }
     })();
   }, [userId]);
 
@@ -746,6 +749,7 @@ useEffect(() => {
   // 🔐 เกตระบบล็อกอิน — เช็คก่อนแสดงแอปจริง
   if (!authChecked) return <AuthLoadingScreen />;
   if (!session) return <AuthPage />;
+  if (!authProfileChecked) return <AuthLoadingScreen />;
   if (!authProfile || !authProfile.approved) return <PendingApprovalScreen profile={authProfile} onLogout={() => supabase.auth.signOut()} />;
 
   return (
@@ -904,8 +908,10 @@ useEffect(() => {
 // ---------------- 🔐 Auth screens ----------------
 function AuthLoadingScreen() {
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#F6F1E8" }}>
-      <div style={{ width: 64, height: 64, borderRadius: 18, background: "#EA9552" }} />
+    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#F6F1E8", gap: 22 }}>
+      <style>{`@keyframes rh-spin { to { transform: rotate(360deg); } } @keyframes rh-pulse { 0%,100% { transform: scale(1); opacity:1; } 50% { transform: scale(1.05); opacity:.85; } }`}</style>
+      <div style={{ animation: "rh-pulse 1.6s ease-in-out infinite" }}><CloverMark size={72} /></div>
+      <div style={{ width: 28, height: 28, borderRadius: "50%", border: "3px solid #E8D8C0", borderTopColor: "#EA9552", animation: "rh-spin 0.8s linear infinite" }} />
     </div>
   );
 }
@@ -1370,7 +1376,7 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, goa
         </CatCard>
         <CatCard t={t} k="violet" icon={<StickyNote size={15} color="#fff" />} label="โน้ตล่าสุด" onClick={() => setPage("note")}>
           <div style={{ fontSize: 12.5, fontWeight: 800, color: t.catTx.violet, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{latestNote ? latestNote.title || "(ไม่มีหัวข้อ)" : "ยังไม่มีโน้ต"}</div>
-          <div style={{ fontSize: 10.5, color: t.catLb.violet, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{latestNote ? latestNote.body || "แตะเพื่อเปิด" : "แตะเพื่อเริ่ม"}</div>
+          <div style={{ fontSize: 10.5, color: t.catLb.violet, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{latestNote ? (blocksToPlainText(latestNote.body).trim() || "แตะเพื่อเปิด") : "แตะเพื่อเริ่ม"}</div>
         </CatCard>
       </div>
 
