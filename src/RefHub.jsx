@@ -248,7 +248,8 @@ export default function RefHub() {
   const [authProfileChecked, setAuthProfileChecked] = useState(false); // true เมื่อเช็ค authProfile ครั้งแรกเสร็จแล้ว (กันโชว์ "รออนุมัติ" ผิดๆ ระหว่างกำลังโหลดจริง)
   const userId = session?.user?.id || null;
   const [themeMode, setThemeMode] = useState("auto");
-  const [mentor, setMentor] = useState("loid");
+  const [mentor, setMentor] = useState("none");
+  const [customMentors, setCustomMentors] = useState([]); // โค้ชที่ user สร้างเอง (ไม่ใช่แอดมิน) [{id, name, description, avatarUrl}]
   const [theme, setTheme] = useState("default"); // 🎨 ธีมสีแอป: default | red | navy | twilight — แยกอิสระจาก mentor
   const [fontScale, setFontScale] = useState(100); // 📏 ขนาดตัวอักษร: 100 | 115 | 130 (ปกติ/ใหญ่/ใหญ่มาก)
   const [page, setPage] = useState(() => { try { return sessionStorage.getItem("refhub:page") || "home"; } catch (e) { return "home"; } });
@@ -285,7 +286,14 @@ export default function RefHub() {
   const isNight = themeMode === "night" || (themeMode === "auto" && autoNight);
   const mode = isNight ? "night" : "day";
   const t = palette(mode, theme);
-  const M = MENTORS[mentor];
+  const customMentorObj = customMentors.find((c) => c.id === mentor);
+  const M = MENTORS[mentor] || (customMentorObj ? {
+    name: customMentorObj.name, full: customMentorObj.name, tag: customMentorObj.description || "โค้ชส่วนตัวของคุณ", mood: "เป็นมิตร ตั้งใจช่วยเหลือ",
+    letter: (customMentorObj.name || "?")[0]?.toUpperCase() || "A", accent: "#8A93A8", accent2: "#A7ADB8", onAccent: "#ffffff",
+    scale: [261.6, 293.7, 329.6, 392.0, 440.0], root: 130.8, avatarUrl: customMentorObj.avatarUrl || null,
+    quotes: ["พร้อมช่วยเหลือคุณเสมอ", "ถามอะไรมาได้เลย", "มาลองคิดไปด้วยกัน", "ทุกก้าวเล็กๆ มีความหมาย"],
+    replies: ["ลองเล่าเพิ่มเติมได้ไหมครับ จะได้ช่วยได้ตรงจุดขึ้น", "เข้าใจแล้ว ลองมาดูกันทีละขั้นตอนนะครับ", "นี่เป็นมุมมองที่น่าสนใจ ลองคิดต่อดูอีกหน่อยไหมครับ"],
+  } : MENTORS.none);
 
   useEffect(() => { const c = () => { const h = new Date().getHours(); setAutoNight(h >= 18 || h < 6); }; c(); const id = setInterval(c, 60000); return () => clearInterval(id); }, []);
   useEffect(() => { const id = setInterval(() => setQuoteIdx((i) => i + 1), 9000); return () => clearInterval(id); }, []);
@@ -312,7 +320,7 @@ export default function RefHub() {
           console.error("โหลด user_settings ไม่สำเร็จ (ปัญหาชั่วคราว ไม่แตะข้อมูลโปรไฟล์เดิม):", uSettingsErr.message);
         } else if (uSettings) {
           setProfile({ name: uSettings.name, avatar: uSettings.avatar || "" });
-          setMentor(uSettings.mentor || "loid");
+          setMentor(uSettings.mentor || "none");
           setThemeMode(uSettings.theme_mode || "auto");
           if (uSettings.theme) setTheme(uSettings.theme);
           if (typeof uSettings.volume === "number") setVolume(uSettings.volume);
@@ -349,6 +357,10 @@ export default function RefHub() {
           .eq("user_id", userId)
           .order("date", { ascending: false });
         if (dbNotes) setNotes(dbNotes.map((n) => ({ ...n, notionId: n.notion_id || null })));
+
+        // 5.5 ดึงโค้ชที่สร้างเอง (ไม่ใช่แอดมิน)
+        const { data: dbCustomMentors } = await supabase.from("custom_mentors").select("*").eq("user_id", userId);
+        if (dbCustomMentors) setCustomMentors(dbCustomMentors.map((c) => ({ id: c.id, name: c.name, description: c.description, avatarUrl: c.avatar_url })));
 
         // 5. ดึงเพลย์ลิสต์เพลง (Playlists)
         const { data: dbPlaylist } = await supabase
@@ -790,7 +802,7 @@ export default function RefHub() {
 
         <Dock t={t} page={page} setPage={setPage} onQuickAdd={() => setAddOpen(true)} />
 
-        {mentorPick && <MentorPicker t={t} mentor={mentor} setMentor={setMentor} authProfile={authProfile} setAuthProfile={setAuthProfile} userId={userId} close={() => setMentorPick(false)} />}
+        {mentorPick && <MentorPicker t={t} mentor={mentor} setMentor={setMentor} authProfile={authProfile} setAuthProfile={setAuthProfile} userId={userId} customMentors={customMentors} setCustomMentors={setCustomMentors} close={() => setMentorPick(false)} />}
         {themePick && <ThemePicker t={t} theme={theme} setTheme={setTheme} mode={mode} close={() => setThemePick(false)} />}
         {moreMenuOpen && (
           <div style={overlay} onClick={() => setMoreMenuOpen(false)}>
@@ -1615,7 +1627,7 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts }) {
   const remindNotification = async (id) => { await supabase.from("profiles").update({ notif_reminder_at: new Date().toISOString() }).eq("id", id); loadMembers(); };
   const setPremiumAi = async (id, premium_ai) => { await supabase.from("profiles").update({ premium_ai }).eq("id", id); loadMembers(); };
   const setMentorLimit = async (id, mentor_limit) => { await supabase.from("profiles").update({ mentor_limit }).eq("id", id); loadMembers(); };
-  const resetMentorPick = async (id) => { await supabase.from("profiles").update({ unlocked_mentors: [] }).eq("id", id); loadMembers(); };
+  const resetMentorPick = async (id) => { await supabase.from("custom_mentors").delete().eq("user_id", id); loadMembers(); };
   const setTopicLimit = async (id, topic_limit) => { await supabase.from("profiles").update({ topic_limit }).eq("id", id); loadMembers(); };
   const setDailyArticleLimit = async (id, daily_article_limit) => { await supabase.from("profiles").update({ daily_article_limit }).eq("id", id); loadMembers(); };
   const removeMember = async (id) => { await supabase.from("profiles").delete().eq("id", id); setDetailMember(null); loadMembers(); };
@@ -1824,16 +1836,14 @@ function MemberDetailModal({ t, m, isSelf, isOnline, setApproved, setRole, setCa
                 <button onClick={() => remindNotification(m.id)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 10, border: `1px solid ${t.border}`, cursor: "pointer", background: "none", color: t.sub, fontSize: 12, fontWeight: 700 }}><Bell size={13} /> เตือนให้เปิดแจ้งเตือน</button>
               </Row>
             )}
-            <Row label="จำนวนโค้ชที่ปลดล็อกได้">
+            <Row label="สร้างโค้ชของตัวเองได้สูงสุด">
               <select value={m.mentor_limit ?? 0} onChange={(e) => setMentorLimit(m.id, +e.target.value)} style={selectStyle}>
                 {[0, 1, 2, 3].map((n) => <option key={n} value={n}>{n} คน</option>)}
               </select>
             </Row>
-            {(m.unlocked_mentors || []).length > 0 && (
-              <Row label={`เลือกโค้ชแล้ว: ${MENTORS[m.unlocked_mentors[0]]?.full || m.unlocked_mentors[0]}`}>
-                <button onClick={() => resetMentorPick(m.id)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 10, border: `1px solid ${t.border}`, cursor: "pointer", background: "none", color: t.sub, fontSize: 12, fontWeight: 700 }}>รีเซ็ตให้เลือกใหม่</button>
-              </Row>
-            )}
+            <Row label="ล้างโค้ชที่สร้างไว้ทั้งหมด">
+              <button onClick={() => resetMentorPick(m.id)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 10, border: `1px solid ${t.border}`, cursor: "pointer", background: "none", color: t.sub, fontSize: 12, fontWeight: 700 }}>ล้างทั้งหมด</button>
+            </Row>
             <Row label="หมวดความสนใจสูงสุด">
               <select value={m.topic_limit ?? 3} onChange={(e) => setTopicLimit(m.id, +e.target.value)} style={selectStyle}>
                 {Array.from({ length: 14 }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n} หมวด</option>)}
@@ -2227,7 +2237,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack }) 
   const typingTimeoutRef = useRef(null);
   const broadcastRef = useRef(null);
 
-  const markRead = () => supabase.from("chat_reads").upsert({ user_id: userId, thread_id: thread.id, last_read_at: new Date().toISOString() }).then(() => {}, () => {});
+  const markRead = () => supabase.from("chat_reads").upsert({ user_id: userId, thread_id: thread.id, last_read_at: new Date().toISOString() }, { onConflict: "user_id,thread_id" }).then(({ error }) => { if (error) console.error("บันทึก 'อ่านแล้ว' ไม่สำเร็จ:", error.message); }, () => {});
 
   // 👥 ดึงสมาชิกคนอื่นในห้อง + เวลาที่แต่ละคนอ่านล่าสุด (สำหรับทำ "อ่านแล้ว") + ฟังการเปลี่ยนแปลงแบบสด
   useEffect(() => {
@@ -3316,7 +3326,7 @@ function ChatModal({ t, M, mentor, userId, session, close }) {
     setMsgs(nextMsgs); setInp(""); setPendingImg(null);
     setLoading(true);
     try {
-      const r = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mentor, messages: nextMsgs, userId, callerToken: session?.access_token }) });
+      const r = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mentor, messages: nextMsgs, userId, callerToken: session?.access_token, mentorName: M.full, mentorDescription: M.tag }) });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "API error");
       setMsgs((m) => [...m, { who: "m", text: data.text || M.replies[Math.floor(Math.random() * M.replies.length)], source: data.source }]);
@@ -3370,48 +3380,83 @@ function ChatModal({ t, M, mentor, userId, session, close }) {
   );
 }
 
-function MentorPicker({ t, mentor, setMentor, authProfile, setAuthProfile, userId, close }) {
-  const isAdmin = authProfile?.role === "admin" || authProfile?.role === "trusted";
+function MentorPicker({ t, mentor, setMentor, authProfile, setAuthProfile, userId, customMentors, setCustomMentors, close }) {
+  const isAdmin = authProfile?.role === "admin";
   const limit = authProfile?.mentor_limit ?? 0;
-  const unlocked = authProfile?.unlocked_mentors || []; // ปกติจะมีได้แค่ 0 หรือ 1 ตัว (ล็อกถาวรตั้งแต่เลือกครั้งแรก)
   const [err, setErr] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newDesc, setNewDesc] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  const pick = async (k) => {
+  const pick = (id) => { setMentor(id); close(); };
+
+  const createMentor = async () => {
     setErr("");
-    if (isAdmin || k === "none") { setMentor(k); close(); return; }
-    if (unlocked.includes(k)) { setMentor(k); close(); return; } // กดตัวที่เลือกไปแล้วซ้ำ ใช้ได้ปกติ
-    if (unlocked.length > 0) {
-      setErr(`คุณเลือกโค้ชไปแล้ว (${MENTORS[unlocked[0]]?.full || unlocked[0]}) เปลี่ยนไม่ได้ ต้องให้แอดมินรีเซ็ตให้ก่อนถึงจะเลือกใหม่ได้`);
-      return;
-    }
-    if (limit < 1) {
-      setErr("คุณยังไม่ได้รับสิทธิ์เลือกโค้ช ให้แอดมินเปิดสิทธิ์ให้ที่หน้า Admin ก่อนนะ");
-      return;
-    }
-    const { data } = await supabase.from("profiles").update({ unlocked_mentors: [k] }).eq("id", userId).select().single();
-    if (data) setAuthProfile(data);
-    setMentor(k); close();
+    if (!newName.trim()) { setErr("ตั้งชื่อโค้ชก่อนนะครับ"); return; }
+    if (!isAdmin && customMentors.length >= limit) { setErr(`สร้างโค้ชได้สูงสุด ${limit} คน ให้แอดมินเพิ่มโควตาถ้าอยากสร้างเพิ่ม`); return; }
+    setBusy(true);
+    try {
+      const { data, error } = await supabase.from("custom_mentors").insert({ user_id: userId, name: newName.trim(), description: newDesc.trim() || null }).select().single();
+      if (error) throw error;
+      const created = { id: data.id, name: data.name, description: data.description, avatarUrl: data.avatar_url };
+      setCustomMentors((cs) => [...cs, created]);
+      setMentor(created.id);
+      close();
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
 
-  return (<div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
-    <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 4 }}>เลือกโค้ชของคุณ</div>
+  return (<div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
+    <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 4 }}>โค้ชของคุณ</div>
     <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>
-      คำคมและสไตล์การคุยจะเปลี่ยนตามโค้ช (สีธีมแอปปรับแยกได้ที่ไอคอนจานสี 🎨 ด้านบน)
-      {!isAdmin && (unlocked.length > 0 ? <> · เลือกไว้แล้ว เปลี่ยนไม่ได้จนกว่าแอดมินจะรีเซ็ต</> : limit < 1 ? <> · ยังไม่ได้รับสิทธิ์เลือกโค้ช</> : <> · เลือกได้ 1 คน (เลือกแล้วเปลี่ยนไม่ได้)</>)}
+      {isAdmin ? "สร้างโค้ชของคุณเองได้ไม่จำกัด (สิทธิ์แอดมิน)" : `สร้างโค้ชของคุณเองได้สูงสุด ${limit} คน (${customMentors.length}/${limit})`}
     </div>
     {err && <div style={{ fontSize: 12, color: "#D9534F", marginBottom: 12 }}>{err}</div>}
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {Object.entries(MENTORS).map(([k, m]) => {
-        const locked = !isAdmin && k !== "none" && !unlocked.includes(k) && (unlocked.length > 0 || limit < 1);
-        return (
-          <button key={k} onClick={() => pick(k)} style={{ display: "flex", alignItems: "center", gap: 14, padding: 14, borderRadius: 18, cursor: "pointer", textAlign: "left", background: t.surface, border: `2px solid ${mentor === k ? m.accent : t.border}`, opacity: locked ? 0.5 : 1 }}>
+
+    {!creating ? (
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {isAdmin && Object.entries(MENTORS).filter(([k]) => k !== "none").map(([k, m]) => (
+          <button key={k} onClick={() => pick(k)} style={{ display: "flex", alignItems: "center", gap: 14, padding: 14, borderRadius: 18, cursor: "pointer", textAlign: "left", background: t.surface, border: `2px solid ${mentor === k ? m.accent : t.border}` }}>
             <span style={{ width: 46, height: 46, borderRadius: 23, background: `linear-gradient(135deg,${m.accent2},${m.accent})`, color: m.onAccent, display: "grid", placeItems: "center", fontWeight: 800, fontSize: 18, flexShrink: 0 }}>{m.letter}</span>
             <div style={{ flex: 1 }}><div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>{m.full}</div><div style={{ fontSize: 12, color: t.sub }}>{m.tag}</div></div>
-            {locked ? <LockKeyhole size={18} color={t.faint} /> : mentor === k && <Check size={20} color={m.accent} />}
+            {mentor === k && <Check size={20} color={m.accent} />}
           </button>
-        );
-      })}
-    </div>
+        ))}
+        <button onClick={() => pick("none")} style={{ display: "flex", alignItems: "center", gap: 14, padding: 14, borderRadius: 18, cursor: "pointer", textAlign: "left", background: t.surface, border: `2px solid ${mentor === "none" ? MENTORS.none.accent : t.border}` }}>
+          <span style={{ width: 46, height: 46, borderRadius: 23, background: `linear-gradient(135deg,${MENTORS.none.accent2},${MENTORS.none.accent})`, color: "#fff", display: "grid", placeItems: "center", fontWeight: 800, fontSize: 18, flexShrink: 0 }}>{MENTORS.none.letter}</span>
+          <div style={{ flex: 1 }}><div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>{MENTORS.none.full}</div><div style={{ fontSize: 12, color: t.sub }}>{MENTORS.none.tag}</div></div>
+          {mentor === "none" && <Check size={20} color={MENTORS.none.accent} />}
+        </button>
+        {customMentors.map((c) => (
+          <button key={c.id} onClick={() => pick(c.id)} style={{ display: "flex", alignItems: "center", gap: 14, padding: 14, borderRadius: 18, cursor: "pointer", textAlign: "left", background: t.surface, border: `2px solid ${mentor === c.id ? "#8A93A8" : t.border}` }}>
+            {c.avatarUrl ? (
+              <img src={c.avatarUrl} alt="" style={{ width: 46, height: 46, borderRadius: 23, objectFit: "cover", flexShrink: 0 }} />
+            ) : (
+              <span style={{ width: 46, height: 46, borderRadius: 23, background: "linear-gradient(135deg,#A7ADB8,#8A93A8)", color: "#fff", display: "grid", placeItems: "center", fontWeight: 800, fontSize: 18, flexShrink: 0 }}>{(c.name || "?")[0].toUpperCase()}</span>
+            )}
+            <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>{c.name}</div><div style={{ fontSize: 12, color: t.sub, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.description || "โค้ชส่วนตัวของคุณ"}</div></div>
+            {mentor === c.id && <Check size={20} color="#8A93A8" />}
+          </button>
+        ))}
+        {(isAdmin || customMentors.length < limit) && (
+          <button onClick={() => setCreating(true)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: 16, borderRadius: 18, cursor: "pointer", background: "none", border: `1.5px dashed ${t.border}`, color: t.sub, fontSize: 13.5, fontWeight: 700 }}>
+            <Plus size={18} /> สร้างโค้ชใหม่
+          </button>
+        )}
+        {!isAdmin && limit < 1 && <div style={{ fontSize: 11.5, color: t.faint, textAlign: "center", marginTop: 6 }}>ให้แอดมินเปิดสิทธิ์ให้ที่หน้า Admin ก่อน ถึงจะสร้างโค้ชของตัวเองได้</div>}
+      </div>
+    ) : (
+      <div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: t.sub, marginBottom: 6 }}>ตั้งชื่อโค้ช</div>
+        <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="เช่น โค้ชแนน, Tony" style={{ ...input(t), marginBottom: 12 }} />
+        <div style={{ fontSize: 12, fontWeight: 700, color: t.sub, marginBottom: 6 }}>ความเชี่ยวชาญ/บุคลิก (ไม่ใส่ก็ได้)</div>
+        <textarea value={newDesc} onChange={(e) => setNewDesc(e.target.value)} placeholder="เช่น เก่งด้านการเงินโดยเฉพาะ หรือ พูดจามั่นใจแบบ Tony Stark" rows={3} style={{ ...input(t), resize: "vertical", marginBottom: 14, fontFamily: "inherit" }} />
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => setCreating(false)} style={{ flex: 1, padding: "11px 0", borderRadius: 12, border: `1px solid ${t.border}`, background: "none", color: t.sub, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>ยกเลิก</button>
+          <button onClick={createMentor} disabled={busy} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), flex: 2, padding: "11px 0" }}>{busy ? "กำลังสร้าง..." : "สร้างโค้ชนี้"}</button>
+        </div>
+      </div>
+    )}
   </div></div>);
 }
 
