@@ -5,7 +5,7 @@ import {
   Sun, Moon, Send, Check, Trash2, X, Wallet, Target, BookOpen, ChevronRight,
   Sparkles, Clock, Search, Volume2, VolumeX, Pencil, Download, ArrowLeft,
   Utensils, Car, ShoppingBag, Receipt, Gamepad2, HeartPulse, Briefcase, Gift, Coffee, Music,
-  Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi, MessageCircle, MoreVertical, KeyRound, MapPin, Copy
+  Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi, MessageCircle, MoreVertical, KeyRound, MapPin, Copy, LockKeyhole
 } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, ResponsiveContainer, Tooltip } from "recharts";
 // 📝 BlockNote — editor แบบ Notion (toggle, checklist, หัวข้อ, แนบรูป/ไฟล์) สำหรับหน้าโน้ตฉบับเต็ม
@@ -3201,10 +3201,12 @@ function ChatModal({ t, M, mentor, close }) {
       const r = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mentor, messages: nextMsgs }) });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "API error");
-      setMsgs((m) => [...m, { who: "m", text: data.text || M.replies[Math.floor(Math.random() * M.replies.length)] }]);
+      setMsgs((m) => [...m, { who: "m", text: data.text || M.replies[Math.floor(Math.random() * M.replies.length)], source: data.source }]);
     } catch (e) {
       // ยังไม่ deploy หรือ API มีปัญหา -> fallback เป็น mock reply ชั่วคราว ไม่ให้แชทค้าง
-      setMsgs((m) => [...m, { who: "m", text: M.replies[Math.floor(Math.random() * M.replies.length)] }]);
+      // แต่ log สาเหตุจริงไว้ให้เช็คได้ (กด F12 > Console) และติดป้ายบอกชัดว่านี่คือ mock ไม่ใช่ AI จริง
+      console.error("เรียก /api/chat ไม่สำเร็จ ตกไปใช้ mock reply สาเหตุ:", e.message);
+      setMsgs((m) => [...m, { who: "m", text: M.replies[Math.floor(Math.random() * M.replies.length)], isMock: true }]);
     } finally {
       setLoading(false);
     }
@@ -3222,6 +3224,7 @@ function ChatModal({ t, M, mentor, close }) {
             <div key={i} style={{ alignSelf: m.who === "u" ? "flex-end" : "flex-start", maxWidth: "78%", background: m.who === "u" ? M.accent : t.surface, color: m.who === "u" ? M.onAccent : t.text, padding: "10px 14px", borderRadius: 16, fontSize: 13.5, lineHeight: 1.45, border: m.who === "u" ? "none" : `1px solid ${t.border}` }}>
               {m.image && <img src={m.image} alt="" style={{ maxWidth: "100%", borderRadius: 10, marginBottom: m.text ? 6 : 0, display: "block" }} />}
               {m.text}
+              {m.isMock && <div style={{ fontSize: 9.5, opacity: 0.55, marginTop: 4 }}>⚠️ โหมดสำรอง (AI ตอบไม่สำเร็จ ดูสาเหตุใน Console)</div>}
             </div>
           ))}
           {loading && <div style={{ alignSelf: "flex-start", color: t.sub, fontSize: 12.5, padding: "4px 14px" }}>{M.name} กำลังพิมพ์...</div>}
