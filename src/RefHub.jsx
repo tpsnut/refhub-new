@@ -175,131 +175,124 @@ function palette(mode, themeId) {
 // 📞 คุยด้วยเสียง/วิดีโอ — ฝัง Jitsi Meet ไว้ในแอป (ฟรี ไม่ต้องมี API key) ทุกคนในห้องแชทเดียวกันเจอห้องคุยเดียวกันอัตโนมัติ
 // 📞 คุยด้วยเสียง — ทำเอง ไม่พึ่งบริการนอก (WebRTC + Supabase Realtime ส่งสัญญาณเชื่อมสาย) ไม่มีการบังคับล็อกอินใดๆ
 // ใช้ STUN สาธารณะฟรีของ Google เชื่อมสายตรง (ไม่มี TURN server สำรอง เผื่อบางเครือข่ายที่เข้มงวดมากอาจเชื่อมไม่ติด แต่ฟรี 100%)
-function AudioCallModal({ t, threadId, userId, displayName, otherMemberIds, roomName, session, onClose }) {
-  const [participants, setParticipants] = useState([]); // [{userId, name}]
+function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName, session, onMinimize, onClose }) {
+  const [participants, setParticipants] = useState([]); // [{sid, identity, name, videoTrack, audioTrack}]
   const [muted, setMuted] = useState(false);
+  const [cameraOn, setCameraOn] = useState(false);
   const [connecting, setConnecting] = useState(true);
   const [err, setErr] = useState("");
-  const [volumeBoost, setVolumeBoost] = useState(0.5); // 0.5 = เบา (ค่าเริ่มต้น เหมือนคุยโทรศัพท์ปกติ), 1 = ปกติ, มากกว่า 1 = ดังขึ้น (ปรับได้ด้วยปุ่ม 🔊)
-  const localStreamRef = useRef(null);
-  const peersRef = useRef({});
+  const [volumeBoost, setVolumeBoost] = useState(0.5); // 0.5 = เบา (ค่าเริ่มต้น เหมือนคุยโทรศัพท์ปกติ), 1 = ปกติ, มากกว่า 1 = ดังขึ้น
+  const roomRef = useRef(null);
   const audioCtxRef = useRef(null);
-  const gainNodesRef = useRef({}); // userId -> GainNode ของแต่ละคน ปรับความดังพร้อมกันทีเดียวได้
-  const micGainRef = useRef(null); // GainNode ของไมค์ตัวเอง (ขยายเสียงที่ส่งออกไปให้อีกฝ่ายได้ยินชัดขึ้น)
-  const channelRef = useRef(null);
-  const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }];
+  const gainNodesRef = useRef({}); // identity -> GainNode ของแต่ละคน
+  const localVideoRef = useRef(null);
+  const presenceChannelRef = useRef(null);
   const VOLUME_LEVELS = [0.5, 1, 1.6, 2.2]; // เบา -> ปกติ -> ดัง -> ดังมาก -> วนกลับ
 
-  // ปรับความดังของทุกคนที่กำลังคุยอยู่ทันทีเมื่อเปลี่ยนระดับเสียง
   useEffect(() => {
     Object.values(gainNodesRef.current).forEach((g) => { g.gain.value = volumeBoost; });
-    if (micGainRef.current) micGainRef.current.gain.value = volumeBoost;
   }, [volumeBoost]);
 
   useEffect(() => {
     let cancelled = false;
     const init = async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, // autoGainControl = ขยายเสียงพูดที่เบา/ไกลจากไมค์ให้ดังขึ้นอัตโนมัติ ไม่ต้องจ่อไมค์
-          video: false,
-        });
-        if (cancelled) { stream.getTracks().forEach((tr) => tr.stop()); return; }
-        localStreamRef.current = stream;
-        setConnecting(false);
+        const { Room, RoomEvent, Track } = await import("livekit-client");
 
-        // 🔊 ตั้ง AudioContext ไว้ขยายเสียงที่ได้ยินจากอีกฝ่ายให้ดังขึ้นกว่าปกติ (ทำตอนนี้เลยเพราะเพิ่งมี user gesture จากการกดปุ่มโทร ทำให้ iOS ยอมให้เล่นเสียงได้)
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
         const audioCtx = new AudioCtx();
         await audioCtx.resume().catch(() => {});
         audioCtxRef.current = audioCtx;
 
-        // 🎙️ ขยายเสียงไมค์ของเราเองก่อนส่งออกไปด้วย (ปุ่ม 🔊 เดียวกัน ทำให้อีกฝ่ายได้ยินเราชัด/ดังขึ้นเวลาพูดจากระยะไกล ไม่ใช่แค่ปิด/เปิดไมค์)
-        const micSource = audioCtx.createMediaStreamSource(stream);
-        const micGain = audioCtx.createGain();
-        micGain.gain.value = volumeBoost;
-        micGainRef.current = micGain;
-        const micDest = audioCtx.createMediaStreamDestination();
-        micSource.connect(micGain).connect(micDest);
-        const outgoingStream = micDest.stream; // สตรีมที่ผ่านการขยายเสียงแล้ว ใช้ตัวนี้ส่งออกไปแทนสตรีมดิบ
+        const r = await fetch("/api/livekit-token", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ roomName: `refhub-${threadId}`, participantName: displayName, callerToken: session?.access_token }),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error);
+        if (cancelled) return;
 
-        const channel = supabase.channel(`call-${threadId}`, { config: { broadcast: { self: false } } });
-        channelRef.current = channel;
+        const room = new Room({ adaptiveStream: true, dynacast: true });
+        roomRef.current = room;
 
-        const createPeer = (otherId, otherName) => {
-          const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-          outgoingStream.getTracks().forEach((track) => pc.addTrack(track, outgoingStream));
-          pc.onicecandidate = (e) => { if (e.candidate) channel.send({ type: "broadcast", event: "signal", payload: { kind: "ice", from: userId, to: otherId, candidate: e.candidate } }); };
-          pc.ontrack = (e) => {
-            // ขยายเสียงที่ได้ยินจากอีกฝ่ายด้วย GainNode (ดังกว่าเล่นผ่าน <audio> ธรรมดาตรงๆ) ปรับได้จากปุ่ม 🔊 ในหน้าคอล
-            const source = audioCtx.createMediaStreamSource(e.streams[0]);
+        const upsertParticipant = (p) => {
+          setParticipants((list) => {
+            const others = list.filter((x) => x.sid !== p.sid);
+            return [...others, p];
+          });
+        };
+
+        room.on(RoomEvent.TrackSubscribed, (track, pub, participant) => {
+          if (track.kind === Track.Kind.Audio) {
+            // ขยายเสียงที่ได้ยินด้วย GainNode (ปรับดังขึ้นได้จากปุ่ม 🔊)
+            const mediaStream = new MediaStream([track.mediaStreamTrack]);
+            const source = audioCtx.createMediaStreamSource(mediaStream);
             const gainNode = audioCtx.createGain();
             gainNode.gain.value = volumeBoost;
             source.connect(gainNode).connect(audioCtx.destination);
-            gainNodesRef.current[otherId] = gainNode;
-          };
-          peersRef.current[otherId] = pc;
-          setParticipants((p) => (p.find((x) => x.userId === otherId) ? p : [...p, { userId: otherId, name: otherName || "เพื่อน" }]));
-          return pc;
-        };
-
-        channel.on("broadcast", { event: "signal" }, async ({ payload }) => {
-          if (payload.to !== userId) return;
-          if (payload.kind === "offer") {
-            const pc = createPeer(payload.from, payload.fromName);
-            await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
-            channel.send({ type: "broadcast", event: "signal", payload: { kind: "answer", from: userId, to: payload.from, sdp: answer } });
-          } else if (payload.kind === "answer") {
-            await peersRef.current[payload.from]?.setRemoteDescription(new RTCSessionDescription(payload.sdp));
-          } else if (payload.kind === "ice") {
-            try { await peersRef.current[payload.from]?.addIceCandidate(payload.candidate); } catch (e) {}
+            gainNodesRef.current[participant.identity] = gainNode;
+          }
+          upsertParticipant({
+            sid: participant.sid, identity: participant.identity, name: participant.name || "เพื่อน",
+            hasVideo: participant.isCameraEnabled,
+          });
+          if (track.kind === Track.Kind.Video) {
+            setTimeout(() => {
+              const el = document.getElementById(`vid-${participant.sid}`);
+              if (el) track.attach(el);
+            }, 0);
           }
         });
 
-        channel.on("broadcast", { event: "join" }, async ({ payload }) => {
-          if (payload.userId === userId) return;
-          const pc = createPeer(payload.userId, payload.name);
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          channel.send({ type: "broadcast", event: "signal", payload: { kind: "offer", from: userId, fromName: displayName, to: payload.userId, sdp: offer } });
+        room.on(RoomEvent.TrackUnsubscribed, (track, pub, participant) => {
+          if (track.kind === Track.Kind.Audio) delete gainNodesRef.current[participant.identity];
+          upsertParticipant({ sid: participant.sid, identity: participant.identity, name: participant.name || "เพื่อน", hasVideo: participant.isCameraEnabled });
         });
 
-        channel.on("broadcast", { event: "leave" }, ({ payload }) => {
-          peersRef.current[payload.userId]?.close();
-          delete peersRef.current[payload.userId];
-          delete gainNodesRef.current[payload.userId];
-          setParticipants((p) => p.filter((x) => x.userId !== payload.userId));
+        room.on(RoomEvent.ParticipantDisconnected, (participant) => {
+          setParticipants((list) => list.filter((x) => x.sid !== participant.sid));
+          delete gainNodesRef.current[participant.identity];
         });
 
-        channel.subscribe((status) => {
-          if (status === "SUBSCRIBED") {
-            channel.send({ type: "broadcast", event: "join", payload: { userId, name: displayName } });
-            channel.track({ userId, name: displayName }); // ให้คนอื่นที่ยังไม่ได้กดเข้าสาย เห็นว่ามีคนอยู่ในสายอยู่ (โชว์แบนเนอร์ในห้องแชท)
-            notifyPush(otherMemberIds || [], `📞 ${displayName || "มีคน"}กำลังโทรเข้ามา`, `ในห้อง ${roomName || ""}`, session?.access_token);
-          }
-        });
+        room.on(RoomEvent.TrackMuted, (pub, participant) => upsertParticipant({ sid: participant.sid, identity: participant.identity, name: participant.name || "เพื่อน", hasVideo: participant.isCameraEnabled }));
+        room.on(RoomEvent.TrackUnmuted, (pub, participant) => upsertParticipant({ sid: participant.sid, identity: participant.identity, name: participant.name || "เพื่อน", hasVideo: participant.isCameraEnabled }));
+
+        await room.connect(data.url, data.token);
+        await room.localParticipant.setMicrophoneEnabled(true, { echoCancellation: true, noiseSuppression: true, autoGainControl: true });
+        setConnecting(false);
+
+        // ส่งสัญญาณ presence ผ่าน Supabase แยกต่างหาก (แค่ให้คนอื่นในห้องแชทเห็นแบนเนอร์ "มีคนอยู่ในสาย" ไม่เกี่ยวกับการเชื่อมสายจริงที่ทำผ่าน LiveKit แล้ว)
+        const presenceChannel = supabase.channel(`call-${threadId}`);
+        presenceChannel.subscribe((status) => { if (status === "SUBSCRIBED") presenceChannel.track({ userId, name: displayName }); });
+        presenceChannelRef.current = presenceChannel;
+
+        notifyPush(otherMemberIds || [], `📞 ${displayName || "มีคน"}กำลังโทรเข้ามา`, `ในห้อง ${roomName || ""}`, session?.access_token);
       } catch (e) {
-        setErr("เปิดไมค์ไม่สำเร็จ (เช็คว่าอนุญาตสิทธิ์ไมค์ให้เว็บนี้หรือยัง): " + e.message);
+        setErr("เข้าร่วมสายไม่สำเร็จ (เช็คว่าอนุญาตสิทธิ์ไมค์ให้เว็บนี้หรือยัง): " + e.message);
       }
     };
     init();
     return () => {
       cancelled = true;
-      channelRef.current?.send({ type: "broadcast", event: "leave", payload: { userId } });
-      Object.values(peersRef.current).forEach((pc) => pc.close());
-      localStreamRef.current?.getTracks().forEach((tr) => tr.stop());
+      roomRef.current?.disconnect();
       audioCtxRef.current?.close().catch(() => {});
-      if (channelRef.current) supabase.removeChannel(channelRef.current);
+      if (presenceChannelRef.current) supabase.removeChannel(presenceChannelRef.current);
     };
   }, [threadId]);
 
-  const toggleMute = () => {
-    const tracks = localStreamRef.current?.getAudioTracks() || [];
-    const newEnabled = !tracks[0]?.enabled;
-    tracks.forEach((tr) => { tr.enabled = newEnabled; });
-    setMuted(!newEnabled);
+  const toggleMute = async () => {
+    const next = !muted;
+    await roomRef.current?.localParticipant.setMicrophoneEnabled(!next);
+    setMuted(next);
+  };
+  const toggleCamera = async () => {
+    const next = !cameraOn;
+    await roomRef.current?.localParticipant.setCameraEnabled(next);
+    if (next) setTimeout(() => {
+      const pub = [...(roomRef.current?.localParticipant.videoTrackPublications.values() || [])][0];
+      if (pub?.track && localVideoRef.current) pub.track.attach(localVideoRef.current);
+    }, 200);
+    setCameraOn(next);
   };
 
   return (
@@ -312,32 +305,48 @@ function AudioCallModal({ t, threadId, userId, displayName, otherMemberIds, room
           </>
         ) : (
           <>
-            <div style={{ fontSize: 13, opacity: .65, marginBottom: 24 }}>{connecting ? "กำลังเชื่อมต่อ..." : `🔊 กำลังคุยด้วยเสียง · ${participants.length + 1} คน`}</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 18, justifyContent: "center", marginBottom: 48, maxWidth: 320 }}>
+            {onMinimize && (
+              <button onClick={onMinimize} style={{ position: "absolute", top: 20, right: 20, background: "rgba(255,255,255,.15)", border: "none", borderRadius: 16, width: 34, height: 34, cursor: "pointer", display: "grid", placeItems: "center" }} title="ย่อเก็บ (คุยต่อได้ ไปหน้าอื่นในแอปได้)">
+                <ChevronRight size={16} color="#fff" style={{ transform: "rotate(90deg)" }} />
+              </button>
+            )}
+            <div style={{ fontSize: 13, opacity: .65, marginBottom: 20 }}>{connecting ? "กำลังเชื่อมต่อ..." : `📞 กำลังคุย · ${participants.length + 1} คน`}</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 14, justifyContent: "center", marginBottom: 40, maxWidth: 360 }}>
               <div style={{ textAlign: "center" }}>
-                <div style={{ width: 64, height: 64, borderRadius: 32, background: "#EA9552", display: "grid", placeItems: "center", fontSize: 22, fontWeight: 700, margin: "0 auto 6px" }}>{(displayName || "ฉ")[0]}</div>
-                <div style={{ fontSize: 11 }}>{displayName || "ฉัน"} (คุณ)</div>
+                {cameraOn ? (
+                  <video ref={localVideoRef} autoPlay muted playsInline style={{ width: 100, height: 130, borderRadius: 14, objectFit: "cover", background: "#000" }} />
+                ) : (
+                  <div style={{ width: 64, height: 64, borderRadius: 32, background: "#EA9552", display: "grid", placeItems: "center", fontSize: 22, fontWeight: 700, margin: "0 auto" }}>{(displayName || "ฉ")[0]}</div>
+                )}
+                <div style={{ fontSize: 11, marginTop: 6 }}>{displayName || "ฉัน"} (คุณ)</div>
               </div>
               {participants.map((p) => (
-                <div key={p.userId} style={{ textAlign: "center" }}>
-                  <div style={{ width: 64, height: 64, borderRadius: 32, background: "#5C7A99", display: "grid", placeItems: "center", fontSize: 22, fontWeight: 700, margin: "0 auto 6px" }}>{(p.name || "?")[0]}</div>
-                  <div style={{ fontSize: 11 }}>{p.name}</div>
+                <div key={p.sid} style={{ textAlign: "center" }}>
+                  {p.hasVideo ? (
+                    <video id={`vid-${p.sid}`} autoPlay playsInline style={{ width: 100, height: 130, borderRadius: 14, objectFit: "cover", background: "#000" }} />
+                  ) : (
+                    <div style={{ width: 64, height: 64, borderRadius: 32, background: "#5C7A99", display: "grid", placeItems: "center", fontSize: 22, fontWeight: 700, margin: "0 auto" }}>{(p.name || "?")[0]}</div>
+                  )}
+                  <div style={{ fontSize: 11, marginTop: 6 }}>{p.name}</div>
                 </div>
               ))}
             </div>
-            <div style={{ display: "flex", gap: 22 }}>
-              <button onClick={toggleMute} style={{ width: 58, height: 58, borderRadius: 29, background: muted ? "#D9534F" : "rgba(255,255,255,.15)", border: "none", cursor: "pointer", display: "grid", placeItems: "center" }} title={muted ? "เปิดไมค์" : "ปิดไมค์"}>
-                {muted ? <MicOff size={22} color="#fff" /> : <Mic size={22} color="#fff" />}
+            <div style={{ display: "flex", gap: 16 }}>
+              <button onClick={toggleMute} style={{ width: 54, height: 54, borderRadius: 27, background: muted ? "#D9534F" : "rgba(255,255,255,.15)", border: "none", cursor: "pointer", display: "grid", placeItems: "center" }} title={muted ? "เปิดไมค์" : "ปิดไมค์"}>
+                {muted ? <MicOff size={20} color="#fff" /> : <Mic size={20} color="#fff" />}
               </button>
-              <button onClick={() => setVolumeBoost((v) => VOLUME_LEVELS[(VOLUME_LEVELS.indexOf(v) + 1) % VOLUME_LEVELS.length])} style={{ width: 58, height: 58, borderRadius: 29, background: volumeBoost > 1 ? "#2E9E6B" : "rgba(255,255,255,.15)", border: "none", cursor: "pointer", display: "grid", placeItems: "center", position: "relative" }} title="ปรับเสียงดังขึ้น">
-                <Volume2 size={22} color="#fff" />
+              <button onClick={toggleCamera} style={{ width: 54, height: 54, borderRadius: 27, background: cameraOn ? "#2E9E6B" : "rgba(255,255,255,.15)", border: "none", cursor: "pointer", display: "grid", placeItems: "center" }} title={cameraOn ? "ปิดกล้อง" : "เปิดกล้อง"}>
+                {cameraOn ? <Camera size={20} color="#fff" /> : <Camera size={20} color="#fff" style={{ opacity: .6 }} />}
+              </button>
+              <button onClick={() => setVolumeBoost((v) => VOLUME_LEVELS[(VOLUME_LEVELS.indexOf(v) + 1) % VOLUME_LEVELS.length])} style={{ width: 54, height: 54, borderRadius: 27, background: volumeBoost > 1 ? "#2E9E6B" : "rgba(255,255,255,.15)", border: "none", cursor: "pointer", display: "grid", placeItems: "center", position: "relative" }} title="ปรับเสียงดังขึ้น">
+                <Volume2 size={20} color="#fff" />
                 {volumeBoost > 1 && <span style={{ position: "absolute", top: -2, right: -2, background: "#fff", color: "#2E9E6B", fontSize: 9, fontWeight: 800, borderRadius: 8, padding: "1px 5px" }}>{volumeBoost === 2.2 ? "MAX" : "+"}</span>}
               </button>
-              <button onClick={onClose} style={{ width: 58, height: 58, borderRadius: 29, background: "#D9534F", border: "none", cursor: "pointer", display: "grid", placeItems: "center" }} title="วางสาย">
-                <PhoneOff size={22} color="#fff" />
+              <button onClick={onClose} style={{ width: 54, height: 54, borderRadius: 27, background: "#D9534F", border: "none", cursor: "pointer", display: "grid", placeItems: "center" }} title="วางสาย">
+                <PhoneOff size={20} color="#fff" />
               </button>
             </div>
-            <div style={{ fontSize: 10.5, opacity: .5, marginTop: 14 }}>{volumeBoost === 0.5 ? "เบา (เหมือนคุยโทรศัพท์ปกติ)" : volumeBoost === 1 ? "เสียงปกติ" : volumeBoost === 1.6 ? "เสียงดังขึ้น + ไมค์ชัดขึ้น" : "เสียงดังมาก + ไมค์ชัดมาก"}</div>
+            <div style={{ fontSize: 10.5, opacity: .5, marginTop: 14 }}>{volumeBoost === 0.5 ? "เบา (เหมือนคุยโทรศัพท์ปกติ)" : volumeBoost === 1 ? "เสียงปกติ" : volumeBoost === 1.6 ? "เสียงดังขึ้น" : "เสียงดังมาก"} · ใครในห้องแชทนี้ก็กดเข้าร่วมได้เลย</div>
           </>
         )}
       </div>
@@ -455,6 +464,8 @@ export default function RefHub() {
   const [autoNight, setAutoNight] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [mentorPick, setMentorPick] = useState(false);
+  const [activeCall, setActiveCall] = useState(null); // { threadId, roomName, otherMemberIds } ห้องที่กำลังคุยอยู่ (อยู่ระดับบนสุด กันสายหลุดตอนสลับหน้าในแอป)
+  const [callMinimized, setCallMinimized] = useState(false);
   const [themePick, setThemePick] = useState(false);
   const [editProfile, setEditProfile] = useState(false);
   const [profileLightbox, setProfileLightbox] = useState(false);
@@ -752,6 +763,7 @@ export default function RefHub() {
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "profiles" }, (payload) => {
         if (payload.new.id === userId) return; // ไม่ต้องแจ้งเตือนตัวเอง
         setAdminAlerts((a) => [{ id: uid(), text: `${payload.new.name || payload.new.email} สมัครสมาชิกใหม่ รอการอนุมัติ`, time: Date.now() }, ...a].slice(0, 20));
+        notifyPush([userId], "🆕 มีคนสมัครสมาชิกใหม่", `${payload.new.name || payload.new.email} รอการอนุมัติอยู่`, session?.access_token);
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -1008,7 +1020,7 @@ export default function RefHub() {
           {page === "admin" && <AdminPage t={t} session={session} userId={userId} adminAlerts={adminAlerts} setAdminAlerts={setAdminAlerts} />}
           {page === "locations" && <LocationsPage t={t} userId={userId} />}
           {page === "chat" && <ChatEntryPage t={t} M={M} userId={userId} authProfile={authProfile} session={session} openThread={(id, name, isGroup, avatarUrl, createdBy) => { setActiveThread({ id, name, isGroup: !!isGroup, avatarUrl: avatarUrl || null, createdBy: createdBy || null }); setPage("chatRoom"); }} />}
-          {page === "chatRoom" && activeThread && <ChatRoomPage t={t} userId={userId} thread={activeThread} profile={profile} session={session} onLeave={() => { setActiveThread(null); setPage("chat"); }} onBack={() => { setActiveThread(null); setPage("chat"); }} />}
+          {page === "chatRoom" && activeThread && <ChatRoomPage t={t} userId={userId} thread={activeThread} profile={profile} session={session} onLeave={() => { setActiveThread(null); setPage("chat"); }} onBack={() => { setActiveThread(null); setPage("chat"); }} activeCall={activeCall} setActiveCall={setActiveCall} setCallMinimized={setCallMinimized} />}
 
           {/* 🎵 การ์ด "กำลังเล่น" ต่อท้ายเนื้อหาหน้า Home (ใต้เป้าหมาย) — div#yt-mini-player mount ค้างตลอด
               ไม่เคย unmount เลย (ซ่อนด้วย display:none เท่านั้น) กันปัญหา React ชนกับ DOM ที่ YouTube API แก้เอง */}
@@ -1078,6 +1090,14 @@ export default function RefHub() {
         )}
         {accountSettingsOpen && <AccountSettingsModal t={t} authProfile={authProfile} userId={userId} close={() => setAccountSettingsOpen(false)} />}
         {chatOpen && <ChatModal t={t} M={M} mentor={mentor} setMentor={setMentor} authProfile={authProfile} setAuthProfile={setAuthProfile} customMentors={customMentors} setCustomMentors={setCustomMentors} userId={userId} session={session} goals={goals} close={() => setChatOpen(false)} />}
+        {activeCall && !callMinimized && (
+          <CallModal t={t} threadId={activeCall.threadId} userId={userId} displayName={profile?.name} otherMemberIds={activeCall.otherMemberIds} roomName={activeCall.roomName} session={session} onMinimize={() => setCallMinimized(true)} onClose={() => { setActiveCall(null); setCallMinimized(false); }} />
+        )}
+        {activeCall && callMinimized && (
+          <button onClick={() => setCallMinimized(false)} style={{ position: "fixed", bottom: 90, right: 16, zIndex: 90, background: "#2E9E6B", border: "none", borderRadius: 24, padding: "10px 16px", display: "flex", alignItems: "center", gap: 8, cursor: "pointer", boxShadow: "0 6px 18px rgba(0,0,0,.25)" }}>
+            <Phone size={15} color="#fff" /><span style={{ fontSize: 12, fontWeight: 700, color: "#fff" }}>กำลังคุยอยู่ · แตะเพื่อกลับ</span>
+          </button>
+        )}
         {editProfile && <EditProfile t={t} M={M} profile={profile} setProfile={setProfile} userId={userId} authProfile={authProfile} setAuthProfile={setAuthProfile} close={() => setEditProfile(false)} />}
         {profileLightbox && profile.avatar && <ImageLightbox src={profile.avatar} onClose={() => setProfileLightbox(false)} />}
         {searchOpen && <SearchOverlay t={t} notes={notes} goals={goals} tx={tx} categories={categories} setPage={setPage} close={() => setSearchOpen(false)} />}
@@ -2009,7 +2029,15 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts }) {
 
   const isOnline = (lastSeen) => lastSeen && (Date.now() - new Date(lastSeen).getTime()) < 2 * 60 * 1000;
 
-  const setApproved = async (id, approved) => { await supabase.from("profiles").update({ approved }).eq("id", id); loadMembers(); };
+  const setApproved = async (id, approved, email, name) => {
+    await supabase.from("profiles").update({ approved }).eq("id", id);
+    loadMembers();
+    if (approved && email) {
+      fetch("/api/send-approval-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ toEmail: email, toName: name, callerToken: session?.access_token }) })
+        .then((r) => r.json()).then((d) => { if (d.error) console.error("ส่งอีเมลแจ้งอนุมัติไม่สำเร็จ:", d.error); })
+        .catch((e) => console.error("เชื่อมต่อ /api/send-approval-email ไม่สำเร็จ:", e.message));
+    }
+  };
   const setRole = async (id, role) => { await supabase.from("profiles").update({ role }).eq("id", id); loadMembers(); };
   const setCanChat = async (id, can_chat) => { await supabase.from("profiles").update({ can_chat }).eq("id", id); loadMembers(); };
   const setCanViewLocations = async (id, can_view_locations) => { const { error } = await supabase.from("profiles").update({ can_view_locations }).eq("id", id); if (error) { alert("ตั้งสิทธิ์ดูตำแหน่งไม่สำเร็จ: " + error.message); console.error(error); } loadMembers(); };
@@ -2195,7 +2223,7 @@ function MemberDetailModal({ t, m, isSelf, isOnline, setApproved, setRole, setCa
 
         <div style={{ fontSize: 11.5, fontWeight: 800, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, margin: "18px 0 4px" }}>สถานะ</div>
         <Row label="การอนุมัติ">
-          <button onClick={() => setApproved(m.id, !m.approved)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 10, border: `1px solid ${m.approved ? "#2E9E6B" : "#D9534F"}`, cursor: "pointer", background: m.approved ? "#2E9E6B18" : "#D9534F18", color: m.approved ? "#2E9E6B" : "#D9534F", fontSize: 12, fontWeight: 700 }}>
+          <button onClick={() => setApproved(m.id, !m.approved, m.email, m.name)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 10, border: `1px solid ${m.approved ? "#2E9E6B" : "#D9534F"}`, cursor: "pointer", background: m.approved ? "#2E9E6B18" : "#D9534F18", color: m.approved ? "#2E9E6B" : "#D9534F", fontSize: 12, fontWeight: 700 }}>
             {m.approved ? <UserCheck size={13} /> : <UserX size={13} />} {m.approved ? "อนุมัติแล้ว" : "รออนุมัติ (กดเพื่ออนุมัติ)"}
           </button>
         </Row>
@@ -2600,7 +2628,7 @@ function ChatEntryPage({ t, M, userId, authProfile, session, openThread }) {
 }
 
 
-function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack }) {
+function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, activeCall, setActiveCall, setCallMinimized }) {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
   const [editingId, setEditingId] = useState(null);
@@ -2614,19 +2642,38 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack }) 
   const [lightbox, setLightbox] = useState(null); // url รูปที่กำลังดูเต็มจอ (null = ไม่ได้เปิดดู)
   const [confirmLeave, setConfirmLeave] = useState(false); // "ยืนยัน" | "" -> โหมด: "leave" (ออกจากห้อง) หรือ "delete" (ลบถาวร)
   const [showMembers, setShowMembers] = useState(false);
-  const [showCall, setShowCall] = useState(false);
   const [callParticipants, setCallParticipants] = useState([]); // คนที่กำลังอยู่ในสายเสียงของห้องนี้ตอนนี้ (ไม่รวมตัวเอง ไว้โชว์แบนเนอร์เตือน)
+  const playRingtone = () => {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      const ctx = new AudioCtx();
+      // จังหวะ "ปี๊บ-ปี๊บ" 2 ครั้งติดกัน คล้ายเสียงโทรศัพท์เรียกเข้า สังเคราะห์สดๆ ไม่ต้องพึ่งไฟล์เสียงภายนอก
+      [0, 0.3].forEach((startAt) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.frequency.value = 880; osc.type = "sine";
+        gain.gain.setValueAtTime(0.25, ctx.currentTime + startAt);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + startAt + 0.25);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(ctx.currentTime + startAt); osc.stop(ctx.currentTime + startAt + 0.25);
+      });
+    } catch (e) {}
+  };
   useEffect(() => {
-    if (showCall) { setCallParticipants([]); return; } // ตัวเองเข้าสายอยู่แล้ว ไม่ต้องโชว์แบนเนอร์เตือนตัวเอง
+    const isMeInThisCall = activeCall?.threadId === thread.id;
+    if (isMeInThisCall) { setCallParticipants([]); return; } // ตัวเองเข้าสายอยู่แล้ว ไม่ต้องโชว์แบนเนอร์เตือนตัวเอง
     const presenceChannel = supabase.channel(`call-${thread.id}`);
     presenceChannel.on("presence", { event: "sync" }, () => {
       const state = presenceChannel.presenceState();
       const people = Object.values(state).flat().filter((p) => p.userId !== userId);
-      setCallParticipants(people);
+      setCallParticipants((prev) => {
+        if (prev.length === 0 && people.length > 0) playRingtone(); // มีคนเพิ่งเริ่ม/เข้าร่วมสายพอดี (ตอนแอปเปิดอยู่เท่านั้น)
+        return people;
+      });
     });
     presenceChannel.subscribe();
     return () => { supabase.removeChannel(presenceChannel); };
-  }, [thread.id, showCall, userId]);
+  }, [thread.id, activeCall?.threadId, userId]);
   const [leaveErr, setLeaveErr] = useState("");
   const isCreator = thread.createdBy && thread.createdBy === userId;
   const leaveRoom = async () => {
@@ -2770,7 +2817,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack }) 
           <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>{thread.name}</div>
           {!thread.isGroup && otherMembers[0]?.status_message && <div style={{ fontSize: 11, color: t.sub, fontStyle: "italic" }}>{otherMembers[0].status_message}</div>}
         </div>
-        <button onClick={() => setShowCall(true)} style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 17, background: "#2E9E6B18", border: "1px solid #2E9E6B55", cursor: "pointer", display: "grid", placeItems: "center" }} title="เริ่ม/เข้าร่วมคุยด้วยเสียง"><Phone size={15} color="#2E9E6B" /></button>
+        <button onClick={() => { setActiveCall({ threadId: thread.id, roomName: thread.name, otherMemberIds: otherMembers.map((m) => m.id) }); setCallMinimized(false); }} style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 17, background: "#2E9E6B18", border: "1px solid #2E9E6B55", cursor: "pointer", display: "grid", placeItems: "center" }} title="เริ่ม/เข้าร่วมคุยด้วยเสียง"><Phone size={15} color="#2E9E6B" /></button>
         {isCreator && (
           <button onClick={() => setShowMembers(true)} style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 17, background: t.surface, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }} title="จัดการสมาชิกห้อง"><Users size={16} color={t.sub} /></button>
         )}
@@ -2789,7 +2836,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack }) 
       </div>
       {leaveErr && <div style={{ fontSize: 11.5, color: "#D9534F", marginBottom: 10 }}>{leaveErr}</div>}
       {callParticipants.length > 0 && (
-        <button onClick={() => setShowCall(true)} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: "#2E9E6B18", border: "1px solid #2E9E6B55", borderRadius: 14, padding: "10px 14px", marginBottom: 10, cursor: "pointer" }}>
+        <button onClick={() => { setActiveCall({ threadId: thread.id, roomName: thread.name, otherMemberIds: otherMembers.map((m) => m.id) }); setCallMinimized(false); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: "#2E9E6B18", border: "1px solid #2E9E6B55", borderRadius: 14, padding: "10px 14px", marginBottom: 10, cursor: "pointer" }}>
           <Phone size={16} color="#2E9E6B" style={{ flexShrink: 0 }} />
           <div style={{ flex: 1, textAlign: "left", fontSize: 12, color: "#2E9E6B", fontWeight: 700 }}>📞 {callParticipants.map((p) => p.name).join(", ")} กำลังคุยด้วยเสียงอยู่</div>
           <span style={{ fontSize: 11, fontWeight: 800, color: "#fff", background: "#2E9E6B", padding: "5px 10px", borderRadius: 10 }}>เข้าร่วม</span>
@@ -2857,7 +2904,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack }) 
       </div>
       {lightbox && <ImageLightbox src={lightbox} onClose={() => setLightbox(null)} />}
       {showMembers && <RoomMembersModal t={t} threadId={thread.id} session={session} close={() => setShowMembers(false)} />}
-      {showCall && <AudioCallModal t={t} threadId={thread.id} userId={userId} displayName={profile?.name} otherMemberIds={otherMembers.map((m) => m.id)} roomName={thread.name} session={session} onClose={() => setShowCall(false)} />}
+
     </div>
   );
 }
