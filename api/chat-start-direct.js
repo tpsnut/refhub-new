@@ -36,12 +36,16 @@ export default async function handler(req, res) {
     const friendHasFullAccess = friend.role === "admin" || friend.role === "trusted";
     if (!friend.can_chat && !friendHasFullAccess) return res.status(403).json({ error: `${friend.name} ยังไม่ได้รับสิทธิ์ใช้งานแชท` });
 
-    // เช็คว่ามีห้องแชทระหว่าง 2 คนนี้อยู่แล้วหรือยัง
+    // เช็คว่ามี "ห้อง 1-1" ระหว่าง 2 คนนี้อยู่แล้วหรือยัง (ต้องเช็ค type=direct ด้วย ไม่งั้นจะไปรวมกับห้องกลุ่มที่ทั้งคู่อยู่ด้วยกันโดยไม่ตั้งใจ)
     const { data: myThreads } = await admin.from("chat_thread_members").select("thread_id").eq("user_id", callerId);
     const { data: friendThreads } = await admin.from("chat_thread_members").select("thread_id").eq("user_id", friend.id);
-    const shared = (myThreads || []).map((t) => t.thread_id).filter((id) => (friendThreads || []).some((f) => f.thread_id === id));
+    const sharedIds = (myThreads || []).map((t) => t.thread_id).filter((id) => (friendThreads || []).some((f) => f.thread_id === id));
 
-    let threadId = shared[0];
+    let threadId = null;
+    if (sharedIds.length) {
+      const { data: directThreads } = await admin.from("chat_threads").select("id").in("id", sharedIds).eq("type", "direct");
+      threadId = directThreads?.[0]?.id || null;
+    }
     if (!threadId) {
       const { data: newThread, error: threadErr } = await admin.from("chat_threads").insert({ type: "direct" }).select().single();
       if (threadErr) throw threadErr;

@@ -175,23 +175,25 @@ function palette(mode, themeId) {
 // 📞 คุยด้วยเสียง/วิดีโอ — ฝัง Jitsi Meet ไว้ในแอป (ฟรี ไม่ต้องมี API key) ทุกคนในห้องแชทเดียวกันเจอห้องคุยเดียวกันอัตโนมัติ
 // 📞 คุยด้วยเสียง — ทำเอง ไม่พึ่งบริการนอก (WebRTC + Supabase Realtime ส่งสัญญาณเชื่อมสาย) ไม่มีการบังคับล็อกอินใดๆ
 // ใช้ STUN สาธารณะฟรีของ Google เชื่อมสายตรง (ไม่มี TURN server สำรอง เผื่อบางเครือข่ายที่เข้มงวดมากอาจเชื่อมไม่ติด แต่ฟรี 100%)
-function AudioCallModal({ t, threadId, userId, displayName, onClose }) {
+function AudioCallModal({ t, threadId, userId, displayName, otherMemberIds, roomName, session, onClose }) {
   const [participants, setParticipants] = useState([]); // [{userId, name}]
   const [muted, setMuted] = useState(false);
   const [connecting, setConnecting] = useState(true);
   const [err, setErr] = useState("");
-  const [volumeBoost, setVolumeBoost] = useState(1.6); // 1 = ปกติ, มากกว่า 1 = ดังขึ้น (ปรับได้ด้วยปุ่ม 🔊)
+  const [volumeBoost, setVolumeBoost] = useState(0.5); // 0.5 = เบา (ค่าเริ่มต้น เหมือนคุยโทรศัพท์ปกติ), 1 = ปกติ, มากกว่า 1 = ดังขึ้น (ปรับได้ด้วยปุ่ม 🔊)
   const localStreamRef = useRef(null);
   const peersRef = useRef({});
   const audioCtxRef = useRef(null);
   const gainNodesRef = useRef({}); // userId -> GainNode ของแต่ละคน ปรับความดังพร้อมกันทีเดียวได้
+  const micGainRef = useRef(null); // GainNode ของไมค์ตัวเอง (ขยายเสียงที่ส่งออกไปให้อีกฝ่ายได้ยินชัดขึ้น)
   const channelRef = useRef(null);
   const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }];
-  const VOLUME_LEVELS = [1, 1.6, 2.2]; // ปกติ -> ดัง -> ดังมาก -> วนกลับ
+  const VOLUME_LEVELS = [0.5, 1, 1.6, 2.2]; // เบา -> ปกติ -> ดัง -> ดังมาก -> วนกลับ
 
   // ปรับความดังของทุกคนที่กำลังคุยอยู่ทันทีเมื่อเปลี่ยนระดับเสียง
   useEffect(() => {
     Object.values(gainNodesRef.current).forEach((g) => { g.gain.value = volumeBoost; });
+    if (micGainRef.current) micGainRef.current.gain.value = volumeBoost;
   }, [volumeBoost]);
 
   useEffect(() => {
@@ -212,12 +214,21 @@ function AudioCallModal({ t, threadId, userId, displayName, onClose }) {
         await audioCtx.resume().catch(() => {});
         audioCtxRef.current = audioCtx;
 
+        // 🎙️ ขยายเสียงไมค์ของเราเองก่อนส่งออกไปด้วย (ปุ่ม 🔊 เดียวกัน ทำให้อีกฝ่ายได้ยินเราชัด/ดังขึ้นเวลาพูดจากระยะไกล ไม่ใช่แค่ปิด/เปิดไมค์)
+        const micSource = audioCtx.createMediaStreamSource(stream);
+        const micGain = audioCtx.createGain();
+        micGain.gain.value = volumeBoost;
+        micGainRef.current = micGain;
+        const micDest = audioCtx.createMediaStreamDestination();
+        micSource.connect(micGain).connect(micDest);
+        const outgoingStream = micDest.stream; // สตรีมที่ผ่านการขยายเสียงแล้ว ใช้ตัวนี้ส่งออกไปแทนสตรีมดิบ
+
         const channel = supabase.channel(`call-${threadId}`, { config: { broadcast: { self: false } } });
         channelRef.current = channel;
 
         const createPeer = (otherId, otherName) => {
           const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-          stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+          outgoingStream.getTracks().forEach((track) => pc.addTrack(track, outgoingStream));
           pc.onicecandidate = (e) => { if (e.candidate) channel.send({ type: "broadcast", event: "signal", payload: { kind: "ice", from: userId, to: otherId, candidate: e.candidate } }); };
           pc.ontrack = (e) => {
             // ขยายเสียงที่ได้ยินจากอีกฝ่ายด้วย GainNode (ดังกว่าเล่นผ่าน <audio> ธรรมดาตรงๆ) ปรับได้จากปุ่ม 🔊 ในหน้าคอล
@@ -263,7 +274,11 @@ function AudioCallModal({ t, threadId, userId, displayName, onClose }) {
         });
 
         channel.subscribe((status) => {
-          if (status === "SUBSCRIBED") channel.send({ type: "broadcast", event: "join", payload: { userId, name: displayName } });
+          if (status === "SUBSCRIBED") {
+            channel.send({ type: "broadcast", event: "join", payload: { userId, name: displayName } });
+            channel.track({ userId, name: displayName }); // ให้คนอื่นที่ยังไม่ได้กดเข้าสาย เห็นว่ามีคนอยู่ในสายอยู่ (โชว์แบนเนอร์ในห้องแชท)
+            notifyPush(otherMemberIds || [], `📞 ${displayName || "มีคน"}กำลังโทรเข้ามา`, `ในห้อง ${roomName || ""}`, session?.access_token);
+          }
         });
       } catch (e) {
         setErr("เปิดไมค์ไม่สำเร็จ (เช็คว่าอนุญาตสิทธิ์ไมค์ให้เว็บนี้หรือยัง): " + e.message);
@@ -322,7 +337,7 @@ function AudioCallModal({ t, threadId, userId, displayName, onClose }) {
                 <PhoneOff size={22} color="#fff" />
               </button>
             </div>
-            <div style={{ fontSize: 10.5, opacity: .5, marginTop: 14 }}>{volumeBoost === 1 ? "เสียงปกติ" : volumeBoost === 1.6 ? "เสียงดังขึ้น" : "เสียงดังมาก"} · ไมค์ปรับความดังอัตโนมัติ (ไม่ต้องจ่อ)</div>
+            <div style={{ fontSize: 10.5, opacity: .5, marginTop: 14 }}>{volumeBoost === 0.5 ? "เบา (เหมือนคุยโทรศัพท์ปกติ)" : volumeBoost === 1 ? "เสียงปกติ" : volumeBoost === 1.6 ? "เสียงดังขึ้น + ไมค์ชัดขึ้น" : "เสียงดังมาก + ไมค์ชัดมาก"}</div>
           </>
         )}
       </div>
@@ -2591,6 +2606,18 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack }) 
   const [confirmLeave, setConfirmLeave] = useState(false); // "ยืนยัน" | "" -> โหมด: "leave" (ออกจากห้อง) หรือ "delete" (ลบถาวร)
   const [showMembers, setShowMembers] = useState(false);
   const [showCall, setShowCall] = useState(false);
+  const [callParticipants, setCallParticipants] = useState([]); // คนที่กำลังอยู่ในสายเสียงของห้องนี้ตอนนี้ (ไม่รวมตัวเอง ไว้โชว์แบนเนอร์เตือน)
+  useEffect(() => {
+    if (showCall) { setCallParticipants([]); return; } // ตัวเองเข้าสายอยู่แล้ว ไม่ต้องโชว์แบนเนอร์เตือนตัวเอง
+    const presenceChannel = supabase.channel(`call-${thread.id}`);
+    presenceChannel.on("presence", { event: "sync" }, () => {
+      const state = presenceChannel.presenceState();
+      const people = Object.values(state).flat().filter((p) => p.userId !== userId);
+      setCallParticipants(people);
+    });
+    presenceChannel.subscribe();
+    return () => { supabase.removeChannel(presenceChannel); };
+  }, [thread.id, showCall, userId]);
   const [leaveErr, setLeaveErr] = useState("");
   const isCreator = thread.createdBy && thread.createdBy === userId;
   const leaveRoom = async () => {
@@ -2752,6 +2779,13 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack }) 
         )}
       </div>
       {leaveErr && <div style={{ fontSize: 11.5, color: "#D9534F", marginBottom: 10 }}>{leaveErr}</div>}
+      {callParticipants.length > 0 && (
+        <button onClick={() => setShowCall(true)} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: "#2E9E6B18", border: "1px solid #2E9E6B55", borderRadius: 14, padding: "10px 14px", marginBottom: 10, cursor: "pointer" }}>
+          <Phone size={16} color="#2E9E6B" style={{ flexShrink: 0 }} />
+          <div style={{ flex: 1, textAlign: "left", fontSize: 12, color: "#2E9E6B", fontWeight: 700 }}>📞 {callParticipants.map((p) => p.name).join(", ")} กำลังคุยด้วยเสียงอยู่</div>
+          <span style={{ fontSize: 11, fontWeight: 800, color: "#fff", background: "#2E9E6B", padding: "5px 10px", borderRadius: 10 }}>เข้าร่วม</span>
+        </button>
+      )}
       <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, paddingBottom: 10 }}>
         {messages.map((m) => {
           const mine = m.sender_id === userId;
@@ -2814,7 +2848,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack }) 
       </div>
       {lightbox && <ImageLightbox src={lightbox} onClose={() => setLightbox(null)} />}
       {showMembers && <RoomMembersModal t={t} threadId={thread.id} session={session} close={() => setShowMembers(false)} />}
-      {showCall && <AudioCallModal t={t} threadId={thread.id} userId={userId} displayName={profile?.name} onClose={() => setShowCall(false)} />}
+      {showCall && <AudioCallModal t={t} threadId={thread.id} userId={userId} displayName={profile?.name} otherMemberIds={otherMembers.map((m) => m.id)} roomName={thread.name} session={session} onClose={() => setShowCall(false)} />}
     </div>
   );
 }
