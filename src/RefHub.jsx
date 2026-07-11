@@ -1391,7 +1391,7 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
     if (!pendingYt) return;
     const track = { id: uid(), kind: pendingYt.platform === "youtube" ? "yt" : "link", platform: pendingYt.platform, name: pendingYt.name.trim() || pendingYt.url, ytId: pendingYt.id, url: pendingYt.url, favorite: false, folderId: activeFolderId, pinnedHome: false };
     setPlaylist((p) => [...p, track]);
-    if (userId) supabase.from("playlists").insert({ id: track.id, user_id: userId, kind: track.kind, platform: track.platform, name: track.name, url: track.url, yt_id: track.ytId, persist: true }).then(() => {}, () => {});
+    if (userId) supabase.from("playlists").insert({ id: track.id, user_id: userId, kind: track.kind, platform: track.platform, name: track.name, url: track.url, yt_id: track.ytId, persist: true }).then(({ error }) => { if (error) { console.error("บันทึกสื่อไม่สำเร็จ:", error.message); alert("บันทึกไม่สำเร็จ: " + error.message + " (เช็คว่ารัน SQL media_platforms_setup.sql แล้วหรือยัง)"); } }, () => {});
     setYtUrl(""); setPendingYt(null); flashSaved();
   };
   const addFileInner = (e) => {
