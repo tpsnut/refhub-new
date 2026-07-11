@@ -1546,33 +1546,32 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
 }
 
 // 📎 แสดงสื่อจากแพลตฟอร์มโซเชียลต่างๆ (โหลด embed script ของแต่ละเจ้าแบบไดนามิก)
+// แยกรหัสวิดีโอ TikTok จากลิงก์ (เช่น https://www.tiktok.com/@user/video/1234567890123456789)
+function tiktokExtract(url) {
+  const m = url.match(/\/video\/(\d+)/);
+  return m ? m[1] : null;
+}
+// แยก shortcode ของ Instagram จากลิงก์ (เช่น https://www.instagram.com/p/ABC123xyz/ หรือ /reel/ABC123xyz/)
+function instagramEmbedUrl(url) {
+  const m = url.match(/instagram\.com\/(p|reel|tv)\/([A-Za-z0-9_-]+)/);
+  return m ? `https://www.instagram.com/${m[1]}/${m[2]}/embed` : null;
+}
+
 function SocialEmbedModal({ t, item, close }) {
   const containerRef = useRef(null);
+  const [twitterReady, setTwitterReady] = useState(!!window.twttr?.widgets);
 
   useEffect(() => {
-    const loadScript = (src, checkFn) => new Promise((resolve) => {
-      if (checkFn()) return resolve();
-      const s = document.createElement("script");
-      s.src = src; s.async = true; s.onload = resolve; s.onerror = resolve;
-      document.body.appendChild(s);
-    });
-
-    (async () => {
-      if (item.platform === "tiktok") {
-        await loadScript("https://www.tiktok.com/embed.js", () => !!window.tiktokEmbedLoad);
-        window.tiktokEmbedLoad?.();
-      } else if (item.platform === "twitter") {
-        await loadScript("https://platform.twitter.com/widgets.js", () => !!window.twttr?.widgets);
-        window.twttr?.widgets?.load(containerRef.current);
-      } else if (item.platform === "instagram") {
-        await loadScript("https://www.instagram.com/embed.js", () => !!window.instgrm);
-        window.instgrm?.Embeds?.process();
-      } else if (item.platform === "facebook") {
-        await loadScript("https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v18.0", () => !!window.FB);
-        window.FB?.XFBML?.parse(containerRef.current);
-      }
-    })();
+    if (item.platform !== "twitter") return;
+    if (window.twttr?.widgets) { window.twttr.widgets.load(containerRef.current); setTwitterReady(true); return; }
+    const s = document.createElement("script");
+    s.src = "https://platform.twitter.com/widgets.js"; s.async = true;
+    s.onload = () => { setTwitterReady(true); window.twttr?.widgets?.load(containerRef.current); };
+    document.body.appendChild(s);
   }, [item.url]);
+
+  const tiktokId = item.platform === "tiktok" ? tiktokExtract(item.url) : null;
+  const igEmbed = item.platform === "instagram" ? instagramEmbedUrl(item.url) : null;
 
   return (
     <ModalPortal>
@@ -1583,10 +1582,20 @@ function SocialEmbedModal({ t, item, close }) {
             <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
           </div>
           <div ref={containerRef} style={{ display: "flex", justifyContent: "center" }}>
-            {item.platform === "tiktok" && <blockquote className="tiktok-embed" cite={item.url} style={{ maxWidth: "100%" }}><a href={item.url}>เปิด TikTok</a></blockquote>}
+            {item.platform === "tiktok" && (
+              tiktokId
+                ? <iframe src={`https://www.tiktok.com/embed/v2/${tiktokId}`} style={{ width: "100%", maxWidth: 325, height: 580, border: "none", borderRadius: 12 }} allow="encrypted-media" title="tiktok" />
+                : <div style={{ fontSize: 12, color: t.sub, padding: 20, textAlign: "center" }}>อ่านลิงก์นี้ไม่ได้ ลองกดเปิดต้นฉบับด้านล่างแทน</div>
+            )}
             {item.platform === "twitter" && <blockquote className="twitter-tweet"><a href={item.url}>เปิดโพสต์ X</a></blockquote>}
-            {item.platform === "instagram" && <blockquote className="instagram-media" data-instgrm-permalink={item.url} style={{ width: "100%" }}><a href={item.url}>เปิด Instagram</a></blockquote>}
-            {item.platform === "facebook" && <div className="fb-post" data-href={item.url} style={{ width: "100%" }} />}
+            {item.platform === "instagram" && (
+              igEmbed
+                ? <iframe src={igEmbed} style={{ width: "100%", maxWidth: 400, height: 480, border: "none", borderRadius: 12 }} title="instagram" />
+                : <div style={{ fontSize: 12, color: t.sub, padding: 20, textAlign: "center" }}>อ่านลิงก์นี้ไม่ได้ ลองกดเปิดต้นฉบับด้านล่างแทน</div>
+            )}
+            {item.platform === "facebook" && (
+              <iframe src={`https://www.facebook.com/plugins/post.php?href=${encodeURIComponent(item.url)}&show_text=true&width=400`} style={{ width: "100%", maxWidth: 400, height: 480, border: "none", borderRadius: 12 }} title="facebook" />
+            )}
           </div>
           <a href={item.url} target="_blank" rel="noreferrer" style={{ display: "block", textAlign: "center", marginTop: 14, fontSize: 12.5, color: t.accent, fontWeight: 700, textDecoration: "none" }}>เปิดต้นฉบับในแอป {PLATFORM_META[item.platform]?.label} →</a>
         </div>
