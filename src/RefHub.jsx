@@ -187,6 +187,7 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
   const gainNodesRef = useRef({}); // identity -> GainNode ของแต่ละคน
   const localVideoRef = useRef(null);
   const presenceChannelRef = useRef(null);
+  const joinedAtRef = useRef(null);
   const VOLUME_LEVELS = [0.5, 1, 1.6, 2.2]; // เบา -> ปกติ -> ดัง -> ดังมาก -> วนกลับ
 
   useEffect(() => {
@@ -206,7 +207,7 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
 
         const r = await fetch("/api/livekit-token", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ roomName: `refhub-${threadId}`, participantName: displayName, callerToken: session?.access_token }),
+          body: JSON.stringify({ roomName: `refhub-${threadId}`, participantName: displayName, sessionId: crypto.randomUUID(), callerToken: session?.access_token }),
         });
         const data = await r.json();
         if (!r.ok) throw new Error(data.error);
@@ -264,6 +265,9 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
         room.on(RoomEvent.TrackUnmuted, (pub, participant) => upsertParticipant({ sid: participant.sid, identity: participant.identity, name: participant.name || "เพื่อน", hasVideo: participant.isCameraEnabled }));
 
         await room.connect(data.url, data.token);
+        const isFirstJoiner = room.remoteParticipants.size === 0;
+        joinedAtRef.current = Date.now();
+        if (userId) supabase.from("chat_messages").insert({ thread_id: threadId, sender_id: userId, text: isFirstJoiner ? `📞 ${displayName || "มีคน"} เริ่มการโทร` : `➡️ ${displayName || "มีคน"} เข้าร่วมสาย` }).then(() => {}, () => {});
         await room.localParticipant.setMicrophoneEnabled(true, { echoCancellation: true, noiseSuppression: true, autoGainControl: true });
         setConnecting(false);
 
@@ -283,6 +287,10 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
       roomRef.current?.disconnect();
       audioCtxRef.current?.close().catch(() => {});
       if (presenceChannelRef.current) supabase.removeChannel(presenceChannelRef.current);
+      if (userId && joinedAtRef.current) {
+        const mins = Math.max(1, Math.round((Date.now() - joinedAtRef.current) / 60000));
+        supabase.from("chat_messages").insert({ thread_id: threadId, sender_id: userId, text: `⬅️ ${displayName || "มีคน"} วางสาย (คุยอยู่ ${mins} นาที)` }).then(() => {}, () => {});
+      }
     };
   }, [threadId]);
 
@@ -973,6 +981,12 @@ export default function RefHub() {
                 </button>
               </div>
               <div style={{ display: "flex", gap: 8 }}>
+                {authProfile?.role === "admin" && (
+                  <button onClick={() => setPage("admin")} style={{ position: "relative", width: 38, height: 38, borderRadius: 19, background: t.surface, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }}>
+                    <ShieldCheck size={17} color={t.text} />
+                    {adminAlerts.length > 0 && <span style={{ position: "absolute", top: 3, right: 3, width: 8, height: 8, borderRadius: 4, background: "#D9534F" }} />}
+                  </button>
+                )}
                 <IconBtn t={t} onClick={() => setSearchOpen(true)}><Search size={17} color={t.text} /></IconBtn>
                 <button onClick={() => setPage("chat")} style={{ position: "relative", width: 38, height: 38, borderRadius: 19, background: t.surface, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }}>
                   <MessageCircle size={17} color={t.text} />
@@ -980,7 +994,6 @@ export default function RefHub() {
                 </button>
                 <button onClick={() => setMoreMenuOpen(true)} style={{ position: "relative", width: 38, height: 38, borderRadius: 19, background: t.surface, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }}>
                   <MoreVertical size={17} color={t.text} />
-                  {adminAlerts.length > 0 && <span style={{ position: "absolute", top: 3, right: 3, width: 8, height: 8, borderRadius: 4, background: "#D9534F" }} />}
                 </button>
               </div>
             </div>
@@ -1023,7 +1036,7 @@ export default function RefHub() {
           {page === "news" && <NewsPage t={t} />}
           {page === "lang" && <LangPage t={t} />}
           {page === "goalsReport" && <GoalsReportPage t={t} goals={goals} />}
-          {page === "admin" && <AdminPage t={t} session={session} userId={userId} adminAlerts={adminAlerts} setAdminAlerts={setAdminAlerts} />}
+          {page === "admin" && <AdminPage t={t} session={session} userId={userId} adminAlerts={adminAlerts} setAdminAlerts={setAdminAlerts} authProfile={authProfile} setAuthProfile={setAuthProfile} />}
           {page === "locations" && <LocationsPage t={t} userId={userId} />}
           {page === "chat" && <ChatEntryPage t={t} M={M} userId={userId} authProfile={authProfile} session={session} openThread={(id, name, isGroup, avatarUrl, createdBy) => { setActiveThread({ id, name, isGroup: !!isGroup, avatarUrl: avatarUrl || null, createdBy: createdBy || null }); setPage("chatRoom"); }} />}
           {page === "chatRoom" && activeThread && <ChatRoomPage t={t} userId={userId} thread={activeThread} profile={profile} session={session} onLeave={() => { setActiveThread(null); setPage("chat"); }} onBack={() => { setActiveThread(null); setPage("chat"); }} activeCall={activeCall} setActiveCall={setActiveCall} setCallMinimized={setCallMinimized} />}
@@ -2011,7 +2024,7 @@ function FinancePage({ t, tx, setTx, categories, openAdd, openExport, userId }) 
   );
 }
 
-function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts }) {
+function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts, authProfile, setAuthProfile }) {
   const [tab, setTab] = useState("overview"); // overview | members | add
   const [members, setMembers] = useState([]);
   const [loadingList, setLoadingList] = useState(true);
@@ -2101,6 +2114,24 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts }) {
 
       {tab === "overview" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ ...card(t), padding: 16 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text, marginBottom: 4 }}>⚙️ ตั้งค่าคลังความรู้ (บัญชีของฉันเอง)</div>
+            <div style={{ fontSize: 11, color: t.sub, marginBottom: 12 }}>กำหนดจำนวนบทความ/หมวดที่ AI สร้างให้ทุกวัน กันบทความล้นเก็บสะสมเยอะเกินไป</div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 11, color: t.faint, marginBottom: 4 }}>บทความ/วัน</div>
+                <select value={authProfile?.daily_article_limit ?? 3} onChange={async (e) => { const v = +e.target.value; await supabase.from("profiles").update({ daily_article_limit: v }).eq("id", userId); setAuthProfile((p) => ({ ...p, daily_article_limit: v })); }} style={selectStyle}>
+                  {[1, 2, 3, 4, 5, 6, 8, 10].map((n) => <option key={n} value={n}>{n} บทความ</option>)}
+                </select>
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 11, color: t.faint, marginBottom: 4 }}>หมวดที่เลือกได้สูงสุด</div>
+                <select value={authProfile?.topic_limit ?? KNOWLEDGE_TOPICS.length} onChange={async (e) => { const v = +e.target.value; await supabase.from("profiles").update({ topic_limit: v }).eq("id", userId); setAuthProfile((p) => ({ ...p, topic_limit: v })); }} style={selectStyle}>
+                  {[1, 2, 3, 4, 5, 6, 8, 10].map((n) => <option key={n} value={n}>{n} หมวด</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
           <div style={{ display: "flex", gap: 10 }}>
             <div style={{ ...card(t), flex: 1, padding: 16, textAlign: "center" }}>
               <div style={{ fontSize: 22, fontWeight: 800, color: t.text }}>{members.length}</div>
@@ -3804,8 +3835,8 @@ const topicLabel = (id) => KNOWLEDGE_TOPICS.find((t) => t.id === id)?.label || i
 function IdeasPage({ t, M, userId, session, authProfile, setAuthProfile, setNotes }) {
   const interests = authProfile?.interests || [];
   const isAdmin = authProfile?.role === "admin" || authProfile?.role === "trusted";
-  const topicLimit = isAdmin ? KNOWLEDGE_TOPICS.length : (authProfile?.topic_limit ?? 3);
-  const dailyLimit = isAdmin ? 10 : (authProfile?.daily_article_limit ?? 3);
+  const topicLimit = authProfile?.topic_limit ?? (isAdmin ? KNOWLEDGE_TOPICS.length : 3);
+  const dailyLimit = authProfile?.daily_article_limit ?? 3;
 
   const [tab, setTab] = useState("today"); // today | saved
   const [today, setToday] = useState([]);

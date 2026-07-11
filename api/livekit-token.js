@@ -14,7 +14,7 @@ import { createClient } from "@supabase/supabase-js";
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { roomName, participantName, callerToken } = req.body || {};
+  const { roomName, participantName, sessionId, callerToken } = req.body || {};
   if (!roomName) return res.status(400).json({ error: "ไม่พบชื่อห้อง" });
   if (!callerToken) return res.status(401).json({ error: "ไม่พบข้อมูลยืนยันตัวตน" });
 
@@ -33,7 +33,7 @@ export default async function handler(req, res) {
     if (userErr || !userData?.user) return res.status(401).json({ error: "ยืนยันตัวตนไม่สำเร็จ" });
 
     const at = new AccessToken(apiKey, apiSecret, {
-      identity: userData.user.id,
+      identity: `${userData.user.id}:${sessionId || Date.now()}`,
       name: participantName || "ผู้ใช้",
     });
     at.addGrant({ roomJoin: true, room: roomName, canPublish: true, canSubscribe: true, canPublishData: true });
