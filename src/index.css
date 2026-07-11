@@ -2,6 +2,8 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  min-width: 0; /* กันช่อง flex ดันขยายเกินขอบจอไม่ยอมตัดบรรทัดข้อความยาวๆ (บั๊ก flexbox คลาสสิก) */
+  overflow-wrap: break-word; /* ตัดคำ/ข้อความยาวๆ ให้ขึ้นบรรทัดใหม่แทนที่จะดันขอบจอออกไปเรื่อยๆ */
 }
 
 html, body {

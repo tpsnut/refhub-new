@@ -892,7 +892,7 @@ export default function RefHub() {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             mentor,
-            messages: [{ who: "u", text: "แต่งคำคมให้กำลังใจสั้นๆ 1 ประโยค ในสไตล์ของคุณ ไม่ต้องทักทายหรืออธิบายอะไรเพิ่มเติมเลย ตอบกลับมาแค่ตัวคำคมอย่างเดียวเท่านั้น ไม่ต้องมีเครื่องหมายคำพูดครอบ" }],
+            messages: [{ who: "u", text: "แต่งคำคมให้กำลังใจ 1 ประโยคเต็มๆ ยาวประมาณ 12-25 คำ ในสไตล์ของคุณ (ห้ามสั้นเกินไปแบบแค่คำเดียวหรือวลีสั้นๆ ต้องเป็นประโยคที่มีเนื้อหาความหมายครบถ้วน) ไม่ต้องทักทายหรืออธิบายอะไรเพิ่มเติมเลย ตอบกลับมาแค่ตัวคำคมอย่างเดียวเท่านั้น ไม่ต้องมีเครื่องหมายคำพูดครอบ" }],
             userId, callerToken: session?.access_token, mentorName: M.full, mentorDescription: M.tag,
           }),
         });
@@ -2687,7 +2687,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack }) 
           <Upload size={16} color={t.sub} />
         </button>
         <input ref={fileRef} type="file" accept="image/*,.pdf,.doc,.docx" onChange={pickFile} style={{ display: "none" }} />
-        <input value={text} onChange={(e) => { setText(e.target.value); notifyTyping(); }} onKeyDown={(e) => e.key === "Enter" && send()} placeholder="พิมพ์ข้อความ..." style={input(t)} />
+        <textarea value={text} onChange={(e) => { setText(e.target.value); notifyTyping(); }} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder="พิมพ์ข้อความ..." rows={1} style={{ ...input(t), resize: "none", maxHeight: 120, overflowY: "auto", fontFamily: "inherit", lineHeight: 1.4 }} onInput={(e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px"; }} />
         <button onClick={send} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: 46, display: "grid", placeItems: "center" }}><Send size={17} /></button>
       </div>
       {lightbox && <ImageLightbox src={lightbox} onClose={() => setLightbox(null)} />}
@@ -3822,7 +3822,7 @@ function ChatModal({ t, M, mentor, setMentor, authProfile, setAuthProfile, custo
               <Upload size={16} color={t.sub} />
             </button>
             <input ref={fileRef} type="file" accept="image/*" onChange={pickImage} style={{ display: "none" }} />
-            <input value={inp} onChange={(e) => setInp(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} placeholder={`ถาม ${M.name}...`} style={input(t)} disabled={loading} />
+            <textarea value={inp} onChange={(e) => setInp(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder={`ถาม ${M.name}...`} rows={1} style={{ ...input(t), resize: "none", maxHeight: 120, overflowY: "auto", fontFamily: "inherit", lineHeight: 1.4 }} disabled={loading} onInput={(e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px"; }} />
             <button onClick={send} disabled={loading} style={{ ...primaryBtn(M), width: 46, padding: 0, display: "grid", placeItems: "center", opacity: loading ? 0.6 : 1 }}><Send size={18} /></button>
           </div>
         </div>
