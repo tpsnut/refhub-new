@@ -875,7 +875,40 @@ export default function RefHub() {
   const goalDone = todayGoals.filter((g) => g.done).length;
   const goalPct = todayGoals.length ? Math.round((goalDone / todayGoals.length) * 100) : 0;
   const balance = tx.reduce((s, x) => s + (x.type === "in" ? x.amount : -x.amount), 0);
-  const quote = M.quotes[quoteIdx % M.quotes.length];
+
+  // ✨ คำคม AI แต่งใหม่ทุกวัน (แยกตามโค้ชแต่ละคน) — สร้างแค่ 1 ครั้ง/วัน/คน เก็บไว้ในฐานข้อมูล ไม่ยิงซ้ำ ถ้าล้มเหลวสำรองกลับไปใช้คำคมคัดสรรเดิมอัตโนมัติ
+  const [aiQuote, setAiQuote] = useState(null);
+  useEffect(() => {
+    if (!userId || !mentor) return;
+    let cancelled = false;
+    setAiQuote(null); // เปลี่ยนโค้ช/วันใหม่ -> เคลียร์ก่อน กันโชว์คำคมของโค้ชคนเก่าค้าง
+    (async () => {
+      const today = todayStr();
+      const { data, error } = await supabase.from("daily_quotes").select("quote").eq("user_id", userId).eq("mentor", mentor).eq("date", today).maybeSingle();
+      if (error) { console.error("โหลดคำคมวันนี้ไม่สำเร็จ:", error.message); return; }
+      if (data) { if (!cancelled) setAiQuote(data.quote); return; }
+      try {
+        const r = await fetch("/api/chat", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mentor,
+            messages: [{ who: "u", text: "แต่งคำคมให้กำลังใจสั้นๆ 1 ประโยค ในสไตล์ของคุณ ไม่ต้องทักทายหรืออธิบายอะไรเพิ่มเติมเลย ตอบกลับมาแค่ตัวคำคมอย่างเดียวเท่านั้น ไม่ต้องมีเครื่องหมายคำพูดครอบ" }],
+            userId, callerToken: session?.access_token, mentorName: M.full, mentorDescription: M.tag,
+          }),
+        });
+        const resData = await r.json();
+        if (!r.ok) throw new Error(resData.error);
+        const q = (resData.text || "").trim().replace(/^["“]|["”]$/g, "").split("\n")[0];
+        if (!q) throw new Error("AI ไม่ตอบกลับคำคม");
+        if (!cancelled) setAiQuote(q);
+        supabase.from("daily_quotes").insert({ user_id: userId, mentor, date: today, quote: q }).then(({ error: insErr }) => { if (insErr) console.error("บันทึกคำคมไม่สำเร็จ:", insErr.message); });
+      } catch (e) {
+        console.error("แต่งคำคมไม่สำเร็จ ใช้คำคมสำรองแทน:", e.message);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [userId, mentor]);
+  const quote = aiQuote || M.quotes[quoteIdx % M.quotes.length];
 
   // 🔐 เกตระบบล็อกอิน — เช็คก่อนแสดงแอปจริง
   if (!authChecked) return <AuthLoadingScreen />;
@@ -1526,6 +1559,16 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, goa
   };
   const shownAnnouncements = announcements.filter((a) => !dismissed.includes(a.id));
 
+  // 📚 ดึงบทความความรู้วันนี้จริงมาโชว์ (เดิมฟิกข้อความปลอมไว้)
+  const [todayArticles, setTodayArticles] = useState(null); // null = กำลังโหลด, [] = ยังไม่มี
+  useEffect(() => {
+    if (!userId) return;
+    supabase.from("knowledge_articles").select("title").eq("user_id", userId).eq("date", todayStr()).order("created_at", { ascending: true }).then(({ data, error }) => {
+      if (error) { console.error("โหลดบทความความรู้วันนี้ไม่สำเร็จ:", error.message); return; }
+      setTodayArticles(data || []);
+    });
+  }, [userId]);
+
   return (
     <>
       {shownAnnouncements.map((a) => (
@@ -1560,8 +1603,12 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, goa
           <div style={{ fontSize: 11, fontWeight: 700, color: todayNet >= 0 ? "#2E9E6B" : "#D9534F", marginTop: 2 }}>{todayNet >= 0 ? "▲ +" : "▼ "}{Math.abs(todayNet).toLocaleString()} วันนี้</div>
         </CatCard>
         <CatCard t={t} k="amber" icon={<BookOpen size={15} color="#fff" />} label="ความรู้วันนี้" onClick={() => setPage("ideas")}>
-          <div style={{ fontSize: 14, fontWeight: 800, color: t.catTx.amber }}>RPA ขั้นเทพ</div>
-          <div style={{ fontSize: 10.5, color: t.catLb.amber, marginTop: 3 }}>4 บทความ · AI คัดให้</div>
+          <div style={{ fontSize: 14, fontWeight: 800, color: t.catTx.amber, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {todayArticles === null ? "กำลังโหลด..." : todayArticles.length === 0 ? "ยังไม่มีวันนี้" : todayArticles[0].title}
+          </div>
+          <div style={{ fontSize: 10.5, color: t.catLb.amber, marginTop: 3 }}>
+            {todayArticles === null ? "" : todayArticles.length === 0 ? "แตะเพื่อดู" : `${todayArticles.length} บทความ · AI คัดให้`}
+          </div>
         </CatCard>
         <CatCard t={t} k="coral" icon={<Target size={15} color="#fff" />} label="เป้าหมายวันนี้" onClick={() => setPage("goalsReport")}>
           <div style={{ fontSize: 16, fontWeight: 800, color: t.catTx.coral }}>{goalDone} / {goals.length || 0} สำเร็จ</div>
@@ -3651,9 +3698,9 @@ function ChatModal({ t, M, mentor, setMentor, authProfile, setAuthProfile, custo
       const { data: latest, error: latestErr } = await supabase.from("mentor_chat_messages").select("session_id").eq("user_id", userId).eq("mentor", mentor).order("created_at", { ascending: false }).limit(1).maybeSingle();
       if (latestErr) { console.error("โหลดประวัติแชทไม่สำเร็จ:", latestErr.message); setMsgs([greeting()]); return; }
       if (!latest) {
-        const g = greeting(); const sid = uid();
+        const g = greeting(); const sid = crypto.randomUUID();
         setMsgs([g]); setCurrentSessionId(sid);
-        if (userId) supabase.from("mentor_chat_messages").insert({ user_id: userId, mentor, session_id: sid, who: g.who, text: g.text }).then(() => {}, () => {});
+        if (userId) supabase.from("mentor_chat_messages").insert({ user_id: userId, mentor, session_id: sid, who: g.who, text: g.text }).then(({ error }) => { if (error) console.error("บันทึกข้อความทักทายไม่สำเร็จ:", error.message); }, () => {});
         return;
       }
       const { data, error } = await supabase.from("mentor_chat_messages").select("*").eq("user_id", userId).eq("mentor", mentor).eq("session_id", latest.session_id).order("created_at", { ascending: true });
@@ -3666,9 +3713,9 @@ function ChatModal({ t, M, mentor, setMentor, authProfile, setAuthProfile, custo
 
   // เริ่มแชทใหม่ = สร้าง session ใหม่ ไม่แตะของเก่าเลย (ดูย้อนหลังได้ทีหลังผ่านปุ่ม "ประวัติเก่า")
   const newChat = async () => {
-    const g = greeting(); const sid = uid();
+    const g = greeting(); const sid = crypto.randomUUID();
     setMsgs([g]); setCurrentSessionId(sid); setShowHistList(false);
-    if (userId) supabase.from("mentor_chat_messages").insert({ user_id: userId, mentor, session_id: sid, who: g.who, text: g.text }).then(() => {}, () => {});
+    if (userId) supabase.from("mentor_chat_messages").insert({ user_id: userId, mentor, session_id: sid, who: g.who, text: g.text }).then(({ error }) => { if (error) console.error("บันทึกข้อความทักทายไม่สำเร็จ:", error.message); }, () => {});
   };
 
   // ดูแชทเก่าที่เลือกจากรายการประวัติ (สลับไปดู/คุยต่อใน session นั้น)
@@ -3707,7 +3754,7 @@ function ChatModal({ t, M, mentor, setMentor, authProfile, setAuthProfile, custo
     const userMsg = { who: "u", text: u || "(ส่งรูปภาพ)", image: pendingImg?.dataUrl || null };
     const nextMsgs = [...msgs, userMsg];
     setMsgs(nextMsgs); setInp(""); setPendingImg(null);
-    if (userId) supabase.from("mentor_chat_messages").insert({ user_id: userId, mentor, session_id: currentSessionId, who: userMsg.who, text: userMsg.text, image: userMsg.image }).then(() => {}, () => {});
+    if (userId) supabase.from("mentor_chat_messages").insert({ user_id: userId, mentor, session_id: currentSessionId, who: userMsg.who, text: userMsg.text, image: userMsg.image }).then(({ error }) => { if (error) console.error("บันทึกข้อความไม่สำเร็จ:", error.message); }, () => {});
     setLoading(true);
     try {
       const r = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mentor, messages: nextMsgs, userId, callerToken: session?.access_token, mentorName: M.full, mentorDescription: M.tag, goalsContext: buildGoalsContext(goals) }) });
@@ -3715,14 +3762,14 @@ function ChatModal({ t, M, mentor, setMentor, authProfile, setAuthProfile, custo
       if (!r.ok) throw new Error(data.error || "API error");
       const replyMsg = { who: "m", text: data.text || M.replies[Math.floor(Math.random() * M.replies.length)], source: data.source };
       setMsgs((m) => [...m, replyMsg]);
-      if (userId) supabase.from("mentor_chat_messages").insert({ user_id: userId, mentor, session_id: currentSessionId, who: replyMsg.who, text: replyMsg.text }).then(() => {}, () => {});
+      if (userId) supabase.from("mentor_chat_messages").insert({ user_id: userId, mentor, session_id: currentSessionId, who: replyMsg.who, text: replyMsg.text }).then(({ error }) => { if (error) console.error("บันทึกคำตอบโค้ชไม่สำเร็จ:", error.message); }, () => {});
     } catch (e) {
       // ยังไม่ deploy หรือ API มีปัญหา -> fallback เป็น mock reply ชั่วคราว ไม่ให้แชทค้าง
       // แต่ log สาเหตุจริงไว้ให้เช็คได้ (กด F12 > Console) และติดป้ายบอกชัดว่านี่คือ mock ไม่ใช่ AI จริง
       console.error("เรียก /api/chat ไม่สำเร็จ ตกไปใช้ mock reply สาเหตุ:", e.message);
       const mockMsg = { who: "m", text: M.replies[Math.floor(Math.random() * M.replies.length)], isMock: true };
       setMsgs((m) => [...m, mockMsg]);
-      if (userId) supabase.from("mentor_chat_messages").insert({ user_id: userId, mentor, session_id: currentSessionId, who: mockMsg.who, text: mockMsg.text }).then(() => {}, () => {});
+      if (userId) supabase.from("mentor_chat_messages").insert({ user_id: userId, mentor, session_id: currentSessionId, who: mockMsg.who, text: mockMsg.text }).then(({ error }) => { if (error) console.error("บันทึกข้อความ mock ไม่สำเร็จ:", error.message); }, () => {});
     } finally {
       setLoading(false);
     }
