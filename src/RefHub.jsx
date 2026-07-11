@@ -556,7 +556,8 @@ export default function RefHub() {
         if (dbPlaylist) {
           // แปลงชื่อฟิลด์ yt_id จากฐานข้อมูลกลับมาใช้ในแอป
           const mappedPlaylist = dbPlaylist.map(p => ({
-            id: p.id, kind: p.kind, name: p.name, url: p.url, ytId: p.yt_id, persist: p.persist
+            id: p.id, kind: p.kind, name: p.name, url: p.url, ytId: p.yt_id, persist: p.persist,
+            platform: p.platform || "youtube", pinnedHome: !!p.pinned_home,
           }));
           setPlaylist(mappedPlaylist);
         }
@@ -981,9 +982,9 @@ export default function RefHub() {
 
         {/* CONTENT */}
         <div style={{ position: "relative", zIndex: 2, padding: `16px 18px ${page === "chat" || page === "chatRoom" ? 16 : 120}px`, height: "calc(100vh - 76px)", overflowY: "auto" }}>
-          {page === "home" && <HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, goalDone, goalPct, setGoals, notes, setPage, setChatOpen, userId }} />}
+          {page === "home" && <HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, goalDone, goalPct, setGoals, notes, setPage, setChatOpen, userId, playlist }} />}
           {page === "ledger" && <FinancePage {...{ t, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt), userId }} />}
-          {page === "note" && <NotePage {...{ t, notes, setNotes, isNight, userId }} />}
+          {page === "note" && <NotePage {...{ t, notes, setNotes, isNight, userId, session, authProfile }} />}
           {page === "ideas" && <IdeasPage t={t} M={M} userId={userId} session={session} authProfile={authProfile} setAuthProfile={setAuthProfile} setNotes={setNotes} />}
           {page === "trade" && <TradePage t={t} />}
           {page === "news" && <NewsPage t={t} />}
@@ -1032,7 +1033,7 @@ export default function RefHub() {
             <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
               <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 14 }}>เพิ่มเติม</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <button onClick={() => { setMusicOpen(true); setMoreMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}><Music size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>เพลง</span></button>
+                <button onClick={() => { setMusicOpen(true); setMoreMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}><Music size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>สื่อ</span></button>
                 <button onClick={() => { setThemePick(true); setMoreMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}><Palette size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>ธีมสีแอป</span></button>
                 <button onClick={() => setFontScale((s) => (s === 100 ? 115 : s === 115 ? 130 : 100))} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}><ALargeSmall size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>ขนาดตัวอักษร ({fontScale}%)</span></button>
                 <button onClick={() => setThemeMode(themeMode === "auto" ? "day" : themeMode === "day" ? "night" : "auto")} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
@@ -1324,34 +1325,73 @@ function ytExtract(url) {
   return m ? m[1] : null;
 }
 
+// 🔍 ตรวจจับว่าลิงก์ที่วางมาเป็นสื่อจากแพลตฟอร์มไหน
+function detectPlatform(url) {
+  const u = url.toLowerCase();
+  if (/youtube\.com|youtu\.be/.test(u)) return "youtube";
+  if (/tiktok\.com/.test(u)) return "tiktok";
+  if (/twitter\.com|x\.com/.test(u)) return "twitter";
+  if (/instagram\.com/.test(u)) return "instagram";
+  if (/facebook\.com|fb\.watch/.test(u)) return "facebook";
+  return "other";
+}
+const PLATFORM_META = {
+  youtube: { label: "YouTube", color: "#E0507B" },
+  tiktok: { label: "TikTok", color: "#000000" },
+  twitter: { label: "X (Twitter)", color: "#1DA1F2" },
+  instagram: { label: "Instagram", color: "#C13584" },
+  facebook: { label: "Facebook", color: "#1877F2" },
+  other: { label: "ลิงก์", color: "#8A93A8" },
+};
+
 function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, moveTrack, toggleFavorite, volume, setVolume, userId, close }) {
   const [ytUrl, setYtUrl] = useState("");
   const fileRef = useRef(null);
   const [saved, setSaved] = useState(false);
   const [tab, setTab] = useState("all"); // "all" | "fav" | folder.id
   const flashSaved = () => { setSaved(true); setTimeout(() => setSaved(false), 1800); };
-  const [pendingYt, setPendingYt] = useState(null); // { id, url, name } รอยืนยัน/แก้ชื่อก่อนบันทึกจริง
+  const [pendingYt, setPendingYt] = useState(null); // { id, url, name, platform } รอยืนยัน/แก้ชื่อก่อนบันทึกจริง
   const [ytLoading, setYtLoading] = useState(false);
+  const [viewingMedia, setViewingMedia] = useState(null); // สื่อโซเชียล (ไม่ใช่เสียง) ที่กำลังเปิดดูอยู่
+  const togglePinHome = (id) => {
+    const target = playlist.find((p) => p.id === id);
+    if (!target) return;
+    const next = !target.pinnedHome;
+    setPlaylist((p) => p.map((x) => (x.id === id ? { ...x, pinnedHome: next } : x)));
+    if (userId) supabase.from("playlists").update({ pinned_home: next }).eq("id", id).then(() => {}, () => {});
+  };
 
   const activeFolderId = tab === "all" || tab === "fav" ? null : tab;
-  const addYt = async () => {
-    const id = ytExtract(ytUrl.trim());
-    if (!id) { alert("ลิงก์ YouTube ไม่ถูกต้อง ลองก๊อปลิงก์จากปุ่ม Share ของ YouTube"); return; }
+  const addMedia = async () => {
+    const url = ytUrl.trim();
+    if (!url || !/^https?:\/\//i.test(url)) { alert("วางลิงก์ที่ถูกต้อง (ต้องขึ้นต้นด้วย http:// หรือ https://)"); return; }
+    const platform = detectPlatform(url);
     setYtLoading(true);
-    let realName = "YouTube · " + id;
+    let realName = `${PLATFORM_META[platform].label} · ${url.slice(0, 40)}`;
+    let ytId = null;
     try {
-      // oEmbed ของ YouTube ดึงชื่อวิดีโอจริงได้ฟรี ไม่ต้องใช้ API key
-      const r = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(ytUrl.trim())}&format=json`);
-      if (r.ok) { const data = await r.json(); if (data.title) realName = data.title; }
+      if (platform === "youtube") {
+        ytId = ytExtract(url);
+        if (!ytId) { alert("ลิงก์ YouTube ไม่ถูกต้อง ลองก๊อปลิงก์จากปุ่ม Share ของ YouTube"); setYtLoading(false); return; }
+        const r = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`);
+        if (r.ok) { const data = await r.json(); if (data.title) realName = data.title; }
+      } else if (platform === "twitter") {
+        const r = await fetch(`https://publish.twitter.com/oembed?url=${encodeURIComponent(url)}`);
+        if (r.ok) { const data = await r.json(); if (data.author_name) realName = `โพสต์ของ ${data.author_name}`; }
+      } else if (platform === "tiktok") {
+        const r = await fetch(`https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`);
+        if (r.ok) { const data = await r.json(); if (data.title) realName = data.title; }
+      }
+      // Instagram/Facebook ไม่มี oEmbed สาธารณะแบบไม่ต้องใช้ API key เลย ใช้ชื่อสำรอง (แก้เองได้ก่อนบันทึกอยู่แล้ว)
     } catch (e) {}
     setYtLoading(false);
-    setPendingYt({ id, url: ytUrl.trim(), name: realName });
+    setPendingYt({ id: ytId, url, name: realName, platform });
   };
   const confirmAddYt = () => {
     if (!pendingYt) return;
-    const track = { id: uid(), kind: "yt", name: pendingYt.name.trim() || "YouTube · " + pendingYt.id, ytId: pendingYt.id, url: pendingYt.url, favorite: false, folderId: activeFolderId };
+    const track = { id: uid(), kind: pendingYt.platform === "youtube" ? "yt" : "link", platform: pendingYt.platform, name: pendingYt.name.trim() || pendingYt.url, ytId: pendingYt.id, url: pendingYt.url, favorite: false, folderId: activeFolderId, pinnedHome: false };
     setPlaylist((p) => [...p, track]);
-    if (userId) supabase.from("playlists").insert({ id: track.id, user_id: userId, kind: track.kind, name: track.name, url: track.url, yt_id: track.ytId, persist: true }).then(() => {}, () => {});
+    if (userId) supabase.from("playlists").insert({ id: track.id, user_id: userId, kind: track.kind, platform: track.platform, name: track.name, url: track.url, yt_id: track.ytId, persist: true }).then(() => {}, () => {});
     setYtUrl(""); setPendingYt(null); flashSaved();
   };
   const addFileInner = (e) => {
@@ -1398,10 +1438,10 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
     <div style={overlay} onClick={close}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: "20px 20px 28px", maxHeight: "90vh", overflowY: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-          <div style={{ fontSize: 17, fontWeight: 800, color: t.text }}>เพลงของฉัน 🎵</div>
+          <div style={{ fontSize: 17, fontWeight: 800, color: t.text }}>สื่อของฉัน 📎</div>
           <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
         </div>
-        <div style={{ fontSize: 12, color: t.sub, marginBottom: 14 }}>เปิดเพลงที่ชอบระหว่างใช้แอป · เพิ่มแล้วบันทึกอัตโนมัติ</div>
+        <div style={{ fontSize: 12, color: t.sub, marginBottom: 14 }}>เก็บสื่อจาก YouTube, TikTok, X, Instagram, Facebook ไว้ดูย้อนหลัง · เพิ่มแล้วบันทึกอัตโนมัติ</div>
 
         {/* ตอนนี้เพลง YouTube เล่นอยู่ที่ mini player ลอยมุมจอ (ไม่ดับตอนสลับหน้าแล้ว) */}
         {cur && cur.kind === "yt" && (
@@ -1417,16 +1457,16 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
           </button>
           <input ref={fileRef} type="file" accept="audio/*,video/mp4,.mp3,.mp4" onChange={addFileInner} style={{ display: "none" }} />
           <div style={{ display: "flex", gap: 8 }}>
-            <input value={ytUrl} onChange={(e) => setYtUrl(e.target.value)} placeholder="วางลิงก์ YouTube..." style={input(t)} />
-            <button onClick={addYt} disabled={ytLoading} style={{ ...primaryBtn(t), padding: "0 14px", display: "flex", alignItems: "center", gap: 5, opacity: ytLoading ? 0.6 : 1 }}><Link2 size={15} /> {ytLoading ? "กำลังดึงชื่อ..." : "เพิ่ม"}</button>
+            <input value={ytUrl} onChange={(e) => setYtUrl(e.target.value)} placeholder="วางลิงก์ YouTube / TikTok / X / Instagram / Facebook..." style={input(t)} />
+            <button onClick={addMedia} disabled={ytLoading} style={{ ...primaryBtn(t), padding: "0 14px", display: "flex", alignItems: "center", gap: 5, opacity: ytLoading ? 0.6 : 1 }}><Link2 size={15} /> {ytLoading ? "กำลังดึงชื่อ..." : "เพิ่ม"}</button>
           </div>
           {pendingYt && (
             <div style={{ marginTop: 10, padding: 12, borderRadius: 12, background: t.inputBg, border: `1px solid ${t.border}` }}>
-              <div style={{ fontSize: 11, color: t.sub, marginBottom: 6 }}>ตั้งชื่อเพลงนี้ (แก้ได้ก่อนบันทึก):</div>
+              <div style={{ fontSize: 11, color: t.sub, marginBottom: 6 }}>ตั้งชื่อสื่อนี้ (แก้ได้ก่อนบันทึก):</div>
               <input value={pendingYt.name} onChange={(e) => setPendingYt((p) => ({ ...p, name: e.target.value }))} onKeyDown={(e) => e.key === "Enter" && confirmAddYt()} style={{ ...input(t), marginBottom: 8 }} autoFocus />
               <div style={{ display: "flex", gap: 8 }}>
                 <button onClick={() => setPendingYt(null)} style={{ flex: 1, padding: "9px 0", borderRadius: 10, border: `1px solid ${t.border}`, background: "none", color: t.sub, cursor: "pointer", fontSize: 12.5, fontWeight: 700 }}>ยกเลิก</button>
-                <button onClick={confirmAddYt} style={{ ...primaryBtn(t), flex: 1, padding: "9px 0" }}>บันทึกเพลงนี้</button>
+                <button onClick={confirmAddYt} style={{ ...primaryBtn(t), flex: 1, padding: "9px 0" }}>บันทึกสื่อนี้</button>
               </div>
             </div>
           )}
@@ -1463,13 +1503,13 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
         )}
 
         {/* playlist */}
-        <div style={{ fontSize: 12.5, fontWeight: 800, color: t.sub, marginBottom: 8 }}>เพลย์ลิสต์ ({shown.length})</div>
+        <div style={{ fontSize: 12.5, fontWeight: 800, color: t.sub, marginBottom: 8 }}>สื่อที่เก็บไว้ ({shown.length})</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {shown.length === 0 && <div style={{ textAlign: "center", color: t.sub, fontSize: 13, padding: "20px 0" }}>ยังไม่มีเพลงในหมวดนี้</div>}
+          {shown.length === 0 && <div style={{ textAlign: "center", color: t.sub, fontSize: 13, padding: "20px 0" }}>ยังไม่มีสื่อในหมวดนี้</div>}
           {shown.map((tr, i) => (
             <TrackRow key={tr.id} t={t} M={M} track={tr} active={curId === tr.id} playing={playing && curId === tr.id}
               folders={folders} isFirst={i === 0} isLast={i === shown.length - 1}
-              onPlay={() => playTrack(tr)} onToggle={togglePlay}
+              onPlay={() => (tr.kind === "link" ? setViewingMedia(tr) : playTrack(tr))} onToggle={togglePlay}
               onDel={() => {
                 if (tab === "all") { setPlaylist((p) => p.filter((x) => x.id !== tr.id)); if (userId) supabase.from("playlists").delete().eq("id", tr.id).then(() => {}, () => {}); } // แท็บทั้งหมด -> ลบจริง
                 else if (tab === "fav") toggleFavorite(tr.id);                                   // แท็บโปรด -> แค่เอาออกจากโปรด
@@ -1477,9 +1517,11 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
               }}
               onFav={() => toggleFavorite(tr.id)}
               onMoveUp={() => moveTrack(tr.id, -1)} onMoveDown={() => moveTrack(tr.id, 1)}
-              onFolder={(fid) => setTrackFolder(tr.id, fid)} onRename={(name) => renameTrack(tr.id, name)} />
+              onFolder={(fid) => setTrackFolder(tr.id, fid)} onRename={(name) => renameTrack(tr.id, name)}
+              onPinHome={() => togglePinHome(tr.id)} />
           ))}
         </div>
+        {viewingMedia && <SocialEmbedModal t={t} item={viewingMedia} close={() => setViewingMedia(null)} />}
         <div style={{ fontSize: 10.5, color: t.faint, textAlign: "center", marginTop: 14 }}>
           เพลง YouTube แสดงเป็นการ์ด "กำลังเล่น" ที่หน้า Home ใต้เป้าหมายวันนี้ (ตาม YouTube ToS ต้องมองเห็นได้ตอนเล่น) — ถ้าออกจากหน้า Home วิดีโออาจหยุดเล่นตามพฤติกรรมเบราว์เซอร์ · ไฟล์เพลงเล่นต่อได้ทุกหน้าเหมือนเดิม · ไฟล์ใหญ่กว่า 1.5MB เล่นเฉพาะรอบนี้ · ดาวน์โหลดได้เฉพาะไฟล์ที่แนบเอง (YouTube ดาวน์โหลดไม่ได้ตามกติกา)
         </div>
@@ -1488,16 +1530,68 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
   );
 }
 
-function TrackRow({ t, M, track, active, playing, folders, isFirst, isLast, onPlay, onToggle, onDel, onFav, onMoveUp, onMoveDown, onFolder, onRename }) {
-  const icon = track.kind === "yt" ? <Music size={16} color="#E0507B" /> : track.kind === "file" ? <Music size={16} color="#3DA5D9" /> : <Sparkles size={16} color={t.accent} />;
+// 📎 แสดงสื่อจากแพลตฟอร์มโซเชียลต่างๆ (โหลด embed script ของแต่ละเจ้าแบบไดนามิก)
+function SocialEmbedModal({ t, item, close }) {
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    const loadScript = (src, checkFn) => new Promise((resolve) => {
+      if (checkFn()) return resolve();
+      const s = document.createElement("script");
+      s.src = src; s.async = true; s.onload = resolve; s.onerror = resolve;
+      document.body.appendChild(s);
+    });
+
+    (async () => {
+      if (item.platform === "tiktok") {
+        await loadScript("https://www.tiktok.com/embed.js", () => !!window.tiktokEmbedLoad);
+        window.tiktokEmbedLoad?.();
+      } else if (item.platform === "twitter") {
+        await loadScript("https://platform.twitter.com/widgets.js", () => !!window.twttr?.widgets);
+        window.twttr?.widgets?.load(containerRef.current);
+      } else if (item.platform === "instagram") {
+        await loadScript("https://www.instagram.com/embed.js", () => !!window.instgrm);
+        window.instgrm?.Embeds?.process();
+      } else if (item.platform === "facebook") {
+        await loadScript("https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v18.0", () => !!window.FB);
+        window.FB?.XFBML?.parse(containerRef.current);
+      }
+    })();
+  }, [item.url]);
+
+  return (
+    <ModalPortal>
+      <div style={overlay} onClick={close}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 16, maxHeight: "85vh", overflowY: "auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
+            <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+          </div>
+          <div ref={containerRef} style={{ display: "flex", justifyContent: "center" }}>
+            {item.platform === "tiktok" && <blockquote className="tiktok-embed" cite={item.url} style={{ maxWidth: "100%" }}><a href={item.url}>เปิด TikTok</a></blockquote>}
+            {item.platform === "twitter" && <blockquote className="twitter-tweet"><a href={item.url}>เปิดโพสต์ X</a></blockquote>}
+            {item.platform === "instagram" && <blockquote className="instagram-media" data-instgrm-permalink={item.url} style={{ width: "100%" }}><a href={item.url}>เปิด Instagram</a></blockquote>}
+            {item.platform === "facebook" && <div className="fb-post" data-href={item.url} style={{ width: "100%" }} />}
+          </div>
+          <a href={item.url} target="_blank" rel="noreferrer" style={{ display: "block", textAlign: "center", marginTop: 14, fontSize: 12.5, color: t.accent, fontWeight: 700, textDecoration: "none" }}>เปิดต้นฉบับในแอป {PLATFORM_META[item.platform]?.label} →</a>
+        </div>
+      </div>
+    </ModalPortal>
+  );
+}
+
+function TrackRow({ t, M, track, active, playing, folders, isFirst, isLast, onPlay, onToggle, onDel, onFav, onMoveUp, onMoveDown, onFolder, onRename, onPinHome }) {
+  const isLink = track.kind === "link";
+  const platMeta = PLATFORM_META[track.platform] || PLATFORM_META.other;
+  const icon = isLink ? <Link2 size={16} color={platMeta.color} /> : track.kind === "yt" ? <Music size={16} color="#E0507B" /> : track.kind === "file" ? <Music size={16} color="#3DA5D9" /> : <Sparkles size={16} color={t.accent} />;
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(track.name);
   const saveRename = () => { if (editName.trim()) onRename?.(editName.trim()); setEditing(false); };
   return (
     <div style={{ ...card(t), padding: "10px 12px", border: `1px solid ${active ? t.accent : t.border}` }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <button onClick={active ? onToggle : onPlay} style={{ width: 34, height: 34, borderRadius: 17, border: "none", cursor: "pointer", background: active ? t.accent : `${t.accent}22`, color: active ? t.onAccent : t.accent, display: "grid", placeItems: "center", flexShrink: 0 }}>
-          {active && playing ? <Pause size={15} /> : <Play size={15} />}
+        <button onClick={isLink ? onPlay : (active ? onToggle : onPlay)} style={{ width: 34, height: 34, borderRadius: 17, border: "none", cursor: "pointer", background: active ? t.accent : `${t.accent}22`, color: active ? t.onAccent : t.accent, display: "grid", placeItems: "center", flexShrink: 0 }}>
+          {isLink ? <ChevronRight size={15} /> : active && playing ? <Pause size={15} /> : <Play size={15} />}
         </button>
         <span style={{ flexShrink: 0 }}>{icon}</span>
         {editing ? (
@@ -1505,12 +1599,16 @@ function TrackRow({ t, M, track, active, playing, folders, isFirst, isLast, onPl
         ) : (
           <div onClick={() => { setEditName(track.name); setEditing(true); }} style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: t.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", cursor: "pointer" }} title="กดเพื่อแก้ชื่อ">{track.name}</div>
         )}
+        {isLink && (
+          <button onClick={onPinHome} style={ghost} title={track.pinnedHome ? "เอาออกจากหน้าโฮม" : "โชว์ที่หน้าโฮม"}><Home size={15} color={track.pinnedHome ? "#2E9E6B" : t.faint} /></button>
+        )}
         <button onClick={onFav} style={ghost} title="โปรด"><Sparkles size={15} color={track.favorite ? "#E0B24A" : t.faint} fill={track.favorite ? "#E0B24A" : "none"} /></button>
         {track.kind === "file" && (
           <a href={track.src} download={track.name} style={{ ...ghost, display: "grid", placeItems: "center" }} title="ดาวน์โหลด"><Download size={15} color={t.faint} /></a>
         )}
         {onDel && <button onClick={onDel} style={ghost}><Trash2 size={15} color={t.faint} /></button>}
       </div>
+      {isLink && <div style={{ fontSize: 10, color: platMeta.color, fontWeight: 700, marginTop: 6, paddingLeft: 44 }}>{platMeta.label}</div>}
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, paddingLeft: 44 }}>
         <button onClick={onMoveUp} disabled={isFirst} style={{ ...ghost, opacity: isFirst ? 0.3 : 1 }} title="ย้ายขึ้น">▲</button>
         <button onClick={onMoveDown} disabled={isLast} style={{ ...ghost, opacity: isLast ? 0.3 : 1 }} title="ย้ายลง">▼</button>
@@ -1528,7 +1626,9 @@ function TrackRow({ t, M, track, active, playing, folders, isFirst, isLast, onPl
 const greet = (night) => { const h = new Date().getHours(); return h < 6 ? "ดึกแล้ว พักบ้างนะ 🌙" : h < 12 ? "สวัสดีตอนเช้า ☀️" : h < 18 ? "สวัสดีตอนบ่าย 🌤️" : "ค่ำแล้ว วันนี้เป็นไงบ้าง 🌙"; };
 
 // ---------------- Home ----------------
-function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, goalDone, goalPct, setGoals, notes, setPage, setChatOpen, userId }) {
+function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, goalDone, goalPct, setGoals, notes, setPage, setChatOpen, userId, playlist }) {
+  const [viewingPinned, setViewingPinned] = useState(null);
+  const pinnedMedia = (playlist || []).filter((p) => p.kind === "link" && p.pinnedHome);
   const [goalText, setGoalText] = useState("");
   const latestNote = notes[0];
   const todayNet = tx.filter((x) => x.date === todayStr()).reduce((s, x) => s + (x.type === "in" ? x.amount : -x.amount), 0);
@@ -1640,6 +1740,28 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, goa
           <button onClick={addGoal} style={{ ...primaryBtn(t), padding: "0 16px" }}>เพิ่ม</button>
         </div>
       </div>
+
+      {pinnedMedia.length > 0 && (
+        <div style={{ ...card(t), marginTop: 16, padding: 16 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text, marginBottom: 10 }}>📎 สื่อที่ปักหมุดไว้</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {pinnedMedia.map((m) => {
+              const meta = PLATFORM_META[m.platform] || PLATFORM_META.other;
+              return (
+                <button key={m.id} onClick={() => setViewingPinned(m)} style={{ display: "flex", alignItems: "center", gap: 10, background: "none", border: `1px solid ${t.border}`, borderRadius: 12, padding: "10px 12px", cursor: "pointer", textAlign: "left" }}>
+                  <Link2 size={15} color={meta.color} style={{ flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 700, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</div>
+                    <div style={{ fontSize: 10, color: meta.color, fontWeight: 700 }}>{meta.label}</div>
+                  </div>
+                  <ChevronRight size={15} color={t.faint} />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      {viewingPinned && <SocialEmbedModal t={t} item={viewingPinned} close={() => setViewingPinned(null)} />}
     </>
   );
 }
@@ -3142,7 +3264,59 @@ function NoteEditor({ content, onChange, theme, userId }) {
   return <BlockNoteView editor={editor} theme={theme} onChange={() => onChange(editor.document)} />;
 }
 
-function NotePage({ t, notes, setNotes, isNight, userId }) {
+function NotionSetupModal({ t, userId, close }) {
+  const [tokenVal, setTokenVal] = useState("");
+  const [dbId, setDbId] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  useEffect(() => {
+    supabase.from("notion_configs").select("*").eq("user_id", userId).maybeSingle().then(({ data, error }) => {
+      if (error) console.error("โหลดการตั้งค่า Notion ไม่สำเร็จ:", error.message);
+      if (data) { setTokenVal(data.notion_token || ""); setDbId(data.notion_database_id || ""); }
+      setLoading(false);
+    });
+  }, [userId]);
+
+  const save = async () => {
+    setSaving(true); setMsg("");
+    const { error } = await supabase.from("notion_configs").upsert({ user_id: userId, notion_token: tokenVal.trim(), notion_database_id: dbId.trim(), updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+    setSaving(false);
+    setMsg(error ? "บันทึกไม่สำเร็จ: " + error.message : "บันทึกแล้ว ✓ ลองกด Sync Notion ได้เลย");
+  };
+
+  return (
+    <div style={overlay} onClick={close}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>ตั้งค่า Notion ของฉัน</div>
+          <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+        </div>
+        <div style={{ fontSize: 11.5, color: t.sub, lineHeight: 1.7, marginBottom: 16, background: t.inputBg, borderRadius: 12, padding: 12 }}>
+          <b>วิธีตั้งค่า (ทำครั้งเดียว):</b><br />
+          1. ไปที่ <b>notion.so/my-integrations</b> กด "New integration" ตั้งชื่ออะไรก็ได้ → copy "Internal Integration Secret" มาใส่ช่องแรกด้านล่าง<br />
+          2. สร้างหน้า Database ใน Notion ต้องมีคอลัมน์: Name (Title), Tags (Multi-select), Pinned (Checkbox), Date (Date)<br />
+          3. เปิดหน้า database นั้น กด "..." มุมขวาบน → Connections → เชื่อม Integration ที่สร้างไว้ในข้อ 1<br />
+          4. Copy "Database ID" จาก URL ของหน้านั้น (ชุดตัวอักษร/ตัวเลขยาวๆ ก่อนเครื่องหมาย ? ) มาใส่ช่องที่สอง
+        </div>
+        {loading ? <Empty t={t} text="กำลังโหลด..." /> : (
+          <>
+            <div style={{ fontSize: 12, fontWeight: 700, color: t.sub, marginBottom: 6 }}>Notion Integration Secret</div>
+            <input type="password" value={tokenVal} onChange={(e) => setTokenVal(e.target.value)} placeholder="ntn_xxxxxxxxxxxxx" style={{ ...input(t), marginBottom: 12 }} />
+            <div style={{ fontSize: 12, fontWeight: 700, color: t.sub, marginBottom: 6 }}>Notion Database ID</div>
+            <input value={dbId} onChange={(e) => setDbId(e.target.value)} placeholder="เช่น a1b2c3d4e5f6..." style={{ ...input(t), marginBottom: 16 }} />
+            {msg && <div style={{ fontSize: 11.5, color: msg.startsWith("บันทึกไม่สำเร็จ") ? "#D9534F" : "#2E9E6B", marginBottom: 12 }}>{msg}</div>}
+            <button onClick={save} disabled={saving} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "12px 0" }}>{saving ? "กำลังบันทึก..." : "บันทึก"}</button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function NotePage({ t, notes, setNotes, isNight, userId, session, authProfile }) {
+
   const [title, setTitle] = useState(""); const [body, setBody] = useState(null); const [tagsInput, setTagsInput] = useState("");
   const [draftKey, setDraftKey] = useState(0); // เปลี่ยนค่านี้เพื่อบังคับให้ NoteEditor ตัวเพิ่มโน้ตใหม่รีเซ็ตเนื้อหาว่าง
   const [editingId, setEditingId] = useState(null);
@@ -3220,15 +3394,16 @@ function NotePage({ t, notes, setNotes, isNight, userId }) {
   const exportAllMd = () => downloadText("refhub-notes.md", notes.map(noteToMd).join("\n---\n\n"), "text/markdown;charset=utf-8;");
   const exportOneMd = (n) => downloadText(`${(n.title || "note").slice(0, 40).replace(/[\\/:*?"<>|]/g, "")}.md`, noteToMd(n), "text/markdown;charset=utf-8;");
 
-  // 🔗 Sync ขึ้น Notion จริง (ต้อง deploy ขึ้น Vercel + ตั้งค่า NOTION_TOKEN/NOTION_DATABASE_ID ก่อนถึงจะทำงานได้จริง)
+  // 🔗 Sync ขึ้น Notion ของตัวเอง (ต้องตั้งค่า Notion token/database ของตัวเองก่อนที่ปุ่ม ⚙️ ข้างล่างนี้)
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState(null);
+  const [showNotionSetup, setShowNotionSetup] = useState(false);
   const syncToNotion = async () => {
     const pending = notes.filter((n) => !n.notionId); // sync เฉพาะโน้ตที่ยังไม่เคยส่งไป (กันสร้างซ้ำ)
     if (pending.length === 0) { setSyncMsg("ไม่มีโน้ตใหม่ที่ต้อง sync"); setTimeout(() => setSyncMsg(null), 2500); return; }
     setSyncing(true); setSyncMsg(null);
     try {
-      const r = await fetch("/api/notion-sync", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ notes: pending }) });
+      const r = await fetch("/api/notion-sync", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ notes: pending, userId, callerToken: session?.access_token }) });
       const data = await r.json();
       if (!r.ok) { setSyncMsg("Sync ไม่สำเร็จ: " + (data.error || "unknown error")); return; }
       const okMap = Object.fromEntries((data.results || []).filter((x) => x.ok).map((x) => [x.id, x.notionId]));
@@ -3255,10 +3430,16 @@ function NotePage({ t, notes, setNotes, isNight, userId }) {
       {notes.length > 0 && (
         <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
           <button onClick={exportAllMd} style={{ ...card(t), flex: 1, padding: "9px 0", border: `1px solid ${t.border}`, cursor: "pointer", color: t.text, fontWeight: 700, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><FileText size={14} color={t.accent} /> Export .md</button>
-          <button onClick={syncToNotion} disabled={syncing} style={{ ...card(t), flex: 1, padding: "9px 0", border: `1px solid ${t.border}`, cursor: syncing ? "default" : "pointer", color: t.text, fontWeight: 700, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: syncing ? 0.6 : 1 }}>{syncing ? "กำลัง sync..." : "🔗 Sync Notion"}</button>
+          {authProfile?.role === "admin" && (
+            <>
+              <button onClick={syncToNotion} disabled={syncing} style={{ ...card(t), flex: 1, padding: "9px 0", border: `1px solid ${t.border}`, cursor: syncing ? "default" : "pointer", color: t.text, fontWeight: 700, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: syncing ? 0.6 : 1 }}>{syncing ? "กำลัง sync..." : "🔗 Sync Notion"}</button>
+              <button onClick={() => setShowNotionSetup(true)} style={{ ...card(t), width: 38, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }} title="ตั้งค่า Notion ของตัวเอง"><KeyRound size={15} color={t.sub} /></button>
+            </>
+          )}
         </div>
       )}
       {syncMsg && <div style={{ fontSize: 11, color: t.sub, textAlign: "center", marginBottom: 12 }}>{syncMsg}</div>}
+      {showNotionSetup && <NotionSetupModal t={t} userId={userId} close={() => setShowNotionSetup(false)} />}
 
       <div style={{ ...card(t), padding: 16 }}>
         <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="หัวข้อ" style={{ ...input(t), marginBottom: 8, fontWeight: 700 }} />
