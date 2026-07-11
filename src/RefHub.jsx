@@ -224,6 +224,8 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
 
         room.on(RoomEvent.TrackSubscribed, (track, pub, participant) => {
           if (track.kind === Track.Kind.Audio) {
+            // เบราว์เซอร์บางตัวบล็อกเสียงอัตโนมัติถ้า AudioContext ไม่ได้ "ปลดล็อก" ไว้ตอนนี้พอดี -> เรียก resume() ซ้ำทุกครั้งกันเหนียว
+            audioCtx.resume().catch(() => {});
             // ขยายเสียงที่ได้ยินด้วย GainNode (ปรับดังขึ้นได้จากปุ่ม 🔊)
             const mediaStream = new MediaStream([track.mediaStreamTrack]);
             const source = audioCtx.createMediaStreamSource(mediaStream);
@@ -237,10 +239,14 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
             hasVideo: participant.isCameraEnabled,
           });
           if (track.kind === Track.Kind.Video) {
-            setTimeout(() => {
+            // ต้องรอให้ React วาดกล่องวิดีโอของคนนี้ในจอก่อน ถึงจะแนบวิดีโอเข้าไปได้ (setTimeout(0) เร็วเกินไป บางทีจับ element ไม่ทัน)
+            let tries = 0;
+            const tryAttach = () => {
               const el = document.getElementById(`vid-${participant.sid}`);
-              if (el) track.attach(el);
-            }, 0);
+              if (el) { track.attach(el); return; }
+              if (tries++ < 20) setTimeout(tryAttach, 100);
+            };
+            tryAttach();
           }
         });
 
@@ -338,7 +344,7 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
               <button onClick={toggleCamera} style={{ width: 54, height: 54, borderRadius: 27, background: cameraOn ? "#2E9E6B" : "rgba(255,255,255,.15)", border: "none", cursor: "pointer", display: "grid", placeItems: "center" }} title={cameraOn ? "ปิดกล้อง" : "เปิดกล้อง"}>
                 {cameraOn ? <Camera size={20} color="#fff" /> : <Camera size={20} color="#fff" style={{ opacity: .6 }} />}
               </button>
-              <button onClick={() => setVolumeBoost((v) => VOLUME_LEVELS[(VOLUME_LEVELS.indexOf(v) + 1) % VOLUME_LEVELS.length])} style={{ width: 54, height: 54, borderRadius: 27, background: volumeBoost > 1 ? "#2E9E6B" : "rgba(255,255,255,.15)", border: "none", cursor: "pointer", display: "grid", placeItems: "center", position: "relative" }} title="ปรับเสียงดังขึ้น">
+              <button onClick={() => { audioCtxRef.current?.resume().catch(() => {}); setVolumeBoost((v) => VOLUME_LEVELS[(VOLUME_LEVELS.indexOf(v) + 1) % VOLUME_LEVELS.length]); }} style={{ width: 54, height: 54, borderRadius: 27, background: volumeBoost > 1 ? "#2E9E6B" : "rgba(255,255,255,.15)", border: "none", cursor: "pointer", display: "grid", placeItems: "center", position: "relative" }} title="ปรับเสียงดังขึ้น">
                 <Volume2 size={20} color="#fff" />
                 {volumeBoost > 1 && <span style={{ position: "absolute", top: -2, right: -2, background: "#fff", color: "#2E9E6B", fontSize: 9, fontWeight: 800, borderRadius: 8, padding: "1px 5px" }}>{volumeBoost === 2.2 ? "MAX" : "+"}</span>}
               </button>
@@ -2043,6 +2049,13 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts }) {
   const setCanViewLocations = async (id, can_view_locations) => { const { error } = await supabase.from("profiles").update({ can_view_locations }).eq("id", id); if (error) { alert("ตั้งสิทธิ์ดูตำแหน่งไม่สำเร็จ: " + error.message); console.error(error); } loadMembers(); };
   const remindNotification = async (id) => { await supabase.from("profiles").update({ notif_reminder_at: new Date().toISOString() }).eq("id", id); loadMembers(); };
   const setPremiumAi = async (id, premium_ai) => { await supabase.from("profiles").update({ premium_ai }).eq("id", id); loadMembers(); };
+  const setCanUseSorting = async (id, can_use_sorting) => { await supabase.from("profiles").update({ can_use_sorting }).eq("id", id); loadMembers(); };
+  const approveSwitch = async (targetUserId) => {
+    const r = await fetch("/api/sorting-group", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "approve_switch", targetUserId, callerToken: session?.access_token }) });
+    const data = await r.json();
+    if (data.error) alert("อนุมัติไม่สำเร็จ: " + data.error);
+    loadMembers();
+  };
   const setMentorLimit = async (id, mentor_limit) => { await supabase.from("profiles").update({ mentor_limit }).eq("id", id); loadMembers(); };
   const resetMentorPick = async (id) => { await supabase.from("custom_mentors").delete().eq("user_id", id); loadMembers(); };
   const setTopicLimit = async (id, topic_limit) => { await supabase.from("profiles").update({ topic_limit }).eq("id", id); loadMembers(); };
@@ -2170,7 +2183,7 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts }) {
           <MemberDetailModal
             t={t} m={detailMember} isSelf={detailMember.id === userId}
             isOnline={isOnline(detailMember.last_seen)}
-            setApproved={setApproved} setRole={setRole} setCanChat={setCanChat} setCanViewLocations={setCanViewLocations} remindNotification={remindNotification} setPremiumAi={setPremiumAi}
+            setApproved={setApproved} setRole={setRole} setCanChat={setCanChat} setCanViewLocations={setCanViewLocations} remindNotification={remindNotification} setPremiumAi={setPremiumAi} setCanUseSorting={setCanUseSorting} approveSwitch={approveSwitch}
             setMentorLimit={setMentorLimit} setTopicLimit={setTopicLimit} setDailyArticleLimit={setDailyArticleLimit} resetMentorPick={resetMentorPick}
             removeMember={removeMember}
             close={() => setDetailMember(null)}
@@ -2181,7 +2194,7 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts }) {
   );
 }
 
-function MemberDetailModal({ t, m, isSelf, isOnline, setApproved, setRole, setCanChat, setCanViewLocations, setMentorLimit, setTopicLimit, setDailyArticleLimit, resetMentorPick, removeMember, remindNotification, setPremiumAi, close }) {
+function MemberDetailModal({ t, m, isSelf, isOnline, setApproved, setRole, setCanChat, setCanViewLocations, setMentorLimit, setTopicLimit, setDailyArticleLimit, resetMentorPick, removeMember, remindNotification, setPremiumAi, setCanUseSorting, approveSwitch, close }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const Row = ({ label, children }) => (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: `1px solid ${t.border}` }}>
@@ -2235,6 +2248,15 @@ function MemberDetailModal({ t, m, isSelf, isOnline, setApproved, setRole, setCa
         <Row label="AI พรีเมียม (Gemini จ่ายเงิน/DeepSeek)">
           <button onClick={() => setPremiumAi(m.id, !m.premium_ai)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 10, border: `1px solid ${m.premium_ai ? "#2E9E6B" : t.border}`, cursor: "pointer", background: m.premium_ai ? "#2E9E6B18" : "none", color: m.premium_ai ? "#2E9E6B" : t.sub, fontSize: 12, fontWeight: 700 }}>{m.premium_ai ? "เปิดอยู่" : "ปิดอยู่ (กดเพื่อเปิด)"}</button>
         </Row>
+        <Row label="เข้าร่วมห้องคัดสรร (R/E/F)">
+          <button onClick={() => setCanUseSorting(m.id, !m.can_use_sorting)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 10, border: `1px solid ${m.can_use_sorting ? "#2E9E6B" : t.border}`, cursor: "pointer", background: m.can_use_sorting ? "#2E9E6B18" : "none", color: m.can_use_sorting ? "#2E9E6B" : t.sub, fontSize: 12, fontWeight: 700 }}>{m.can_use_sorting ? "เปิดอยู่" : "ปิดอยู่ (กดเพื่อเปิด)"}</button>
+        </Row>
+        {m.sorted_group && <Row label="กลุ่มที่คัดสรรแล้ว"><span style={{ fontSize: 12.5, fontWeight: 700, color: t.text }}>{{ reason: "🧠 Reason", emotion: "❤️ Emotion", force: "✊ Force" }[m.sorted_group]}</span></Row>}
+        {m.group_switch_request && (
+          <Row label={`ขอสลับไป: ${{ reason: "🧠 Reason", emotion: "❤️ Emotion", force: "✊ Force" }[m.group_switch_request]}`}>
+            <button onClick={() => approveSwitch(m.id)} style={{ padding: "6px 12px", borderRadius: 10, border: "none", background: "#2E9E6B", color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>อนุมัติ</button>
+          </Row>
+        )}
         {!isSelf && m.role !== "admin" && (
           <Row label="ใช้งานเต็มรูปแบบ (ไม่เห็นหน้า Admin)">
             <button onClick={() => setRole(m.id, m.role === "trusted" ? "member" : "trusted")} style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 10, border: `1px solid ${m.role === "trusted" ? "#2E9E6B" : t.border}`, cursor: "pointer", background: m.role === "trusted" ? "#2E9E6B18" : "none", color: m.role === "trusted" ? "#2E9E6B" : t.sub, fontSize: 12, fontWeight: 700 }}>{m.role === "trusted" ? "เปิดอยู่" : "ปิดอยู่ (กดเพื่อเปิด)"}</button>
@@ -2388,6 +2410,7 @@ function ChatEntryPage({ t, M, userId, authProfile, session, openThread }) {
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sheet, setSheet] = useState(null); // null | "menu" | "create" | "join" | "direct"
+  const [showSorting, setShowSorting] = useState(false);
   const [friendCode, setFriendCode] = useState("");
   const [roomName, setRoomName] = useState("");
   const [roomAvatar, setRoomAvatar] = useState(null); // dataURL preview
@@ -2569,6 +2592,12 @@ function ChatEntryPage({ t, M, userId, authProfile, session, openThread }) {
                     <button onClick={() => setSheet("create")} style={{ display: "flex", alignItems: "center", gap: 12, padding: 14, borderRadius: 14, border: `1px solid ${t.border}`, background: "none", cursor: "pointer", textAlign: "left" }}><Plus size={18} color={t.accent} /><div><div style={{ fontSize: 13.5, fontWeight: 700, color: t.text }}>สร้างห้องใหม่</div><div style={{ fontSize: 11, color: t.sub }}>ตั้งชื่อ+รูป แล้วชวนคนอื่นด้วยโค้ด</div></div></button>
                     <button onClick={() => setSheet("join")} style={{ display: "flex", alignItems: "center", gap: 12, padding: 14, borderRadius: 14, border: `1px solid ${t.border}`, background: "none", cursor: "pointer", textAlign: "left" }}><KeyRound size={18} color={t.accent} /><div><div style={{ fontSize: 13.5, fontWeight: 700, color: t.text }}>เข้าร่วมห้องด้วยโค้ด</div><div style={{ fontSize: 11, color: t.sub }}>มีโค้ดห้องจากคนอื่นแล้ว</div></div></button>
                     <button onClick={() => setSheet("direct")} style={{ display: "flex", alignItems: "center", gap: 12, padding: 14, borderRadius: 14, border: `1px solid ${t.border}`, background: "none", cursor: "pointer", textAlign: "left" }}><MessageCircle size={18} color={t.accent} /><div><div style={{ fontSize: 13.5, fontWeight: 700, color: t.text }}>เริ่มแชทส่วนตัว 1-1</div><div style={{ fontSize: 11, color: t.sub }}>แลกโค้ดส่วนตัวกับเพื่อน</div></div></button>
+                    {authProfile?.can_use_sorting && (
+                      <button onClick={() => { closeSheet(); setShowSorting(true); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: 14, borderRadius: 14, border: "1px solid #8A5CF655", background: "#8A5CF618", cursor: "pointer", textAlign: "left" }}>
+                        <Sparkles size={18} color="#8A5CF6" />
+                        <div><div style={{ fontSize: 13.5, fontWeight: 700, color: t.text }}>เข้าร่วมห้องคัดสรร</div><div style={{ fontSize: 11, color: t.sub }}>{authProfile?.sorted_group ? "ไปที่ห้องกลุ่มของคุณ" : "ทำแบบทดสอบ รู้ผลว่าคุณอยู่กลุ่มไหน"}</div></div>
+                      </button>
+                    )}
                   </div>
                 </>
               )}
@@ -2623,12 +2652,172 @@ function ChatEntryPage({ t, M, userId, authProfile, session, openThread }) {
           </div>
         </ModalPortal>
       )}
+      {showSorting && <SortingQuizModal t={t} userId={userId} authProfile={authProfile} session={session} openThread={openThread} close={() => setShowSorting(false)} />}
     </>
   );
 }
 
 
+// 🏠 ระบบคัดสรรกลุ่ม R-E-F
+const GROUP_META = {
+  reason: { label: "Reason", emoji: "🧠", color: "#4A90D9", threadId: "00000000-0000-0000-0000-0000000000f1", desc: "นักคิด วางแผน ใช้เหตุผลนำอารมณ์" },
+  emotion: { label: "Emotion", emoji: "❤️", color: "#E0507B", threadId: "00000000-0000-0000-0000-0000000000f2", desc: "นักรู้สึก ใส่ใจความสัมพันธ์ ตัดสินใจด้วยหัวใจ" },
+  force: { label: "Force", emoji: "✊", color: "#E0A030", threadId: "00000000-0000-0000-0000-0000000000f3", desc: "นักลงมือทำ พลังงานสูง ไม่ชอบคิดนาน" },
+};
+const QUIZ_QUESTIONS = [
+  { q: "มีเวลาว่างทั้งวันแบบไม่ได้วางแผนอะไรเลย คุณจะ...", options: [
+    { text: "คิดว่าจะทำอะไรให้คุ้มค่าที่สุดก่อน", g: "reason" }, { text: "ทำตามอารมณ์ตอนนั้นเลย", g: "emotion" }, { text: "ลุกไปทำอะไรสักอย่างทันที", g: "force" },
+  ]},
+  { q: "เจอปัญหาใหญ่ในงาน สิ่งแรกที่คุณทำคือ...", options: [
+    { text: "วิเคราะห์หาสาเหตุก่อน", g: "reason" }, { text: "ถามความรู้สึกคนในทีมก่อน", g: "emotion" }, { text: "ลงมือแก้เลยแล้วปรับหน้างาน", g: "force" },
+  ]},
+  { q: "ทะเลาะกับเพื่อนสนิท คุณมักจะ...", options: [
+    { text: "ขอเวลาคิดทบทวนเหตุผลทั้ง 2 ฝ่ายก่อน", g: "reason" }, { text: "อยากคุยกันตรงๆ ให้เข้าใจความรู้สึกกัน", g: "emotion" }, { text: "หาทางแก้ปัญหาให้จบเร็วที่สุด", g: "force" },
+  ]},
+  { q: "ได้รับข่าวไม่ดีกะทันหัน คุณจะ...", options: [
+    { text: "ตั้งสติ ประเมินสถานการณ์ก่อน", g: "reason" }, { text: "ต้องการใครสักคนอยู่ด้วย", g: "emotion" }, { text: "หาทางจัดการทันที", g: "force" },
+  ]},
+  { q: "ดูหนังจบเรื่องหนึ่ง คุณมักจะ...", options: [
+    { text: "วิเคราะห์โครงเรื่อง/เหตุผลตัวละคร", g: "reason" }, { text: "อินไปกับความรู้สึกตัวละครหลัก", g: "emotion" }, { text: "อยากลุกไปทำอะไรต่อทันที", g: "force" },
+  ]},
+  { q: "เพื่อนชวนลองของใหม่ที่ไม่เคยทำมาก่อน คุณจะ...", options: [
+    { text: "ขอศึกษาข้อมูลก่อนตัดสินใจ", g: "reason" }, { text: "ถ้ารู้สึกสนุกก็ลองเลย", g: "emotion" }, { text: "ตอบตกลงทันทีไม่ต้องคิดเยอะ", g: "force" },
+  ]},
+];
+
+function SortingQuizModal({ t, userId, authProfile, session, openThread, close }) {
+  const [step, setStep] = useState(authProfile?.sorted_group ? "done" : "intro"); // intro | quiz | tie | reveal | done
+  const [qIdx, setQIdx] = useState(0);
+  const [scores, setScores] = useState({ reason: 0, emotion: 0, force: 0 });
+  const [tiedGroups, setTiedGroups] = useState([]);
+  const [resultGroup, setResultGroup] = useState(authProfile?.sorted_group || null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [switchTarget, setSwitchTarget] = useState(null);
+
+  const answer = (g) => {
+    const next = { ...scores, [g]: scores[g] + 1 };
+    setScores(next);
+    if (qIdx + 1 < QUIZ_QUESTIONS.length) { setQIdx(qIdx + 1); return; }
+    // ตอบครบแล้ว -> หาผู้ชนะ เช็คว่าเสมอกันไหม
+    const max = Math.max(...Object.values(next));
+    const winners = Object.entries(next).filter(([, v]) => v === max).map(([k]) => k);
+    if (winners.length > 1) { setTiedGroups(winners); setStep("tie"); }
+    else { finalize(winners[0]); }
+  };
+
+  const finalize = async (group) => {
+    setBusy(true); setErr("");
+    try {
+      const r = await fetch("/api/sorting-group", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "sort", group, callerToken: session?.access_token }) });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error);
+      setResultGroup(group);
+      setStep("reveal");
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
+  const requestSwitch = async () => {
+    if (!switchTarget) return;
+    setBusy(true);
+    try {
+      const r = await fetch("/api/sorting-group", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "request_switch", group: switchTarget, callerToken: session?.access_token }) });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error);
+      setErr(""); alert("ส่งคำขอสลับกลุ่มแล้ว รอแอดมินอนุมัติ");
+      setSwitchTarget(null);
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
+  const goToRoom = () => {
+    const meta = GROUP_META[resultGroup];
+    close();
+    openThread(meta.threadId, `${meta.emoji} ${meta.label}`, true, null);
+  };
+
+  return (
+    <ModalPortal>
+      <div style={overlay} onClick={step === "quiz" ? undefined : close}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 24, maxHeight: "85vh", overflowY: "auto" }}>
+          {step === "intro" && (
+            <>
+              <div style={{ fontSize: 18, fontWeight: 800, color: t.text, marginBottom: 8 }}>✨ ห้องคัดสรร</div>
+              <div style={{ fontSize: 13, color: t.sub, lineHeight: 1.7, marginBottom: 20 }}>ตอบคำถาม 6 ข้อสั้นๆ เพื่อดูว่าคุณเข้ากับกลุ่มไหน แล้วจะได้เข้าร่วมชุมชนของกลุ่มนั้นถาวร ไม่ต้องคิดนาน ตอบตามสัญชาตญาณได้เลย</div>
+              <button onClick={() => setStep("quiz")} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "13px 0" }}>เริ่มทำแบบทดสอบ</button>
+            </>
+          )}
+
+          {step === "quiz" && (
+            <>
+              <div style={{ fontSize: 11, color: t.faint, marginBottom: 6 }}>ข้อ {qIdx + 1}/{QUIZ_QUESTIONS.length}</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 18, lineHeight: 1.5 }}>{QUIZ_QUESTIONS[qIdx].q}</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {QUIZ_QUESTIONS[qIdx].options.map((opt, i) => (
+                  <button key={i} onClick={() => answer(opt.g)} style={{ padding: 16, borderRadius: 14, border: `1px solid ${t.border}`, background: t.surface, cursor: "pointer", textAlign: "left", fontSize: 13.5, color: t.text }}>{opt.text}</button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {step === "tie" && (
+            <>
+              <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 6 }}>คะแนนสูสีมาก! 🤔</div>
+              <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 18 }}>คุณเข้าได้ทั้ง 2 กลุ่มนี้พอๆ กัน เลือกกลุ่มที่รู้สึกตรงกับตัวเองที่สุด</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {tiedGroups.map((g) => (
+                  <button key={g} onClick={() => finalize(g)} disabled={busy} style={{ padding: 16, borderRadius: 14, border: `2px solid ${GROUP_META[g].color}`, background: `${GROUP_META[g].color}18`, cursor: "pointer", textAlign: "left" }}>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>{GROUP_META[g].emoji} {GROUP_META[g].label}</div>
+                    <div style={{ fontSize: 11.5, color: t.sub, marginTop: 2 }}>{GROUP_META[g].desc}</div>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {step === "reveal" && resultGroup && (
+            <div style={{ textAlign: "center", padding: "20px 0" }}>
+              <div style={{ fontSize: 13, color: t.sub, marginBottom: 16 }}>คุณถูกคัดสรรเข้ากลุ่ม...</div>
+              <div style={{ fontSize: 56, marginBottom: 10, animation: "rh-pop .5s ease" }}>{GROUP_META[resultGroup].emoji}</div>
+              <style>{`@keyframes rh-pop { 0% { transform: scale(0); opacity:0; } 60% { transform: scale(1.15); opacity:1; } 100% { transform: scale(1); } }`}</style>
+              <div style={{ fontSize: 24, fontWeight: 800, color: GROUP_META[resultGroup].color, marginBottom: 8 }}>{GROUP_META[resultGroup].label}</div>
+              <div style={{ fontSize: 13, color: t.sub, marginBottom: 24 }}>{GROUP_META[resultGroup].desc}</div>
+              <button onClick={goToRoom} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "13px 0" }}>เข้าห้องกลุ่มของฉันเลย</button>
+            </div>
+          )}
+
+          {step === "done" && resultGroup && (
+            <>
+              <div style={{ textAlign: "center", marginBottom: 20 }}>
+                <div style={{ fontSize: 44, marginBottom: 6 }}>{GROUP_META[resultGroup].emoji}</div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: GROUP_META[resultGroup].color }}>{GROUP_META[resultGroup].label}</div>
+                <div style={{ fontSize: 12, color: t.sub, marginTop: 4 }}>คุณอยู่กลุ่มนี้แล้ว</div>
+              </div>
+              <button onClick={goToRoom} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "13px 0", marginBottom: 16 }}>เข้าห้องกลุ่มของฉัน</button>
+              {authProfile?.group_switch_request ? (
+                <div style={{ fontSize: 11.5, color: t.faint, textAlign: "center" }}>คำขอสลับไป {GROUP_META[authProfile.group_switch_request]?.label} กำลังรอแอดมินอนุมัติ</div>
+              ) : (
+                <>
+                  <div style={{ fontSize: 12, color: t.sub, marginBottom: 8, textAlign: "center" }}>รู้สึกไม่ตรงกับกลุ่มนี้? ขอสลับได้ (ต้องรอแอดมินอนุมัติ)</div>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                    {Object.keys(GROUP_META).filter((g) => g !== resultGroup).map((g) => (
+                      <button key={g} onClick={() => setSwitchTarget(g)} style={{ flex: 1, padding: "8px 0", borderRadius: 10, border: `1.5px solid ${switchTarget === g ? GROUP_META[g].color : t.border}`, background: switchTarget === g ? `${GROUP_META[g].color}18` : "none", cursor: "pointer", fontSize: 12, fontWeight: 700, color: t.text }}>{GROUP_META[g].emoji} {GROUP_META[g].label}</button>
+                    ))}
+                  </div>
+                  {switchTarget && <button onClick={requestSwitch} disabled={busy} style={{ width: "100%", padding: "9px 0", borderRadius: 10, border: "none", background: "#D9534F", color: "#fff", cursor: "pointer", fontSize: 12.5, fontWeight: 700 }}>ส่งคำขอสลับไป {GROUP_META[switchTarget].label}</button>}
+                </>
+              )}
+            </>
+          )}
+
+          {err && <div style={{ fontSize: 12, color: "#D9534F", marginTop: 12, textAlign: "center" }}>{err}</div>}
+        </div>
+      </div>
+    </ModalPortal>
+  );
+}
+
 function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, activeCall, setActiveCall, setCallMinimized }) {
+
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
   const [editingId, setEditingId] = useState(null);
