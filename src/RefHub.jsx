@@ -369,11 +369,47 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
 }
 
 function ImageLightbox({ src, onClose }) {
+  const [scale, setScale] = useState(1);
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const stateRef = useRef({ startDist: 0, startScale: 1, startPos: { x: 0, y: 0 }, dragStart: null, lastTap: 0 });
+
+  const dist = (touches) => Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
+
+  const onTouchStart = (e) => {
+    if (e.touches.length === 2) {
+      stateRef.current.startDist = dist(e.touches);
+      stateRef.current.startScale = scale;
+    } else if (e.touches.length === 1) {
+      const now = Date.now();
+      if (now - stateRef.current.lastTap < 300) { setScale(1); setPos({ x: 0, y: 0 }); } // ดับเบิลแท็ป -> รีเซ็ตซูม
+      stateRef.current.lastTap = now;
+      stateRef.current.dragStart = { x: e.touches[0].clientX - pos.x, y: e.touches[0].clientY - pos.y };
+    }
+  };
+  const onTouchMove = (e) => {
+    if (e.touches.length === 2 && stateRef.current.startDist) {
+      e.preventDefault();
+      const newScale = Math.min(5, Math.max(1, stateRef.current.startScale * (dist(e.touches) / stateRef.current.startDist)));
+      setScale(newScale);
+    } else if (e.touches.length === 1 && scale > 1 && stateRef.current.dragStart) {
+      e.preventDefault();
+      setPos({ x: e.touches[0].clientX - stateRef.current.dragStart.x, y: e.touches[0].clientY - stateRef.current.dragStart.y });
+    }
+  };
+  const onTouchEnd = () => { stateRef.current.startDist = 0; stateRef.current.dragStart = null; };
+  const onWheel = (e) => { e.preventDefault(); setScale((s) => Math.min(5, Math.max(1, s - e.deltaY * 0.002))); };
+
   return (
     <ModalPortal>
-      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.9)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onClose}>
-        <button onClick={onClose} style={{ position: "absolute", top: 20, right: 20, background: "rgba(255,255,255,.15)", border: "none", borderRadius: 20, width: 40, height: 40, cursor: "pointer", display: "grid", placeItems: "center" }}><X size={22} color="#fff" /></button>
-        <img src={src} alt="" style={{ maxWidth: "92vw", maxHeight: "85vh", objectFit: "contain", borderRadius: 8 }} onClick={(e) => e.stopPropagation()} />
+      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.9)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", touchAction: "none" }} onClick={() => scale === 1 && onClose()}>
+        <button onClick={onClose} style={{ position: "absolute", top: 20, right: 20, background: "rgba(255,255,255,.15)", border: "none", borderRadius: 20, width: 40, height: 40, cursor: "pointer", display: "grid", placeItems: "center", zIndex: 1 }}><X size={22} color="#fff" /></button>
+        {scale > 1 && <div style={{ position: "absolute", bottom: 24, left: "50%", transform: "translateX(-50%)", color: "rgba(255,255,255,.6)", fontSize: 11 }}>ดับเบิลแท็ปเพื่อรีเซ็ตซูม</div>}
+        <img
+          src={src} alt=""
+          onClick={(e) => e.stopPropagation()}
+          onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onWheel={onWheel}
+          style={{ maxWidth: "92vw", maxHeight: "85vh", objectFit: "contain", borderRadius: 8, transform: `translate(${pos.x}px, ${pos.y}px) scale(${scale})`, transition: stateRef.current.startDist || stateRef.current.dragStart ? "none" : "transform .15s ease", cursor: scale > 1 ? "grab" : "zoom-in" }}
+        />
       </div>
     </ModalPortal>
   );
@@ -752,18 +788,15 @@ export default function RefHub() {
     return () => clearInterval(id);
   }, [userId]);
 
-  // 📍 อัปเดตตำแหน่งเบื้องหลังทุก 5 นาทีตอนเปิดแอปอยู่ (เฉพาะคนที่เปิดแชร์ตำแหน่งไว้เท่านั้น)
+  // 📍 อัปเดตตำแหน่งเบื้องหลังทุก 5 นาทีตอนเปิดแอปอยู่ — เช็คแค่ "สิทธิ์ของเครื่อง" เท่านั้น ไม่มีสวิตช์เปิด/ปิดในแอปแยกต่างหากแล้ว
   useEffect(() => {
-    if (!userId) return;
-    const updateLoc = async () => {
-      try {
-        const { data } = await supabase.from("locations").select("share_enabled").eq("user_id", userId).maybeSingle();
-        if (!data?.share_enabled || !navigator.geolocation) return;
-        navigator.geolocation.getCurrentPosition(
-          (pos) => { supabase.from("locations").update({ lat: pos.coords.latitude, lng: pos.coords.longitude, updated_at: new Date().toISOString() }).eq("user_id", userId).then(() => {}, () => {}); },
-          () => {}, { timeout: 10000 }
-        );
-      } catch (e) {}
+    if (!userId || !navigator.geolocation) return;
+    const updateLoc = () => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => { supabase.from("locations").upsert({ user_id: userId, lat: pos.coords.latitude, lng: pos.coords.longitude, updated_at: new Date().toISOString(), share_enabled: true }).then(() => {}, () => {}); },
+        () => {}, // เครื่องไม่ได้ให้สิทธิ์ตำแหน่งไว้ -> ไม่ทำอะไร เงียบๆ (ไม่ต้องมีสวิตช์ให้กดในแอป)
+        { timeout: 10000 }
+      );
     };
     updateLoc();
     const id = setInterval(updateLoc, 5 * 60 * 1000);
@@ -1107,7 +1140,7 @@ export default function RefHub() {
             </div>
           </div>
         )}
-        {accountSettingsOpen && <AccountSettingsModal t={t} authProfile={authProfile} userId={userId} close={() => setAccountSettingsOpen(false)} />}
+        {accountSettingsOpen && <AccountSettingsModal t={t} authProfile={authProfile} userId={userId} session={session} close={() => setAccountSettingsOpen(false)} />}
         {chatOpen && <ChatModal t={t} M={M} mentor={mentor} setMentor={setMentor} authProfile={authProfile} setAuthProfile={setAuthProfile} customMentors={customMentors} setCustomMentors={setCustomMentors} userId={userId} session={session} goals={goals} close={() => setChatOpen(false)} />}
         {activeCall && !callMinimized && (
           <CallModal t={t} threadId={activeCall.threadId} userId={userId} displayName={profile?.name} otherMemberIds={activeCall.otherMemberIds} roomName={activeCall.roomName} session={session} onMinimize={() => setCallMinimized(true)} onClose={() => { setActiveCall(null); setCallMinimized(false); }} />
@@ -1169,16 +1202,56 @@ function AuthPage() {
   const [err, setErr] = useState("");
   const [info, setInfo] = useState("");
 
+  // 🛡️ พิมพ์รหัสผิดครบ 5 ครั้ง -> บังคับผ่าน CAPTCHA ก่อนถึงจะลองใหม่ได้ (กันสคริปต์เดา PIN/รหัสผ่านซ้ำๆ)
+  const [failCount, setFailCount] = useState(() => +(localStorage.getItem("refhub_login_fails") || 0));
+  const [captchaToken, setCaptchaToken] = useState(null);
+  const captchaRef = useRef(null);
+  const siteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY;
+  const needsCaptcha = failCount >= 5 && siteKey;
+
+  useEffect(() => {
+    if (!needsCaptcha || !captchaRef.current) return;
+    const renderWidget = () => {
+      if (captchaRef.current && window.turnstile) {
+        captchaRef.current.innerHTML = "";
+        window.turnstile.render(captchaRef.current, { sitekey: siteKey, callback: (token) => setCaptchaToken(token) });
+      }
+    };
+    if (window.turnstile) { renderWidget(); return; }
+    const s = document.createElement("script");
+    s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js"; s.async = true;
+    s.onload = renderWidget;
+    document.body.appendChild(s);
+  }, [needsCaptcha]);
+
+  const recordFail = () => {
+    const next = failCount + 1;
+    setFailCount(next);
+    localStorage.setItem("refhub_login_fails", String(next));
+    setCaptchaToken(null);
+  };
+  const clearFails = () => { setFailCount(0); localStorage.removeItem("refhub_login_fails"); };
+
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
   const submit = async () => {
     setErr(""); setInfo("");
+    if (needsCaptcha && !captchaToken) { setErr("กรุณายืนยันตัวตนผ่าน CAPTCHA ก่อน (พิมพ์รหัสผิดหลายครั้งเกินไป)"); return; }
     setLoading(true);
     try {
+      if (needsCaptcha) {
+        const cr = await fetch("/api/verify-captcha", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: captchaToken }) });
+        const cdata = await cr.json();
+        if (!cr.ok) { setErr(cdata.error || "ยืนยัน CAPTCHA ไม่สำเร็จ"); setLoading(false); return; }
+      }
       if (mode === "login" && loginWith === "pin") {
         if (!username.trim() || !pin) { setErr("กรอกชื่อผู้ใช้และ PIN ให้ครบ"); setLoading(false); return; }
-        const { error } = await supabase.auth.signInWithPassword({ email: `${username.trim().toLowerCase()}@refhub.local`, password: pin });
-        if (error) throw error;
+        const lookupR = await fetch("/api/pin-lookup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: username.trim() }) });
+        const lookupData = await lookupR.json();
+        if (!lookupR.ok) { recordFail(); setErr(lookupData.error || "ไม่พบชื่อผู้ใช้นี้"); setLoading(false); return; }
+        const { error } = await supabase.auth.signInWithPassword({ email: lookupData.email, password: pin });
+        if (error) { recordFail(); throw error; }
+        clearFails();
         setLoading(false); return;
       }
       if (!emailOk) { setErr("รูปแบบอีเมลยังไม่ถูกต้อง"); setLoading(false); return; }
@@ -1194,7 +1267,8 @@ function AuthPage() {
         setInfo(data.session ? "สมัครสำเร็จ กำลังเข้าสู่ระบบ..." : "สมัครสำเร็จ! เช็คอีเมลเพื่อกดยืนยันบัญชีก่อน ถึงจะเข้าใช้งานได้");
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
+        if (error) { recordFail(); throw error; }
+        clearFails();
       }
     } catch (e) {
       setErr(e.message === "Invalid login credentials" ? "อีเมลหรือรหัสผ่านไม่ถูกต้อง" : e.message);
@@ -1252,7 +1326,14 @@ function AuthPage() {
         {err && <div style={{ fontSize: 12, color: "#D9534F", marginBottom: 10, textAlign: "center" }}>{err}</div>}
         {info && <div style={{ fontSize: 12, color: "#2E9E6B", marginBottom: 10, textAlign: "center" }}>{info}</div>}
 
-        <button onClick={submit} disabled={loading} style={{ background: loading ? "#F0DCC3" : "#EA9552", border: "none", borderRadius: 14, padding: "13px 0", fontSize: 14, fontWeight: 700, color: "#3A2408", cursor: loading ? "default" : "pointer", marginTop: 6 }}>
+        {needsCaptcha && (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 11.5, color: "#7A828F", marginBottom: 8, textAlign: "center" }}>พิมพ์รหัสผิดหลายครั้งเกินไป กรุณายืนยันตัวตนก่อน</div>
+            <div ref={captchaRef} style={{ display: "flex", justifyContent: "center" }} />
+          </div>
+        )}
+
+        <button onClick={submit} disabled={loading || (needsCaptcha && !captchaToken)} style={{ background: loading || (needsCaptcha && !captchaToken) ? "#F0DCC3" : "#EA9552", border: "none", borderRadius: 14, padding: "13px 0", fontSize: 14, fontWeight: 700, color: "#3A2408", cursor: loading ? "default" : "pointer", marginTop: 6 }}>
           {loading ? "กำลังดำเนินการ..." : mode === "login" ? "เข้าสู่ระบบ" : "สมัครสมาชิก"}
         </button>
 
@@ -1262,39 +1343,47 @@ function AuthPage() {
   );
 }
 
-function AccountSettingsModal({ t, authProfile, userId, close }) {
+function AccountSettingsModal({ t, authProfile, userId, session, close }) {
   const [newEmail, setNewEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
-  const [pushBusy, setPushBusy] = useState(false);
-  const [pushMsg, setPushMsg] = useState("");
-  const [locShare, setLocShare] = useState(false);
-  const [locBusy, setLocBusy] = useState(false);
-  const [locMsg, setLocMsg] = useState("");
   const isPinAccount = authProfile?.login_type === "pin";
 
-  useEffect(() => {
-    supabase.from("locations").select("share_enabled").eq("user_id", userId).maybeSingle().then(({ data }) => setLocShare(data?.share_enabled || false));
-  }, [userId]);
-
-  const toggleLocationShare = async () => {
-    setLocBusy(true); setLocMsg("");
+  // 🔒 เปลี่ยนรหัสผ่าน/PIN (ใช้กลไกเดียวกันทั้ง 2 แบบบัญชี เพราะ PIN คือรหัสผ่านจริงเบื้องหลัง)
+  const [newPass, setNewPass] = useState("");
+  const [passBusy, setPassBusy] = useState(false);
+  const [passMsg, setPassMsg] = useState("");
+  const changePassword = async () => {
+    setPassMsg("");
+    const isValid = isPinAccount ? /^[0-9]{4,6}$/.test(newPass) : newPass.length >= 6;
+    if (!isValid) { setPassMsg(isPinAccount ? "PIN ต้องเป็นตัวเลข 4-6 หลัก" : "รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร"); return; }
+    setPassBusy(true);
     try {
-      if (!locShare) {
-        if (!navigator.geolocation) throw new Error("เบราว์เซอร์นี้ไม่รองรับตำแหน่ง");
-        const pos = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 }));
-        await supabase.from("locations").upsert({ user_id: userId, lat: pos.coords.latitude, lng: pos.coords.longitude, updated_at: new Date().toISOString(), share_enabled: true });
-        setLocShare(true);
-        setLocMsg("เปิดแชร์ตำแหน่งแล้ว");
-      } else {
-        await supabase.from("locations").update({ share_enabled: false }).eq("user_id", userId);
-        setLocShare(false);
-        setLocMsg("ปิดแชร์ตำแหน่งแล้ว");
-      }
-    } catch (e) {
-      setLocMsg("ทำรายการไม่สำเร็จ: " + e.message);
-    } finally { setLocBusy(false); }
+      const { error } = await supabase.auth.updateUser({ password: newPass });
+      if (error) throw error;
+      setPassMsg(isPinAccount ? "เปลี่ยน PIN สำเร็จแล้ว ✓" : "เปลี่ยนรหัสผ่านสำเร็จแล้ว ✓");
+      setNewPass("");
+    } catch (e) { setPassMsg("ไม่สำเร็จ: " + e.message); } finally { setPassBusy(false); }
+  };
+
+  // ⚡ ตั้งชื่อผู้ใช้ + PIN สำหรับ "เข้าเร็ว" (เฉพาะบัญชีอีเมล ไม่ทิ้งอีเมลเดิม แค่เพิ่มทางลัด)
+  const [quickUsername, setQuickUsername] = useState(authProfile?.username || "");
+  const [quickPin, setQuickPin] = useState("");
+  const [quickBusy, setQuickBusy] = useState(false);
+  const [quickMsg, setQuickMsg] = useState("");
+  const linkPin = async () => {
+    setQuickMsg("");
+    if (!/^[a-zA-Z0-9_]{3,20}$/.test(quickUsername)) { setQuickMsg("ชื่อผู้ใช้ต้องเป็นตัวอักษร/ตัวเลขภาษาอังกฤษ 3-20 ตัว"); return; }
+    if (!/^[0-9]{4,6}$/.test(quickPin)) { setQuickMsg("PIN ต้องเป็นตัวเลข 4-6 หลัก"); return; }
+    setQuickBusy(true);
+    try {
+      const r = await fetch("/api/link-pin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: quickUsername, pin: quickPin, callerToken: session?.access_token }) });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error);
+      setQuickMsg(`ตั้งค่าสำเร็จ! ครั้งหน้าเข้าเร็วด้วยชื่อผู้ใช้ "${quickUsername}" + PIN นี้ได้เลย ✓`);
+      setQuickPin("");
+    } catch (e) { setQuickMsg("ไม่สำเร็จ: " + e.message); } finally { setQuickBusy(false); }
   };
 
   const linkEmail = async () => {
@@ -1310,19 +1399,9 @@ function AccountSettingsModal({ t, authProfile, userId, close }) {
     } finally { setBusy(false); }
   };
 
-  const enableNotifications = async () => {
-    setPushBusy(true); setPushMsg("");
-    try {
-      const ok2 = await subscribeToPush(userId);
-      setPushMsg(ok2 ? "เปิดการแจ้งเตือนสำเร็จ! มีข้อความใหม่จะเด้งแจ้งเตือนแม้ปิดแอปอยู่" : "");
-    } catch (e) {
-      setPushMsg("เปิดไม่สำเร็จ: " + e.message);
-    } finally { setPushBusy(false); }
-  };
-
   return (
     <div style={overlay} onClick={close}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
         <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 14 }}>ตั้งค่าบัญชี</div>
         <div style={{ ...card(t), padding: 14, marginBottom: 16 }}>
           <div style={{ fontSize: 12, color: t.sub, marginBottom: 4 }}>เข้าสู่ระบบด้วย</div>
@@ -1330,18 +1409,22 @@ function AccountSettingsModal({ t, authProfile, userId, close }) {
         </div>
 
         <div style={{ ...card(t), padding: 14, marginBottom: 16 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}><Bell size={15} color={t.accent} /><span style={{ fontSize: 13, fontWeight: 700, color: t.text }}>การแจ้งเตือน</span></div>
-          <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 10, lineHeight: 1.6 }}>เปิดแล้วจะได้รับแจ้งเตือนทันทีเมื่อมีข้อความแชทใหม่ แม้ปิดแอปอยู่ก็ตาม (เบราว์เซอร์จะขออนุญาตก่อน)</div>
-          {pushMsg && <div style={{ fontSize: 11.5, color: pushMsg.startsWith("เปิดไม่สำเร็จ") ? "#D9534F" : "#2E9E6B", marginBottom: 10 }}>{pushMsg}</div>}
-          <button onClick={enableNotifications} disabled={pushBusy} style={{ width: "100%", padding: "10px 0", borderRadius: 10, border: `1px solid ${t.border}`, background: "none", cursor: "pointer", color: t.text, fontSize: 12.5, fontWeight: 700 }}>{pushBusy ? "กำลังเปิด..." : "เปิดการแจ้งเตือน"}</button>
+          <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 8 }}>{isPinAccount ? "เปลี่ยน PIN" : "เปลี่ยนรหัสผ่าน"}</div>
+          <input value={newPass} onChange={(e) => setNewPass(e.target.value)} type={isPinAccount ? "tel" : "password"} inputMode={isPinAccount ? "numeric" : undefined} placeholder={isPinAccount ? "PIN ใหม่ (4-6 หลัก)" : "รหัสผ่านใหม่ (อย่างน้อย 6 ตัวอักษร)"} style={{ ...input(t), marginBottom: 8 }} />
+          {passMsg && <div style={{ fontSize: 11.5, color: passMsg.startsWith("ไม่สำเร็จ") ? "#D9534F" : "#2E9E6B", marginBottom: 8 }}>{passMsg}</div>}
+          <button onClick={changePassword} disabled={passBusy} style={{ width: "100%", padding: "10px 0", borderRadius: 10, border: `1px solid ${t.border}`, background: "none", cursor: "pointer", color: t.text, fontSize: 12.5, fontWeight: 700 }}>{passBusy ? "กำลังบันทึก..." : isPinAccount ? "เปลี่ยน PIN" : "เปลี่ยนรหัสผ่าน"}</button>
         </div>
 
-        <div style={{ ...card(t), padding: 14, marginBottom: 16 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}><MapPin size={15} color={t.accent} /><span style={{ fontSize: 13, fontWeight: 700, color: t.text }}>แชร์ตำแหน่งของฉัน</span></div>
-          <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 10, lineHeight: 1.6 }}>เปิดแล้วคนที่แอดมินอนุญาตให้ดูได้จะเห็นตำแหน่งล่าสุดของคุณ (อัปเดตทุก 5 นาทีตอนเปิดแอปอยู่) ปิดได้ตลอดเวลา</div>
-          {locMsg && <div style={{ fontSize: 11.5, color: locMsg.startsWith("ทำรายการไม่สำเร็จ") ? "#D9534F" : "#2E9E6B", marginBottom: 10 }}>{locMsg}</div>}
-          <button onClick={toggleLocationShare} disabled={locBusy} style={{ width: "100%", padding: "10px 0", borderRadius: 10, border: `1px solid ${locShare ? "#2E9E6B" : t.border}`, background: locShare ? "#2E9E6B18" : "none", cursor: "pointer", color: locShare ? "#2E9E6B" : t.text, fontSize: 12.5, fontWeight: 700 }}>{locBusy ? "กำลังทำรายการ..." : locShare ? "กำลังแชร์อยู่ (กดเพื่อปิด)" : "เปิดแชร์ตำแหน่ง"}</button>
-        </div>
+        {!isPinAccount && (
+          <div style={{ ...card(t), padding: 14, marginBottom: 16 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 4 }}>⚡ ตั้งค่าเข้าเร็วด้วยชื่อผู้ใช้ + PIN</div>
+            <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 10, lineHeight: 1.6 }}>ไม่ต้องพิมพ์อีเมล+รหัสผ่านยาวๆ ทุกครั้ง ตั้งชื่อผู้ใช้สั้นๆ + PIN ไว้ ครั้งหน้าเข้าเร็วได้เลย (อีเมลเดิมยังใช้ล็อกอินได้ปกติเหมือนเดิม ไม่ทิ้งของเก่า)</div>
+            <input value={quickUsername} onChange={(e) => setQuickUsername(e.target.value)} placeholder="ตั้งชื่อผู้ใช้ (ภาษาอังกฤษ 3-20 ตัว)" style={{ ...input(t), marginBottom: 8 }} />
+            <input value={quickPin} onChange={(e) => setQuickPin(e.target.value.replace(/\D/g, ""))} type="tel" inputMode="numeric" placeholder="ตั้ง PIN (4-6 หลัก)" style={{ ...input(t), marginBottom: 8 }} />
+            {quickMsg && <div style={{ fontSize: 11.5, color: quickMsg.startsWith("ไม่สำเร็จ") ? "#D9534F" : "#2E9E6B", marginBottom: 8 }}>{quickMsg}</div>}
+            <button onClick={linkPin} disabled={quickBusy} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "11px 0" }}>{quickBusy ? "กำลังตั้งค่า..." : "ตั้งค่าเข้าเร็ว"}</button>
+          </div>
+        )}
 
         {isPinAccount ? (
           <>
@@ -2120,13 +2203,13 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts, authProfil
             <div style={{ display: "flex", gap: 10 }}>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 11, color: t.faint, marginBottom: 4 }}>บทความ/วัน</div>
-                <select value={authProfile?.daily_article_limit ?? 3} onChange={async (e) => { const v = +e.target.value; await supabase.from("profiles").update({ daily_article_limit: v }).eq("id", userId); setAuthProfile((p) => ({ ...p, daily_article_limit: v })); }} style={selectStyle}>
+                <select value={authProfile?.daily_article_limit ?? 3} onChange={async (e) => { const v = +e.target.value; await supabase.from("profiles").update({ daily_article_limit: v }).eq("id", userId); setAuthProfile((p) => ({ ...p, daily_article_limit: v })); }} style={{ border: `1px solid ${t.border}`, borderRadius: 8, background: t.inputBg, color: t.text, fontWeight: 700, fontSize: 12.5, padding: "4px 8px", width: "100%" }}>
                   {[1, 2, 3, 4, 5, 6, 8, 10].map((n) => <option key={n} value={n}>{n} บทความ</option>)}
                 </select>
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 11, color: t.faint, marginBottom: 4 }}>หมวดที่เลือกได้สูงสุด</div>
-                <select value={authProfile?.topic_limit ?? KNOWLEDGE_TOPICS.length} onChange={async (e) => { const v = +e.target.value; await supabase.from("profiles").update({ topic_limit: v }).eq("id", userId); setAuthProfile((p) => ({ ...p, topic_limit: v })); }} style={selectStyle}>
+                <select value={authProfile?.topic_limit ?? KNOWLEDGE_TOPICS.length} onChange={async (e) => { const v = +e.target.value; await supabase.from("profiles").update({ topic_limit: v }).eq("id", userId); setAuthProfile((p) => ({ ...p, topic_limit: v })); }} style={{ border: `1px solid ${t.border}`, borderRadius: 8, background: t.inputBg, color: t.text, fontWeight: 700, fontSize: 12.5, padding: "4px 8px", width: "100%" }}>
                   {[1, 2, 3, 4, 5, 6, 8, 10].map((n) => <option key={n} value={n}>{n} หมวด</option>)}
                 </select>
               </div>
