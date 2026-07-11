@@ -517,37 +517,42 @@ export default function RefHub() {
         }
 
         // 2. ดึงรายการเงิน (Transactions)
-        const { data: dbTx } = await supabase
+        const { data: dbTx, error: txErr } = await supabase
           .from("transactions")
           .select("*")
           .eq("user_id", userId)
           .order("date", { ascending: false });
-        if (dbTx) setTx(dbTx);
+        if (txErr) console.error("โหลดรายรับ-รายจ่ายไม่สำเร็จ (ไม่แตะข้อมูลเดิม):", txErr.message);
+        else if (dbTx) setTx(dbTx);
 
         // 3. ดึงเป้าหมายวันนี้ (Goals)
-        const { data: dbGoals } = await supabase
+        const { data: dbGoals, error: goalsErr } = await supabase
           .from("goals")
           .select("*")
           .eq("user_id", userId);
-        if (dbGoals) setGoals(dbGoals.map((g) => ({ ...g, doneDate: g.done_date || null })));
+        if (goalsErr) console.error("โหลดเป้าหมายไม่สำเร็จ (ไม่แตะข้อมูลเดิม):", goalsErr.message);
+        else if (dbGoals) setGoals(dbGoals.map((g) => ({ ...g, doneDate: g.done_date || null })));
 
         // 4. ดึงสมุดโน้ต (Notes)
-        const { data: dbNotes } = await supabase
+        const { data: dbNotes, error: notesErr } = await supabase
           .from("notes")
           .select("*")
           .eq("user_id", userId)
           .order("date", { ascending: false });
-        if (dbNotes) setNotes(dbNotes.map((n) => ({ ...n, notionId: n.notion_id || null })));
+        if (notesErr) console.error("โหลดโน้ตไม่สำเร็จ (ไม่แตะข้อมูลเดิม):", notesErr.message);
+        else if (dbNotes) setNotes(dbNotes.map((n) => ({ ...n, notionId: n.notion_id || null })));
 
         // 5.5 ดึงโค้ชที่สร้างเอง (ไม่ใช่แอดมิน)
-        const { data: dbCustomMentors } = await supabase.from("custom_mentors").select("*").eq("user_id", userId);
-        if (dbCustomMentors) setCustomMentors(dbCustomMentors.map((c) => ({ id: c.id, name: c.name, description: c.description, avatarUrl: c.avatar_url })));
+        const { data: dbCustomMentors, error: cmErr } = await supabase.from("custom_mentors").select("*").eq("user_id", userId);
+        if (cmErr) console.error("โหลดโค้ชที่สร้างเองไม่สำเร็จ:", cmErr.message);
+        else if (dbCustomMentors) setCustomMentors(dbCustomMentors.map((c) => ({ id: c.id, name: c.name, description: c.description, avatarUrl: c.avatar_url })));
 
         // 5. ดึงเพลย์ลิสต์เพลง (Playlists)
-        const { data: dbPlaylist } = await supabase
+        const { data: dbPlaylist, error: plErr } = await supabase
           .from("playlists")
           .select("*")
           .eq("user_id", userId);
+        if (plErr) console.error("โหลดเพลย์ลิสต์ไม่สำเร็จ (ไม่แตะข้อมูลเดิม):", plErr.message);
         if (dbPlaylist) {
           // แปลงชื่อฟิลด์ yt_id จากฐานข้อมูลกลับมาใช้ในแอป
           const mappedPlaylist = dbPlaylist.map(p => ({
@@ -1594,6 +1599,7 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, goa
 
 // ---------------- Finance (full) ----------------
 function FinancePage({ t, tx, setTx, categories, openAdd, openExport, userId }) {
+  const [editingTx, setEditingTx] = useState(null);
   const [periodMode, setPeriodMode] = useState("month"); // day | week | month | range
   const [anchor, setAnchor] = useState(todayStr());       // วันที่อ้างอิงสำหรับ day/week/month
   const [rangeStart, setRangeStart] = useState(todayStr());
@@ -1773,6 +1779,7 @@ function FinancePage({ t, tx, setTx, categories, openAdd, openExport, userId }) 
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <div style={{ fontSize: 14.5, fontWeight: 800, color: x.type === "in" ? "#2E9E6B" : t.text }}>{x.type === "in" ? "+" : "−"}{x.amount.toLocaleString()}</div>
+                  <button onClick={() => setEditingTx(x)} style={ghost} title="แก้ไข"><Pencil size={15} color={t.faint} /></button>
                   <button onClick={() => { setTx((l) => l.filter((y) => y.id !== x.id)); if (userId) supabase.from("transactions").delete().eq("id", x.id).then(() => {}, () => {}); }} style={ghost}><Trash2 size={15} color={t.faint} /></button>
                 </div>
               </div>
@@ -1780,6 +1787,7 @@ function FinancePage({ t, tx, setTx, categories, openAdd, openExport, userId }) 
           </div>
         </div>
       ))}
+      {editingTx && <EditTxModal t={t} x={editingTx} categories={categories} userId={userId} setTx={setTx} close={() => setEditingTx(null)} />}
     </>
   );
 }
@@ -2857,6 +2865,50 @@ function GoalsReportPage({ t, goals }) {
   );
 }
 
+function EditTxModal({ t, x, categories, userId, setTx, close }) {
+  const [type, setType] = useState(x.type);
+  const [cat, setCat] = useState(x.cat);
+  const [amount, setAmount] = useState(String(x.amount));
+  const [note, setNote] = useState(x.note);
+  const [date, setDate] = useState(x.date);
+  const [busy, setBusy] = useState(false);
+
+  const save = async () => {
+    const a = parseFloat(amount);
+    if (!a || a <= 0) return;
+    setBusy(true);
+    const updated = { type, cat, amount: a, note: note.trim() || findCat(categories, cat).label, date };
+    setTx((l) => l.map((y) => (y.id === x.id ? { ...y, ...updated } : y)));
+    if (userId) await supabase.from("transactions").update(updated).eq("id", x.id);
+    setBusy(false);
+    close();
+  };
+
+  return (
+    <div style={overlay} onClick={close}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <div style={{ fontSize: 17, fontWeight: 800, color: t.text }}>แก้ไขรายการ</div>
+          <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+        </div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          {[["out", "จ่ายออก"], ["in", "รับเข้า"]].map(([v, lb]) => (
+            <button key={v} onClick={() => setType(v)} style={{ flex: 1, padding: "10px 0", borderRadius: 12, border: `1.5px solid ${type === v ? (v === "in" ? "#2E9E6B" : "#D9534F") : t.border}`, background: type === v ? (v === "in" ? "#2E9E6B18" : "#D9534F18") : "transparent", color: type === v ? (v === "in" ? "#2E9E6B" : "#D9534F") : t.sub, fontWeight: 700, cursor: "pointer" }}>{lb}</button>
+          ))}
+        </div>
+        <select value={cat || ""} onChange={(e) => setCat(e.target.value)} style={{ ...input(t), marginBottom: 10 }}>
+          {categories.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+        </select>
+        <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="จำนวนเงิน" style={{ ...input(t), marginBottom: 10, fontSize: 18, fontWeight: 700 }} />
+        <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="รายละเอียด" style={{ ...input(t), marginBottom: 10 }} />
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ ...input(t), marginBottom: 16 }} />
+        <button onClick={save} disabled={busy} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "13px 0" }}>{busy ? "กำลังบันทึก..." : "บันทึกการแก้ไข"}</button>
+      </div>
+    </div>
+  );
+}
+
+
 function AddTxModal({ t, tx, setTx, categories, moveCategory, deleteCategory, addCategory, userId, close }) {
   const [type, setType] = useState("out");
   const [cat, setCat] = useState(null); // ไม่ default หมวดหมู่ไว้แล้ว ต้องให้ผู้ใช้เลือกเอง
@@ -3047,6 +3099,7 @@ function NotePage({ t, notes, setNotes, isNight, userId }) {
   const [title, setTitle] = useState(""); const [body, setBody] = useState(null); const [tagsInput, setTagsInput] = useState("");
   const [draftKey, setDraftKey] = useState(0); // เปลี่ยนค่านี้เพื่อบังคับให้ NoteEditor ตัวเพิ่มโน้ตใหม่รีเซ็ตเนื้อหาว่าง
   const [editingId, setEditingId] = useState(null);
+  const [viewingId, setViewingId] = useState(null); // โน้ตที่กำลังกางดูเต็มๆ (อ่านอย่างเดียว แยกจากโหมดแก้ไข)
   const [editTitle, setEditTitle] = useState(""); const [editBody, setEditBody] = useState(null); const [editTags, setEditTags] = useState("");
   const [tagFilter, setTagFilter] = useState(null);
 
@@ -3076,6 +3129,25 @@ function NotePage({ t, notes, setNotes, isNight, userId }) {
   };
 
   // 📤 Export เป็น Markdown — Notion ลากไฟล์ .md ไป import ตรงๆ ได้เลย (ใช้ได้ทันทีไม่ต้องรอ deploy)
+  // 👁️ render โน้ตแบบอ่านอย่างเดียว (ใช้ตอนกดดูโน้ตเฉยๆ ไม่ใช่โหมดแก้ไข)
+  const renderBlockView = (b, depth = 0) => {
+    const text = Array.isArray(b.content) ? b.content.map((c) => c.text || "").join("") : (typeof b.content === "string" ? b.content : "");
+    const kids = (b.children || []).length > 0 && (
+      <div style={{ marginLeft: 16 }}>{b.children.map((c, i) => <div key={i}>{renderBlockView(c, depth + 1)}</div>)}</div>
+    );
+    let inner;
+    if (b.type === "heading") inner = <div style={{ fontSize: 22 - Math.min(Math.max(b.props?.level || 2, 1), 6) * 2, fontWeight: 800, margin: "6px 0" }}>{text}</div>;
+    else if (b.type === "bulletListItem") inner = <div style={{ display: "flex", gap: 8 }}><span>•</span><span>{text}</span></div>;
+    else if (b.type === "numberedListItem") inner = <div style={{ display: "flex", gap: 8 }}><span>·</span><span>{text}</span></div>;
+    else if (b.type === "checkListItem") inner = <div style={{ display: "flex", gap: 8 }}><span>{b.props?.checked ? "☑" : "☐"}</span><span style={{ textDecoration: b.props?.checked ? "line-through" : "none", opacity: b.props?.checked ? 0.6 : 1 }}>{text}</span></div>;
+    else if (b.type === "toggleListItem") inner = <div style={{ fontWeight: 700 }}>▸ {text}</div>;
+    else if (b.type === "image") inner = <img src={b.props?.url} alt={b.props?.name || ""} style={{ maxWidth: "100%", borderRadius: 8, display: "block", margin: "4px 0" }} />;
+    else if (b.type === "file") inner = <a href={b.props?.url} target="_blank" rel="noreferrer" style={{ color: "inherit", textDecoration: "underline" }}>📎 {b.props?.name || "ไฟล์แนบ"}</a>;
+    else inner = <div>{text}</div>;
+    return (<>{inner}{kids}</>);
+  };
+
+
   const blockToMd = (b, depth) => {
     const text = Array.isArray(b.content) ? b.content.map((c) => c.text || "").join("") : (typeof b.content === "string" ? b.content : "");
     const indent = "  ".repeat(depth);
@@ -3178,11 +3250,11 @@ function NotePage({ t, notes, setNotes, isNight, userId }) {
               </>
             ) : (
               <>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                <div onClick={() => setViewingId(viewingId === n.id ? null : n.id)} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, cursor: "pointer" }}>
                   <div style={{ fontSize: 14.5, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 6 }}>
                     {n.pinned && <Sparkles size={13} color={t.accent} />}{n.title || "(ไม่มีหัวข้อ)"}
                   </div>
-                  <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
+                  <div style={{ display: "flex", gap: 2, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
                     {n.notionId && <span title="sync ขึ้น Notion แล้ว" style={{ display: "grid", placeItems: "center", padding: 4 }}><Check size={14} color="#2E9E6B" /></span>}
                     <button onClick={() => exportOneMd(n)} style={ghost} title="Export เป็น Markdown"><Download size={15} color={t.faint} /></button>
                     <button onClick={() => togglePin(n.id)} style={ghost} title="ปักหมุด"><Target size={15} color={n.pinned ? t.accent : t.faint} /></button>
@@ -3190,7 +3262,13 @@ function NotePage({ t, notes, setNotes, isNight, userId }) {
                     <button onClick={() => { setNotes((x) => x.filter((y) => y.id !== n.id)); if (userId) supabase.from("notes").delete().eq("id", n.id).then(() => {}, () => {}); }} style={ghost} title="ลบ"><Trash2 size={15} color={t.faint} /></button>
                   </div>
                 </div>
-                {blocksToPlainText(n.body).trim() && <div style={{ fontSize: 13, color: t.sub, marginTop: 6, whiteSpace: "pre-wrap", lineHeight: 1.5, maxHeight: 90, overflow: "hidden" }}>{blocksToPlainText(n.body)}</div>}
+                {viewingId === n.id ? (
+                  <div onClick={() => setViewingId(null)} style={{ fontSize: 13, color: t.text, marginTop: 8, lineHeight: 1.6, cursor: "pointer" }}>
+                    {migrateBody(n.body).map((b, i) => <div key={i}>{renderBlockView(b)}</div>)}
+                  </div>
+                ) : (
+                  blocksToPlainText(n.body).trim() && <div onClick={() => setViewingId(n.id)} style={{ fontSize: 13, color: t.sub, marginTop: 6, whiteSpace: "pre-wrap", lineHeight: 1.5, maxHeight: 90, overflow: "hidden", cursor: "pointer" }}>{blocksToPlainText(n.body)}</div>
+                )}
                 {(n.tags || []).length > 0 && (
                   <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 8 }}>
                     {n.tags.map((tag) => <span key={tag} style={{ fontSize: 10, fontWeight: 700, color: t.accent, background: `${t.accent}18`, padding: "2px 8px", borderRadius: 10 }}>#{tag}</span>)}
@@ -3492,20 +3570,118 @@ function LangPage({ t }) {
 }
 
 // ---------------- Modals ----------------
+function ChatHistoryListModal({ t, userId, mentor, currentSessionId, onSelect, close }) {
+  const [sessions, setSessions] = useState([]); // [{sessionId, preview, startedAt, count}]
+  const [loading, setLoading] = useState(true);
+  const [confirmDelId, setConfirmDelId] = useState(null);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.from("mentor_chat_messages").select("session_id, who, text, created_at").eq("user_id", userId).eq("mentor", mentor).order("created_at", { ascending: true });
+      if (error) { console.error("โหลดรายการแชทเก่าไม่สำเร็จ:", error.message); setSessions([]); return; }
+      const bySession = {};
+      (data || []).forEach((r) => {
+        const sid = r.session_id || "00000000-0000-0000-0000-000000000001";
+        if (!bySession[sid]) bySession[sid] = { sessionId: sid, startedAt: r.created_at, count: 0, preview: null };
+        bySession[sid].count += 1;
+        if (!bySession[sid].preview && r.who === "u") bySession[sid].preview = r.text; // เอาข้อความแรกที่ผู้ใช้พิมพ์เป็น preview
+      });
+      const list = Object.values(bySession).sort((a, b) => new Date(b.startedAt) - new Date(a.startedAt));
+      setSessions(list);
+    } finally { setLoading(false); }
+  };
+  useEffect(() => { load(); }, []);
+
+  const delSession = async (sid) => {
+    await supabase.from("mentor_chat_messages").delete().eq("user_id", userId).eq("mentor", mentor).eq("session_id", sid);
+    setConfirmDelId(null);
+    load();
+  };
+
+  return (
+    <ModalPortal>
+      <div style={overlay} onClick={close}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "75vh", overflowY: "auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>ประวัติแชทเก่า</div>
+            <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+          </div>
+          {loading && <Empty t={t} text="กำลังโหลด..." />}
+          {!loading && sessions.length === 0 && <Empty t={t} text="ยังไม่มีประวัติแชทเก่า" />}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {sessions.map((s) => (
+              <div key={s.sessionId} style={{ ...card(t), padding: 12, border: `1px solid ${s.sessionId === currentSessionId ? t.accent : t.border}`, display: "flex", alignItems: "center", gap: 10 }}>
+                <button onClick={() => onSelect(s.sessionId)} style={{ flex: 1, minWidth: 0, background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.preview || "(ไม่มีข้อความจากคุณ)"}</div>
+                  <div style={{ fontSize: 10.5, color: t.faint, marginTop: 2 }}>{new Date(s.startedAt).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })} · {s.count} ข้อความ{s.sessionId === currentSessionId ? " · กำลังใช้อยู่" : ""}</div>
+                </button>
+                {confirmDelId === s.sessionId ? (
+                  <button onClick={() => delSession(s.sessionId)} style={{ flexShrink: 0, padding: "6px 10px", borderRadius: 9, border: "none", background: "#D9534F", color: "#fff", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>ยืนยัน?</button>
+                ) : (
+                  <button onClick={() => setConfirmDelId(s.sessionId)} style={{ flexShrink: 0, background: "none", border: "none", cursor: "pointer", padding: 6 }}><Trash2 size={15} color={t.faint} /></button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </ModalPortal>
+  );
+}
+
 function ChatModal({ t, M, mentor, setMentor, authProfile, setAuthProfile, customMentors, setCustomMentors, userId, session, goals, close }) {
+
   const [switchPick, setSwitchPick] = useState(false);
-  const [msgs, setMsgs] = useState([{ who: "m", text: `สวัสดี ฉันคือ ${M.full} วันนี้อยากให้ช่วยเรื่องอะไร?` }]);
+  const [msgs, setMsgs] = useState([]);
+  const [histLoading, setHistLoading] = useState(true);
+  const [currentSessionId, setCurrentSessionId] = useState(null);
+  const [showHistList, setShowHistList] = useState(false);
   const [inp, setInp] = useState(""); const [loading, setLoading] = useState(false); const endRef = useRef(null);
   const [pendingImg, setPendingImg] = useState(null); // { dataUrl, mime } รูปที่เลือกไว้ รอกดส่ง
   const fileRef = useRef(null);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, loading]);
-  const prevMentorRef = useRef(mentor);
-  useEffect(() => {
-    if (prevMentorRef.current !== mentor) {
-      setMsgs([{ who: "m", text: `สวัสดี ฉันคือ ${M.full} วันนี้อยากให้ช่วยเรื่องอะไร?` }]);
-      prevMentorRef.current = mentor;
-    }
-  }, [mentor]);
+
+  const greeting = () => ({ who: "m", text: `สวัสดี ฉันคือ ${M.full} วันนี้อยากให้ช่วยเรื่องอะไร?` });
+
+  // 🗂️ โหลด session ล่าสุดของโค้ชคนนี้จาก Supabase (ไม่หายเมื่อออกจากหน้าแชท) — โหลดใหม่ทุกครั้งที่เปิด/สลับโค้ช
+  const loadHistory = async () => {
+    setHistLoading(true);
+    try {
+      const { data: latest, error: latestErr } = await supabase.from("mentor_chat_messages").select("session_id").eq("user_id", userId).eq("mentor", mentor).order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (latestErr) { console.error("โหลดประวัติแชทไม่สำเร็จ:", latestErr.message); setMsgs([greeting()]); return; }
+      if (!latest) {
+        const g = greeting(); const sid = uid();
+        setMsgs([g]); setCurrentSessionId(sid);
+        if (userId) supabase.from("mentor_chat_messages").insert({ user_id: userId, mentor, session_id: sid, who: g.who, text: g.text }).then(() => {}, () => {});
+        return;
+      }
+      const { data, error } = await supabase.from("mentor_chat_messages").select("*").eq("user_id", userId).eq("mentor", mentor).eq("session_id", latest.session_id).order("created_at", { ascending: true });
+      if (error) { console.error("โหลดประวัติแชทไม่สำเร็จ:", error.message); setMsgs([greeting()]); return; }
+      setCurrentSessionId(latest.session_id);
+      setMsgs((data || []).map((r) => ({ who: r.who, text: r.text, image: r.image || null })));
+    } finally { setHistLoading(false); }
+  };
+  useEffect(() => { loadHistory(); }, [mentor]);
+
+  // เริ่มแชทใหม่ = สร้าง session ใหม่ ไม่แตะของเก่าเลย (ดูย้อนหลังได้ทีหลังผ่านปุ่ม "ประวัติเก่า")
+  const newChat = async () => {
+    const g = greeting(); const sid = uid();
+    setMsgs([g]); setCurrentSessionId(sid); setShowHistList(false);
+    if (userId) supabase.from("mentor_chat_messages").insert({ user_id: userId, mentor, session_id: sid, who: g.who, text: g.text }).then(() => {}, () => {});
+  };
+
+  // ดูแชทเก่าที่เลือกจากรายการประวัติ (สลับไปดู/คุยต่อใน session นั้น)
+  const viewSession = async (sid) => {
+    setShowHistList(false);
+    setHistLoading(true);
+    try {
+      const { data, error } = await supabase.from("mentor_chat_messages").select("*").eq("user_id", userId).eq("mentor", mentor).eq("session_id", sid).order("created_at", { ascending: true });
+      if (error) { console.error("โหลดแชทเก่าไม่สำเร็จ:", error.message); return; }
+      setCurrentSessionId(sid);
+      setMsgs((data || []).map((r) => ({ who: r.who, text: r.text, image: r.image || null })));
+    } finally { setHistLoading(false); }
+  };
 
   // ย่อรูปก่อนส่ง กันไฟล์ใหญ่เกิน (Vercel จำกัด payload ต่อ request ไว้ไม่กี่ MB)
   const pickImage = (e) => {
@@ -3531,17 +3707,22 @@ function ChatModal({ t, M, mentor, setMentor, authProfile, setAuthProfile, custo
     const userMsg = { who: "u", text: u || "(ส่งรูปภาพ)", image: pendingImg?.dataUrl || null };
     const nextMsgs = [...msgs, userMsg];
     setMsgs(nextMsgs); setInp(""); setPendingImg(null);
+    if (userId) supabase.from("mentor_chat_messages").insert({ user_id: userId, mentor, session_id: currentSessionId, who: userMsg.who, text: userMsg.text, image: userMsg.image }).then(() => {}, () => {});
     setLoading(true);
     try {
       const r = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mentor, messages: nextMsgs, userId, callerToken: session?.access_token, mentorName: M.full, mentorDescription: M.tag, goalsContext: buildGoalsContext(goals) }) });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "API error");
-      setMsgs((m) => [...m, { who: "m", text: data.text || M.replies[Math.floor(Math.random() * M.replies.length)], source: data.source }]);
+      const replyMsg = { who: "m", text: data.text || M.replies[Math.floor(Math.random() * M.replies.length)], source: data.source };
+      setMsgs((m) => [...m, replyMsg]);
+      if (userId) supabase.from("mentor_chat_messages").insert({ user_id: userId, mentor, session_id: currentSessionId, who: replyMsg.who, text: replyMsg.text }).then(() => {}, () => {});
     } catch (e) {
       // ยังไม่ deploy หรือ API มีปัญหา -> fallback เป็น mock reply ชั่วคราว ไม่ให้แชทค้าง
       // แต่ log สาเหตุจริงไว้ให้เช็คได้ (กด F12 > Console) และติดป้ายบอกชัดว่านี่คือ mock ไม่ใช่ AI จริง
       console.error("เรียก /api/chat ไม่สำเร็จ ตกไปใช้ mock reply สาเหตุ:", e.message);
-      setMsgs((m) => [...m, { who: "m", text: M.replies[Math.floor(Math.random() * M.replies.length)], isMock: true }]);
+      const mockMsg = { who: "m", text: M.replies[Math.floor(Math.random() * M.replies.length)], isMock: true };
+      setMsgs((m) => [...m, mockMsg]);
+      if (userId) supabase.from("mentor_chat_messages").insert({ user_id: userId, mentor, session_id: currentSessionId, who: mockMsg.who, text: mockMsg.text }).then(() => {}, () => {});
     } finally {
       setLoading(false);
     }
@@ -3561,11 +3742,17 @@ function ChatModal({ t, M, mentor, setMentor, authProfile, setAuthProfile, custo
               <div style={{ fontSize: 11, color: "rgba(255,255,255,.7)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{M.tag}</div>
             </div>
           </button>
+          <button onClick={() => setShowHistList(true)} style={{ background: "rgba(255,255,255,.15)", border: "none", borderRadius: 12, width: 32, height: 32, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }} title="ดูแชทเก่าที่เก็บไว้"><Clock size={15} color="#fff" /></button>
+          <button onClick={newChat} style={{ background: "rgba(255,255,255,.15)", border: "none", borderRadius: 12, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }} title="เริ่มแชทใหม่ (ของเก่ายังเก็บไว้ ดูย้อนหลังได้)">
+            <Plus size={13} color="#fff" /><span style={{ fontSize: 10.5, color: "#fff", fontWeight: 700 }}>ใหม่</span>
+          </button>
           <button onClick={close} style={{ background: "rgba(255,255,255,.15)", border: "none", borderRadius: 16, width: 32, height: 32, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}><X size={18} color="#fff" /></button>
         </div>
         {switchPick && <MentorPicker t={t} mentor={mentor} setMentor={setMentor} authProfile={authProfile} setAuthProfile={setAuthProfile} userId={userId} customMentors={customMentors} setCustomMentors={setCustomMentors} close={() => setSwitchPick(false)} />}
+        {showHistList && <ChatHistoryListModal t={t} userId={userId} mentor={mentor} currentSessionId={currentSessionId} onSelect={viewSession} close={() => setShowHistList(false)} />}
         <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
-          {msgs.map((m, i) => (
+          {histLoading && <div style={{ alignSelf: "center", color: t.sub, fontSize: 12.5, padding: "20px 0" }}>กำลังโหลดประวัติแชท...</div>}
+          {!histLoading && msgs.map((m, i) => (
             <div key={i} style={{ alignSelf: m.who === "u" ? "flex-end" : "flex-start", maxWidth: "78%", background: m.who === "u" ? M.accent : t.surface, color: m.who === "u" ? M.onAccent : t.text, padding: "10px 14px", borderRadius: 16, fontSize: 13.5, lineHeight: 1.45, border: m.who === "u" ? "none" : `1px solid ${t.border}` }}>
               {m.image && <img src={m.image} alt="" style={{ maxWidth: "100%", borderRadius: 10, marginBottom: m.text ? 6 : 0, display: "block" }} />}
               {m.text}
@@ -3794,7 +3981,7 @@ function EditProfile({ t, M, profile, setProfile, userId, authProfile, setAuthPr
 // 🖼️ ปรับตำแหน่ง/ซูมรูปก่อนบันทึกเป็นรูปโปรไฟล์ (ลาก = ขยับ, สไลเดอร์ = ซูม)
 function ImageCropModal({ t, src, onCancel, onConfirm }) {
   const V = 260; // ขนาดกรอบวงกลมที่โชว์ตอน crop (px)
-  const OUT = 320; // ขนาดไฟล์ผลลัพธ์สุดท้าย (px)
+  const OUT = 800; // ขนาดไฟล์ผลลัพธ์สุดท้าย (px) — เพิ่มจาก 320 เป็น 800 กันภาพแตก/เบลอตอนดูเต็มจอ (ไอคอนเล็กๆ ยังโชว์ได้ปกติ แค่ตอนขยายดูเต็มจอจะคมชัดขึ้นมาก)
   const imgRef = useRef(null);
   const [imgSize, setImgSize] = useState(null); // { w, h } ขนาดจริงของรูป
   const [zoom, setZoom] = useState(1);
