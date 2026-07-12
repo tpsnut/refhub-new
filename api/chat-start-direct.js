@@ -7,8 +7,8 @@ import { createClient } from "@supabase/supabase-js";
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { friendCode, callerToken } = req.body || {};
-  if (!friendCode?.trim()) return res.status(400).json({ error: "กรอกโค้ดของเพื่อนก่อน" });
+  const { friendCode, targetUserId, callerToken } = req.body || {};
+  if (!friendCode?.trim() && !targetUserId) return res.status(400).json({ error: "กรอกโค้ดของเพื่อนก่อน" });
   if (!callerToken) return res.status(401).json({ error: "ไม่พบข้อมูลยืนยันตัวตน ลองล็อกอินใหม่" });
 
   const supabaseUrl = process.env.VITE_SUPABASE_URL;
@@ -29,9 +29,11 @@ export default async function handler(req, res) {
     const callerHasFullAccess = callerProfile?.role === "admin" || callerProfile?.role === "trusted";
     if (!callerProfile?.can_chat && !callerHasFullAccess) return res.status(403).json({ error: "คุณยังไม่ได้รับสิทธิ์ใช้งานแชท ติดต่อแอดมิน" });
 
-    // หาเจ้าของโค้ด
-    const { data: friend } = await admin.from("profiles").select("id, name, can_chat, role").eq("chat_code", friendCode.trim().toUpperCase()).maybeSingle();
-    if (!friend) return res.status(404).json({ error: "ไม่พบโค้ดนี้ในระบบ ลองเช็คอีกครั้ง" });
+    // หาเพื่อน: จาก userId ตรงๆ (ทักจากหน้าโปรไฟล์) หรือจากโค้ด (แลกโค้ดแบบเดิม)
+    const { data: friend } = targetUserId
+      ? await admin.from("profiles").select("id, name, can_chat, role").eq("id", targetUserId).maybeSingle()
+      : await admin.from("profiles").select("id, name, can_chat, role").eq("chat_code", friendCode.trim().toUpperCase()).maybeSingle();
+    if (!friend) return res.status(404).json({ error: targetUserId ? "ไม่พบผู้ใช้นี้" : "ไม่พบโค้ดนี้ในระบบ ลองเช็คอีกครั้ง" });
     if (friend.id === callerId) return res.status(400).json({ error: "นี่คือโค้ดของคุณเอง ให้เพื่อนกรอกแทนนะ" });
     const friendHasFullAccess = friend.role === "admin" || friend.role === "trusted";
     if (!friend.can_chat && !friendHasFullAccess) return res.status(403).json({ error: `${friend.name} ยังไม่ได้รับสิทธิ์ใช้งานแชท` });

@@ -67,6 +67,16 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
+    if (action === "admin_join_all") {
+      const { data: callerProfile } = await admin.from("profiles").select("role").eq("id", callerId).single();
+      if (callerProfile?.role !== "admin") return res.status(403).json({ error: "เฉพาะแอดมินเท่านั้น" });
+      for (const roomId of Object.values(GROUP_ROOM_IDS)) {
+        const { data: already } = await admin.from("chat_thread_members").select("*").eq("thread_id", roomId).eq("user_id", callerId).maybeSingle();
+        if (!already) await admin.from("chat_thread_members").insert({ thread_id: roomId, user_id: callerId });
+      }
+      return res.status(200).json({ ok: true });
+    }
+
     return res.status(400).json({ error: "ไม่รู้จัก action นี้" });
   } catch (e) {
     return res.status(500).json({ error: e.message });
