@@ -2131,6 +2131,50 @@ function FinancePage({ t, tx, setTx, categories, openAdd, openExport, userId }) 
   );
 }
 
+// 🎭 แอดมินจัดการชุด Reaction เอง (เพิ่ม/ลบ/แก้ emoji ได้ทั้งหมด)
+function ReactionManagerCard({ t }) {
+  const [types, setTypes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [newEmoji, setNewEmoji] = useState("");
+  const [newLabel, setNewLabel] = useState("");
+
+  const load = () => { supabase.from("reaction_types").select("*").order("sort_order", { ascending: true }).then(({ data }) => { setTypes(data || []); setLoading(false); }); };
+  useEffect(() => { load(); }, []);
+
+  const addType = async () => {
+    if (!newEmoji.trim() || !newLabel.trim()) return;
+    const id = newLabel.trim().toLowerCase().replace(/[^a-z0-9ก-๙]/g, "") + "_" + uid();
+    const { error } = await supabase.from("reaction_types").insert({ id, emoji: newEmoji.trim(), label: newLabel.trim(), sort_order: types.length + 1 });
+    if (error) { alert("เพิ่มไม่สำเร็จ: " + error.message); return; }
+    setNewEmoji(""); setNewLabel(""); load();
+  };
+  const removeType = async (id) => { await supabase.from("reaction_types").delete().eq("id", id); load(); };
+
+  return (
+    <div style={{ ...card(t), padding: 16 }}>
+      <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text, marginBottom: 4 }}>🎭 จัดการชุด Reaction (Passport)</div>
+      <div style={{ fontSize: 11, color: t.sub, marginBottom: 12 }}>ปรับชุด reaction ที่ทุกคนใช้กดในหน้า Passport ได้เอง เพิ่ม/ลบได้ตามใจ</div>
+      {loading ? <Empty t={t} text="กำลังโหลด..." /> : (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+          {types.map((r) => (
+            <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 6, background: t.inputBg, border: `1px solid ${t.border}`, borderRadius: 10, padding: "6px 10px" }}>
+              <span style={{ fontSize: 16 }}>{r.emoji}</span>
+              <span style={{ fontSize: 11.5, color: t.text, fontWeight: 700 }}>{r.label}</span>
+              <button onClick={() => removeType(r.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "grid" }}><X size={12} color={t.faint} /></button>
+            </div>
+          ))}
+          {types.length === 0 && <div style={{ fontSize: 11.5, color: t.faint }}>ยังไม่มี reaction เลย เพิ่มอันแรกด้านล่าง</div>}
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 8 }}>
+        <input value={newEmoji} onChange={(e) => setNewEmoji(e.target.value)} placeholder="😍" style={{ ...input(t), width: 60, textAlign: "center", fontSize: 16, padding: "8px 4px" }} maxLength={4} />
+        <input value={newLabel} onChange={(e) => setNewLabel(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addType()} placeholder="ชื่อ เช่น ว้าว" style={{ ...input(t), flex: 1 }} />
+        <button onClick={addType} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), padding: "0 16px" }}>เพิ่ม</button>
+      </div>
+    </div>
+  );
+}
+
 function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts, authProfile, setAuthProfile }) {
   const [tab, setTab] = useState("overview"); // overview | members | add
   const [members, setMembers] = useState([]);
@@ -2240,6 +2284,7 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts, authProfil
               </div>
             </div>
           </div>
+          <ReactionManagerCard t={t} />
           <div style={{ display: "flex", gap: 10 }}>
             <div style={{ ...card(t), flex: 1, padding: 16, textAlign: "center" }}>
               <div style={{ fontSize: 22, fontWeight: 800, color: t.text }}>{members.length}</div>
@@ -2548,11 +2593,46 @@ function AdminAddPinMember({ t, session, onCreated }) {
 const AVATAR_COLORS = ["#C0658C", "#5C7A99", "#7B6CB0", "#4FB286", "#E0507B", "#3DA5D9", "#B07A4B"];
 const colorFor = (str) => AVATAR_COLORS[[...(str || "?")].reduce((a, c) => a + c.charCodeAt(0), 0) % AVATAR_COLORS.length];
 
+// 🌐 Community — Passport เป็นหน้าหลัก (สอบแล้ว/แอดมิน เห็น Passport ตัวเองทันที ไม่ต้องกดผ่านหลายชั้นแบบเดิม)
+function CommunityEntryView({ t, userId, authProfile, session, openThread }) {
+  const isAdmin = authProfile?.role === "admin";
+  const isSorted = isAdmin || !!authProfile?.sorted_group;
+  const [showQuiz, setShowQuiz] = useState(false);
+  const [showMyPassport, setShowMyPassport] = useState(isSorted); // เปิด Passport ตัวเองทันทีถ้าสอบแล้ว/แอดมิน
+  const [showGlobal, setShowGlobal] = useState(false);
+
+  if (!isSorted) {
+    return (
+      <div style={{ textAlign: "center", padding: "30px 10px" }}>
+        <div style={{ fontSize: 40, marginBottom: 10 }}>🛂✨</div>
+        <div style={{ fontSize: 15, fontWeight: 800, color: t.text, marginBottom: 6 }}>ยังไม่มี Passport ของคุณ</div>
+        <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 20, lineHeight: 1.7 }}>ทำแบบทดสอบสั้นๆ เพื่อสร้าง Passport และเข้าร่วมชุมชน R-E-F</div>
+        <button onClick={() => setShowQuiz(true)} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), padding: "12px 24px" }}>เริ่มทำแบบทดสอบ</button>
+        {showQuiz && <SortingQuizModal t={t} userId={userId} authProfile={authProfile} session={session} openThread={openThread} close={() => setShowQuiz(false)} />}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ textAlign: "center", padding: "20px 10px" }}>
+      <div style={{ fontSize: 13, color: t.sub, marginBottom: 16 }}>Passport ของคุณคือหน้าตัวตนในชุมชน R-E-F</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 280, margin: "0 auto" }}>
+        <button onClick={() => setShowMyPassport(true)} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), padding: "13px 0" }}>🛂 เปิด Passport ของฉัน</button>
+        <button onClick={() => setShowGlobal(true)} style={{ padding: "13px 0", borderRadius: 14, border: `1px solid ${t.border}`, background: "none", color: t.text, cursor: "pointer", fontSize: 13.5, fontWeight: 700 }}>🌐 ไปที่ Global (ดูทุกกลุ่ม + ห้องคัดสรร)</button>
+      </div>
+      {showMyPassport && <Hi5ProfileModal t={t} profileId={userId} userId={userId} authProfile={authProfile} session={session} openThread={openThread} close={() => setShowMyPassport(false)} />}
+      {showGlobal && <SortingQuizModal t={t} userId={userId} authProfile={authProfile} session={session} openThread={openThread} close={() => setShowGlobal(false)} />}
+    </div>
+  );
+}
+
 function ChatEntryPage({ t, M, userId, authProfile, session, openThread }) {
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sheet, setSheet] = useState(null); // null | "menu" | "create" | "join" | "direct"
   const [showSorting, setShowSorting] = useState(false);
+  const [chatMode, setChatMode] = useState("normal"); // normal | community
+  const [showMyPassport, setShowMyPassport] = useState(false);
   const [friendCode, setFriendCode] = useState("");
   const [roomName, setRoomName] = useState("");
   const [roomAvatar, setRoomAvatar] = useState(null); // dataURL preview
@@ -2681,6 +2761,18 @@ function ChatEntryPage({ t, M, userId, authProfile, session, openThread }) {
   return (
     <>
       <PageHead t={t} title="แชท" sub="สร้างห้องเองหรือแลกโค้ดกับเพื่อน" icon={<MessageCircle size={20} color={t.accent} />} />
+
+      {authProfile?.can_use_sorting && (
+        <div style={{ display: "flex", gap: 8, marginBottom: 16, ...card(t), padding: 4 }}>
+          <button onClick={() => setChatMode("normal")} style={{ flex: 1, padding: "9px 0", borderRadius: 10, border: "none", cursor: "pointer", background: chatMode === "normal" ? t.accent : "none", color: chatMode === "normal" ? t.onAccent : t.sub, fontSize: 12.5, fontWeight: 700 }}>💬 แชทปกติ</button>
+          <button onClick={() => setChatMode("community")} style={{ flex: 1, padding: "9px 0", borderRadius: 10, border: "none", cursor: "pointer", background: chatMode === "community" ? "#8A5CF6" : "none", color: chatMode === "community" ? "#fff" : t.sub, fontSize: 12.5, fontWeight: 700 }}>🌐 Community</button>
+        </div>
+      )}
+
+      {chatMode === "community" ? (
+        <CommunityEntryView t={t} userId={userId} authProfile={authProfile} session={session} openThread={openThread} />
+      ) : (
+        <>
       {authProfile.chat_code && (
         <div style={{ ...card(t), padding: 12, marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
           <div style={{ fontSize: 11.5, color: t.sub }}>โค้ดส่วนตัวของคุณ (แชร์ให้เพื่อนเริ่มแชท 1-1)</div>
@@ -2793,6 +2885,8 @@ function ChatEntryPage({ t, M, userId, authProfile, session, openThread }) {
             </div>
           </div>
         </ModalPortal>
+      )}
+        </>
       )}
       {showSorting && <SortingQuizModal t={t} userId={userId} authProfile={authProfile} session={session} openThread={openThread} close={() => setShowSorting(false)} />}
     </>
@@ -3094,8 +3188,11 @@ function Hi5ProfileModal({ t, profileId, userId, authProfile, session, openThrea
   const [prof, setProf] = useState(null);
   const [loading, setLoading] = useState(true);
   const [testimonials, setTestimonials] = useState([]);
-  const [likeCount, setLikeCount] = useState(0);
-  const [iLiked, setILiked] = useState(false);
+  const [reactionTypes, setReactionTypes] = useState([]);
+  const [reactionCounts, setReactionCounts] = useState({});
+  const [myReaction, setMyReaction] = useState(null);
+  const [showReactionPicker, setShowReactionPicker] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
   const [newMsg, setNewMsg] = useState("");
   const [editing, setEditing] = useState(false);
   const [myMedia, setMyMedia] = useState([]);
@@ -3104,6 +3201,9 @@ function Hi5ProfileModal({ t, profileId, userId, authProfile, session, openThrea
   const [msgErr, setMsgErr] = useState("");
   const bgPhotoRef = useRef(null);
   const [bgUploading, setBgUploading] = useState(false);
+  const passportAvatarRef = useRef(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const coverDragRef = useRef({ dragging: false, startY: 0, startPos: 50 });
 
   const uploadBgPhoto = async (e) => {
     const f = e.target.files?.[0]; if (!f) return;
@@ -3114,11 +3214,44 @@ function Hi5ProfileModal({ t, profileId, userId, authProfile, session, openThrea
       const { error: upErr } = await supabase.storage.from("attachments").upload(path, f);
       if (upErr) throw upErr;
       const { data } = supabase.storage.from("attachments").getPublicUrl(path);
-      await supabase.from("profiles").update({ profile_bg_photo: data.publicUrl }).eq("id", userId);
-      setProf((p) => ({ ...p, profile_bg_photo: data.publicUrl }));
+      await supabase.from("profiles").update({ profile_bg_photo: data.publicUrl, profile_bg_photo_pos: "50%" }).eq("id", userId);
+      setProf((p) => ({ ...p, profile_bg_photo: data.publicUrl, profile_bg_photo_pos: "50%" }));
     } catch (e2) { alert("อัปโหลดรูปปกไม่สำเร็จ: " + e2.message); } finally { setBgUploading(false); }
   };
   const clearBgPhoto = async () => { await supabase.from("profiles").update({ profile_bg_photo: null }).eq("id", userId); setProf((p) => ({ ...p, profile_bg_photo: null })); };
+
+  // 🖱️ ลาก/เลื่อนปรับตำแหน่งรูปปกได้ (แบบ Facebook cover photo)
+  const onCoverDragStart = (clientY) => { coverDragRef.current = { dragging: true, startY: clientY, startPos: parseInt(prof.profile_bg_photo_pos) || 50 }; };
+  const onCoverDragMove = (clientY) => {
+    if (!coverDragRef.current.dragging) return;
+    const delta = clientY - coverDragRef.current.startY;
+    const next = Math.max(0, Math.min(100, coverDragRef.current.startPos - delta / 2));
+    setProf((p) => ({ ...p, profile_bg_photo_pos: `${Math.round(next)}%` }));
+  };
+  const onCoverDragEnd = async () => {
+    if (!coverDragRef.current.dragging) return;
+    coverDragRef.current.dragging = false;
+    await supabase.from("profiles").update({ profile_bg_photo_pos: prof.profile_bg_photo_pos }).eq("id", userId);
+  };
+
+  // 📷 รูปโปรไฟล์เฉพาะ Passport (แยกจากรูปโปรไฟล์หลักของแอปได้ หรือจะใช้รูปเดียวกันก็ได้)
+  const uploadPassportAvatar = async (e) => {
+    const f = e.target.files?.[0]; if (!f) return;
+    e.target.value = "";
+    setAvatarUploading(true);
+    try {
+      const path = `passport-avatars/${userId}-${uid()}.jpg`;
+      const { error: upErr } = await supabase.storage.from("attachments").upload(path, f);
+      if (upErr) throw upErr;
+      const { data } = supabase.storage.from("attachments").getPublicUrl(path);
+      await supabase.from("profiles").update({ passport_avatar_url: data.publicUrl, passport_use_main_avatar: false }).eq("id", userId);
+      setProf((p) => ({ ...p, passport_avatar_url: data.publicUrl, passport_use_main_avatar: false }));
+    } catch (e2) { alert("อัปโหลดรูปไม่สำเร็จ: " + e2.message); } finally { setAvatarUploading(false); }
+  };
+  const toggleUseMainAvatar = async (val) => {
+    await supabase.from("profiles").update({ passport_use_main_avatar: val }).eq("id", userId);
+    setProf((p) => ({ ...p, passport_use_main_avatar: val }));
+  };
 
   const startChat = async () => {
     setMsgBusy(true); setMsgErr("");
@@ -3135,15 +3268,22 @@ function Hi5ProfileModal({ t, profileId, userId, authProfile, session, openThrea
     const { data: p } = await supabase.from("profiles").select("*").eq("id", profileId).single();
     setProf(p);
     const { data: ts } = await supabase.from("profile_testimonials").select("*, author:author_id(name)").eq("owner_id", profileId).order("created_at", { ascending: false });
-    // fallback ถ้า join แบบ author:author_id ใช้ไม่ได้ในบาง client -> ดึงชื่อแยก
     if (ts) {
       const authorIds = [...new Set(ts.map((x) => x.author_id))];
       const { data: authors } = authorIds.length ? await supabase.from("profiles").select("id, name").in("id", authorIds) : { data: [] };
       setTestimonials(ts.map((x) => ({ ...x, authorName: authors?.find((a) => a.id === x.author_id)?.name || "ไม่ทราบชื่อ" })));
     }
-    const { data: likes } = await supabase.from("profile_likes").select("liker_id").eq("owner_id", profileId);
-    setLikeCount(likes?.length || 0);
-    setILiked(!!likes?.find((l) => l.liker_id === userId));
+    const { data: rt } = await supabase.from("reaction_types").select("*").order("sort_order", { ascending: true });
+    setReactionTypes(rt || []);
+    const { data: reactions } = await supabase.from("profile_likes").select("liker_id, reaction_type").eq("owner_id", profileId);
+    const counts = {};
+    (reactions || []).forEach((r) => { counts[r.reaction_type || "like"] = (counts[r.reaction_type || "like"] || 0) + 1; });
+    setReactionCounts(counts);
+    setMyReaction(reactions?.find((r) => r.liker_id === userId)?.reaction_type || null);
+    if (!isMe) {
+      const { data: muteRow } = await supabase.from("user_mutes").select("*").eq("muter_id", userId).eq("muted_id", profileId).maybeSingle();
+      setIsMuted(!!muteRow);
+    }
     setLoading(false);
   };
   useEffect(() => { load(); }, [profileId]);
@@ -3153,13 +3293,33 @@ function Hi5ProfileModal({ t, profileId, userId, authProfile, session, openThrea
     supabase.from("playlists").select("id, name, url, platform, kind").eq("user_id", userId).then(({ data }) => setMyMedia(data || []));
   }, [isMe]);
 
-  const toggleLike = async () => {
-    if (iLiked) {
+  const setReaction = async (typeId) => {
+    setShowReactionPicker(false);
+    if (myReaction === typeId) {
+      // กดซ้ำอันเดิม -> เอาออก
       await supabase.from("profile_likes").delete().eq("owner_id", profileId).eq("liker_id", userId);
-      setILiked(false); setLikeCount((c) => c - 1);
+      setReactionCounts((c) => ({ ...c, [typeId]: Math.max(0, (c[typeId] || 1) - 1) }));
+      setMyReaction(null);
     } else {
-      await supabase.from("profile_likes").insert({ owner_id: profileId, liker_id: userId });
-      setILiked(true); setLikeCount((c) => c + 1);
+      await supabase.from("profile_likes").upsert({ owner_id: profileId, liker_id: userId, reaction_type: typeId }, { onConflict: "owner_id,liker_id" });
+      setReactionCounts((c) => {
+        const next = { ...c };
+        if (myReaction) next[myReaction] = Math.max(0, (next[myReaction] || 1) - 1);
+        next[typeId] = (next[typeId] || 0) + 1;
+        return next;
+      });
+      setMyReaction(typeId);
+    }
+  };
+  const totalReactions = Object.values(reactionCounts).reduce((a, b) => a + b, 0);
+
+  const toggleMute = async () => {
+    if (isMuted) {
+      await supabase.from("user_mutes").delete().eq("muter_id", userId).eq("muted_id", profileId);
+      setIsMuted(false);
+    } else {
+      await supabase.from("user_mutes").insert({ muter_id: userId, muted_id: profileId });
+      setIsMuted(true);
     }
   };
 
@@ -3204,14 +3364,31 @@ function Hi5ProfileModal({ t, profileId, userId, authProfile, session, openThrea
     <ModalPortal>
       <div style={overlay} onClick={close}>
         <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", maxHeight: "88vh", overflowY: "auto" }}>
-          {/* 🎨 หัวโปรไฟล์ พื้นหลังแต่งเอง */}
-          <div style={{ background: prof.profile_bg_photo ? `url(${prof.profile_bg_photo}) center/cover` : bgGradient(prof.profile_bg), padding: "28px 20px 20px", position: "relative", borderRadius: "24px 24px 0 0" }}>
-            {prof.profile_bg_photo && <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(0,0,0,.15), rgba(0,0,0,.5))", borderRadius: "24px 24px 0 0" }} />}
+          {/* 🎨 หัวโปรไฟล์ พื้นหลังแต่งเอง — ลากปรับตำแหน่งปกได้ตอนอยู่โหมดแก้ไข */}
+          <div
+            onMouseDown={(e) => isMe && editing && prof.profile_bg_photo && onCoverDragStart(e.clientY)}
+            onMouseMove={(e) => isMe && editing && onCoverDragMove(e.clientY)}
+            onMouseUp={onCoverDragEnd} onMouseLeave={onCoverDragEnd}
+            onTouchStart={(e) => isMe && editing && prof.profile_bg_photo && onCoverDragStart(e.touches[0].clientY)}
+            onTouchMove={(e) => isMe && editing && onCoverDragMove(e.touches[0].clientY)}
+            onTouchEnd={onCoverDragEnd}
+            style={{ background: prof.profile_bg_photo ? `url(${prof.profile_bg_photo}) center ${prof.profile_bg_photo_pos || "50%"}/cover` : bgGradient(prof.profile_bg), padding: "28px 20px 20px", position: "relative", borderRadius: "24px 24px 0 0", cursor: isMe && editing && prof.profile_bg_photo ? "ns-resize" : "default", touchAction: isMe && editing && prof.profile_bg_photo ? "none" : "auto" }}
+          >
+            {prof.profile_bg_photo && <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(0,0,0,.15), rgba(0,0,0,.5))", borderRadius: "24px 24px 0 0", pointerEvents: "none" }} />}
+            {isMe && editing && prof.profile_bg_photo && <div style={{ position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", fontSize: 10, color: "#fff", background: "rgba(0,0,0,.4)", padding: "3px 10px", borderRadius: 8, pointerEvents: "none" }}>↕ ลากขึ้น-ลงเพื่อปรับตำแหน่งปก</div>}
             <button onClick={close} style={{ position: "absolute", top: 14, right: 14, background: "rgba(0,0,0,.25)", border: "none", borderRadius: 16, width: 32, height: 32, cursor: "pointer", display: "grid", placeItems: "center" }}><X size={18} color="#fff" /></button>
             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
               <div style={{ position: "relative" }}>
-                {prof.avatar_url ? <img src={prof.avatar_url} alt="" style={{ width: 66, height: 66, borderRadius: 33, objectFit: "cover", border: "3px solid #fff" }} /> : <div style={{ width: 66, height: 66, borderRadius: 33, background: "rgba(255,255,255,.3)", color: "#fff", display: "grid", placeItems: "center", fontSize: 24, fontWeight: 800, border: "3px solid #fff" }}>{prof.name?.[0]}</div>}
+                {(() => {
+                  const showAvatar = prof.passport_use_main_avatar !== false ? prof.avatar_url : prof.passport_avatar_url;
+                  return showAvatar ? <img src={showAvatar} alt="" style={{ width: 66, height: 66, borderRadius: 33, objectFit: "cover", border: "3px solid #fff" }} /> : <div style={{ width: 66, height: 66, borderRadius: 33, background: "rgba(255,255,255,.3)", color: "#fff", display: "grid", placeItems: "center", fontSize: 24, fontWeight: 800, border: "3px solid #fff" }}>{prof.name?.[0]}</div>;
+                })()}
                 {moodToday && <span style={{ position: "absolute", bottom: -2, right: -2, fontSize: 20 }}>{moodToday}</span>}
+                {isMe && editing && (
+                  <button onClick={() => passportAvatarRef.current?.click()} style={{ position: "absolute", bottom: -2, left: -2, width: 22, height: 22, borderRadius: 11, background: t.accent, border: "2px solid #fff", cursor: "pointer", display: "grid", placeItems: "center" }} title="เปลี่ยนรูป Passport">
+                    <Camera size={10} color={t.onAccent} />
+                  </button>
+                )}
               </div>
               <div>
                 <div style={{ fontSize: 18, fontWeight: 800, color: "#fff" }}>{prof.name}</div>
@@ -3219,23 +3396,39 @@ function Hi5ProfileModal({ t, profileId, userId, authProfile, session, openThrea
               </div>
             </div>
           </div>
+          <input ref={passportAvatarRef} type="file" accept="image/*" onChange={uploadPassportAvatar} style={{ display: "none" }} />
 
           <div style={{ padding: 20 }}>
-            {/* ❤️ ไลค์ + 💬 ทักแชท */}
+            {/* 🎭 Reaction + 💬 ทักแชท + 🔇 Mute */}
             {!isMe && (
-              <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                <button onClick={toggleLike} style={{ display: "flex", alignItems: "center", gap: 6, background: iLiked ? "#E0507B18" : "none", border: `1px solid ${iLiked ? "#E0507B" : t.border}`, borderRadius: 12, padding: "8px 14px", cursor: "pointer" }}>
-                  <Sparkles size={15} color={iLiked ? "#E0507B" : t.sub} fill={iLiked ? "#E0507B" : "none"} />
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: iLiked ? "#E0507B" : t.text }}>{iLiked ? "กดไลค์แล้ว" : "กดไลค์"} · {likeCount}</span>
+              <div style={{ position: "relative", display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+                <button onClick={() => setShowReactionPicker((s) => !s)} style={{ display: "flex", alignItems: "center", gap: 6, background: myReaction ? `${t.accent}18` : "none", border: `1px solid ${myReaction ? t.accent : t.border}`, borderRadius: 12, padding: "8px 14px", cursor: "pointer" }}>
+                  <span style={{ fontSize: 15 }}>{myReaction ? reactionTypes.find((r) => r.id === myReaction)?.emoji : "👍"}</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: myReaction ? t.accent : t.text }}>{myReaction ? reactionTypes.find((r) => r.id === myReaction)?.label : "แสดงความรู้สึก"} · {totalReactions}</span>
                 </button>
+                {showReactionPicker && (
+                  <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 6, background: t.surface, border: `1px solid ${t.border}`, borderRadius: 14, padding: 8, display: "flex", gap: 4, boxShadow: "0 6px 18px rgba(0,0,0,.15)", zIndex: 2 }}>
+                    {reactionTypes.map((r) => (
+                      <button key={r.id} onClick={() => setReaction(r.id)} title={r.label} style={{ width: 38, height: 38, borderRadius: 10, border: "none", background: myReaction === r.id ? `${t.accent}25` : "none", cursor: "pointer", fontSize: 20, display: "grid", placeItems: "center" }}>{r.emoji}</button>
+                    ))}
+                  </div>
+                )}
                 <button onClick={startChat} disabled={msgBusy} style={{ display: "flex", alignItems: "center", gap: 6, background: t.accent, border: "none", borderRadius: 12, padding: "8px 14px", cursor: "pointer" }}>
                   <MessageCircle size={15} color={t.onAccent} />
                   <span style={{ fontSize: 12.5, fontWeight: 700, color: t.onAccent }}>{msgBusy ? "..." : "ทักแชท"}</span>
                 </button>
+                <button onClick={toggleMute} style={{ display: "flex", alignItems: "center", gap: 6, background: isMuted ? "#D9534F18" : "none", border: `1px solid ${isMuted ? "#D9534F" : t.border}`, borderRadius: 12, padding: "8px 14px", cursor: "pointer" }} title={isMuted ? "เลิก mute คนนี้" : "Mute คนนี้ (ไม่อยากให้มาก่อกวน)"}>
+                  <VolumeX size={15} color={isMuted ? "#D9534F" : t.sub} />
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: isMuted ? "#D9534F" : t.text }}>{isMuted ? "Mute อยู่" : "Mute"}</span>
+                </button>
               </div>
             )}
             {msgErr && <div style={{ fontSize: 11.5, color: "#D9534F", marginBottom: 12 }}>{msgErr}</div>}
-            {isMe && likeCount > 0 && <div style={{ fontSize: 12, color: t.sub, marginBottom: 16 }}>❤️ มีคนไลค์คุณ {likeCount} คน</div>}
+            {isMe && totalReactions > 0 && (
+              <div style={{ fontSize: 12, color: t.sub, marginBottom: 16 }}>
+                {reactionTypes.filter((r) => reactionCounts[r.id]).map((r) => `${r.emoji} ${reactionCounts[r.id]}`).join("  ")} · รวม {totalReactions} รีแอคชัน
+              </div>
+            )}
 
             {/* 🎭 ป้ายทักษะ */}
             {((prof.skill_tags || []).length > 0 || isMe) && (
@@ -3283,13 +3476,19 @@ function Hi5ProfileModal({ t, profileId, userId, authProfile, session, openThrea
                 <button onClick={() => setEditing((e) => !e)} style={{ width: "100%", padding: "10px 0", borderRadius: 10, border: `1px solid ${t.accent}`, background: editing ? t.accent : "none", color: editing ? t.onAccent : t.accent, cursor: "pointer", fontSize: 12.5, fontWeight: 700, marginBottom: editing ? 12 : 0 }}>{editing ? "เสร็จแล้ว ปิดโหมดแก้ไข" : "🛂 แต่งพาสปอร์ตของฉัน"}</button>
                 {editing && (
                   <>
+                    <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>รูปโปรไฟล์ Passport</div>
+                    <div style={{ display: "flex", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+                      <button onClick={() => toggleUseMainAvatar(true)} style={{ padding: "8px 14px", borderRadius: 10, border: `1.5px solid ${prof.passport_use_main_avatar !== false ? t.accent : t.border}`, background: prof.passport_use_main_avatar !== false ? `${t.accent}18` : "none", color: t.text, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>ใช้รูปเดียวกับหน้าแอป</button>
+                      <button onClick={() => passportAvatarRef.current?.click()} style={{ padding: "8px 14px", borderRadius: 10, border: `1.5px solid ${prof.passport_use_main_avatar === false ? t.accent : t.border}`, background: prof.passport_use_main_avatar === false ? `${t.accent}18` : "none", color: t.text, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>{avatarUploading ? "กำลังอัปโหลด..." : "📷 ใช้รูปอื่นแยกต่างหาก"}</button>
+                    </div>
+                    <div style={{ fontSize: 10, color: t.faint, marginBottom: 12 }}>เลือก "ใช้รูปอื่นแยกต่างหาก" แล้วเลือกไฟล์ใหม่ได้เลย ไม่กระทบรูปโปรไฟล์หลักของแอป</div>
                     <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, margin: "10px 0 6px" }}>สีพื้นหลัง</div>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
                       {PROFILE_BG_OPTIONS.map((bg) => (
                         <button key={bg.key} onClick={() => setBg(bg.key)} style={{ width: 36, height: 36, borderRadius: 10, background: bg.grad, border: prof.profile_bg === bg.key && !prof.profile_bg_photo ? `3px solid ${t.text}` : "none", cursor: "pointer" }} />
                       ))}
                     </div>
-                    <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>หรือใช้รูปของตัวเองแทน</div>
+                    <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>หรือใช้รูปของตัวเองแทน (ลากปรับตำแหน่งได้หลังอัปโหลด)</div>
                     <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
                       <button onClick={() => bgPhotoRef.current?.click()} style={{ padding: "8px 14px", borderRadius: 10, border: `1px solid ${t.border}`, background: "none", color: t.text, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>{bgUploading ? "กำลังอัปโหลด..." : "📷 อัปโหลดรูปปก"}</button>
                       {prof.profile_bg_photo && <button onClick={clearBgPhoto} style={{ padding: "8px 14px", borderRadius: 10, border: `1px solid ${t.border}`, background: "none", color: t.faint, cursor: "pointer", fontSize: 12 }}>เอารูปออก</button>}
