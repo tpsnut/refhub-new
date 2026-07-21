@@ -1079,7 +1079,7 @@ export default function RefHub() {
   if (!authProfile || !authProfile.approved) return <PendingApprovalScreen profile={authProfile} onLogout={() => supabase.auth.signOut()} />;
 
   return (
-    <div style={{ height: "calc(var(--app-vh, 1vh) * 100)", background: t.page, display: "flex", justifyContent: "center", overflow: "hidden", fontFamily: "'IBM Plex Sans Thai','Segoe UI','Helvetica Neue',system-ui,sans-serif" }}>
+    <div className="rh-app-shell" style={{ background: t.page, display: "flex", justifyContent: "center", overflow: "hidden", fontFamily: "'IBM Plex Sans Thai','Segoe UI','Helvetica Neue',system-ui,sans-serif" }}>
       <div style={{ width: "100%", maxWidth: 440, position: "relative", background: t.bg, height: "100%", overflow: "hidden", transition: "background .5s" }}>
         {t.star && <Stars />}
         {/* 📏 ขยายเฉพาะส่วนหัว+เนื้อหา ไม่รวมแถบเมนูด้านล่าง กันเมนูหาย/เพี้ยน — ใช้ transform:scale แทน zoom เพราะ zoom ใช้งานไม่ได้เลยบน iOS Safari (zoom ไม่รองรับ ทำให้ก่อนหน้านี้ iPhone ไม่ขยายเลย) */}
@@ -1150,7 +1150,7 @@ export default function RefHub() {
 
         {/* CONTENT — ความสูงต้องหารด้วยสเกลชดเชย transform:scale ข้างบน ไม่งั้นตอนขยายฟอนต์ กล่องจะสูงล้นจอจริง
             ทำให้ท้ายเนื้อหาจมอยู่ใต้ Dock เลื่อนลงไปไม่ถึงตลอดกาล (10000/fontScale = 100/สเกล หน่วย vh) */}
-        <div style={{ position: "relative", zIndex: 2, padding: `16px 18px ${page === "chat" || page === "chatRoom" ? 16 : 120}px`, height: `calc(var(--app-vh, 1vh) * ${(10000 / fontScale).toFixed(2)} / 100 - 76px)`, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
+        <div style={{ position: "relative", zIndex: 2, padding: `16px 18px ${page === "chat" || page === "chatRoom" ? 16 : 120}px`, height: `calc(var(--rh-vh) * ${(10000 / fontScale).toFixed(2)} / 100 - 76px)`, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
           {page === "home" && <HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, goalDone, goalPct, setGoals, notes, setPage, setChatOpen, userId, playlist }} />}
           {page === "ledger" && <FinancePage {...{ t, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt), userId }} />}
           {page === "note" && <NotePage {...{ t, notes, setNotes, isNight, userId, session, authProfile }} />}
