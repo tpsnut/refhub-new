@@ -225,38 +225,56 @@ function palette(mode, themeId) {
 // 📞 คุยด้วยเสียง/วิดีโอ — ฝัง Jitsi Meet ไว้ในแอป (ฟรี ไม่ต้องมี API key) ทุกคนในห้องแชทเดียวกันเจอห้องคุยเดียวกันอัตโนมัติ
 // 📞 คุยด้วยเสียง — ทำเอง ไม่พึ่งบริการนอก (WebRTC + Supabase Realtime ส่งสัญญาณเชื่อมสาย) ไม่มีการบังคับล็อกอินใดๆ
 // ใช้ STUN สาธารณะฟรีของ Google เชื่อมสายตรง (ไม่มี TURN server สำรอง เผื่อบางเครือข่ายที่เข้มงวดมากอาจเชื่อมไม่ติด แต่ฟรี 100%)
+// กล่องวิดีโอ/โปรไฟล์ 1 คนในหน้าโทร — เป็น component ระดับโมดูล (ไม่ได้อยู่ใน CallModal)
+// ถ้านิยามไว้ข้างใน CallModal จะถูกสร้างใหม่ทุก re-render -> React remount กล่องวิดีโอ ทำให้กล้องดำ+โปรไฟล์ซ้อน
+function CallVideoTile({ tile, big, t, onExpand, attachLocalVideo, attachRemoteVideo }) {
+  const dim = big ? { width: "100%", height: "100%" } : { width: 100, height: 130 };
+  return (
+    <div onClick={onExpand} style={{ textAlign: "center", cursor: "pointer", position: big ? "relative" : "static", ...(big ? { width: "100%", height: "100%" } : {}) }}>
+      {tile.hasVideo ? (
+        tile.isSelf ? (
+          <video ref={attachLocalVideo} autoPlay muted playsInline style={{ ...dim, borderRadius: 14, objectFit: "cover", background: "#000" }} />
+        ) : (
+          <video id={`vid-${tile.sid}`} ref={attachRemoteVideo(tile.sid)} autoPlay playsInline style={{ ...dim, borderRadius: 14, objectFit: "cover", background: "#000" }} />
+        )
+      ) : (
+        <div style={{ ...(big ? { width: "100%", height: "100%" } : {}), display: "grid", placeItems: "center", background: big ? "#111827" : "transparent", borderRadius: 14 }}>
+          <div style={{ width: big ? 96 : 64, height: big ? 96 : 64, borderRadius: "50%", background: tile.isSelf ? t.accent : "#5C7A99", display: "grid", placeItems: "center", fontSize: big ? 34 : 22, fontWeight: 700, color: "#fff" }}>{(tile.name || "?")[0]}</div>
+        </div>
+      )}
+      <div style={{ fontSize: 11, marginTop: big ? 0 : 6, color: "#fff", ...(big ? { position: "absolute", bottom: 10, left: 12, background: "rgba(0,0,0,.5)", padding: "3px 8px", borderRadius: 8 } : {}) }}>{tile.name}</div>
+    </div>
+  );
+}
+
 function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName, session, onMinimize, onClose }) {
   const [participants, setParticipants] = useState([]); // [{sid, identity, name, hasVideo}]
   const [muted, setMuted] = useState(false);
   const [cameraOn, setCameraOn] = useState(false);
   const [connecting, setConnecting] = useState(true);
   const [err, setErr] = useState("");
-  const [volLevel, setVolLevel] = useState(1); // ตัวคูณความดังของเสียงที่ได้ยิน (1 = ปกติ)
-  const [speakerMuted, setSpeakerMuted] = useState(false); // ปิดเสียงลำโพง (ไม่ได้ยินเสียงคนอื่น — ต่างจากปิดไมค์ที่เป็นเสียงเรา)
+  const [speakerLoud, setSpeakerLoud] = useState(false); // false = เบา (แนบหู) / true = ดัง (เปิดลำโพง) — เริ่มที่เบาเหมือนโทรศัพท์
   const [layout, setLayout] = useState("grid"); // grid | speaker
   const [focusSid, setFocusSid] = useState(null); // sid ของคนที่ถูกเลือกให้เป็นจอใหญ่ (speaker view)
   const roomRef = useRef(null);
   const audioElsRef = useRef({}); // identity -> <audio> element จริง (วิธีมาตรฐาน เล่นเสียงได้ทุกแพลตฟอร์ม)
-  const videoTracksRef = useRef({}); // sid -> video track ของคนอื่น (เก็บไว้ re-attach ใหม่ทุกครั้งที่ layout/จอเปลี่ยน กันจอดำ)
+  const videoTracksRef = useRef({}); // sid -> video track ของคนอื่น
   const localVideoRef = useRef(null);
   const presenceChannelRef = useRef(null);
   const watchChannelRef = useRef(null);
   const joinedAtRef = useRef(null);
-  const VOLUME_LEVELS = [1, 1.5, 2.2, 3]; // ปกติ -> ดัง -> ดังมาก -> สูงสุด -> วนกลับ
+  const SOFT_VOL = 0.35, LOUD_VOL = 1.0; // เบาแนบหู vs ดังเปิดลำโพง
 
-  // ปรับความดังของทุก <audio> element เมื่อเปลี่ยนระดับเสียง หรือกดปิด/เปิดเสียงลำโพง
+  // ปรับความดังของทุก <audio> element เมื่อสลับเบา/ดัง
   useEffect(() => {
-    Object.values(audioElsRef.current).forEach((el) => { el.muted = speakerMuted; el.volume = Math.min(1, volLevel); });
-  }, [volLevel, speakerMuted]);
+    Object.values(audioElsRef.current).forEach((el) => { el.volume = speakerLoud ? LOUD_VOL : SOFT_VOL; });
+  }, [speakerLoud]);
 
   const attachAudio = (track, identity) => {
-    // วิธีมาตรฐานของ LiveKit: สร้าง <audio> element จริงแล้วให้ browser เล่นเสียงเอง — ทำงานได้ทุกแพลตฟอร์ม
-    // (เดิมใช้ Web Audio API + GainNode อย่างเดียว ทำให้บนมือถือ/บางเบราว์เซอร์เสียงเงียบสนิท)
     const el = track.attach(); // คืน <audio> ที่ผูก track แล้ว
     el.autoplay = true;
     el.playsInline = true;
-    el.volume = Math.min(1, volLevel);
-    el.muted = speakerMuted;
+    el.volume = speakerLoud ? LOUD_VOL : SOFT_VOL;
     document.body.appendChild(el);
     el.play?.().catch(() => {});
     audioElsRef.current[identity] = el;
@@ -268,9 +286,16 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
       try {
         const { Room, RoomEvent, Track } = await import("livekit-client");
 
+        // ดึง token สดจาก session ปัจจุบันก่อนเสมอ (token เก่าใน prop อาจหมดอายุ -> "ยืนยันตัวตนไม่สำเร็จ")
+        let freshToken = session?.access_token;
+        try {
+          const { data: sess } = await supabase.auth.getSession();
+          if (sess?.session?.access_token) freshToken = sess.session.access_token;
+        } catch (e) {}
+
         const r = await fetch("/api/livekit-token", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ roomName: `refhub-${threadId}`, participantName: displayName, sessionId: crypto.randomUUID(), callerToken: session?.access_token }),
+          body: JSON.stringify({ roomName: `refhub-${threadId}`, participantName: displayName, sessionId: crypto.randomUUID(), callerToken: freshToken }),
         });
         const data = await r.json();
         if (!r.ok) throw new Error(data.error);
@@ -288,17 +313,12 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
 
         room.on(RoomEvent.TrackSubscribed, (track, pub, participant) => {
           if (track.kind === Track.Kind.Audio) attachAudio(track, participant.identity);
-          if (track.kind === Track.Kind.Video) videoTracksRef.current[participant.sid] = track;
-          upsert(participant);
           if (track.kind === Track.Kind.Video) {
-            let tries = 0;
-            const tryAttach = () => {
-              const el = document.getElementById(`vid-${participant.sid}`);
-              if (el) { track.attach(el); return; }
-              if (tries++ < 30) setTimeout(tryAttach, 100);
-            };
-            tryAttach();
+            videoTracksRef.current[participant.sid] = track;
+            const el = document.getElementById(`vid-${participant.sid}`);
+            if (el) { try { track.attach(el); } catch (e) {} }
           }
+          upsert(participant);
         });
 
         room.on(RoomEvent.TrackUnsubscribed, (track, pub, participant) => {
@@ -369,23 +389,6 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
     };
   }, [threadId]);
 
-  // 🎥 re-attach วิดีโอทุกครั้งที่ layout/คน/จอโฟกัสเปลี่ยน — กันจอดำ (element ถูกสร้างใหม่ตอน re-render แต่ track เก่ายังอยู่)
-  useEffect(() => {
-    const id = setTimeout(() => {
-      // วิดีโอคนอื่น
-      Object.entries(videoTracksRef.current).forEach(([sid, track]) => {
-        const el = document.getElementById(`vid-${sid}`);
-        if (el && track) { try { track.attach(el); } catch (e) {} }
-      });
-      // วิดีโอตัวเอง
-      if (cameraOn && localVideoRef.current) {
-        const pub = [...(roomRef.current?.localParticipant.videoTrackPublications.values() || [])][0];
-        if (pub?.track) { try { pub.track.attach(localVideoRef.current); } catch (e) {} }
-      }
-    }, 60);
-    return () => clearTimeout(id);
-  }, [layout, focusSid, participants, cameraOn]);
-
   const toggleMute = async () => {
     const next = !muted;
     await roomRef.current?.localParticipant.setMicrophoneEnabled(!next);
@@ -395,15 +398,20 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
   const toggleCamera = async () => {
     const next = !cameraOn;
     await roomRef.current?.localParticipant.setCameraEnabled(next);
-    if (next) setTimeout(() => {
-      const pub = [...(roomRef.current?.localParticipant.videoTrackPublications.values() || [])][0];
-      if (pub?.track && localVideoRef.current) pub.track.attach(localVideoRef.current);
-    }, 250);
     setCameraOn(next);
   };
 
-  const cycleVolume = () => {
-    setVolLevel((v) => VOLUME_LEVELS[(VOLUME_LEVELS.indexOf(v) + 1) % VOLUME_LEVELS.length]);
+  // ต่อวิดีโอตัวเองเข้ากับ element เมื่อเปิดกล้อง (callback ref ทำงานทุกครั้งที่ element mount ใหม่ กันจอดำ/ซ้อน)
+  const attachLocalVideo = (el) => {
+    localVideoRef.current = el;
+    if (el && cameraOn) {
+      const pub = [...(roomRef.current?.localParticipant.videoTrackPublications.values() || [])][0];
+      if (pub?.track) { try { pub.track.attach(el); } catch (e) {} }
+    }
+  };
+  // ต่อวิดีโอคนอื่นเข้ากับ element (callback ref — เรียกทุกครั้งที่ element ของ sid นั้น mount)
+  const attachRemoteVideo = (sid) => (el) => {
+    if (el && videoTracksRef.current[sid]) { try { videoTracksRef.current[sid].attach(el); } catch (e) {} }
   };
 
   // รวมทุกคน (ตัวเอง + คนอื่น) เป็นรายการเดียวเพื่อจัดเลย์เอาต์
@@ -411,26 +419,7 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
   const total = allTiles.length;
   const focused = focusSid ? allTiles.find((x) => x.sid === focusSid) : allTiles.find((x) => x.hasVideo) || allTiles[0];
   const others = allTiles.filter((x) => x.sid !== focused?.sid);
-
-  const VideoTile = ({ tile, big }) => {
-    const dim = big ? { width: "100%", height: "100%" } : { width: 100, height: 130 };
-    return (
-      <div onClick={() => { setLayout("speaker"); setFocusSid(tile.sid); }} style={{ textAlign: "center", cursor: "pointer", position: big ? "relative" : "static", ...(big ? { width: "100%", height: "100%" } : {}) }}>
-        {tile.hasVideo ? (
-          tile.isSelf ? (
-            <video ref={localVideoRef} autoPlay muted playsInline style={{ ...dim, borderRadius: 14, objectFit: "cover", background: "#000" }} />
-          ) : (
-            <video id={`vid-${tile.sid}`} autoPlay playsInline style={{ ...dim, borderRadius: 14, objectFit: "cover", background: "#000" }} />
-          )
-        ) : (
-          <div style={{ ...(big ? { width: "100%", height: "100%" } : {}), display: "grid", placeItems: "center", background: big ? "#111827" : "transparent", borderRadius: 14 }}>
-            <div style={{ width: big ? 96 : 64, height: big ? 96 : 64, borderRadius: "50%", background: tile.isSelf ? t.accent : "#5C7A99", display: "grid", placeItems: "center", fontSize: big ? 34 : 22, fontWeight: 700, color: "#fff" }}>{(tile.name || "?")[0]}</div>
-          </div>
-        )}
-        <div style={{ fontSize: 11, marginTop: big ? 0 : 6, color: "#fff", ...(big ? { position: "absolute", bottom: 10, left: 12, background: "rgba(0,0,0,.5)", padding: "3px 8px", borderRadius: 8 } : {}) }}>{tile.name}</div>
-      </div>
-    );
-  };
+  const tileProps = (tile, big) => ({ tile, big, t, onExpand: () => { setLayout("speaker"); setFocusSid(tile.sid); }, attachLocalVideo, attachRemoteVideo });
 
   return (
     <ModalPortal>
@@ -459,10 +448,10 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
             <div style={{ flex: 1, width: "100%", maxWidth: 500, display: "flex", flexDirection: "column", padding: 16, minHeight: 0 }}>
               {layout === "speaker" && focused ? (
                 <>
-                  <div style={{ flex: 1, minHeight: 0, marginBottom: 10 }}><VideoTile tile={focused} big /></div>
+                  <div style={{ flex: 1, minHeight: 0, marginBottom: 10 }}><CallVideoTile {...tileProps(focused, true)} /></div>
                   {others.length > 0 && (
                     <div style={{ display: "flex", gap: 10, overflowX: "auto", flexShrink: 0, paddingBottom: 4 }}>
-                      {others.map((tile) => <VideoTile key={tile.sid} tile={tile} />)}
+                      {others.map((tile) => <CallVideoTile key={tile.sid} {...tileProps(tile, false)} />)}
                     </div>
                   )}
                 </>
@@ -470,7 +459,7 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
                 <div style={{ flex: 1, display: "grid", gridTemplateColumns: total <= 1 ? "1fr" : "1fr 1fr", gap: 12, alignContent: "center", justifyItems: "center", minHeight: 0 }}>
                   {allTiles.map((tile) => (
                     <div key={tile.sid} style={{ width: "100%", aspectRatio: total <= 2 ? "3/4" : "1/1", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <VideoTile tile={tile} big={tile.hasVideo} />
+                      <CallVideoTile {...tileProps(tile, tile.hasVideo)} />
                     </div>
                   ))}
                 </div>
@@ -485,19 +474,15 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
               <button onClick={toggleCamera} style={{ width: 54, height: 54, borderRadius: 27, background: cameraOn ? "#2E9E6B" : "rgba(255,255,255,.15)", border: "none", cursor: "pointer", display: "grid", placeItems: "center" }} title={cameraOn ? "ปิดกล้อง" : "เปิดกล้อง"}>
                 <Camera size={20} color="#fff" style={{ opacity: cameraOn ? 1 : .6 }} />
               </button>
-              <button onClick={() => setSpeakerMuted((m) => !m)} style={{ width: 54, height: 54, borderRadius: 27, background: speakerMuted ? "#D9534F" : "rgba(255,255,255,.15)", border: "none", cursor: "pointer", display: "grid", placeItems: "center" }} title={speakerMuted ? "เปิดเสียงลำโพง" : "ปิดเสียงลำโพง (ไม่ได้ยินคนอื่น)"}>
-                {speakerMuted ? <VolumeX size={20} color="#fff" /> : <Volume1 size={20} color="#fff" />}
-              </button>
-              <button onClick={cycleVolume} disabled={speakerMuted} style={{ width: 54, height: 54, borderRadius: 27, background: volLevel > 1 && !speakerMuted ? "#2E9E6B" : "rgba(255,255,255,.15)", border: "none", cursor: speakerMuted ? "default" : "pointer", opacity: speakerMuted ? .4 : 1, display: "grid", placeItems: "center", position: "relative" }} title="ปรับเสียงดังขึ้น">
-                <Volume2 size={20} color="#fff" />
-                {volLevel > 1 && !speakerMuted && <span style={{ position: "absolute", top: -2, right: -2, background: "#fff", color: "#2E9E6B", fontSize: 9, fontWeight: 800, borderRadius: 8, padding: "1px 5px" }}>{volLevel === 3 ? "MAX" : "+"}</span>}
+              <button onClick={() => setSpeakerLoud((s) => !s)} style={{ width: 54, height: 54, borderRadius: 27, background: speakerLoud ? "#2E9E6B" : "rgba(255,255,255,.15)", border: "none", cursor: "pointer", display: "grid", placeItems: "center" }} title={speakerLoud ? "ปิดลำโพง (เสียงเบาแนบหู)" : "เปิดลำโพง (เสียงดัง)"}>
+                {speakerLoud ? <Volume2 size={20} color="#fff" /> : <Volume1 size={20} color="#fff" />}
               </button>
               <button onClick={onClose} style={{ width: 54, height: 54, borderRadius: 27, background: "#D9534F", border: "none", cursor: "pointer", display: "grid", placeItems: "center" }} title="วางสาย">
                 <PhoneOff size={20} color="#fff" />
               </button>
             </div>
             <div style={{ fontSize: 10.5, opacity: .5, padding: "6px 20px 18px", textAlign: "center" }}>
-              {speakerMuted ? "🔇 ปิดเสียงลำโพงอยู่ (ไม่ได้ยินคนอื่น)" : volLevel === 1 ? "เสียงปกติ" : volLevel === 1.5 ? "เสียงดังขึ้น" : volLevel === 2.2 ? "เสียงดังมาก" : "เสียงสูงสุด"} · แตะที่คนใดคนหนึ่งเพื่อขยายจอ
+              {speakerLoud ? "🔊 เปิดลำโพง (เสียงดัง)" : "🔉 เสียงเบา (แนบหู) · กดลำโพงเพื่อเปิดเสียงดัง"} · แตะที่คนใดคนหนึ่งเพื่อขยายจอ
             </div>
           </>
         )}
