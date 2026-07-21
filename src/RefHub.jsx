@@ -119,6 +119,56 @@ class Ambient {
 }
 const ambient = new Ambient();
 
+// ---------------- 🔔 เสียงแจ้งเตือน/เรียกเข้า (สังเคราะห์สดๆ ไม่ต้องพึ่งไฟล์เสียง) ----------------
+function beepOn(ctx, freq, start, dur, type, vol) {
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = type || "sine"; o.frequency.value = freq;
+  g.gain.setValueAtTime(vol || 0.22, ctx.currentTime + start);
+  g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
+  o.connect(g).connect(ctx.destination);
+  o.start(ctx.currentTime + start); o.stop(ctx.currentTime + start + dur);
+}
+// เสียงข้อความเข้า = "ตุ๊บเบาๆ" (เล่นครั้งเดียวสั้นๆ)
+function playMessagePop() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AudioCtx();
+    beepOn(ctx, 660, 0, 0.15, "sine", 0.22);
+    beepOn(ctx, 880, 0.08, 0.18, "sine", 0.18);
+    setTimeout(() => { try { ctx.close(); } catch (e) {} }, 500);
+  } catch (e) {}
+}
+// เสียงโทรเข้า = "ริงโทนนุ่ม + ตุ๊งแตง" สลับกัน วนจนครบ ~60 วิ แล้วหยุดเอง
+// คืน object { stop } ให้ผู้เรียกสั่งหยุดก่อนเวลาได้ (ตอนกดรับ/ปฏิเสธ)
+function startCallRingtone() {
+  let ctx = null, timer = null, stopped = false;
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    ctx = new AudioCtx();
+  } catch (e) { return { stop: () => {} }; }
+
+  const softRing = () => [[523, 0], [659, 0.18], [784, 0.36], [1047, 0.54]].forEach(([f, t]) => beepOn(ctx, f, t, 0.5, "triangle", 0.2));
+  const bell = () => [0, 0.5].forEach((t) => { beepOn(ctx, 1568, t, 0.6, "sine", 0.18); beepOn(ctx, 2093, t, 0.6, "sine", 0.08); });
+
+  let useBell = false;
+  const cycle = () => {
+    if (stopped) return;
+    try { ctx.resume().catch(() => {}); (useBell ? bell : softRing)(); } catch (e) {}
+    useBell = !useBell;
+  };
+  cycle();
+  timer = setInterval(cycle, 1500); // สลับริงโทน↔ตุ๊งแตงทุก 1.5 วิ
+  const autoStop = setTimeout(() => stop(), 60000); // ครบ 1 นาทีไม่รับ -> ดับเอง
+
+  function stop() {
+    if (stopped) return;
+    stopped = true;
+    clearInterval(timer); clearTimeout(autoStop);
+    try { ctx.close(); } catch (e) {}
+  }
+  return { stop };
+}
+
 // ---------------- Theme ----------------
 // 🎨 ระบบธีมสีแอป (แยกอิสระจากสี Mentor โดยสิ้นเชิง — Mentor ใช้แค่จุดที่เป็นตัวตนโค้ชเท่านั้น เช่น การ์ดเลือกโค้ช/แชท)
 // แต่ละธีมมีเวอร์ชัน day และ night ของตัวเอง อิสระจากกัน (เลือกธีมได้โดยไม่ผูกกับเวลา/โหมดกลางวัน-กลางคืน)
@@ -182,21 +232,21 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
   const [connecting, setConnecting] = useState(true);
   const [err, setErr] = useState("");
   const [volLevel, setVolLevel] = useState(1); // ตัวคูณความดังของเสียงที่ได้ยิน (1 = ปกติ)
-  const [speakerOn, setSpeakerOn] = useState(false); // สลับลำโพงนอก (เฉพาะอุปกรณ์ที่รองรับ setSinkId)
-  const [canSwitchSpeaker, setCanSwitchSpeaker] = useState(false);
+  const [speakerMuted, setSpeakerMuted] = useState(false); // ปิดเสียงลำโพง (ไม่ได้ยินเสียงคนอื่น — ต่างจากปิดไมค์ที่เป็นเสียงเรา)
   const [layout, setLayout] = useState("grid"); // grid | speaker
   const [focusSid, setFocusSid] = useState(null); // sid ของคนที่ถูกเลือกให้เป็นจอใหญ่ (speaker view)
   const roomRef = useRef(null);
   const audioElsRef = useRef({}); // identity -> <audio> element จริง (วิธีมาตรฐาน เล่นเสียงได้ทุกแพลตฟอร์ม)
+  const videoTracksRef = useRef({}); // sid -> video track ของคนอื่น (เก็บไว้ re-attach ใหม่ทุกครั้งที่ layout/จอเปลี่ยน กันจอดำ)
   const localVideoRef = useRef(null);
   const presenceChannelRef = useRef(null);
   const joinedAtRef = useRef(null);
   const VOLUME_LEVELS = [1, 1.5, 2.2, 3]; // ปกติ -> ดัง -> ดังมาก -> สูงสุด -> วนกลับ
 
-  // ปรับความดังของทุก <audio> element เมื่อเปลี่ยนระดับเสียง (element.volume จำกัดที่ 0-1 จึงใช้ค่าที่ clamp)
+  // ปรับความดังของทุก <audio> element เมื่อเปลี่ยนระดับเสียง หรือกดปิด/เปิดเสียงลำโพง
   useEffect(() => {
-    Object.values(audioElsRef.current).forEach((el) => { el.volume = Math.min(1, volLevel); });
-  }, [volLevel]);
+    Object.values(audioElsRef.current).forEach((el) => { el.muted = speakerMuted; el.volume = Math.min(1, volLevel); });
+  }, [volLevel, speakerMuted]);
 
   const attachAudio = (track, identity) => {
     // วิธีมาตรฐานของ LiveKit: สร้าง <audio> element จริงแล้วให้ browser เล่นเสียงเอง — ทำงานได้ทุกแพลตฟอร์ม
@@ -205,7 +255,7 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
     el.autoplay = true;
     el.playsInline = true;
     el.volume = Math.min(1, volLevel);
-    if (canSwitchSpeaker && speakerOn && el.setSinkId) el.setSinkId("").catch(() => {});
+    el.muted = speakerMuted;
     document.body.appendChild(el);
     el.play?.().catch(() => {});
     audioElsRef.current[identity] = el;
@@ -215,12 +265,6 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
     let cancelled = false;
     const init = async () => {
       try {
-        // เช็คว่าอุปกรณ์นี้สลับลำโพง/หูฟังได้ไหม (setSinkId มีเฉพาะ Chrome/Edge desktop; iOS/Safari ไม่มี)
-        try {
-          const testEl = document.createElement("audio");
-          if (typeof testEl.setSinkId === "function") setCanSwitchSpeaker(true);
-        } catch (e) {}
-
         const { Room, RoomEvent, Track } = await import("livekit-client");
 
         const r = await fetch("/api/livekit-token", {
@@ -243,6 +287,7 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
 
         room.on(RoomEvent.TrackSubscribed, (track, pub, participant) => {
           if (track.kind === Track.Kind.Audio) attachAudio(track, participant.identity);
+          if (track.kind === Track.Kind.Video) videoTracksRef.current[participant.sid] = track;
           upsert(participant);
           if (track.kind === Track.Kind.Video) {
             let tries = 0;
@@ -260,6 +305,7 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
             const el = audioElsRef.current[participant.identity];
             if (el) { try { track.detach(el); el.remove(); } catch (e) {} delete audioElsRef.current[participant.identity]; }
           }
+          if (track.kind === Track.Kind.Video) delete videoTracksRef.current[participant.sid];
           upsert(participant);
         });
 
@@ -267,6 +313,7 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
           setParticipants((list) => list.filter((x) => x.sid !== participant.sid));
           const el = audioElsRef.current[participant.identity];
           if (el) { try { el.remove(); } catch (e) {} delete audioElsRef.current[participant.identity]; }
+          delete videoTracksRef.current[participant.sid];
         });
 
         // เมื่อคนอื่นเปิด/ปิดกล้อง อัปเดตสถานะ hasVideo (ใช้ค่าจาก pub.isSubscribed จริง ไม่เดา)
@@ -316,6 +363,23 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
     };
   }, [threadId]);
 
+  // 🎥 re-attach วิดีโอทุกครั้งที่ layout/คน/จอโฟกัสเปลี่ยน — กันจอดำ (element ถูกสร้างใหม่ตอน re-render แต่ track เก่ายังอยู่)
+  useEffect(() => {
+    const id = setTimeout(() => {
+      // วิดีโอคนอื่น
+      Object.entries(videoTracksRef.current).forEach(([sid, track]) => {
+        const el = document.getElementById(`vid-${sid}`);
+        if (el && track) { try { track.attach(el); } catch (e) {} }
+      });
+      // วิดีโอตัวเอง
+      if (cameraOn && localVideoRef.current) {
+        const pub = [...(roomRef.current?.localParticipant.videoTrackPublications.values() || [])][0];
+        if (pub?.track) { try { pub.track.attach(localVideoRef.current); } catch (e) {} }
+      }
+    }, 60);
+    return () => clearTimeout(id);
+  }, [layout, focusSid, participants, cameraOn]);
+
   const toggleMute = async () => {
     const next = !muted;
     await roomRef.current?.localParticipant.setMicrophoneEnabled(!next);
@@ -330,15 +394,6 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
       if (pub?.track && localVideoRef.current) pub.track.attach(localVideoRef.current);
     }, 250);
     setCameraOn(next);
-  };
-
-  const toggleSpeaker = async () => {
-    const next = !speakerOn;
-    setSpeakerOn(next);
-    // setSinkId("") = อุปกรณ์เสียงเริ่มต้น; ผู้ใช้ desktop บางคนต่อหูฟังจะสลับได้ (มือถือไม่รองรับ ปุ่มนี้จะถูกซ่อนไว้)
-    for (const el of Object.values(audioElsRef.current)) {
-      if (el.setSinkId) { try { await el.setSinkId(""); } catch (e) {} }
-    }
   };
 
   const cycleVolume = () => {
@@ -424,21 +479,19 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
               <button onClick={toggleCamera} style={{ width: 54, height: 54, borderRadius: 27, background: cameraOn ? "#2E9E6B" : "rgba(255,255,255,.15)", border: "none", cursor: "pointer", display: "grid", placeItems: "center" }} title={cameraOn ? "ปิดกล้อง" : "เปิดกล้อง"}>
                 <Camera size={20} color="#fff" style={{ opacity: cameraOn ? 1 : .6 }} />
               </button>
-              <button onClick={cycleVolume} style={{ width: 54, height: 54, borderRadius: 27, background: volLevel > 1 ? "#2E9E6B" : "rgba(255,255,255,.15)", border: "none", cursor: "pointer", display: "grid", placeItems: "center", position: "relative" }} title="ปรับเสียงดังขึ้น">
-                <Volume2 size={20} color="#fff" />
-                {volLevel > 1 && <span style={{ position: "absolute", top: -2, right: -2, background: "#fff", color: "#2E9E6B", fontSize: 9, fontWeight: 800, borderRadius: 8, padding: "1px 5px" }}>{volLevel === 3 ? "MAX" : "+"}</span>}
+              <button onClick={() => setSpeakerMuted((m) => !m)} style={{ width: 54, height: 54, borderRadius: 27, background: speakerMuted ? "#D9534F" : "rgba(255,255,255,.15)", border: "none", cursor: "pointer", display: "grid", placeItems: "center" }} title={speakerMuted ? "เปิดเสียงลำโพง" : "ปิดเสียงลำโพง (ไม่ได้ยินคนอื่น)"}>
+                {speakerMuted ? <VolumeX size={20} color="#fff" /> : <Volume1 size={20} color="#fff" />}
               </button>
-              {canSwitchSpeaker && (
-                <button onClick={toggleSpeaker} style={{ width: 54, height: 54, borderRadius: 27, background: speakerOn ? "#2E9E6B" : "rgba(255,255,255,.15)", border: "none", cursor: "pointer", display: "grid", placeItems: "center" }} title="สลับลำโพง/หูฟัง">
-                  <Volume1 size={20} color="#fff" />
-                </button>
-              )}
+              <button onClick={cycleVolume} disabled={speakerMuted} style={{ width: 54, height: 54, borderRadius: 27, background: volLevel > 1 && !speakerMuted ? "#2E9E6B" : "rgba(255,255,255,.15)", border: "none", cursor: speakerMuted ? "default" : "pointer", opacity: speakerMuted ? .4 : 1, display: "grid", placeItems: "center", position: "relative" }} title="ปรับเสียงดังขึ้น">
+                <Volume2 size={20} color="#fff" />
+                {volLevel > 1 && !speakerMuted && <span style={{ position: "absolute", top: -2, right: -2, background: "#fff", color: "#2E9E6B", fontSize: 9, fontWeight: 800, borderRadius: 8, padding: "1px 5px" }}>{volLevel === 3 ? "MAX" : "+"}</span>}
+              </button>
               <button onClick={onClose} style={{ width: 54, height: 54, borderRadius: 27, background: "#D9534F", border: "none", cursor: "pointer", display: "grid", placeItems: "center" }} title="วางสาย">
                 <PhoneOff size={20} color="#fff" />
               </button>
             </div>
             <div style={{ fontSize: 10.5, opacity: .5, padding: "6px 20px 18px", textAlign: "center" }}>
-              {volLevel === 1 ? "เสียงปกติ" : volLevel === 1.5 ? "เสียงดังขึ้น" : volLevel === 2.2 ? "เสียงดังมาก" : "เสียงสูงสุด"} · แตะที่คนใดคนหนึ่งเพื่อขยายจอ
+              {speakerMuted ? "🔇 ปิดเสียงลำโพงอยู่ (ไม่ได้ยินคนอื่น)" : volLevel === 1 ? "เสียงปกติ" : volLevel === 1.5 ? "เสียงดังขึ้น" : volLevel === 2.2 ? "เสียงดังมาก" : "เสียงสูงสุด"} · แตะที่คนใดคนหนึ่งเพื่อขยายจอ
             </div>
           </>
         )}
@@ -603,6 +656,8 @@ export default function RefHub() {
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   const [chatUnread, setChatUnread] = useState(0); // จำนวนข้อความแชทที่ยังไม่ได้อ่าน (คำนวณจริงในหน้าแชท)
+  const [msgToast, setMsgToast] = useState(null); // ป็อปอัพแจ้งข้อความใหม่ทั่วทั้งแอป { name, text, threadId, at }
+  useEffect(() => { if (!msgToast) return; const id = setTimeout(() => setMsgToast(null), 4000); return () => clearTimeout(id); }, [msgToast?.at]);
   const [activeThread, setActiveThread] = useState(() => { try { return JSON.parse(sessionStorage.getItem("refhub:activeThread") || "null"); } catch (e) { return null; } });
   useEffect(() => { if (page === "chatRoom" && !activeThread) setPage("chat"); }, []);
   useEffect(() => { try { if (activeThread) sessionStorage.setItem("refhub:activeThread", JSON.stringify(activeThread)); else sessionStorage.removeItem("refhub:activeThread"); } catch (e) {} }, [activeThread]);
@@ -924,7 +979,19 @@ export default function RefHub() {
     };
     computeUnread();
     const channel = supabase.channel("unread-watch")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages" }, computeUnread)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages" }, async (payload) => {
+        computeUnread();
+        // 🔔 ข้อความจากคนอื่น (ไม่ใช่ของเราเอง) + ไม่ได้เปิดอ่านห้องนั้นอยู่ -> เด้ง toast + เสียงตุ๊บ
+        const msg = payload.new;
+        if (msg && msg.sender_id && msg.sender_id !== userId) {
+          const { data: mem } = await supabase.from("chat_thread_members").select("thread_id").eq("user_id", userId).eq("thread_id", msg.thread_id).maybeSingle();
+          if (mem) { // เป็นห้องที่เราอยู่จริง
+            playMessagePop();
+            const { data: sender } = await supabase.from("profiles").select("name").eq("id", msg.sender_id).maybeSingle();
+            setMsgToast({ name: sender?.name || "ข้อความใหม่", text: msg.text || (msg.attachment_url ? "ส่งไฟล์มา" : ""), threadId: msg.thread_id, at: Date.now() });
+          }
+        }
+      })
       .on("postgres_changes", { event: "*", schema: "public", table: "chat_reads", filter: `user_id=eq.${userId}` }, computeUnread)
       .subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -1239,6 +1306,22 @@ export default function RefHub() {
           <button onClick={() => setCallMinimized(false)} style={{ position: "fixed", bottom: 90, right: 16, zIndex: 90, background: "#2E9E6B", border: "none", borderRadius: 24, padding: "10px 16px", display: "flex", alignItems: "center", gap: 8, cursor: "pointer", boxShadow: "0 6px 18px rgba(0,0,0,.25)" }}>
             <Phone size={15} color="#fff" /><span style={{ fontSize: 12, fontWeight: 700, color: "#fff" }}>กำลังคุยอยู่ · แตะเพื่อกลับ</span>
           </button>
+        )}
+        {!activeCall && <IncomingCallWatcher t={t} userId={userId} onAccept={(threadId, roomName, otherIds) => { setActiveCall({ threadId, roomName, otherMemberIds: otherIds }); setCallMinimized(false); }} />}
+        {msgToast && !(page === "chatRoom" && activeThread?.id === msgToast.threadId) && (
+          <ModalPortal>
+            <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 115, display: "flex", justifyContent: "center", padding: "12px 12px 0", pointerEvents: "none" }}>
+              <button onClick={() => { const tid = msgToast.threadId; setMsgToast(null); setPage("chat"); }} style={{ pointerEvents: "auto", width: "100%", maxWidth: 420, background: "#1C1A18", border: "1px solid rgba(255,255,255,.1)", borderRadius: 16, padding: "12px 14px", display: "flex", alignItems: "center", gap: 12, boxShadow: "0 10px 30px rgba(0,0,0,.4)", cursor: "pointer", textAlign: "left", animation: "rh-ring-in .3s ease" }}>
+                <style>{`@keyframes rh-ring-in { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }`}</style>
+                <div style={{ width: 40, height: 40, borderRadius: 20, background: t.accent, display: "grid", placeItems: "center", flexShrink: 0 }}><MessageCircle size={18} color={t.onAccent} /></div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 800, color: "#F2EDE6", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{msgToast.name}</div>
+                  <div style={{ fontSize: 12, color: "#8C857C", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{msgToast.text || "ส่งข้อความมา"}</div>
+                </div>
+                <ChevronRight size={16} color="#8C857C" />
+              </button>
+            </div>
+          </ModalPortal>
         )}
         {editProfile && <EditProfile t={t} M={M} profile={profile} setProfile={setProfile} userId={userId} authProfile={authProfile} setAuthProfile={setAuthProfile} close={() => setEditProfile(false)} />}
         {profileLightbox && profile.avatar && <ImageLightbox src={profile.avatar} onClose={() => setProfileLightbox(false)} />}
@@ -3659,22 +3742,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
   const [confirmLeave, setConfirmLeave] = useState(false); // "ยืนยัน" | "" -> โหมด: "leave" (ออกจากห้อง) หรือ "delete" (ลบถาวร)
   const [showMembers, setShowMembers] = useState(false);
   const [callParticipants, setCallParticipants] = useState([]); // คนที่กำลังอยู่ในสายเสียงของห้องนี้ตอนนี้ (ไม่รวมตัวเอง ไว้โชว์แบนเนอร์เตือน)
-  const playRingtone = () => {
-    try {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      const ctx = new AudioCtx();
-      // จังหวะ "ปี๊บ-ปี๊บ" 2 ครั้งติดกัน คล้ายเสียงโทรศัพท์เรียกเข้า สังเคราะห์สดๆ ไม่ต้องพึ่งไฟล์เสียงภายนอก
-      [0, 0.3].forEach((startAt) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.frequency.value = 880; osc.type = "sine";
-        gain.gain.setValueAtTime(0.25, ctx.currentTime + startAt);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + startAt + 0.25);
-        osc.connect(gain).connect(ctx.destination);
-        osc.start(ctx.currentTime + startAt); osc.stop(ctx.currentTime + startAt + 0.25);
-      });
-    } catch (e) {}
-  };
+  // เสียงเรียกเข้าย้ายไปที่ IncomingCallWatcher ระดับแอปแล้ว (ทำงานทุกหน้า) — ตรงนี้เหลือแค่แบนเนอร์ในห้อง กันเสียงซ้อนกัน
   useEffect(() => {
     const isMeInThisCall = activeCall?.threadId === thread.id;
     if (isMeInThisCall) { setCallParticipants([]); return; } // ตัวเองเข้าสายอยู่แล้ว ไม่ต้องโชว์แบนเนอร์เตือนตัวเอง
@@ -3682,10 +3750,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
     presenceChannel.on("presence", { event: "sync" }, () => {
       const state = presenceChannel.presenceState();
       const people = Object.values(state).flat().filter((p) => p.userId !== userId);
-      setCallParticipants((prev) => {
-        if (prev.length === 0 && people.length > 0) playRingtone(); // มีคนเพิ่งเริ่ม/เข้าร่วมสายพอดี (ตอนแอปเปิดอยู่เท่านั้น)
-        return people;
-      });
+      setCallParticipants(people);
     });
     presenceChannel.subscribe();
     return () => { supabase.removeChannel(presenceChannel); };
@@ -5481,6 +5546,71 @@ function SearchOverlay({ t, notes, goals, tx, categories, setPage, close }) {
   </div></div>);
 }
 function SR({ t, icon, title, sub, onClick }) { return (<button onClick={onClick} style={{ ...card(t), padding: "11px 14px", display: "flex", alignItems: "center", gap: 12, cursor: "pointer", textAlign: "left", width: "100%" }}><span style={{ flexShrink: 0 }}>{icon}</span><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13.5, fontWeight: 600, color: t.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{title}</div><div style={{ fontSize: 11, color: t.sub }}>{sub}</div></div><ChevronRight size={16} color={t.faint} /></button>); }
+
+// ---------------- 📞 Incoming call watcher (ทำงานทั่วทั้งแอป ไม่ว่าอยู่หน้าไหน) ----------------
+// ฟัง presence ของทุกห้องแชทที่เราอยู่ พอมีคนเริ่มโทร -> เด้งแบนเนอร์ + เสียงเรียกเข้า ให้กดรับ/ปฏิเสธได้เลย
+function IncomingCallWatcher({ t, userId, onAccept }) {
+  const [incoming, setIncoming] = useState(null); // { threadId, roomName, callerName, otherIds }
+  const ringRef = useRef(null);
+  const dismissedRef = useRef({}); // threadId -> true (กดปฏิเสธแล้ว ไม่เด้งซ้ำจนกว่าจะมีสายใหม่)
+
+  const playRing = () => { stopRing(); ringRef.current = startCallRingtone(); };
+  const stopRing = () => { try { ringRef.current?.stop(); } catch (e) {} ringRef.current = null; };
+
+  useEffect(() => {
+    if (!userId) return;
+    let channels = [];
+    let cancelled = false;
+    (async () => {
+      const { data: mine } = await supabase.from("chat_thread_members").select("thread_id").eq("user_id", userId);
+      if (cancelled || !mine) return;
+      for (const row of mine) {
+        const threadId = row.thread_id;
+        const ch = supabase.channel(`call-${threadId}`);
+        ch.on("presence", { event: "sync" }, () => {
+          const state = ch.presenceState();
+          const people = Object.values(state).flat().filter((p) => p.userId !== userId);
+          if (people.length > 0 && !dismissedRef.current[threadId]) {
+            setIncoming((cur) => {
+              if (cur) return cur; // มีสายค้างอยู่แล้ว ไม่ทับ
+              playRing();
+              return { threadId, callerName: people[0]?.name || "มีคน", otherIds: people.map((p) => p.userId) };
+            });
+          } else if (people.length === 0) {
+            dismissedRef.current[threadId] = false; // สายจบแล้ว รีเซ็ตให้เด้งได้อีกครั้งถ้ามีสายใหม่
+            setIncoming((cur) => { if (cur?.threadId === threadId) { stopRing(); return null; } return cur; });
+          }
+        });
+        ch.subscribe();
+        channels.push(ch);
+      }
+    })();
+    return () => { cancelled = true; stopRing(); channels.forEach((c) => supabase.removeChannel(c)); };
+  }, [userId]);
+
+  if (!incoming) return null;
+  const accept = () => { stopRing(); const inc = incoming; setIncoming(null); onAccept(inc.threadId, inc.callerName, inc.otherIds); };
+  const decline = () => { stopRing(); dismissedRef.current[incoming.threadId] = true; setIncoming(null); };
+
+  return (
+    <ModalPortal>
+      <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 120, display: "flex", justifyContent: "center", padding: "12px 12px 0", pointerEvents: "none" }}>
+        <div style={{ pointerEvents: "auto", width: "100%", maxWidth: 420, background: "#1C1A18", border: "1px solid rgba(255,255,255,.1)", borderRadius: 18, padding: "14px 16px", display: "flex", alignItems: "center", gap: 12, boxShadow: "0 10px 30px rgba(0,0,0,.4)", animation: "rh-ring-in .3s ease" }}>
+          <style>{`@keyframes rh-ring-in { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } } @keyframes rh-ring-pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.12); } }`}</style>
+          <div style={{ width: 46, height: 46, borderRadius: 23, background: "#2E9E6B", display: "grid", placeItems: "center", flexShrink: 0, animation: "rh-ring-pulse 1s ease-in-out infinite" }}>
+            <Phone size={20} color="#fff" />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: "#F2EDE6" }}>📞 สายเรียกเข้า</div>
+            <div style={{ fontSize: 12, color: "#8C857C", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{incoming.callerName} กำลังโทรหาคุณ</div>
+          </div>
+          <button onClick={decline} style={{ width: 42, height: 42, borderRadius: 21, background: "#D9534F", border: "none", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }} title="ปฏิเสธ"><PhoneOff size={18} color="#fff" /></button>
+          <button onClick={accept} style={{ width: 42, height: 42, borderRadius: 21, background: "#2E9E6B", border: "none", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }} title="รับสาย"><Phone size={18} color="#fff" /></button>
+        </div>
+      </div>
+    </ModalPortal>
+  );
+}
 
 // ---------------- Dock ----------------
 function Dock({ t, page, setPage, onQuickAdd }) {
