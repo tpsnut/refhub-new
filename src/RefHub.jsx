@@ -124,9 +124,9 @@ const ambient = new Ambient();
 // แต่ละธีมมีเวอร์ชัน day และ night ของตัวเอง อิสระจากกัน (เลือกธีมได้โดยไม่ผูกกับเวลา/โหมดกลางวัน-กลางคืน)
 const THEMES = {
   default:  {
-    label: "ค่าเริ่มต้น",
-    day:   { accent: "#EA9552", accent2: "#F2B074", onAccent: "#3A2408", page: "#F6F1E8", bgTop: "#F6F1E8", bgBot: "#FBF8F2", surface: "#FFFFFF" },
-    night: { accent: "#EA9552", accent2: "#F2B074", onAccent: "#3A2408", page: "#0A1020", bgTop: "#131E36", bgBot: "#0A1020", surface: "#16223C" },
+    label: "PKNOW",
+    day:   { accent: "#F2872E", accent2: "#F5A050", onAccent: "#141414", page: "#F5F3F0", bgTop: "#F5F3F0", bgBot: "#FFFFFF", surface: "#FFFFFF" },
+    night: { accent: "#F2872E", accent2: "#F5A050", onAccent: "#141414", page: "#0D0C0B", bgTop: "#151311", bgBot: "#0D0C0B", surface: "#1C1A18" },
   },
   red: {
     label: "เรดโบลด์",
@@ -152,8 +152,8 @@ function palette(mode, themeId) {
   if (mode === "night") return {
     ...common, page: T.page, bg: `linear-gradient(180deg,${T.bgTop} 0%,${T.bgBot} 100%)`,
     surface: T.surface, hero: `linear-gradient(135deg,${T.accent2} 0%,${T.accent} 100%)`, heroBorder: "transparent",
-    text: "#EEF2FB", sub: "#8A93A8", faint: "#5C6680", border: "rgba(255,255,255,0.08)",
-    dock: T.surface, dockBorder: "rgba(120,140,190,0.28)", star: true, inputBg: "rgba(255,255,255,.06)",
+    text: "#F2EDE6", sub: "#8C857C", faint: "#5C5750", border: "rgba(255,255,255,0.08)",
+    dock: T.surface, dockBorder: "rgba(255,255,255,0.10)", star: true, inputBg: "rgba(255,255,255,.06)",
     cat: { green: "#16223C", amber: "#1E2438", coral: "#2A1C24", violet: "#201E33" },
     catTx: { green: "#EAF2EC", amber: "#F0E9D6", coral: "#F6E4DC", violet: "#E7E3F6" },
     catLb: { green: "#8FA79A", amber: "#C6B274", coral: "#D89A86", violet: "#A99CD6" },
@@ -161,7 +161,7 @@ function palette(mode, themeId) {
   return {
     ...common, page: T.page, bg: `linear-gradient(180deg,${T.bgTop} 0%,${T.bgBot} 100%)`,
     surface: T.surface, hero: `linear-gradient(135deg,${T.accent2} 0%,${T.accent} 100%)`, heroBorder: "transparent",
-    text: "#26303F", sub: "#7A828F", faint: "#A7ADB8", border: "rgba(0,0,0,0.06)",
+    text: "#221F1C", sub: "#6B655F", faint: "#A39C93", border: "rgba(0,0,0,0.06)",
     dock: T.surface, dockBorder: "rgba(0,0,0,0.05)", star: false, inputBg: "#F4F5F7",
     cat: { green: "#E7F1E9", amber: "#FBF0D6", coral: "#FBE4DC", violet: "#E9E7F4" },
     catTx: { green: "#2A3B30", amber: "#3A3320", coral: "#5A3327", violet: "#39316A" },
@@ -501,7 +501,7 @@ export default function RefHub() {
   const [authProfile, setAuthProfile] = useState(null);  // แถวในตาราง profiles: { approved, role, name, ... }
   const [authProfileChecked, setAuthProfileChecked] = useState(false); // true เมื่อเช็ค authProfile ครั้งแรกเสร็จแล้ว (กันโชว์ "รออนุมัติ" ผิดๆ ระหว่างกำลังโหลดจริง)
   const userId = session?.user?.id || null;
-  const [themeMode, setThemeMode] = useState("auto");
+  const [themeMode, setThemeMode] = useState("night");
   const [mentor, setMentor] = useState("none");
   const [customMentors, setCustomMentors] = useState([]); // โค้ชที่ user สร้างเอง (ไม่ใช่แอดมิน) [{id, name, description, avatarUrl}]
   const [theme, setTheme] = useState("default"); // 🎨 ธีมสีแอป: default | red | navy | twilight — แยกอิสระจาก mentor
@@ -579,7 +579,7 @@ export default function RefHub() {
         } else if (uSettings) {
           setProfile({ name: uSettings.name, avatar: uSettings.avatar || "" });
           setMentor(uSettings.mentor || "none");
-          setThemeMode(uSettings.theme_mode || "auto");
+          setThemeMode(uSettings.theme_mode || "night");
           if (uSettings.theme) setTheme(uSettings.theme);
           if (typeof uSettings.volume === "number") setVolume(uSettings.volume);
         } else {
@@ -1178,23 +1178,57 @@ export default function RefHub() {
 // ---------------- 🔐 Auth screens ----------------
 function AuthLoadingScreen() {
   return (
-    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#F6F1E8", gap: 22 }}>
+    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#0D0C0B", gap: 22 }}>
       <style>{`@keyframes rh-spin { to { transform: rotate(360deg); } } @keyframes rh-pulse { 0%,100% { transform: scale(1); opacity:1; } 50% { transform: scale(1.05); opacity:.85; } }`}</style>
-      <div style={{ animation: "rh-pulse 1.6s ease-in-out infinite" }}><CloverMark size={72} /></div>
-      <div style={{ width: 28, height: 28, borderRadius: "50%", border: "3px solid #E8D8C0", borderTopColor: "#EA9552", animation: "rh-spin 0.8s linear infinite" }} />
+      <div style={{ animation: "rh-pulse 1.6s ease-in-out infinite" }}><PKnowLockup width={180} gap={8} animated /></div>
+      <div style={{ width: 28, height: 28, borderRadius: "50%", border: "3px solid #2A2825", borderTopColor: "#F2872E", animation: "rh-spin 0.8s linear infinite" }} />
     </div>
   );
 }
 
-function CloverMark({ size = 80 }) {
+function PKnowMark({ width = 220, animated = false }) {
+  const h = width * 0.34;
   return (
-    <div style={{ width: size, height: size, borderRadius: size * 0.25, background: "#EA9552", display: "flex", alignItems: "center", justifyContent: "center", position: "relative", flexShrink: 0 }}>
-      <span style={{ fontFamily: "'Baloo 2','IBM Plex Sans Thai',sans-serif", fontSize: size * 0.5, fontWeight: 700, color: "#3A2408" }}>R</span>
-      <div style={{ position: "absolute", top: size * 0.1, right: size * 0.08, width: size * 0.22, height: size * 0.22 }}>
-        <div style={{ position: "absolute", left: "35%", top: "0%", width: "40%", height: "40%", borderRadius: "50%", background: "#FFFFFF" }} />
-        <div style={{ position: "absolute", left: "35%", top: "55%", width: "40%", height: "40%", borderRadius: "50%", background: "#FFFFFF" }} />
-        <div style={{ position: "absolute", left: "0%", top: "27%", width: "40%", height: "40%", borderRadius: "50%", background: "#FFFFFF" }} />
-        <div style={{ position: "absolute", left: "65%", top: "27%", width: "40%", height: "40%", borderRadius: "50%", background: "#FFFFFF" }} />
+    <svg width={width} height={h} viewBox="0 0 220 75" style={{ display: "block" }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');
+        @keyframes pk-in { 0% { opacity: 0; transform: translateY(5px) scale(0.85); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
+        @keyframes pk-dot { 0% { opacity: 0; } 25% { opacity: 1; } 75% { opacity: 1; } 100% { opacity: 0; } }
+        .pk-p { animation: pk-in 0.3s cubic-bezier(.2,.8,.3,1.15) both; transform-box: fill-box; transform-origin: center; }
+        .pk-know { animation: pk-in 0.25s cubic-bezier(.2,.8,.3,1.15) both; animation-delay: 0.62s; transform-box: fill-box; transform-origin: center; }
+        .pk-dot1 { animation: pk-dot 0.45s ease-in-out both; animation-delay: 0.15s; }
+        .pk-dot2 { animation: pk-dot 0.45s ease-in-out both; animation-delay: 0.23s; }
+        .pk-dot3 { animation: pk-dot 0.45s ease-in-out both; animation-delay: 0.31s; }
+      `}</style>
+      <defs>
+        <filter id="pkRough" x="-20%" y="-20%" width="140%" height="140%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.9 0.85" numOctaves="2" seed="7" result="noise" />
+          <feDisplacementMap in="SourceGraphic" in2="noise" scale="3.4" xChannelSelector="R" yChannelSelector="G" />
+        </filter>
+      </defs>
+      <text x="50%" y="58" textAnchor="middle" filter="url(#pkRough)"
+        style={{ fontFamily: "'Anton','IBM Plex Sans Thai',sans-serif", fontSize: 58, letterSpacing: 1 }}
+        fill="#F2872E">
+        {animated ? (<><tspan className="pk-p">P</tspan><tspan className="pk-know">KNOW</tspan></>) : "PKNOW"}
+      </text>
+      {animated && (
+        <g filter="url(#pkRough)" fill="#F2872E">
+          <circle className="pk-dot1" cx="48" cy="48" r="3.2" />
+          <circle className="pk-dot2" cx="58" cy="48" r="3.2" />
+          <circle className="pk-dot3" cx="68" cy="48" r="3.2" />
+        </g>
+      )}
+    </svg>
+  );
+}
+
+function PKnowLockup({ width = 220, gap = 10, animated = false }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap }}>
+      <PKnowMark width={width} animated={animated} />
+      <div style={{ textAlign: "center" }}>
+        <div style={{ fontSize: 12, color: "#C7C2BC", letterSpacing: 1 }}>プレイヤーは知っている</div>
+        <div style={{ fontSize: 11, color: "#6B655F", marginTop: 2 }}>คนเล่นเขารู้กัน</div>
       </div>
     </div>
   );
@@ -1289,66 +1323,62 @@ function AuthPage() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", justifyContent: "center", background: "#F6F1E8", fontFamily: "'IBM Plex Sans Thai',sans-serif" }}>
-      <div style={{ width: "100%", maxWidth: 440, padding: "56px 24px", display: "flex", flexDirection: "column" }}>
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}><CloverMark size={84} /></div>
-        <div style={{ textAlign: "center", fontSize: 18, fontWeight: 700, color: "#26303F", marginBottom: 2 }}>RefHub</div>
-        <div style={{ textAlign: "center", fontSize: 12.5, color: "#7A828F", marginBottom: 26 }}>ที่พักใจของครอบครัวคุณ</div>
+    <div style={{ minHeight: "100vh", display: "flex", justifyContent: "center", background: "#0D0C0B", fontFamily: "'IBM Plex Sans Thai',sans-serif" }}>
+      <div style={{ width: "100%", maxWidth: 440, padding: "64px 24px", display: "flex", flexDirection: "column" }}>
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 40 }}><PKnowLockup width={230} /></div>
 
-        <div style={{ display: "flex", background: "#FFFFFF", borderRadius: 14, padding: 4, marginBottom: 16, border: "1px solid rgba(0,0,0,0.06)" }}>
-          <button onClick={() => setMode("login")} style={{ flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 11, border: "none", cursor: "pointer", background: mode === "login" ? "#EA9552" : "transparent", color: mode === "login" ? "#3A2408" : "#7A828F", fontWeight: 600, fontSize: 13.5 }}>เข้าสู่ระบบ</button>
-          <button onClick={() => setMode("signup")} style={{ flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 11, border: "none", cursor: "pointer", background: mode === "signup" ? "#EA9552" : "transparent", color: mode === "signup" ? "#3A2408" : "#7A828F", fontWeight: 600, fontSize: 13.5 }}>สมัครสมาชิก</button>
+        <div style={{ display: "flex", background: "#1C1A18", borderRadius: 14, padding: 4, marginBottom: 16, border: "1px solid rgba(255,255,255,0.07)" }}>
+          <button onClick={() => setMode("login")} style={{ flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 11, border: "none", cursor: "pointer", background: mode === "login" ? "#F2872E" : "transparent", color: mode === "login" ? "#141414" : "#8C857C", fontWeight: 600, fontSize: 13.5 }}>เข้าสู่ระบบ</button>
+          <button onClick={() => setMode("signup")} style={{ flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 11, border: "none", cursor: "pointer", background: mode === "signup" ? "#F2872E" : "transparent", color: mode === "signup" ? "#141414" : "#8C857C", fontWeight: 600, fontSize: 13.5 }}>สมัครสมาชิก</button>
         </div>
 
         {mode === "login" && (
           <div style={{ display: "flex", gap: 14, marginBottom: 16, justifyContent: "center" }}>
-            <button onClick={() => setLoginWith("email")} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, color: loginWith === "email" ? "#EA9552" : "#A7ADB8", borderBottom: loginWith === "email" ? "2px solid #EA9552" : "2px solid transparent", paddingBottom: 4 }}>ด้วยอีเมล</button>
-            <button onClick={() => setLoginWith("pin")} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, color: loginWith === "pin" ? "#EA9552" : "#A7ADB8", borderBottom: loginWith === "pin" ? "2px solid #EA9552" : "2px solid transparent", paddingBottom: 4 }}>ด้วยชื่อ + PIN</button>
+            <button onClick={() => setLoginWith("email")} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, color: loginWith === "email" ? "#F2872E" : "#6B655F", borderBottom: loginWith === "email" ? "2px solid #F2872E" : "2px solid transparent", paddingBottom: 4 }}>ด้วยอีเมล</button>
+            <button onClick={() => setLoginWith("pin")} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, color: loginWith === "pin" ? "#F2872E" : "#6B655F", borderBottom: loginWith === "pin" ? "2px solid #F2872E" : "2px solid transparent", paddingBottom: 4 }}>ด้วยชื่อ + PIN</button>
           </div>
         )}
 
         {mode === "login" && loginWith === "pin" ? (
           <>
-            <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="ชื่อผู้ใช้ที่แอดมินตั้งให้ เช่น mom" style={{ background: "#FFFFFF", border: "1px solid rgba(0,0,0,0.06)", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, marginBottom: 10, outline: "none" }} />
-            <input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} type="password" inputMode="numeric" placeholder="PIN 4-6 หลัก" style={{ background: "#FFFFFF", border: "1px solid rgba(0,0,0,0.06)", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, marginBottom: 14, outline: "none", letterSpacing: 3 }} />
+            <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="ชื่อผู้ใช้ที่แอดมินตั้งให้ เช่น mom" style={{ background: "#1C1A18", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, marginBottom: 10, outline: "none", color: "#F2EDE6" }} />
+            <input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} type="password" inputMode="numeric" placeholder="PIN 4-6 หลัก" style={{ background: "#1C1A18", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, marginBottom: 14, outline: "none", letterSpacing: 3, color: "#F2EDE6" }} />
           </>
         ) : (
           <>
             {mode === "signup" && (
-              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="ชื่อของคุณ" style={{ background: "#FFFFFF", border: "1px solid rgba(0,0,0,0.06)", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, marginBottom: 10, outline: "none" }} />
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="ชื่อของคุณ" style={{ background: "#1C1A18", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, marginBottom: 10, outline: "none", color: "#F2EDE6" }} />
             )}
 
-            <div style={{ background: "#FFFFFF", border: `1px solid ${email && !emailOk ? "#D9534F" : "rgba(0,0,0,0.06)"}`, borderRadius: 12, padding: "11px 14px", marginBottom: 4, display: "flex", alignItems: "center", gap: 8 }}>
-              <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@email.com" style={{ flex: 1, border: "none", outline: "none", fontSize: 13.5, background: "transparent" }} />
-              {email && <span style={{ fontSize: 13, color: emailOk ? "#2E9E6B" : "#D9534F" }}>{emailOk ? "✓" : "!"}</span>}
+            <div style={{ background: "#1C1A18", border: `1px solid ${email && !emailOk ? "#E8685A" : "rgba(255,255,255,0.07)"}`, borderRadius: 12, padding: "11px 14px", marginBottom: 4, display: "flex", alignItems: "center", gap: 8 }}>
+              <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@email.com" style={{ flex: 1, border: "none", outline: "none", fontSize: 13.5, background: "transparent", color: "#F2EDE6" }} />
+              {email && <span style={{ fontSize: 13, color: emailOk ? "#4CBE8D" : "#E8685A" }}>{emailOk ? "✓" : "!"}</span>}
             </div>
-            <div style={{ fontSize: 11, color: email ? (emailOk ? "#2E9E6B" : "#D9534F") : "#A7ADB8", marginBottom: 10, paddingLeft: 2, minHeight: 14 }}>
+            <div style={{ fontSize: 11, color: email ? (emailOk ? "#4CBE8D" : "#E8685A") : "#6B655F", marginBottom: 10, paddingLeft: 2, minHeight: 14 }}>
               {email ? (emailOk ? "รูปแบบอีเมลถูกต้อง" : "รูปแบบอีเมลยังไม่ถูกต้อง") : "พิมพ์อีเมลของคุณ"}
             </div>
 
-            <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="รหัสผ่าน (อย่างน้อย 6 ตัว)" style={{ background: "#FFFFFF", border: "1px solid rgba(0,0,0,0.06)", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, marginBottom: 10, outline: "none" }} />
+            <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="รหัสผ่าน (อย่างน้อย 6 ตัว)" style={{ background: "#1C1A18", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, marginBottom: 10, outline: "none", color: "#F2EDE6" }} />
 
             {mode === "signup" && (
-              <input value={familyCode} onChange={(e) => setFamilyCode(e.target.value)} placeholder="รหัสเชิญครอบครัว (ถ้ามี)" style={{ background: "#FFFFFF", border: "1px solid rgba(0,0,0,0.06)", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, marginBottom: 14, outline: "none" }} />
+              <input value={familyCode} onChange={(e) => setFamilyCode(e.target.value)} placeholder="รหัสเชิญครอบครัว (ถ้ามี)" style={{ background: "#1C1A18", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, marginBottom: 14, outline: "none", color: "#F2EDE6" }} />
             )}
           </>
         )}
 
-        {err && <div style={{ fontSize: 12, color: "#D9534F", marginBottom: 10, textAlign: "center" }}>{err}</div>}
-        {info && <div style={{ fontSize: 12, color: "#2E9E6B", marginBottom: 10, textAlign: "center" }}>{info}</div>}
+        {err && <div style={{ fontSize: 12, color: "#E8685A", marginBottom: 10, textAlign: "center" }}>{err}</div>}
+        {info && <div style={{ fontSize: 12, color: "#4CBE8D", marginBottom: 10, textAlign: "center" }}>{info}</div>}
 
         {needsCaptcha && (
           <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 11.5, color: "#7A828F", marginBottom: 8, textAlign: "center" }}>พิมพ์รหัสผิดหลายครั้งเกินไป กรุณายืนยันตัวตนก่อน</div>
+            <div style={{ fontSize: 11.5, color: "#8C857C", marginBottom: 8, textAlign: "center" }}>พิมพ์รหัสผิดหลายครั้งเกินไป กรุณายืนยันตัวตนก่อน</div>
             <div ref={captchaRef} style={{ display: "flex", justifyContent: "center" }} />
           </div>
         )}
 
-        <button onClick={submit} disabled={loading || (needsCaptcha && !captchaToken)} style={{ background: loading || (needsCaptcha && !captchaToken) ? "#F0DCC3" : "#EA9552", border: "none", borderRadius: 14, padding: "13px 0", fontSize: 14, fontWeight: 700, color: "#3A2408", cursor: loading ? "default" : "pointer", marginTop: 6 }}>
+        <button onClick={submit} disabled={loading || (needsCaptcha && !captchaToken)} style={{ background: loading || (needsCaptcha && !captchaToken) ? "#4A362A" : "#F2872E", border: "none", borderRadius: 14, padding: "13px 0", fontSize: 14, fontWeight: 700, color: "#141414", cursor: loading ? "default" : "pointer", marginTop: 6 }}>
           {loading ? "กำลังดำเนินการ..." : mode === "login" ? "เข้าสู่ระบบ" : "สมัครสมาชิก"}
         </button>
-
-        <div style={{ textAlign: "center", fontSize: 11, color: "#A7ADB8", marginTop: 18 }}>บัญชีใหม่ต้องรอแอดมินอนุมัติก่อนใช้งาน (ยกเว้นคนแรกสุด)</div>
       </div>
     </div>
   );
@@ -1456,14 +1486,14 @@ function AccountSettingsModal({ t, authProfile, userId, session, close }) {
 
 function PendingApprovalScreen({ profile, onLogout }) {
   return (
-    <div style={{ minHeight: "100vh", display: "flex", justifyContent: "center", background: "#F6F1E8", fontFamily: "'IBM Plex Sans Thai',sans-serif" }}>
+    <div style={{ minHeight: "100vh", display: "flex", justifyContent: "center", background: "#0D0C0B", fontFamily: "'IBM Plex Sans Thai',sans-serif" }}>
       <div style={{ width: "100%", maxWidth: 440, padding: "80px 24px", textAlign: "center" }}>
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}><CloverMark size={72} /></div>
-        <div style={{ fontSize: 16, fontWeight: 700, color: "#26303F", marginBottom: 8 }}>รอแอดมินอนุมัติ</div>
-        <div style={{ fontSize: 13, color: "#7A828F", lineHeight: 1.6, marginBottom: 4 }}>
-          บัญชี {profile?.email ? <b>{profile.email}</b> : "ของคุณ"} สมัครสำเร็จแล้ว<br />แต่ยังใช้งานแอปไม่ได้จนกว่าแอดมินจะกดอนุมัติ
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 28 }}><PKnowLockup width={190} /></div>
+        <div style={{ fontSize: 16, fontWeight: 700, color: "#F2EDE6", marginBottom: 8 }}>รอแอดมินอนุมัติ</div>
+        <div style={{ fontSize: 13, color: "#8C857C", lineHeight: 1.6, marginBottom: 4 }}>
+          บัญชี {profile?.email ? <b style={{ color: "#C7C2BC" }}>{profile.email}</b> : "ของคุณ"} สมัครสำเร็จแล้ว<br />แต่ยังใช้งานแอปไม่ได้จนกว่าแอดมินจะกดอนุมัติ
         </div>
-        <button onClick={onLogout} style={{ marginTop: 24, background: "none", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 12, padding: "10px 20px", fontSize: 13, color: "#7A828F", cursor: "pointer" }}>ออกจากระบบ</button>
+        <button onClick={onLogout} style={{ marginTop: 24, background: "none", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, padding: "10px 20px", fontSize: 13, color: "#8C857C", cursor: "pointer" }}>ออกจากระบบ</button>
       </div>
     </div>
   );
@@ -1857,7 +1887,7 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, goa
 
       <div style={{ fontSize: 13, fontWeight: 700, color: t.sub, margin: "22px 0 12px" }}>วิดเจ็ตของฉัน</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <CatCard t={t} k="green" icon={<Wallet size={15} color="#fff" />} label="พอร์ตโฟลิโอ" onClick={() => setPage("ledger")}>
+        <CatCard t={t} k="green" icon={<Wallet size={15} color="#fff" />} label="การเงิน" onClick={() => setPage("ledger")}>
           <div style={{ fontSize: 19, fontWeight: 800, color: t.catTx.green }}>{fmt(balance)}</div>
           <div style={{ fontSize: 11, fontWeight: 700, color: todayNet >= 0 ? "#2E9E6B" : "#D9534F", marginTop: 2 }}>{todayNet >= 0 ? "▲ +" : "▼ "}{Math.abs(todayNet).toLocaleString()} วันนี้</div>
         </CatCard>
