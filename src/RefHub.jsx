@@ -4092,26 +4092,28 @@ function EditTxModal({ t, x, categories, userId, setTx, close }) {
   };
 
   return (
-    <div style={overlay} onClick={close}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-          <div style={{ fontSize: 17, fontWeight: 800, color: t.text }}>แก้ไขรายการ</div>
-          <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+    <ModalPortal>
+      <div style={overlay} onClick={close}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: "20px 20px 28px", maxHeight: "88vh", overflowY: "auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <div style={{ fontSize: 17, fontWeight: 800, color: t.text }}>แก้ไขรายการ</div>
+            <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+          </div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+            {[["out", "จ่ายออก"], ["in", "รับเข้า"]].map(([v, lb]) => (
+              <button key={v} onClick={() => setType(v)} style={{ flex: 1, padding: "10px 0", borderRadius: 12, border: `1.5px solid ${type === v ? (v === "in" ? "#2E9E6B" : "#D9534F") : t.border}`, background: type === v ? (v === "in" ? "#2E9E6B18" : "#D9534F18") : "transparent", color: type === v ? (v === "in" ? "#2E9E6B" : "#D9534F") : t.sub, fontWeight: 700, cursor: "pointer" }}>{lb}</button>
+            ))}
+          </div>
+          <select value={cat || ""} onChange={(e) => setCat(e.target.value)} style={{ ...input(t), marginBottom: 10 }}>
+            {categories.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+          </select>
+          <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="จำนวนเงิน" style={{ ...input(t), marginBottom: 10, fontSize: 18, fontWeight: 700 }} />
+          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="รายละเอียด" style={{ ...input(t), marginBottom: 10 }} />
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ ...input(t), marginBottom: 16 }} />
+          <button onClick={save} disabled={busy} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "13px 0" }}>{busy ? "กำลังบันทึก..." : "บันทึกการแก้ไข"}</button>
         </div>
-        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-          {[["out", "จ่ายออก"], ["in", "รับเข้า"]].map(([v, lb]) => (
-            <button key={v} onClick={() => setType(v)} style={{ flex: 1, padding: "10px 0", borderRadius: 12, border: `1.5px solid ${type === v ? (v === "in" ? "#2E9E6B" : "#D9534F") : t.border}`, background: type === v ? (v === "in" ? "#2E9E6B18" : "#D9534F18") : "transparent", color: type === v ? (v === "in" ? "#2E9E6B" : "#D9534F") : t.sub, fontWeight: 700, cursor: "pointer" }}>{lb}</button>
-          ))}
-        </div>
-        <select value={cat || ""} onChange={(e) => setCat(e.target.value)} style={{ ...input(t), marginBottom: 10 }}>
-          {categories.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
-        </select>
-        <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="จำนวนเงิน" style={{ ...input(t), marginBottom: 10, fontSize: 18, fontWeight: 700 }} />
-        <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="รายละเอียด" style={{ ...input(t), marginBottom: 10 }} />
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ ...input(t), marginBottom: 16 }} />
-        <button onClick={save} disabled={busy} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "13px 0" }}>{busy ? "กำลังบันทึก..." : "บันทึกการแก้ไข"}</button>
       </div>
-    </div>
+    </ModalPortal>
   );
 }
 
