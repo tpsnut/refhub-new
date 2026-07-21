@@ -5,7 +5,7 @@ import {
   Sun, Moon, Send, Check, Trash2, X, Wallet, Target, BookOpen, ChevronRight,
   Sparkles, Clock, Search, Volume2, VolumeX, Pencil, Download, ArrowLeft, Users, Camera, Phone, Mic, MicOff, PhoneOff, RefreshCw,
   Utensils, Car, ShoppingBag, Receipt, Gamepad2, HeartPulse, Briefcase, Gift, Coffee, Music,
-  Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi, MessageCircle, MoreVertical, KeyRound, MapPin, Copy, LockKeyhole, LogOut
+  Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi, MessageCircle, MoreVertical, KeyRound, MapPin, Copy, LockKeyhole, LogOut, LayoutGrid, Maximize2, Volume1
 } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, ResponsiveContainer, Tooltip } from "recharts";
 // 📝 BlockNote — editor แบบ Notion (toggle, checklist, หัวข้อ, แนบรูป/ไฟล์) สำหรับหน้าโน้ตฉบับเต็ม
@@ -176,34 +176,52 @@ function palette(mode, themeId) {
 // 📞 คุยด้วยเสียง — ทำเอง ไม่พึ่งบริการนอก (WebRTC + Supabase Realtime ส่งสัญญาณเชื่อมสาย) ไม่มีการบังคับล็อกอินใดๆ
 // ใช้ STUN สาธารณะฟรีของ Google เชื่อมสายตรง (ไม่มี TURN server สำรอง เผื่อบางเครือข่ายที่เข้มงวดมากอาจเชื่อมไม่ติด แต่ฟรี 100%)
 function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName, session, onMinimize, onClose }) {
-  const [participants, setParticipants] = useState([]); // [{sid, identity, name, videoTrack, audioTrack}]
+  const [participants, setParticipants] = useState([]); // [{sid, identity, name, hasVideo}]
   const [muted, setMuted] = useState(false);
   const [cameraOn, setCameraOn] = useState(false);
   const [connecting, setConnecting] = useState(true);
   const [err, setErr] = useState("");
-  const [volumeBoost, setVolumeBoost] = useState(0.5); // 0.5 = เบา (ค่าเริ่มต้น เหมือนคุยโทรศัพท์ปกติ), 1 = ปกติ, มากกว่า 1 = ดังขึ้น
+  const [volLevel, setVolLevel] = useState(1); // ตัวคูณความดังของเสียงที่ได้ยิน (1 = ปกติ)
+  const [speakerOn, setSpeakerOn] = useState(false); // สลับลำโพงนอก (เฉพาะอุปกรณ์ที่รองรับ setSinkId)
+  const [canSwitchSpeaker, setCanSwitchSpeaker] = useState(false);
+  const [layout, setLayout] = useState("grid"); // grid | speaker
+  const [focusSid, setFocusSid] = useState(null); // sid ของคนที่ถูกเลือกให้เป็นจอใหญ่ (speaker view)
   const roomRef = useRef(null);
-  const audioCtxRef = useRef(null);
-  const gainNodesRef = useRef({}); // identity -> GainNode ของแต่ละคน
+  const audioElsRef = useRef({}); // identity -> <audio> element จริง (วิธีมาตรฐาน เล่นเสียงได้ทุกแพลตฟอร์ม)
   const localVideoRef = useRef(null);
   const presenceChannelRef = useRef(null);
   const joinedAtRef = useRef(null);
-  const VOLUME_LEVELS = [0.5, 1, 1.6, 2.2]; // เบา -> ปกติ -> ดัง -> ดังมาก -> วนกลับ
+  const VOLUME_LEVELS = [1, 1.5, 2.2, 3]; // ปกติ -> ดัง -> ดังมาก -> สูงสุด -> วนกลับ
 
+  // ปรับความดังของทุก <audio> element เมื่อเปลี่ยนระดับเสียง (element.volume จำกัดที่ 0-1 จึงใช้ค่าที่ clamp)
   useEffect(() => {
-    Object.values(gainNodesRef.current).forEach((g) => { g.gain.value = volumeBoost; });
-  }, [volumeBoost]);
+    Object.values(audioElsRef.current).forEach((el) => { el.volume = Math.min(1, volLevel); });
+  }, [volLevel]);
+
+  const attachAudio = (track, identity) => {
+    // วิธีมาตรฐานของ LiveKit: สร้าง <audio> element จริงแล้วให้ browser เล่นเสียงเอง — ทำงานได้ทุกแพลตฟอร์ม
+    // (เดิมใช้ Web Audio API + GainNode อย่างเดียว ทำให้บนมือถือ/บางเบราว์เซอร์เสียงเงียบสนิท)
+    const el = track.attach(); // คืน <audio> ที่ผูก track แล้ว
+    el.autoplay = true;
+    el.playsInline = true;
+    el.volume = Math.min(1, volLevel);
+    if (canSwitchSpeaker && speakerOn && el.setSinkId) el.setSinkId("").catch(() => {});
+    document.body.appendChild(el);
+    el.play?.().catch(() => {});
+    audioElsRef.current[identity] = el;
+  };
 
   useEffect(() => {
     let cancelled = false;
     const init = async () => {
       try {
-        const { Room, RoomEvent, Track } = await import("livekit-client");
+        // เช็คว่าอุปกรณ์นี้สลับลำโพง/หูฟังได้ไหม (setSinkId มีเฉพาะ Chrome/Edge desktop; iOS/Safari ไม่มี)
+        try {
+          const testEl = document.createElement("audio");
+          if (typeof testEl.setSinkId === "function") setCanSwitchSpeaker(true);
+        } catch (e) {}
 
-        const AudioCtx = window.AudioContext || window.webkitAudioContext;
-        const audioCtx = new AudioCtx();
-        await audioCtx.resume().catch(() => {});
-        audioCtxRef.current = audioCtx;
+        const { Room, RoomEvent, Track } = await import("livekit-client");
 
         const r = await fetch("/api/livekit-token", {
           method: "POST", headers: { "Content-Type": "application/json" },
@@ -216,62 +234,65 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
         const room = new Room({ adaptiveStream: true, dynacast: true });
         roomRef.current = room;
 
-        const upsertParticipant = (p) => {
+        const upsert = (participant) => {
           setParticipants((list) => {
-            const others = list.filter((x) => x.sid !== p.sid);
-            return [...others, p];
+            const others = list.filter((x) => x.sid !== participant.sid);
+            return [...others, { sid: participant.sid, identity: participant.identity, name: participant.name || "เพื่อน", hasVideo: participant.isCameraEnabled }];
           });
         };
 
         room.on(RoomEvent.TrackSubscribed, (track, pub, participant) => {
-          if (track.kind === Track.Kind.Audio) {
-            // เบราว์เซอร์บางตัวบล็อกเสียงอัตโนมัติถ้า AudioContext ไม่ได้ "ปลดล็อก" ไว้ตอนนี้พอดี -> เรียก resume() ซ้ำทุกครั้งกันเหนียว
-            audioCtx.resume().catch(() => {});
-            // ขยายเสียงที่ได้ยินด้วย GainNode (ปรับดังขึ้นได้จากปุ่ม 🔊)
-            const mediaStream = new MediaStream([track.mediaStreamTrack]);
-            const source = audioCtx.createMediaStreamSource(mediaStream);
-            const gainNode = audioCtx.createGain();
-            gainNode.gain.value = volumeBoost;
-            source.connect(gainNode).connect(audioCtx.destination);
-            gainNodesRef.current[participant.identity] = gainNode;
-          }
-          upsertParticipant({
-            sid: participant.sid, identity: participant.identity, name: participant.name || "เพื่อน",
-            hasVideo: participant.isCameraEnabled,
-          });
+          if (track.kind === Track.Kind.Audio) attachAudio(track, participant.identity);
+          upsert(participant);
           if (track.kind === Track.Kind.Video) {
-            // ต้องรอให้ React วาดกล่องวิดีโอของคนนี้ในจอก่อน ถึงจะแนบวิดีโอเข้าไปได้ (setTimeout(0) เร็วเกินไป บางทีจับ element ไม่ทัน)
             let tries = 0;
             const tryAttach = () => {
               const el = document.getElementById(`vid-${participant.sid}`);
               if (el) { track.attach(el); return; }
-              if (tries++ < 20) setTimeout(tryAttach, 100);
+              if (tries++ < 30) setTimeout(tryAttach, 100);
             };
             tryAttach();
           }
         });
 
         room.on(RoomEvent.TrackUnsubscribed, (track, pub, participant) => {
-          if (track.kind === Track.Kind.Audio) delete gainNodesRef.current[participant.identity];
-          upsertParticipant({ sid: participant.sid, identity: participant.identity, name: participant.name || "เพื่อน", hasVideo: participant.isCameraEnabled });
+          if (track.kind === Track.Kind.Audio) {
+            const el = audioElsRef.current[participant.identity];
+            if (el) { try { track.detach(el); el.remove(); } catch (e) {} delete audioElsRef.current[participant.identity]; }
+          }
+          upsert(participant);
         });
 
         room.on(RoomEvent.ParticipantDisconnected, (participant) => {
           setParticipants((list) => list.filter((x) => x.sid !== participant.sid));
-          delete gainNodesRef.current[participant.identity];
+          const el = audioElsRef.current[participant.identity];
+          if (el) { try { el.remove(); } catch (e) {} delete audioElsRef.current[participant.identity]; }
         });
 
-        room.on(RoomEvent.TrackMuted, (pub, participant) => upsertParticipant({ sid: participant.sid, identity: participant.identity, name: participant.name || "เพื่อน", hasVideo: participant.isCameraEnabled }));
-        room.on(RoomEvent.TrackUnmuted, (pub, participant) => upsertParticipant({ sid: participant.sid, identity: participant.identity, name: participant.name || "เพื่อน", hasVideo: participant.isCameraEnabled }));
+        // เมื่อคนอื่นเปิด/ปิดกล้อง อัปเดตสถานะ hasVideo (ใช้ค่าจาก pub.isSubscribed จริง ไม่เดา)
+        const refreshVideo = (participant) => upsert(participant);
+        room.on(RoomEvent.TrackMuted, (pub, participant) => refreshVideo(participant));
+        room.on(RoomEvent.TrackUnmuted, (pub, participant) => refreshVideo(participant));
+        room.on(RoomEvent.LocalTrackPublished, () => {});
 
         await room.connect(data.url, data.token);
         const isFirstJoiner = room.remoteParticipants.size === 0;
         joinedAtRef.current = Date.now();
         if (userId) supabase.from("chat_messages").insert({ thread_id: threadId, sender_id: userId, text: isFirstJoiner ? `📞 ${displayName || "มีคน"} เริ่มการโทร` : `➡️ ${displayName || "มีคน"} เข้าร่วมสาย` }).then(() => {}, () => {});
+
+        // เปิดไมค์ให้เลย (เสียงเริ่มต้นดังปกติ) พร้อมตัดเสียงสะท้อน/เสียงรบกวน
         await room.localParticipant.setMicrophoneEnabled(true, { echoCancellation: true, noiseSuppression: true, autoGainControl: true });
+
+        // มีคนอยู่ในห้องอยู่ก่อนแล้ว -> subscribe เสียงเขาที่มีอยู่ (กันเคสเข้าห้องทีหลังแล้วไม่ได้ยินคนเก่า)
+        room.remoteParticipants.forEach((participant) => {
+          participant.trackPublications.forEach((pub) => {
+            if (pub.track && pub.kind === Track.Kind.Audio) attachAudio(pub.track, participant.identity);
+          });
+          upsert(participant);
+        });
+
         setConnecting(false);
 
-        // ส่งสัญญาณ presence ผ่าน Supabase แยกต่างหาก (แค่ให้คนอื่นในห้องแชทเห็นแบนเนอร์ "มีคนอยู่ในสาย" ไม่เกี่ยวกับการเชื่อมสายจริงที่ทำผ่าน LiveKit แล้ว)
         const presenceChannel = supabase.channel(`call-${threadId}`);
         presenceChannel.subscribe((status) => { if (status === "SUBSCRIBED") presenceChannel.track({ userId, name: displayName }); });
         presenceChannelRef.current = presenceChannel;
@@ -285,7 +306,8 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
     return () => {
       cancelled = true;
       roomRef.current?.disconnect();
-      audioCtxRef.current?.close().catch(() => {});
+      Object.values(audioElsRef.current).forEach((el) => { try { el.remove(); } catch (e) {} });
+      audioElsRef.current = {};
       if (presenceChannelRef.current) supabase.removeChannel(presenceChannelRef.current);
       if (userId && joinedAtRef.current) {
         const mins = Math.max(1, Math.round((Date.now() - joinedAtRef.current) / 60000));
@@ -299,68 +321,125 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
     await roomRef.current?.localParticipant.setMicrophoneEnabled(!next);
     setMuted(next);
   };
+
   const toggleCamera = async () => {
     const next = !cameraOn;
     await roomRef.current?.localParticipant.setCameraEnabled(next);
     if (next) setTimeout(() => {
       const pub = [...(roomRef.current?.localParticipant.videoTrackPublications.values() || [])][0];
       if (pub?.track && localVideoRef.current) pub.track.attach(localVideoRef.current);
-    }, 200);
+    }, 250);
     setCameraOn(next);
+  };
+
+  const toggleSpeaker = async () => {
+    const next = !speakerOn;
+    setSpeakerOn(next);
+    // setSinkId("") = อุปกรณ์เสียงเริ่มต้น; ผู้ใช้ desktop บางคนต่อหูฟังจะสลับได้ (มือถือไม่รองรับ ปุ่มนี้จะถูกซ่อนไว้)
+    for (const el of Object.values(audioElsRef.current)) {
+      if (el.setSinkId) { try { await el.setSinkId(""); } catch (e) {} }
+    }
+  };
+
+  const cycleVolume = () => {
+    setVolLevel((v) => VOLUME_LEVELS[(VOLUME_LEVELS.indexOf(v) + 1) % VOLUME_LEVELS.length]);
+  };
+
+  // รวมทุกคน (ตัวเอง + คนอื่น) เป็นรายการเดียวเพื่อจัดเลย์เอาต์
+  const allTiles = [{ sid: "self", name: `${displayName || "ฉัน"} (คุณ)`, isSelf: true, hasVideo: cameraOn }, ...participants];
+  const total = allTiles.length;
+  const focused = focusSid ? allTiles.find((x) => x.sid === focusSid) : allTiles.find((x) => x.hasVideo) || allTiles[0];
+  const others = allTiles.filter((x) => x.sid !== focused?.sid);
+
+  const VideoTile = ({ tile, big }) => {
+    const dim = big ? { width: "100%", height: "100%" } : { width: 100, height: 130 };
+    return (
+      <div onClick={() => { setLayout("speaker"); setFocusSid(tile.sid); }} style={{ textAlign: "center", cursor: "pointer", position: big ? "relative" : "static", ...(big ? { width: "100%", height: "100%" } : {}) }}>
+        {tile.hasVideo ? (
+          tile.isSelf ? (
+            <video ref={localVideoRef} autoPlay muted playsInline style={{ ...dim, borderRadius: 14, objectFit: "cover", background: "#000" }} />
+          ) : (
+            <video id={`vid-${tile.sid}`} autoPlay playsInline style={{ ...dim, borderRadius: 14, objectFit: "cover", background: "#000" }} />
+          )
+        ) : (
+          <div style={{ ...(big ? { width: "100%", height: "100%" } : {}), display: "grid", placeItems: "center", background: big ? "#111827" : "transparent", borderRadius: 14 }}>
+            <div style={{ width: big ? 96 : 64, height: big ? 96 : 64, borderRadius: "50%", background: tile.isSelf ? t.accent : "#5C7A99", display: "grid", placeItems: "center", fontSize: big ? 34 : 22, fontWeight: 700, color: "#fff" }}>{(tile.name || "?")[0]}</div>
+          </div>
+        )}
+        <div style={{ fontSize: 11, marginTop: big ? 0 : 6, color: "#fff", ...(big ? { position: "absolute", bottom: 10, left: 12, background: "rgba(0,0,0,.5)", padding: "3px 8px", borderRadius: 8 } : {}) }}>{tile.name}</div>
+      </div>
+    );
   };
 
   return (
     <ModalPortal>
-      <div style={{ position: "fixed", inset: 0, background: "#1A1F2E", zIndex: 100, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#fff" }}>
+      <div style={{ position: "fixed", inset: 0, background: "#0D0C0B", zIndex: 100, display: "flex", flexDirection: "column", alignItems: "center", color: "#fff" }}>
         {err ? (
-          <>
-            <div style={{ fontSize: 13, color: "#F0A0A0", textAlign: "center", padding: "0 30px", marginBottom: 20 }}>{err}</div>
+          <div style={{ margin: "auto", textAlign: "center", padding: "0 30px" }}>
+            <div style={{ fontSize: 13, color: "#F0A0A0", marginBottom: 20 }}>{err}</div>
             <button onClick={onClose} style={{ padding: "10px 20px", borderRadius: 12, border: "none", background: "#D9534F", color: "#fff", cursor: "pointer", fontWeight: 700 }}>ปิด</button>
-          </>
+          </div>
         ) : (
           <>
-            {onMinimize && (
-              <button onClick={onMinimize} style={{ position: "absolute", top: 20, right: 20, background: "rgba(255,255,255,.15)", border: "none", borderRadius: 16, width: 34, height: 34, cursor: "pointer", display: "grid", placeItems: "center" }} title="ย่อเก็บ (คุยต่อได้ ไปหน้าอื่นในแอปได้)">
-                <ChevronRight size={16} color="#fff" style={{ transform: "rotate(90deg)" }} />
+            {/* แถบบน: ย่อ + สลับเลย์เอาต์ */}
+            <div style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 18px 0" }}>
+              {onMinimize ? (
+                <button onClick={onMinimize} style={{ background: "rgba(255,255,255,.12)", border: "none", borderRadius: 16, width: 34, height: 34, cursor: "pointer", display: "grid", placeItems: "center" }} title="ย่อเก็บ">
+                  <ChevronRight size={16} color="#fff" style={{ transform: "rotate(90deg)" }} />
+                </button>
+              ) : <div style={{ width: 34 }} />}
+              <div style={{ fontSize: 13, opacity: .7 }}>{connecting ? "กำลังเชื่อมต่อ..." : `📞 ${total} คน`}</div>
+              <button onClick={() => { setLayout((l) => l === "grid" ? "speaker" : "grid"); setFocusSid(null); }} style={{ background: "rgba(255,255,255,.12)", border: "none", borderRadius: 16, width: 34, height: 34, cursor: "pointer", display: "grid", placeItems: "center" }} title={layout === "grid" ? "มุมมองเดี่ยว" : "มุมมองตาราง"}>
+                {layout === "grid" ? <Maximize2 size={15} color="#fff" /> : <LayoutGrid size={15} color="#fff" />}
               </button>
-            )}
-            <div style={{ fontSize: 13, opacity: .65, marginBottom: 20 }}>{connecting ? "กำลังเชื่อมต่อ..." : `📞 กำลังคุย · ${participants.length + 1} คน`}</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 14, justifyContent: "center", marginBottom: 40, maxWidth: 360 }}>
-              <div style={{ textAlign: "center" }}>
-                {cameraOn ? (
-                  <video ref={localVideoRef} autoPlay muted playsInline style={{ width: 100, height: 130, borderRadius: 14, objectFit: "cover", background: "#000" }} />
-                ) : (
-                  <div style={{ width: 64, height: 64, borderRadius: 32, background: "#EA9552", display: "grid", placeItems: "center", fontSize: 22, fontWeight: 700, margin: "0 auto" }}>{(displayName || "ฉ")[0]}</div>
-                )}
-                <div style={{ fontSize: 11, marginTop: 6 }}>{displayName || "ฉัน"} (คุณ)</div>
-              </div>
-              {participants.map((p) => (
-                <div key={p.sid} style={{ textAlign: "center" }}>
-                  {p.hasVideo ? (
-                    <video id={`vid-${p.sid}`} autoPlay playsInline style={{ width: 100, height: 130, borderRadius: 14, objectFit: "cover", background: "#000" }} />
-                  ) : (
-                    <div style={{ width: 64, height: 64, borderRadius: 32, background: "#5C7A99", display: "grid", placeItems: "center", fontSize: 22, fontWeight: 700, margin: "0 auto" }}>{(p.name || "?")[0]}</div>
-                  )}
-                  <div style={{ fontSize: 11, marginTop: 6 }}>{p.name}</div>
-                </div>
-              ))}
             </div>
-            <div style={{ display: "flex", gap: 16 }}>
+
+            {/* พื้นที่วิดีโอ */}
+            <div style={{ flex: 1, width: "100%", maxWidth: 500, display: "flex", flexDirection: "column", padding: 16, minHeight: 0 }}>
+              {layout === "speaker" && focused ? (
+                <>
+                  <div style={{ flex: 1, minHeight: 0, marginBottom: 10 }}><VideoTile tile={focused} big /></div>
+                  {others.length > 0 && (
+                    <div style={{ display: "flex", gap: 10, overflowX: "auto", flexShrink: 0, paddingBottom: 4 }}>
+                      {others.map((tile) => <VideoTile key={tile.sid} tile={tile} />)}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div style={{ flex: 1, display: "grid", gridTemplateColumns: total <= 1 ? "1fr" : "1fr 1fr", gap: 12, alignContent: "center", justifyItems: "center", minHeight: 0 }}>
+                  {allTiles.map((tile) => (
+                    <div key={tile.sid} style={{ width: "100%", aspectRatio: total <= 2 ? "3/4" : "1/1", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <VideoTile tile={tile} big={tile.hasVideo} />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* ปุ่มควบคุม */}
+            <div style={{ display: "flex", gap: 14, padding: "0 0 8px", flexWrap: "wrap", justifyContent: "center" }}>
               <button onClick={toggleMute} style={{ width: 54, height: 54, borderRadius: 27, background: muted ? "#D9534F" : "rgba(255,255,255,.15)", border: "none", cursor: "pointer", display: "grid", placeItems: "center" }} title={muted ? "เปิดไมค์" : "ปิดไมค์"}>
                 {muted ? <MicOff size={20} color="#fff" /> : <Mic size={20} color="#fff" />}
               </button>
               <button onClick={toggleCamera} style={{ width: 54, height: 54, borderRadius: 27, background: cameraOn ? "#2E9E6B" : "rgba(255,255,255,.15)", border: "none", cursor: "pointer", display: "grid", placeItems: "center" }} title={cameraOn ? "ปิดกล้อง" : "เปิดกล้อง"}>
-                {cameraOn ? <Camera size={20} color="#fff" /> : <Camera size={20} color="#fff" style={{ opacity: .6 }} />}
+                <Camera size={20} color="#fff" style={{ opacity: cameraOn ? 1 : .6 }} />
               </button>
-              <button onClick={() => { audioCtxRef.current?.resume().catch(() => {}); setVolumeBoost((v) => VOLUME_LEVELS[(VOLUME_LEVELS.indexOf(v) + 1) % VOLUME_LEVELS.length]); }} style={{ width: 54, height: 54, borderRadius: 27, background: volumeBoost > 1 ? "#2E9E6B" : "rgba(255,255,255,.15)", border: "none", cursor: "pointer", display: "grid", placeItems: "center", position: "relative" }} title="ปรับเสียงดังขึ้น">
+              <button onClick={cycleVolume} style={{ width: 54, height: 54, borderRadius: 27, background: volLevel > 1 ? "#2E9E6B" : "rgba(255,255,255,.15)", border: "none", cursor: "pointer", display: "grid", placeItems: "center", position: "relative" }} title="ปรับเสียงดังขึ้น">
                 <Volume2 size={20} color="#fff" />
-                {volumeBoost > 1 && <span style={{ position: "absolute", top: -2, right: -2, background: "#fff", color: "#2E9E6B", fontSize: 9, fontWeight: 800, borderRadius: 8, padding: "1px 5px" }}>{volumeBoost === 2.2 ? "MAX" : "+"}</span>}
+                {volLevel > 1 && <span style={{ position: "absolute", top: -2, right: -2, background: "#fff", color: "#2E9E6B", fontSize: 9, fontWeight: 800, borderRadius: 8, padding: "1px 5px" }}>{volLevel === 3 ? "MAX" : "+"}</span>}
               </button>
+              {canSwitchSpeaker && (
+                <button onClick={toggleSpeaker} style={{ width: 54, height: 54, borderRadius: 27, background: speakerOn ? "#2E9E6B" : "rgba(255,255,255,.15)", border: "none", cursor: "pointer", display: "grid", placeItems: "center" }} title="สลับลำโพง/หูฟัง">
+                  <Volume1 size={20} color="#fff" />
+                </button>
+              )}
               <button onClick={onClose} style={{ width: 54, height: 54, borderRadius: 27, background: "#D9534F", border: "none", cursor: "pointer", display: "grid", placeItems: "center" }} title="วางสาย">
                 <PhoneOff size={20} color="#fff" />
               </button>
             </div>
-            <div style={{ fontSize: 10.5, opacity: .5, marginTop: 14 }}>{volumeBoost === 0.5 ? "เบา (เหมือนคุยโทรศัพท์ปกติ)" : volumeBoost === 1 ? "เสียงปกติ" : volumeBoost === 1.6 ? "เสียงดังขึ้น" : "เสียงดังมาก"} · ใครในห้องแชทนี้ก็กดเข้าร่วมได้เลย</div>
+            <div style={{ fontSize: 10.5, opacity: .5, padding: "6px 20px 18px", textAlign: "center" }}>
+              {volLevel === 1 ? "เสียงปกติ" : volLevel === 1.5 ? "เสียงดังขึ้น" : volLevel === 2.2 ? "เสียงดังมาก" : "เสียงสูงสุด"} · แตะที่คนใดคนหนึ่งเพื่อขยายจอ
+            </div>
           </>
         )}
       </div>
