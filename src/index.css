@@ -16,8 +16,7 @@
 
 /* กล่องนอกสุดของแอป — สูงเต็มจอจริงเสมอ (ประกาศ vh ก่อนเป็น fallback แล้วทับด้วย dvh ถ้ารองรับ) */
 .rh-app-shell {
-  height: 100vh;
-  height: 100dvh;
+  min-height: 100vh;
 }
 
 html, body {
@@ -33,9 +32,7 @@ body {
   background-color: #0D0C0B;
   /* 🔒 ตรึง body แน่นๆ สำหรับ iOS Safari — overflow:hidden เฉยๆ ไม่พอ Safari ยังลากทั้งหน้าได้
      position:fixed คือวิธีเดียวที่ล็อกอยู่จริงบน iPhone (Android ไม่ได้รับผลกระทบ ทำงานเหมือนเดิม) */
-  position: fixed;
-  inset: 0;
-  width: 100%;
+  
 }
 
 #root {
