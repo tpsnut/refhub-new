@@ -233,13 +233,17 @@ function CallVideoTile({ tile, big, t, onExpand, attachLocalVideo, attachRemoteV
     <div onClick={onExpand} style={{ textAlign: "center", cursor: "pointer", position: big ? "relative" : "static", ...(big ? { width: "100%", height: "100%" } : {}) }}>
       {tile.hasVideo ? (
         tile.isSelf ? (
-          <video ref={attachLocalVideo} autoPlay muted playsInline style={{ ...dim, borderRadius: 14, objectFit: "cover", background: "#000" }} />
+          <video ref={attachLocalVideo} autoPlay muted playsInline style={{ ...dim, borderRadius: 14, objectFit: "cover", background: "#000", transform: "scaleX(-1)" }} />
         ) : (
           <video id={`vid-${tile.sid}`} ref={attachRemoteVideo(tile.sid)} autoPlay playsInline style={{ ...dim, borderRadius: 14, objectFit: "cover", background: "#000" }} />
         )
       ) : (
         <div style={{ ...(big ? { width: "100%", height: "100%" } : {}), display: "grid", placeItems: "center", background: big ? "#111827" : "transparent", borderRadius: 14 }}>
-          <div style={{ width: big ? 96 : 64, height: big ? 96 : 64, borderRadius: "50%", background: tile.isSelf ? t.accent : "#5C7A99", display: "grid", placeItems: "center", fontSize: big ? 34 : 22, fontWeight: 700, color: "#fff" }}>{(tile.name || "?")[0]}</div>
+          {tile.avatar ? (
+            <img src={tile.avatar} alt="" style={{ width: big ? 96 : 64, height: big ? 96 : 64, borderRadius: "50%", objectFit: "cover" }} />
+          ) : (
+            <div style={{ width: big ? 96 : 64, height: big ? 96 : 64, borderRadius: "50%", background: tile.isSelf ? t.accent : "#5C7A99", display: "grid", placeItems: "center", fontSize: big ? 34 : 22, fontWeight: 700, color: "#fff" }}>{(tile.name || "?")[0]}</div>
+          )}
         </div>
       )}
       <div style={{ fontSize: 11, marginTop: big ? 0 : 6, color: "#fff", ...(big ? { position: "absolute", bottom: 10, left: 12, background: "rgba(0,0,0,.5)", padding: "3px 8px", borderRadius: 8 } : {}) }}>{tile.name}</div>
@@ -247,13 +251,14 @@ function CallVideoTile({ tile, big, t, onExpand, attachLocalVideo, attachRemoteV
   );
 }
 
-function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName, session, onMinimize, onClose }) {
+function CallModal({ t, threadId, userId, displayName, myAvatar, otherMemberIds, roomName, session, minimized, onMinimize, onClose }) {
   const [participants, setParticipants] = useState([]); // [{sid, identity, name, hasVideo}]
   const [muted, setMuted] = useState(false);
   const [cameraOn, setCameraOn] = useState(false);
   const [connecting, setConnecting] = useState(true);
   const [err, setErr] = useState("");
   const [speakerLoud, setSpeakerLoud] = useState(false); // false = เบา (แนบหู) / true = ดัง (เปิดลำโพง) — เริ่มที่เบาเหมือนโทรศัพท์
+  const [speakerMuted, setSpeakerMuted] = useState(false); // ปิดเสียงลำโพง = ไม่ได้ยินเสียงคนอื่นเลย (ต่างจากปิดไมค์ที่เป็นเสียงเรา)
   const [layout, setLayout] = useState("grid"); // grid | speaker
   const [focusSid, setFocusSid] = useState(null); // sid ของคนที่ถูกเลือกให้เป็นจอใหญ่ (speaker view)
   const roomRef = useRef(null);
@@ -267,14 +272,15 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
 
   // ปรับความดังของทุก <audio> element เมื่อสลับเบา/ดัง
   useEffect(() => {
-    Object.values(audioElsRef.current).forEach((el) => { el.volume = speakerLoud ? LOUD_VOL : SOFT_VOL; });
-  }, [speakerLoud]);
+    Object.values(audioElsRef.current).forEach((el) => { el.muted = speakerMuted; el.volume = speakerLoud ? LOUD_VOL : SOFT_VOL; });
+  }, [speakerLoud, speakerMuted]);
 
   const attachAudio = (track, identity) => {
     const el = track.attach(); // คืน <audio> ที่ผูก track แล้ว
     el.autoplay = true;
     el.playsInline = true;
     el.volume = speakerLoud ? LOUD_VOL : SOFT_VOL;
+    el.muted = speakerMuted;
     document.body.appendChild(el);
     el.play?.().catch(() => {});
     audioElsRef.current[identity] = el;
@@ -296,7 +302,7 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
         const requestToken = async (tok) => {
           const rr = await fetch("/api/livekit-token", {
             method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ roomName: `refhub-${threadId}`, participantName: displayName, sessionId: crypto.randomUUID(), callerToken: tok }),
+            body: JSON.stringify({ roomName: `refhub-${threadId}`, participantName: displayName, avatar: myAvatar || "", sessionId: crypto.randomUUID(), callerToken: tok }),
           });
           return { ok: rr.ok, data: await rr.json() };
         };
@@ -318,11 +324,12 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
 
         const upsert = (participant) => {
           // ข้ามตัวเอง (local participant) — ตัวเองโชว์ผ่านกล่อง "self" อยู่แล้ว
-          // ถ้าไม่ข้าม พอกดปิด/เปิดไมค์ตัวเอง event จะ fire แล้วเพิ่มตัวเองเข้า list -> โปรไฟล์ซ้อน
           if (participant.isLocal || participant.identity === roomRef.current?.localParticipant?.identity) return;
+          let avatar = "";
+          try { avatar = JSON.parse(participant.metadata || "{}").avatar || ""; } catch (e) {}
           setParticipants((list) => {
             const others = list.filter((x) => x.sid !== participant.sid);
-            return [...others, { sid: participant.sid, identity: participant.identity, name: participant.name || "เพื่อน", hasVideo: participant.isCameraEnabled }];
+            return [...others, { sid: participant.sid, identity: participant.identity, name: participant.name || "เพื่อน", hasVideo: participant.isCameraEnabled, avatar }];
           });
         };
 
@@ -430,7 +437,7 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
   };
 
   // รวมทุกคน (ตัวเอง + คนอื่น) เป็นรายการเดียวเพื่อจัดเลย์เอาต์
-  const allTiles = [{ sid: "self", name: `${displayName || "ฉัน"} (คุณ)`, isSelf: true, hasVideo: cameraOn }, ...participants];
+  const allTiles = [{ sid: "self", name: `${displayName || "ฉัน"} (คุณ)`, isSelf: true, hasVideo: cameraOn, avatar: myAvatar || "" }, ...participants];
   const total = allTiles.length;
   const focused = focusSid ? allTiles.find((x) => x.sid === focusSid) : allTiles.find((x) => x.hasVideo) || allTiles[0];
   const others = allTiles.filter((x) => x.sid !== focused?.sid);
@@ -438,7 +445,7 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
 
   return (
     <ModalPortal>
-      <div style={{ position: "fixed", inset: 0, background: "#0D0C0B", zIndex: 100, display: "flex", flexDirection: "column", alignItems: "center", color: "#fff" }}>
+      <div style={{ position: "fixed", inset: 0, background: "#0D0C0B", zIndex: 100, display: minimized ? "none" : "flex", flexDirection: "column", alignItems: "center", color: "#fff" }}>
         {err ? (
           <div style={{ margin: "auto", textAlign: "center", padding: "0 30px" }}>
             <div style={{ fontSize: 13, color: "#F0A0A0", marginBottom: 20 }}>{err}</div>
@@ -491,6 +498,9 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
               </button>
               <button onClick={() => setSpeakerLoud((s) => !s)} style={{ width: 54, height: 54, borderRadius: 27, background: speakerLoud ? "#2E9E6B" : "rgba(255,255,255,.15)", border: "none", cursor: "pointer", display: "grid", placeItems: "center" }} title={speakerLoud ? "ปิดลำโพง (เสียงเบาแนบหู)" : "เปิดลำโพง (เสียงดัง)"}>
                 {speakerLoud ? <Volume2 size={20} color="#fff" /> : <Volume1 size={20} color="#fff" />}
+              </button>
+              <button onClick={() => setSpeakerMuted((m) => !m)} style={{ width: 54, height: 54, borderRadius: 27, background: speakerMuted ? "#D9534F" : "rgba(255,255,255,.15)", border: "none", cursor: "pointer", display: "grid", placeItems: "center" }} title={speakerMuted ? "เปิดเสียง (ได้ยินคนอื่น)" : "ปิดเสียง (ไม่ได้ยินคนอื่น)"}>
+                {speakerMuted ? <VolumeX size={20} color="#fff" /> : <Volume2 size={20} color="#fff" />}
               </button>
               <button onClick={onClose} style={{ width: 54, height: 54, borderRadius: 27, background: "#D9534F", border: "none", cursor: "pointer", display: "grid", placeItems: "center" }} title="วางสาย">
                 <PhoneOff size={20} color="#fff" />
@@ -1305,8 +1315,8 @@ export default function RefHub() {
         )}
         {accountSettingsOpen && <AccountSettingsModal t={t} authProfile={authProfile} userId={userId} session={session} close={() => setAccountSettingsOpen(false)} />}
         {chatOpen && <ChatModal t={t} M={M} mentor={mentor} setMentor={setMentor} authProfile={authProfile} setAuthProfile={setAuthProfile} customMentors={customMentors} setCustomMentors={setCustomMentors} userId={userId} session={session} goals={goals} askAiTopic={askAiTopic} close={() => { setChatOpen(false); setAskAiTopic(null); }} />}
-        {activeCall && !callMinimized && (
-          <CallModal t={t} threadId={activeCall.threadId} userId={userId} displayName={profile?.name} otherMemberIds={activeCall.otherMemberIds} roomName={activeCall.roomName} session={session} onMinimize={() => setCallMinimized(true)} onClose={() => { setActiveCall(null); setCallMinimized(false); }} />
+        {activeCall && (
+          <CallModal t={t} threadId={activeCall.threadId} userId={userId} displayName={profile?.name} myAvatar={profile?.avatar} otherMemberIds={activeCall.otherMemberIds} roomName={activeCall.roomName} session={session} minimized={callMinimized} onMinimize={() => setCallMinimized(true)} onClose={() => { setActiveCall(null); setCallMinimized(false); }} />
         )}
         {activeCall && callMinimized && (
           <button onClick={() => setCallMinimized(false)} style={{ position: "fixed", bottom: 90, right: 16, zIndex: 90, background: "#2E9E6B", border: "none", borderRadius: 24, padding: "10px 16px", display: "flex", alignItems: "center", gap: 8, cursor: "pointer", boxShadow: "0 6px 18px rgba(0,0,0,.25)" }}>
@@ -3748,6 +3758,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
   const [confirmLeave, setConfirmLeave] = useState(false); // "ยืนยัน" | "" -> โหมด: "leave" (ออกจากห้อง) หรือ "delete" (ลบถาวร)
   const [showMembers, setShowMembers] = useState(false);
   const [callParticipants, setCallParticipants] = useState([]); // คนที่กำลังอยู่ในสายเสียงของห้องนี้ตอนนี้ (ไม่รวมตัวเอง ไว้โชว์แบนเนอร์เตือน)
+  const [callDetail, setCallDetail] = useState(null); // สรุปประวัติการโทร (เปิดเมื่อกดที่ข้อความโทร) { starter, joiners[], durationMins, at }
   // เสียงเรียกเข้าย้ายไปที่ IncomingCallWatcher ระดับแอปแล้ว (ทำงานทุกหน้า) — ตรงนี้เหลือแค่แบนเนอร์ในห้อง กันเสียงซ้อนกัน
   useEffect(() => {
     const isMeInThisCall = activeCall?.threadId === thread.id;
@@ -3950,15 +3961,33 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
                     <button onClick={saveEdit} style={{ ...ghost, color: t.accent }}><Check size={16} color={t.accent} /></button>
                     <button onClick={() => setEditingId(null)} style={ghost}><X size={16} color={t.faint} /></button>
                   </div>
-                ) : (
-                  <div style={{ background: mine ? t.accent : t.surface, color: mine ? t.onAccent : t.text, padding: m.attachment_url ? 6 : "9px 13px", borderRadius: 14, fontSize: 13.5, lineHeight: 1.4, border: mine ? "none" : `1px solid ${t.border}` }}>
+                ) : (() => {
+                  const isCallMsg = m.text && /^(📞|➡️|⬅️)/.test(m.text);
+                  const openCallDetail = () => {
+                    // รวบรวมข้อความโทรทั้งชุดรอบๆ ข้อความนี้ (คั่นด้วยช่องว่างเวลา > 3 ชม. ถือเป็นคนละสาย)
+                    const callMsgs = messages.filter((x) => x.text && /^(📞|➡️|⬅️)/.test(x.text)).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+                    const idx = callMsgs.findIndex((x) => x.id === m.id);
+                    let start = idx, end = idx;
+                    while (start > 0 && (new Date(callMsgs[start].created_at) - new Date(callMsgs[start - 1].created_at)) < 3 * 3600 * 1000) start--;
+                    while (end < callMsgs.length - 1 && (new Date(callMsgs[end + 1].created_at) - new Date(callMsgs[end].created_at)) < 3 * 3600 * 1000) end++;
+                    const group = callMsgs.slice(start, end + 1);
+                    const nameOf = (mm) => senderMap[mm.sender_id]?.name || (mm.sender_id === userId ? profile?.name : "เพื่อน");
+                    const starter = group.find((g) => g.text.startsWith("📞"));
+                    const joiners = group.filter((g) => g.text.startsWith("➡️")).map(nameOf);
+                    const durations = group.filter((g) => g.text.startsWith("⬅️")).map((g) => { const mt = g.text.match(/(\d+)\s*นาที/); return mt ? +mt[1] : 0; });
+                    const maxDur = durations.length ? Math.max(...durations) : 0;
+                    setCallDetail({ starter: starter ? nameOf(starter) : "—", joiners, durationMins: maxDur, at: group[0]?.created_at });
+                  };
+                  return (
+                  <div onClick={isCallMsg ? openCallDetail : undefined} style={{ background: mine ? t.accent : t.surface, color: mine ? t.onAccent : t.text, padding: m.attachment_url ? 6 : "9px 13px", borderRadius: 14, fontSize: 13.5, lineHeight: 1.4, border: mine ? "none" : `1px solid ${t.border}`, cursor: isCallMsg ? "pointer" : "default" }}>
                     {m.attachment_type === "image" && <img src={m.attachment_url} alt="" onClick={() => setLightbox(m.attachment_url)} style={{ maxWidth: 200, borderRadius: 10, display: "block", cursor: "pointer" }} />}
                     {m.attachment_type === "file" && (
                       <a href={m.attachment_url} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: 6, color: "inherit", textDecoration: "underline", padding: "3px 7px" }}><FileText size={14} /> {m.attachment_name}</a>
                     )}
-                    {m.text && <div style={{ padding: m.attachment_url ? "6px 7px 2px" : 0 }}>{m.text}{m.edited_at && <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 6 }}>(แก้ไขแล้ว)</span>}</div>}
+                    {m.text && <div style={{ padding: m.attachment_url ? "6px 7px 2px" : 0 }}>{m.text}{m.edited_at && <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 6 }}>(แก้ไขแล้ว)</span>}{isCallMsg && <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 6 }}>· ดูรายละเอียด</span>}</div>}
                   </div>
-                )}
+                  );
+                })()}
               </div>
               {mine && editingId !== m.id && !m.attachment_url && (
                 <div style={{ display: "flex", gap: 10, marginTop: 3, paddingRight: 2 }}>
@@ -3990,6 +4019,30 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
         <button onClick={send} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: 46, display: "grid", placeItems: "center" }}><Send size={17} /></button>
       </div>
       {lightbox && <ImageLightbox src={lightbox} onClose={() => setLightbox(null)} />}
+      {callDetail && (
+        <div style={overlay} onClick={() => setCallDetail(null)}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 380, background: t.page, borderRadius: 20, padding: 24, textAlign: "center" }}>
+            <div style={{ width: 56, height: 56, borderRadius: 28, background: "#2E9E6B", display: "grid", placeItems: "center", margin: "0 auto 14px" }}><Phone size={26} color="#fff" /></div>
+            <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 4 }}>ประวัติการโทร</div>
+            <div style={{ fontSize: 12, color: t.sub, marginBottom: 18 }}>{callDetail.at ? new Date(callDetail.at).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" }) : ""}</div>
+            <div style={{ textAlign: "left", display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 13, color: t.sub }}>📞 คนเริ่มโทร</span>
+                <span style={{ fontSize: 13.5, fontWeight: 700, color: t.text }}>{callDetail.starter}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <span style={{ fontSize: 13, color: t.sub }}>➡️ คนเข้าร่วม</span>
+                <span style={{ fontSize: 13.5, fontWeight: 700, color: t.text, textAlign: "right", maxWidth: "60%" }}>{callDetail.joiners.length > 0 ? callDetail.joiners.join(", ") : "— ไม่มีใครเข้าร่วม"}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${t.border}`, paddingTop: 12 }}>
+                <span style={{ fontSize: 13, color: t.sub }}>⏱️ ระยะเวลารวม</span>
+                <span style={{ fontSize: 15, fontWeight: 800, color: t.accent }}>{callDetail.durationMins > 0 ? `${callDetail.durationMins} นาที` : "ไม่ถึง 1 นาที"}</span>
+              </div>
+            </div>
+            <button onClick={() => setCallDetail(null)} style={{ marginTop: 22, width: "100%", padding: "12px 0", borderRadius: 12, border: "none", background: t.accent, color: t.onAccent, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>ปิด</button>
+          </div>
+        </div>
+      )}
       {showMembers && <RoomMembersModal t={t} threadId={thread.id} session={session} close={() => setShowMembers(false)} />}
 
     </div>
@@ -5562,6 +5615,7 @@ function IncomingCallWatcher({ t, userId, onAccept }) {
 
   const playRing = () => { stopRing(); ringRef.current = startCallRingtone(); };
   const stopRing = () => { try { ringRef.current?.stop(); } catch (e) {} ringRef.current = null; };
+  const prevCountRef = useRef({}); // threadId -> จำนวนคนในสายครั้งก่อน (ใช้จับ "สายใหม่จริงๆ" = เพิ่งเปลี่ยนจาก 0 เป็นมีคน)
 
   useEffect(() => {
     if (!userId) return;
@@ -5576,10 +5630,15 @@ function IncomingCallWatcher({ t, userId, onAccept }) {
         ch.on("presence", { event: "sync" }, () => {
           const state = ch.presenceState();
           const people = Object.values(state).flat().filter((p) => p.userId && p.userId !== userId);
+          const prevCount = prevCountRef.current[threadId] ?? 0;
+          prevCountRef.current[threadId] = people.length;
           if (people.length > 0 && !dismissedRef.current[threadId]) {
+            // ดังเฉพาะตอน "สายใหม่จริงๆ" = เพิ่งเปลี่ยนจากไม่มีใครเป็นมีคน
+            // ถ้า sync ครั้งแรกแล้วมีคนอยู่ก่อนแล้ว (เช่นเพิ่งออกจากห้อง/วางสายเอง แต่คนอื่นยังคุยอยู่) แสดงแบนเนอร์เงียบๆ ไม่ต้องดัง
+            const isNewCall = prevCount === 0;
             setIncoming((cur) => {
               if (cur) return cur; // มีสายค้างอยู่แล้ว ไม่ทับ
-              playRing();
+              if (isNewCall) playRing();
               return { threadId, callerName: people[0]?.name || "มีคน", otherIds: people.map((p) => p.userId) };
             });
           } else if (people.length === 0) {
