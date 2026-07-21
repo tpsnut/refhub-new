@@ -6,19 +6,6 @@
   overflow-wrap: break-word; /* ตัดคำ/ข้อความยาวๆ ให้ขึ้นบรรทัดใหม่แทนที่จะดันขอบจอออกไปเรื่อยๆ */
 }
 
-/* 📐 ความสูงจอ "ที่เห็นจริง" — ใช้ dvh (dynamic viewport height) ที่เบราว์เซอร์คำนวณเองไม่ต้องพึ่ง JS
-   ค่า 1vh เป็น fallback สำหรับเบราว์เซอร์เก่าที่ยังไม่รู้จัก dvh
-   ที่ต้องใช้ dvh เพราะ 100vh บน iOS Safari สูงเกินจอจริง (แถบ URL กิน) ทำให้แอปล้น/เด้ง/ขาดครึ่ง */
-:root { --rh-vh: 1vh; }
-@supports (height: 1dvh) {
-  :root { --rh-vh: 1dvh; }
-}
-
-/* กล่องนอกสุดของแอป — สูงเต็มจอจริงเสมอ (ประกาศ vh ก่อนเป็น fallback แล้วทับด้วย dvh ถ้ารองรับ) */
-.rh-app-shell {
-  min-height: 100vh;
-}
-
 html, body {
   height: 100%;
   overflow: hidden; /* กัน scroll เด้ง (rubber-band) ของ iOS Safari — เนื้อหาจริงเลื่อนในกล่องข้างในของแอปแทน */
@@ -30,22 +17,9 @@ body {
   margin: 0;
   font-family: sans-serif;
   background-color: #0D0C0B;
-  /* 🔒 ตรึง body แน่นๆ สำหรับ iOS Safari — overflow:hidden เฉยๆ ไม่พอ Safari ยังลากทั้งหน้าได้
-     position:fixed คือวิธีเดียวที่ล็อกอยู่จริงบน iPhone (Android ไม่ได้รับผลกระทบ ทำงานเหมือนเดิม) */
-  
 }
 
 #root {
   height: 100%;
   overflow: hidden;
-}
-
-/* 🍎 กัน iOS ซูมอัตโนมัติเวลาจิ้มช่องกรอกข้อความ — Safari จะซูมเข้าทันทีถ้า font-size ของ input < 16px
-   (นี่คือสาเหตุหลักที่ "จอขยับมั่วเวลานิ้วไปโดน" บน iPhone แต่ Android ปกติ)
-   ทริค: คงขนาดที่ตาเห็นเท่าเดิม แต่บอก Safari ว่าเป็น 16px ด้วย font-size + transform ย่อกลับ
-   วิธีที่ง่ายและชัวร์กว่า: บังคับ font-size ขั้นต่ำ 16px เฉพาะบนอุปกรณ์สัมผัส แล้วปล่อยให้ดีไซน์ปรับตาม */
-@media (pointer: coarse) {
-  input, select, textarea {
-    font-size: 16px !important;
-  }
 }
