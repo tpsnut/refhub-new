@@ -240,6 +240,7 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
   const videoTracksRef = useRef({}); // sid -> video track ของคนอื่น (เก็บไว้ re-attach ใหม่ทุกครั้งที่ layout/จอเปลี่ยน กันจอดำ)
   const localVideoRef = useRef(null);
   const presenceChannelRef = useRef(null);
+  const watchChannelRef = useRef(null);
   const joinedAtRef = useRef(null);
   const VOLUME_LEVELS = [1, 1.5, 2.2, 3]; // ปกติ -> ดัง -> ดังมาก -> สูงสุด -> วนกลับ
 
@@ -343,6 +344,10 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
         const presenceChannel = supabase.channel(`call-${threadId}`);
         presenceChannel.subscribe((status) => { if (status === "SUBSCRIBED") presenceChannel.track({ userId, name: displayName }); });
         presenceChannelRef.current = presenceChannel;
+        // ช่องที่ 2 แยกหัวข้อ สำหรับ IncomingCallWatcher ระดับแอป (กันชนหัวข้อเดียวกับ ChatRoomPage ที่ทำให้ crash)
+        const watchChannel = supabase.channel(`callwatch-${threadId}`);
+        watchChannel.subscribe((status) => { if (status === "SUBSCRIBED") watchChannel.track({ userId, name: displayName }); });
+        watchChannelRef.current = watchChannel;
 
         notifyPush(otherMemberIds || [], `📞 ${displayName || "มีคน"}กำลังโทรเข้ามา`, `ในห้อง ${roomName || ""}`, session?.access_token);
       } catch (e) {
@@ -356,6 +361,7 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
       Object.values(audioElsRef.current).forEach((el) => { try { el.remove(); } catch (e) {} });
       audioElsRef.current = {};
       if (presenceChannelRef.current) supabase.removeChannel(presenceChannelRef.current);
+      if (watchChannelRef.current) supabase.removeChannel(watchChannelRef.current);
       if (userId && joinedAtRef.current) {
         const mins = Math.max(1, Math.round((Date.now() - joinedAtRef.current) / 60000));
         supabase.from("chat_messages").insert({ thread_id: threadId, sender_id: userId, text: `⬅️ ${displayName || "มีคน"} วางสาย (คุยอยู่ ${mins} นาที)` }).then(() => {}, () => {});
@@ -5566,10 +5572,10 @@ function IncomingCallWatcher({ t, userId, onAccept }) {
       if (cancelled || !mine) return;
       for (const row of mine) {
         const threadId = row.thread_id;
-        const ch = supabase.channel(`call-${threadId}`);
+        const ch = supabase.channel(`callwatch-${threadId}`);
         ch.on("presence", { event: "sync" }, () => {
           const state = ch.presenceState();
-          const people = Object.values(state).flat().filter((p) => p.userId !== userId);
+          const people = Object.values(state).flat().filter((p) => p.userId && p.userId !== userId);
           if (people.length > 0 && !dismissedRef.current[threadId]) {
             setIncoming((cur) => {
               if (cur) return cur; // มีสายค้างอยู่แล้ว ไม่ทับ
