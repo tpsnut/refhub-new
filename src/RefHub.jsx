@@ -293,18 +293,33 @@ function CallModal({ t, threadId, userId, displayName, otherMemberIds, roomName,
           if (sess?.session?.access_token) freshToken = sess.session.access_token;
         } catch (e) {}
 
-        const r = await fetch("/api/livekit-token", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ roomName: `refhub-${threadId}`, participantName: displayName, sessionId: crypto.randomUUID(), callerToken: freshToken }),
-        });
-        const data = await r.json();
-        if (!r.ok) throw new Error(data.error);
+        const requestToken = async (tok) => {
+          const rr = await fetch("/api/livekit-token", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ roomName: `refhub-${threadId}`, participantName: displayName, sessionId: crypto.randomUUID(), callerToken: tok }),
+          });
+          return { ok: rr.ok, data: await rr.json() };
+        };
+
+        let { ok, data } = await requestToken(freshToken);
+        // ถ้ายืนยันตัวตนไม่ผ่าน -> รีเฟรช session ขอ token ใหม่แล้วลองอีกครั้ง (กันเคส token หมดอายุตอนกดรับสาย)
+        if (!ok) {
+          try {
+            const { data: refreshed } = await supabase.auth.refreshSession();
+            const newTok = refreshed?.session?.access_token;
+            if (newTok) { const retry = await requestToken(newTok); ok = retry.ok; data = retry.data; }
+          } catch (e) {}
+        }
+        if (!ok) throw new Error(data.error);
         if (cancelled) return;
 
         const room = new Room({ adaptiveStream: true, dynacast: true });
         roomRef.current = room;
 
         const upsert = (participant) => {
+          // ข้ามตัวเอง (local participant) — ตัวเองโชว์ผ่านกล่อง "self" อยู่แล้ว
+          // ถ้าไม่ข้าม พอกดปิด/เปิดไมค์ตัวเอง event จะ fire แล้วเพิ่มตัวเองเข้า list -> โปรไฟล์ซ้อน
+          if (participant.isLocal || participant.identity === roomRef.current?.localParticipant?.identity) return;
           setParticipants((list) => {
             const others = list.filter((x) => x.sid !== participant.sid);
             return [...others, { sid: participant.sid, identity: participant.identity, name: participant.name || "เพื่อน", hasVideo: participant.isCameraEnabled }];
