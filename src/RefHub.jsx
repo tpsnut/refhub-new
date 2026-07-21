@@ -1257,7 +1257,7 @@ function AuthPage() {
       }
       if (mode === "login" && loginWith === "pin") {
         if (!username.trim() || !pin) { setErr("กรอกชื่อผู้ใช้และ PIN ให้ครบ"); setLoading(false); return; }
-        const lookupR = await fetch("/api/pin-lookup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: username.trim() }) });
+        const lookupR = await fetch("/api/link-pin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "lookup", username: username.trim() }) });
         const lookupData = await lookupR.json();
         if (!lookupR.ok) { recordFail(); setErr(lookupData.error || "ไม่พบชื่อผู้ใช้นี้"); setLoading(false); return; }
         const { error } = await supabase.auth.signInWithPassword({ email: lookupData.email, password: pin });
@@ -2215,7 +2215,7 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts, authProfil
   const setPremiumAi = async (id, premium_ai) => { await supabase.from("profiles").update({ premium_ai }).eq("id", id); loadMembers(); };
   const setCanUseSorting = async (id, can_use_sorting) => { await supabase.from("profiles").update({ can_use_sorting }).eq("id", id); loadMembers(); };
   const approveSwitch = async (targetUserId) => {
-    const r = await fetch("/api/sorting-group", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "approve_switch", targetUserId, callerToken: session?.access_token }) });
+    const r = await fetch("/api/chat-room", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "approve_switch", targetUserId, callerToken: session?.access_token }) });
     const data = await r.json();
     if (data.error) alert("อนุมัติไม่สำเร็จ: " + data.error);
     loadMembers();
@@ -2697,7 +2697,7 @@ function ChatEntryPage({ t, M, userId, authProfile, session, openThread }) {
     if (!friendCode.trim()) { setErr("กรอกโค้ดก่อน"); return; }
     setBusy(true);
     try {
-      const r = await fetch("/api/chat-start-direct", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ friendCode, callerToken: session?.access_token }) });
+      const r = await fetch("/api/chat-room", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "start_direct", friendCode, callerToken: session?.access_token }) });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error);
       await loadRooms();
@@ -2955,7 +2955,7 @@ function SortingQuizModal({ t, userId, authProfile, session, openThread, close }
   // 👑 แอดมิน: เข้าได้ทั้ง 3 ห้องอัตโนมัติ ไม่ต้องทำแบบทดสอบ
   useEffect(() => {
     if (!isAdmin) return;
-    fetch("/api/sorting-group", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "admin_join_all", callerToken: session?.access_token }) })
+    fetch("/api/chat-room", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "admin_join_all", callerToken: session?.access_token }) })
       .then((r) => r.json()).then((d) => { if (d.error) console.error("เข้าห้องคัดสรรอัตโนมัติไม่สำเร็จ:", d.error); });
   }, [isAdmin]);
 
@@ -3002,7 +3002,7 @@ function SortingQuizModal({ t, userId, authProfile, session, openThread, close }
   const finalize = async (group) => {
     setBusy(true); setErr("");
     try {
-      const r = await fetch("/api/sorting-group", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "sort", group, callerToken: session?.access_token }) });
+      const r = await fetch("/api/chat-room", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "sort", group, callerToken: session?.access_token }) });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error);
       setResultGroup(group);
@@ -3014,7 +3014,7 @@ function SortingQuizModal({ t, userId, authProfile, session, openThread, close }
     if (!switchTarget) return;
     setBusy(true);
     try {
-      const r = await fetch("/api/sorting-group", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "request_switch", group: switchTarget, callerToken: session?.access_token }) });
+      const r = await fetch("/api/chat-room", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "request_switch", group: switchTarget, callerToken: session?.access_token }) });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error);
       setErr(""); alert("ส่งคำขอสลับกลุ่มแล้ว รอแอดมินอนุมัติ");
@@ -3256,7 +3256,7 @@ function Hi5ProfileModal({ t, profileId, userId, authProfile, session, openThrea
   const startChat = async () => {
     setMsgBusy(true); setMsgErr("");
     try {
-      const r = await fetch("/api/chat-start-direct", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ targetUserId: profileId, callerToken: session?.access_token }) });
+      const r = await fetch("/api/chat-room", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "start_direct", targetUserId: profileId, callerToken: session?.access_token }) });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error);
       openThread(data.threadId, data.friendName, false);
