@@ -5,7 +5,7 @@ import {
   Sun, Moon, Send, Check, Trash2, X, Wallet, Target, BookOpen, ChevronRight,
   Sparkles, Clock, Search, Volume2, VolumeX, Pencil, Download, ArrowLeft, Users, Camera, Phone, Mic, MicOff, PhoneOff, RefreshCw,
   Utensils, Car, ShoppingBag, Receipt, Gamepad2, HeartPulse, Briefcase, Gift, Coffee, Music,
-  Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi, MessageCircle, MoreVertical, KeyRound, MapPin, Copy, LockKeyhole, LogOut, LayoutGrid, Maximize2, Volume1
+  Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi, MessageCircle, MoreVertical, KeyRound, MapPin, Copy, LockKeyhole, LogOut, LayoutGrid, Maximize2, Volume1, Settings, Bookmark, Share2, Repeat2
 } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, ResponsiveContainer, Tooltip } from "recharts";
 // 📝 BlockNote — editor แบบ Notion (toggle, checklist, หัวข้อ, แนบรูป/ไฟล์) สำหรับหน้าโน้ตฉบับเต็ม
@@ -1234,7 +1234,7 @@ export default function RefHub() {
 
         {/* CONTENT — ความสูงหารด้วยสเกลชดเชย transform:scale ข้างบน กันตอนขยายฟอนต์แล้วท้ายเนื้อหาจมใต้ Dock */}
         <div style={{ position: "relative", zIndex: 2, padding: `16px 18px ${page === "chat" || page === "chatRoom" ? 16 : 120}px`, height: `calc(${(10000 / fontScale).toFixed(2)}vh - 76px)`, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
-          {page === "home" && <HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, goalDone, goalPct, setGoals, notes, setPage, setChatOpen, userId, playlist, setCommunityOpen }} />}
+          {page === "home" && <HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, goalDone, goalPct, setGoals, notes, setPage, setChatOpen, userId, playlist, setCommunityOpen, isCustomMentor: !MENTORS[mentor] }} />}
           {page === "ledger" && <FinancePage {...{ t, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt), userId }} />}
           {page === "note" && <NotePage {...{ t, notes, setNotes, isNight, userId, session, authProfile }} />}
           {page === "ideas" && <IdeasPage t={t} M={M} userId={userId} session={session} authProfile={authProfile} setAuthProfile={setAuthProfile} setNotes={setNotes} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} />}
@@ -1994,7 +1994,7 @@ function TrackRow({ t, M, track, active, playing, folders, isFirst, isLast, onPl
 const greet = (night) => { const h = new Date().getHours(); return h < 6 ? "ดึกแล้ว พักบ้างนะ 🌙" : h < 12 ? "สวัสดีตอนเช้า ☀️" : h < 18 ? "สวัสดีตอนบ่าย 🌤️" : "ค่ำแล้ว วันนี้เป็นไงบ้าง 🌙"; };
 
 // ---------------- Home ----------------
-function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, goalDone, goalPct, setGoals, notes, setPage, setChatOpen, userId, playlist, setCommunityOpen }) {
+function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, goalDone, goalPct, setGoals, notes, setPage, setChatOpen, userId, playlist, setCommunityOpen, isCustomMentor }) {
   const [viewingPinned, setViewingPinned] = useState(null);
   const [commentingId, setCommentingId] = useState(null);
   const pinnedMedia = (playlist || []).filter((p) => p.kind === "link" && p.pinnedHome);
@@ -2069,13 +2069,14 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, goa
         <div style={{ position: "absolute", bottom: -44, left: -24, width: 105, height: 105, borderRadius: "50%", background: "rgba(255,255,255,.06)", pointerEvents: "none" }} />
         <div style={{ position: "relative" }}>
           <button onClick={() => setMentorPick(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontSize: 11.5, fontWeight: 700, color: M.accent, letterSpacing: .5 }}>{isNight ? "โค้ชคืนนี้" : "โค้ชวันนี้"} · {M.name.toUpperCase()}</span>
+            <span style={{ fontSize: isCustomMentor ? 14.5 : 11.5, fontWeight: isCustomMentor ? 800 : 700, color: isCustomMentor ? "#141414" : "rgba(255,255,255,.55)", letterSpacing: .5 }}>{isNight ? "โค้ชคืนนี้" : "โค้ชวันนี้"} · {M.name.toUpperCase()}</span>
             <span style={{ fontSize: 10, color: "rgba(255,255,255,.5)" }}>เปลี่ยน ▾</span>
           </button>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, gap: 14 }}>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 16.5, fontWeight: 700, color: "#fff", lineHeight: 1.4, minHeight: 46 }}>“{quote}”</div>
-              <button onClick={() => setChatOpen(true)} style={{ marginTop: 14, border: "none", cursor: "pointer", background: "rgba(255,255,255,.18)", color: "#fff", fontWeight: 700, fontSize: 13, padding: "9px 16px", borderRadius: 18, display: "inline-flex", alignItems: "center", gap: 6 }}>คุยกับโค้ช <ChevronRight size={15} /></button>
+              <style>{`@keyframes rh-coach-nudge { 0%,88%,100% { transform: translateX(0) rotate(0); } 90% { transform: translateX(-2px) rotate(-1.5deg); } 92% { transform: translateX(2px) rotate(1.5deg); } 94% { transform: translateX(-2px) rotate(-1deg); } 96% { transform: translateX(2px) rotate(1deg); } 98% { transform: translateX(0) rotate(0); } }`}</style>
+              <button onClick={() => setChatOpen(true)} style={{ marginTop: 14, border: "none", cursor: "pointer", background: "rgba(255,255,255,.18)", color: "#fff", fontWeight: 700, fontSize: 13, padding: "9px 16px", borderRadius: 18, display: "inline-flex", alignItems: "center", gap: 6, animation: "rh-coach-nudge 5s ease-in-out infinite" }}>คุยกับโค้ช <ChevronRight size={15} /></button>
             </div>
             <Ring pct={goalPct} color="#fff" label="เป้าหมาย" />
           </div>
@@ -2107,19 +2108,14 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, goa
       </div>
 
       {/* 🌐 การ์ดเข้าชุมชน — พรีวิวเนื้อหาจริง + ลูกโลกหมุน */}
-      <button onClick={() => setCommunityOpen(true)} style={{ marginTop: 16, width: "100%", border: "none", cursor: "pointer", textAlign: "left", borderRadius: 20, padding: 16, background: "linear-gradient(135deg, #2A2420, #16130F)", position: "relative", overflow: "hidden", boxShadow: "0 8px 22px rgba(0,0,0,.3)" }}>
-        <div style={{ position: "absolute", top: -30, right: -30, width: 120, height: 120, borderRadius: "50%", background: "radial-gradient(circle, rgba(242,135,46,.22), transparent 70%)", pointerEvents: "none" }} />
+      <button onClick={() => setCommunityOpen(true)} style={{ marginTop: 16, width: "100%", border: `1px solid ${t.border}`, cursor: "pointer", textAlign: "left", borderRadius: 20, padding: 16, background: `linear-gradient(135deg, ${t.accent}22, ${t.surface})`, position: "relative", overflow: "hidden", boxShadow: t.star ? "none" : "0 8px 22px rgba(40,50,70,.10)" }}>
+        <div style={{ position: "absolute", top: -30, right: -30, width: 120, height: 120, borderRadius: "50%", background: `radial-gradient(circle, ${t.accent}33, transparent 70%)`, pointerEvents: "none" }} />
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", position: "relative" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ width: 40, height: 40, borderRadius: "50%", position: "relative", overflow: "hidden", background: "radial-gradient(circle at 32% 28%, #F2A65A, #E0742A 55%, #A34D12)", boxShadow: "0 0 14px rgba(242,135,46,.55)", flexShrink: 0 }}>
-              <style>{`@keyframes rh-home-globe { from { background-position: 0 0; } to { background-position: 40px 0; } }`}</style>
-              <div style={{ position: "absolute", inset: 0, background: "repeating-linear-gradient(90deg, transparent 0 5px, rgba(255,255,255,.22) 5px 6px)", animation: "rh-home-globe 3.5s linear infinite" }} />
-              <div style={{ position: "absolute", inset: 0, background: "repeating-linear-gradient(0deg, transparent 0 6px, rgba(255,255,255,.13) 6px 7px)" }} />
-              <div style={{ position: "absolute", inset: 0, borderRadius: "50%", boxShadow: "inset -3px -3px 8px rgba(0,0,0,.4)" }} />
-            </div>
+            <GlobeIcon size={40} accent={t.accent} />
             <div>
-              <div style={{ fontSize: 14, fontWeight: 800, color: "#fff" }}>ชุมชน</div>
-              <div style={{ fontSize: 11, color: "rgba(255,255,255,.55)" }}>โลกโซเชียลของ PKNOW</div>
+              <div style={{ fontSize: 14, fontWeight: 800, color: t.text }}>ชุมชน</div>
+              <div style={{ fontSize: 11, color: t.sub }}>โลกโซเชียลของ PKNOW</div>
             </div>
           </div>
           {commPreview.newCount > 0 && <div style={{ background: "#E0563E", color: "#fff", fontSize: 10.5, fontWeight: 800, padding: "3px 9px", borderRadius: 10 }}>{commPreview.newCount} ใหม่</div>}
@@ -2128,15 +2124,15 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, goa
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, position: "relative" }}>
             <div style={{ display: "flex" }}>
               {commPreview.avatars.map((a, i) => (
-                <div key={i} style={{ width: 26, height: 26, borderRadius: 13, marginLeft: i === 0 ? 0 : -8, border: "2px solid #201B17", overflow: "hidden", background: colorFor(a.name || "?"), display: "grid", placeItems: "center", color: "#fff", fontSize: 11, fontWeight: 700 }}>
+                <div key={i} style={{ width: 26, height: 26, borderRadius: 13, marginLeft: i === 0 ? 0 : -8, border: `2px solid ${t.surface}`, overflow: "hidden", background: colorFor(a.name || "?"), display: "grid", placeItems: "center", color: "#fff", fontSize: 11, fontWeight: 700 }}>
                   {a.avatar_url ? <img src={a.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : (a.name || "?")[0]}
                 </div>
               ))}
             </div>
-            <span style={{ fontSize: 12, color: "rgba(255,255,255,.7)" }}>แตะเพื่อดูโพสต์ล่าสุดของทุกคน</span>
+            <span style={{ fontSize: 12, color: t.sub }}>แตะเพื่อดูโพสต์ล่าสุดของทุกคน</span>
           </div>
         ) : (
-          <div style={{ fontSize: 12, color: "rgba(255,255,255,.6)", marginTop: 12, position: "relative" }}>แตะเพื่อเข้าสู่โลกโซเชียล — โพสต์ แชร์ ติดตามกัน</div>
+          <div style={{ fontSize: 12, color: t.sub, marginTop: 12, position: "relative" }}>แตะเพื่อเข้าสู่โลกโซเชียล — โพสต์ แชร์ ติดตามกัน</div>
         )}
       </button>
 
@@ -2868,16 +2864,28 @@ const timeAgo = (ts) => {
   return new Date(ts).toLocaleDateString("th-TH", { day: "numeric", month: "short" });
 };
 
-// 🌍 ลูกโลกหมุนได้ — ทางเข้า Community ใน navbar (เส้น grid วิ่งหมุนรอบ + เรืองแสงนุ่มๆ)
-function SpinningGlobe({ onClick, size = 38 }) {
+// 🌍 ลูกโลก — มีดาวข้างใน + เส้น grid หมุน (สีตามธีม ส่งผ่าน accent)
+function GlobeIcon({ size = 40, accent = "#F2872E" }) {
+  const stars = [[26, 22, 1.5], [58, 34, 1], [40, 55, 1.8], [70, 62, 1.2], [30, 74, 1], [78, 20, .9], [18, 45, 1.1], [52, 78, 1.3]];
+  return (
+    <div style={{ width: size, height: size, borderRadius: "50%", position: "relative", overflow: "hidden", background: `radial-gradient(circle at 32% 28%, ${accent}, ${accent}CC 55%, ${accent}66)`, boxShadow: `0 0 14px ${accent}8C`, flexShrink: 0 }}>
+      <style>{`@keyframes rh-globe-spin { from { background-position: 0 0; } to { background-position: ${size}px 0; } } @keyframes rh-globe-twinkle { 0%,100% { opacity: .35; } 50% { opacity: 1; } }`}</style>
+      <svg viewBox="0 0 100 100" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}>
+        {stars.map(([cx, cy, r], i) => (
+          <circle key={i} cx={cx} cy={cy} r={r} fill="#FFFFFF" style={{ animation: `rh-globe-twinkle ${1.5 + (i % 4) * 0.4}s ease-in-out infinite`, animationDelay: `${i * 0.2}s` }} />
+        ))}
+      </svg>
+      <div style={{ position: "absolute", inset: 0, background: "repeating-linear-gradient(90deg, transparent 0 5px, rgba(255,255,255,.18) 5px 6px)", animation: "rh-globe-spin 3.5s linear infinite" }} />
+      <div style={{ position: "absolute", inset: 0, borderRadius: "50%", boxShadow: "inset -3px -3px 8px rgba(0,0,0,.4), inset 2px 2px 6px rgba(255,255,255,.25)" }} />
+    </div>
+  );
+}
+
+// 🌍 ลูกโลกหมุนได้ — ทางเข้า Community (ใช้ GlobeIcon ที่มีดาวข้างใน)
+function SpinningGlobe({ onClick, size = 38, accent }) {
   return (
     <button onClick={onClick} title="เข้าสู่ชุมชน" style={{ background: "none", border: "none", padding: 0, cursor: "pointer", flexShrink: 0, lineHeight: 0 }}>
-      <div style={{ width: size, height: size, borderRadius: "50%", position: "relative", overflow: "hidden", background: "radial-gradient(circle at 32% 28%, #F2A65A, #E0742A 60%, #A34D12)", boxShadow: "0 0 12px rgba(242,135,46,.5)" }}>
-        <style>{`@keyframes rh-globe-lon { from { background-position: 0 0; } to { background-position: ${size}px 0; } }`}</style>
-        <div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "repeating-linear-gradient(90deg, transparent 0 5px, rgba(255,255,255,.22) 5px 6px)", animation: "rh-globe-lon 3.5s linear infinite" }} />
-        <div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "repeating-linear-gradient(0deg, transparent 0 6px, rgba(255,255,255,.13) 6px 7px)" }} />
-        <div style={{ position: "absolute", inset: 0, borderRadius: "50%", boxShadow: "inset -3px -3px 8px rgba(0,0,0,.4), inset 2px 2px 6px rgba(255,255,255,.25)" }} />
-      </div>
+      <GlobeIcon size={size} accent={accent} />
     </button>
   );
 }
@@ -2885,23 +2893,36 @@ function SpinningGlobe({ onClick, size = 38 }) {
 // 🌐 หน้า Community เต็มจอ — ถ้าไม่มีสิทธิ์ใช้จะขึ้นชวนปลดล็อก (แบบ 2)
 function CommunityOverlay({ t, userId, authProfile, session, openThread, close }) {
   const canUse = authProfile?.can_use_community || authProfile?.role === "admin";
+  const [tab, setTab] = useState("feed"); // feed | search | bookmarks | profile
+  const [viewProfileId, setViewProfileId] = useState(userId);
+  const [showSettings, setShowSettings] = useState(false);
+  const openProfile = (id) => { setViewProfileId(id); setTab("profile"); };
+
+  const tabs = [
+    { k: "feed", ic: "🏠", label: "ฟีด" },
+    { k: "search", ic: "🔍", label: "ค้นหา" },
+    { k: "bookmarks", ic: "🔖", label: "บันทึก" },
+    { k: "profile", ic: "👤", label: "ฉัน" },
+  ];
+
   return (
     <ModalPortal>
       <div style={{ position: "fixed", inset: 0, background: t.page, zIndex: 100, display: "flex", flexDirection: "column" }}>
         {/* หัวแถบ */}
         <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 18px 12px", borderBottom: `1px solid ${t.border}`, flexShrink: 0 }}>
           <button onClick={close} style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 18, width: 36, height: 36, cursor: "pointer", display: "grid", placeItems: "center" }}><ArrowLeft size={18} color={t.text} /></button>
-          <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-            <SpinningGlobe onClick={() => {}} size={30} />
+          <div style={{ display: "flex", alignItems: "center", gap: 9, flex: 1 }}>
+            <GlobeIcon size={30} accent={t.accent} />
             <div style={{ fontSize: 17, fontWeight: 800, color: t.text }}>ชุมชน</div>
           </div>
+          {canUse && <button onClick={() => setShowSettings(true)} style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 18, width: 36, height: 36, cursor: "pointer", display: "grid", placeItems: "center" }}><Settings size={17} color={t.text} /></button>}
         </div>
-        <div style={{ flex: 1, overflowY: "auto", padding: "16px 18px 40px" }}>
-          {canUse ? (
-            <CommunityEntryView t={t} userId={userId} authProfile={authProfile} session={session} openThread={openThread} />
-          ) : (
+
+        {/* เนื้อหา */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "16px 18px 90px" }}>
+          {!canUse ? (
             <div style={{ textAlign: "center", padding: "50px 20px" }}>
-              <div style={{ width: 90, height: 90, borderRadius: 45, margin: "0 auto 22px", position: "relative", overflow: "hidden", background: "radial-gradient(circle at 32% 28%, #F2A65A, #E0742A 60%, #A34D12)", boxShadow: "0 0 30px rgba(242,135,46,.4)", opacity: .6 }}>
+              <div style={{ width: 90, height: 90, borderRadius: 45, margin: "0 auto 22px", position: "relative", overflow: "hidden", background: `radial-gradient(circle at 32% 28%, ${t.accent}, ${t.accent}CC 60%, ${t.accent}66)`, boxShadow: `0 0 30px ${t.accent}66`, opacity: .6 }}>
                 <div style={{ position: "absolute", inset: 0, background: "repeating-linear-gradient(90deg, transparent 0 10px, rgba(255,255,255,.20) 10px 12px)" }} />
                 <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center" }}><LockKeyhole size={34} color="#fff" /></div>
               </div>
@@ -2909,40 +2930,39 @@ function CommunityOverlay({ t, userId, authProfile, session, openThread, close }
               <div style={{ fontSize: 13.5, color: t.sub, lineHeight: 1.7, maxWidth: 300, margin: "0 auto 24px" }}>ชุมชนคือพื้นที่โซเชียลลับของ PKNOW — โพสต์ แชร์ ติดตามกันได้เหมือนโซเชียลส่วนตัว ต้องปลดล็อกสิทธิ์ก่อนถึงจะเข้าได้</div>
               <div style={{ ...card(t), padding: 16, maxWidth: 320, margin: "0 auto", textAlign: "left" }}>
                 <div style={{ fontSize: 12.5, fontWeight: 700, color: t.text, marginBottom: 10 }}>✨ ปลดล็อกแล้วได้อะไรบ้าง</div>
-                {["📝 โพสต์รูป + ข้อความ", "❤️ ไลก์ · 💬 คอมเมนต์ · 🔁 รีโพสต์", "👥 ติดตามคนอื่น มีฟีดส่วนตัว", "👤 หน้าโปรไฟล์โซเชียลของคุณเอง"].map((x, i) => (
+                {["📝 โพสต์รูป + ข้อความ", "❤️ ไลก์ · 💬 คอมเมนต์ · 🔁 รีโพสต์", "👥 ติดตามคนอื่น มีฟีดส่วนตัว", "🔖 บันทึกโพสต์แยกหมวดหมู่"].map((x, i) => (
                   <div key={i} style={{ fontSize: 12.5, color: t.sub, padding: "5px 0" }}>{x}</div>
                 ))}
               </div>
               <div style={{ fontSize: 12, color: t.faint, marginTop: 22 }}>ติดต่อแอดมินเพื่อขอปลดล็อกสิทธิ์ชุมชน</div>
             </div>
+          ) : (
+            <>
+              {tab === "feed" && <CommunityFeed t={t} userId={userId} session={session} onOpenProfile={openProfile} />}
+              {tab === "search" && <CommunitySearch t={t} userId={userId} onOpenProfile={openProfile} />}
+              {tab === "bookmarks" && <CommunityBookmarks t={t} userId={userId} onOpenProfile={openProfile} />}
+              {tab === "profile" && <CommunityProfile t={t} userId={userId} authProfile={authProfile} profileId={viewProfileId} session={session} onOpenProfile={(id) => setViewProfileId(id)} />}
+            </>
           )}
         </div>
+
+        {/* แท็บบาร์ล่าง */}
+        {canUse && (
+          <div style={{ display: "flex", borderTop: `1px solid ${t.border}`, background: t.surface, padding: "8px 0 10px", flexShrink: 0 }}>
+            {tabs.map((tb) => {
+              const on = tab === tb.k;
+              return (
+                <button key={tb.k} onClick={() => { setTab(tb.k); if (tb.k === "profile") setViewProfileId(userId); }} style={{ flex: 1, background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+                  <span style={{ fontSize: 19, filter: on ? "none" : "grayscale(.6) opacity(.6)" }}>{tb.ic}</span>
+                  <span style={{ fontSize: 9.5, fontWeight: 700, color: on ? t.accent : t.faint }}>{tb.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
+      {showSettings && <CommunitySettings t={t} userId={userId} close={() => setShowSettings(false)} />}
     </ModalPortal>
-  );
-}
-
-// 🌐 Community — Social Feed แบบ Threads (Feed คนที่ติดตาม + โปรไฟล์เรา + โพสต์/ไลก์/คอมเมนต์/รีโพสต์/follow)
-function CommunityEntryView({ t, userId, authProfile, session, openThread }) {
-  const [tab, setTab] = useState("feed"); // feed | search | profile
-  const [viewProfileId, setViewProfileId] = useState(null); // ดูโปรไฟล์คนอื่น (null = ไม่ได้ดู)
-  const tabBtn = (k, label) => (
-    <button onClick={() => { setTab(k); if (k === "profile") setViewProfileId(userId); if (k !== "profile") setViewProfileId(null); }} style={{ flex: 1, padding: "9px 0", borderRadius: 10, border: "none", cursor: "pointer", background: tab === k ? "#F2872E" : "none", color: tab === k ? "#fff" : t.sub, fontSize: 12.5, fontWeight: 700 }}>{label}</button>
-  );
-
-  return (
-    <div>
-      {/* แท็บเมนูบน */}
-      <div style={{ display: "flex", gap: 6, marginBottom: 14, ...card(t), padding: 4 }}>
-        {tabBtn("feed", "🏠 ฟีด")}
-        {tabBtn("search", "🔍 ค้นหา")}
-        {tabBtn("profile", "👤 ฉัน")}
-      </div>
-
-      {tab === "feed" && <CommunityFeed t={t} userId={userId} session={session} onOpenProfile={(id) => { setViewProfileId(id); setTab("profile"); }} />}
-      {tab === "search" && <CommunitySearch t={t} userId={userId} onOpenProfile={(id) => { setViewProfileId(id); setTab("profile"); }} />}
-      {tab === "profile" && <CommunityProfile t={t} userId={userId} authProfile={authProfile} profileId={viewProfileId || userId} session={session} onOpenProfile={(id) => setViewProfileId(id)} />}
-    </div>
   );
 }
 
@@ -3025,6 +3045,19 @@ function PostCard({ t, post, userId, onOpenProfile, onChanged }) {
     onChanged?.();
   };
   const deletePost = async () => { await supabase.from("posts").delete().eq("id", post.id); onChanged?.(); };
+  const [bookmarked, setBookmarked] = useState(post.bookmarked || false);
+  const [showBmMenu, setShowBmMenu] = useState(false);
+  const toggleBookmark = async () => {
+    if (bookmarked) { setBookmarked(false); await supabase.from("post_bookmarks").delete().eq("user_id", userId).eq("post_id", post.id); }
+    else setShowBmMenu(true); // เปิดให้เลือกหมวดก่อนบันทึก
+  };
+  const share = async () => {
+    const text = (post.text || "") + "\n\n— แชร์จากชุมชน PKNOW";
+    try {
+      if (navigator.share) await navigator.share({ text });
+      else { await navigator.clipboard.writeText(text); alert("คัดลอกข้อความโพสต์แล้ว"); }
+    } catch (e) {}
+  };
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(post.text || "");
   const saveEdit = async () => { await supabase.from("posts").update({ text: editText.trim() }).eq("id", post.id); setEditing(false); onChanged?.(); };
@@ -3070,11 +3103,18 @@ function PostCard({ t, post, userId, onOpenProfile, onChanged }) {
           <MessageCircle size={17} color={t.faint} /> <span style={{ fontSize: 12 }}>{post.comment_count > 0 ? post.comment_count : ""}</span>
         </button>
         <button onClick={doRepost} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 5, color: reposted ? "#2E9E6B" : t.faint }}>
-          <Wifi size={16} color={reposted ? "#2E9E6B" : t.faint} style={{ transform: "rotate(90deg)" }} />
+          <Repeat2 size={18} color={reposted ? "#2E9E6B" : t.faint} />
+        </button>
+        <button onClick={share} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", color: t.faint }}>
+          <Share2 size={16} color={t.faint} />
+        </button>
+        <button onClick={toggleBookmark} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", color: bookmarked ? t.accent : t.faint }}>
+          <Bookmark size={16} fill={bookmarked ? t.accent : "none"} color={bookmarked ? t.accent : t.faint} />
         </button>
         {post.author_id === userId && !post.repost_of && <button onClick={() => { setEditText(post.text || ""); setEditing(true); }} style={{ background: "none", border: "none", cursor: "pointer", marginLeft: "auto", fontSize: 11, color: t.faint }}>แก้ไข</button>}
         {post.author_id === userId && <button onClick={deletePost} style={{ background: "none", border: "none", cursor: "pointer", marginLeft: post.repost_of ? "auto" : 12, fontSize: 11, color: t.faint }}>ลบ</button>}
       </div>
+      {showBmMenu && <BookmarkPicker t={t} userId={userId} postId={post.id} onDone={() => { setShowBmMenu(false); setBookmarked(true); }} close={() => setShowBmMenu(false)} />}
       {/* คอมเมนต์ */}
       {showComments && (
         <div style={{ marginLeft: 48, marginTop: 12, borderTop: `1px solid ${t.border}`, paddingTop: 10 }}>
@@ -3113,6 +3153,119 @@ function PostCard({ t, post, userId, onOpenProfile, onChanged }) {
 }
 
 // หน้า Feed — โพสต์ของคนที่เรา follow (+ ตัวเราเอง) + ปุ่มโพสต์ใหม่
+// เลือกหมวดตอนบันทึกโพสต์ (สร้างหมวดใหม่ได้ด้วย)
+function BookmarkPicker({ t, userId, postId, onDone, close }) {
+  const [cats, setCats] = useState([]);
+  const [newCat, setNewCat] = useState("");
+  const load = async () => { const { data } = await supabase.from("bookmark_categories").select("*").eq("user_id", userId).order("created_at"); setCats(data || []); };
+  useEffect(() => { load(); }, []);
+  const saveTo = async (categoryId) => {
+    await supabase.from("post_bookmarks").upsert({ user_id: userId, post_id: postId, category_id: categoryId });
+    onDone?.();
+  };
+  const addCat = async () => {
+    const n = newCat.trim(); if (!n) return;
+    const { data } = await supabase.from("bookmark_categories").insert({ user_id: userId, name: n }).select().maybeSingle();
+    setNewCat(""); if (data) saveTo(data.id);
+  };
+  return (
+    <ModalPortal>
+      <div style={overlay} onClick={close}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "20px 20px 0 0", padding: 20, maxHeight: "70vh", overflowY: "auto" }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: t.text, marginBottom: 14, textAlign: "center" }}>🔖 บันทึกลงหมวด</div>
+          <button onClick={() => saveTo(null)} style={{ width: "100%", ...card(t), padding: 13, marginBottom: 8, cursor: "pointer", border: `1px solid ${t.border}`, textAlign: "left", fontSize: 13, fontWeight: 700, color: t.text }}>📌 บันทึกทั่วไป (ไม่จัดหมวด)</button>
+          {cats.map((c) => (
+            <button key={c.id} onClick={() => saveTo(c.id)} style={{ width: "100%", ...card(t), padding: 13, marginBottom: 8, cursor: "pointer", border: `1px solid ${t.border}`, textAlign: "left", fontSize: 13, fontWeight: 700, color: t.text }}>📁 {c.name}</button>
+          ))}
+          <div style={{ display: "flex", gap: 6, marginTop: 12 }}>
+            <input value={newCat} onChange={(e) => setNewCat(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addCat()} placeholder="+ สร้างหมวดใหม่..." style={{ ...input(t), flex: 1 }} />
+            <button onClick={addCat} style={{ background: t.accent, border: "none", color: t.onAccent, fontWeight: 700, padding: "0 16px", borderRadius: 12, cursor: "pointer" }}>สร้าง</button>
+          </div>
+        </div>
+      </div>
+    </ModalPortal>
+  );
+}
+
+// หน้าบันทึก (บุ๊กมาร์ก) — แยกตามหมวด กันรก
+function CommunityBookmarks({ t, userId, onOpenProfile }) {
+  const [cats, setCats] = useState([]);
+  const [activeCat, setActiveCat] = useState("all"); // all | uncat | <catId>
+  const [posts, setPosts] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const { data: cs } = await supabase.from("bookmark_categories").select("*").eq("user_id", userId).order("created_at");
+      setCats(cs || []);
+      let q = supabase.from("post_bookmarks").select("post_id, category_id").eq("user_id", userId);
+      if (activeCat === "uncat") q = q.is("category_id", null);
+      else if (activeCat !== "all") q = q.eq("category_id", activeCat);
+      const { data: bms } = await q;
+      const ids = (bms || []).map((b) => b.post_id);
+      if (ids.length === 0) { setPosts([]); setLoading(false); return; }
+      const { data: raw } = await supabase.from("posts").select("*, author:profiles!posts_author_id_fkey(id, name, avatar_url, community_name, community_avatar, community_use_main)").in("id", ids).order("created_at", { ascending: false });
+      const enriched = await enrichPosts(raw || [], userId);
+      setPosts(enriched.map((p) => ({ ...p, bookmarked: true })));
+    } catch (e) {}
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, [activeCat]);
+
+  const chip = (k, label) => (
+    <button onClick={() => setActiveCat(k)} style={{ padding: "6px 14px", borderRadius: 16, border: `1.5px solid ${activeCat === k ? t.accent : t.border}`, background: activeCat === k ? t.accent : "transparent", color: activeCat === k ? t.onAccent : t.sub, fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>{label}</button>
+  );
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 14, paddingBottom: 4 }}>
+        {chip("all", "ทั้งหมด")}
+        {chip("uncat", "📌 ทั่วไป")}
+        {cats.map((c) => chip(c.id, `📁 ${c.name}`))}
+      </div>
+      {loading ? <div style={{ textAlign: "center", padding: 30, color: t.faint, fontSize: 13 }}>กำลังโหลด...</div>
+        : posts.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "40px 16px" }}>
+            <div style={{ fontSize: 32, marginBottom: 8 }}>🔖</div>
+            <div style={{ fontSize: 13.5, fontWeight: 700, color: t.text, marginBottom: 4 }}>ยังไม่มีโพสต์ที่บันทึก</div>
+            <div style={{ fontSize: 12, color: t.sub }}>กดไอคอน 🔖 ใต้โพสต์เพื่อบันทึกไว้อ่านทีหลัง</div>
+          </div>
+        ) : posts.map((p) => <PostCard key={p.id} t={t} post={p} userId={userId} onOpenProfile={onOpenProfile} onChanged={load} />)}
+    </div>
+  );
+}
+
+// ⚙️ ตั้งค่าชุมชน
+function CommunitySettings({ t, userId, close }) {
+  const [cats, setCats] = useState([]);
+  const load = async () => { const { data } = await supabase.from("bookmark_categories").select("*").eq("user_id", userId).order("created_at"); setCats(data || []); };
+  useEffect(() => { load(); }, []);
+  const delCat = async (id) => { await supabase.from("bookmark_categories").delete().eq("id", id); load(); };
+
+  return (
+    <ModalPortal>
+      <div style={overlay} onClick={close}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "20px 20px 0 0", padding: 20, maxHeight: "80vh", overflowY: "auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>⚙️ ตั้งค่าชุมชน</div>
+            <button onClick={close} style={{ background: "none", border: "none", cursor: "pointer" }}><X size={20} color={t.sub} /></button>
+          </div>
+          <div style={{ fontSize: 12, fontWeight: 800, color: t.faint, textTransform: "uppercase", letterSpacing: .5, marginBottom: 8 }}>จัดการหมวดหมู่บันทึก</div>
+          {cats.length === 0 ? <div style={{ fontSize: 12.5, color: t.sub, padding: "8px 0" }}>ยังไม่มีหมวดหมู่ — สร้างได้ตอนกดบันทึกโพสต์</div>
+            : cats.map((c) => (
+              <div key={c.id} style={{ ...card(t), padding: 12, marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: t.text }}>📁 {c.name}</span>
+                <button onClick={() => delCat(c.id)} style={{ background: "none", border: "none", cursor: "pointer" }}><Trash2 size={15} color="#D9534F" /></button>
+              </div>
+            ))}
+          <div style={{ fontSize: 11.5, color: t.faint, marginTop: 6 }}>ลบหมวดแล้วโพสต์ที่บันทึกไว้จะกลับไปอยู่ "ทั่วไป" ไม่หายไป</div>
+        </div>
+      </div>
+    </ModalPortal>
+  );
+}
+
 function CommunityFeed({ t, userId, session, onOpenProfile }) {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -3156,12 +3309,13 @@ function CommunityFeed({ t, userId, session, onOpenProfile }) {
 async function enrichPosts(raw, userId) {
   if (raw.length === 0) return [];
   const ids = raw.map((p) => p.id);
-  const [{ data: likes }, { data: myLikes }, { data: comments }] = await Promise.all([
+  const [{ data: likes }, { data: myLikes }, { data: comments }, { data: myBms }] = await Promise.all([
     supabase.from("post_likes").select("post_id").in("post_id", ids),
     supabase.from("post_likes").select("post_id").in("post_id", ids).eq("user_id", userId),
     supabase.from("post_comments").select("post_id").in("post_id", ids),
+    supabase.from("post_bookmarks").select("post_id").in("post_id", ids).eq("user_id", userId),
   ]);
-  const likeCount = {}, commentCount = {}; const myLiked = new Set((myLikes || []).map((l) => l.post_id));
+  const likeCount = {}, commentCount = {}; const myLiked = new Set((myLikes || []).map((l) => l.post_id)); const myBm = new Set((myBms || []).map((b) => b.post_id));
   (likes || []).forEach((l) => { likeCount[l.post_id] = (likeCount[l.post_id] || 0) + 1; });
   (comments || []).forEach((c) => { commentCount[c.post_id] = (commentCount[c.post_id] || 0) + 1; });
   // โหลดโพสต์ต้นฉบับของรีโพสต์
@@ -3171,7 +3325,7 @@ async function enrichPosts(raw, userId) {
     const { data: origs } = await supabase.from("posts").select("*, author:profiles!posts_author_id_fkey(id, name, avatar_url, community_name, community_avatar, community_use_main)").in("id", repostIds);
     (origs || []).forEach((o) => { origMap[o.id] = o; });
   }
-  return raw.map((p) => ({ ...p, like_count: likeCount[p.id] || 0, comment_count: commentCount[p.id] || 0, liked: myLiked.has(p.id), original: p.repost_of ? origMap[p.repost_of] : null }));
+  return raw.map((p) => ({ ...p, like_count: likeCount[p.id] || 0, comment_count: commentCount[p.id] || 0, liked: myLiked.has(p.id), bookmarked: myBm.has(p.id), original: p.repost_of ? origMap[p.repost_of] : null }));
 }
 
 // หน้าโปรไฟล์ — โพสต์ของคนนั้น + จำนวนผู้ติดตาม + ปุ่ม follow
