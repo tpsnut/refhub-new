@@ -2893,17 +2893,21 @@ function SpinningGlobe({ onClick, size = 38, accent }) {
 // 🌐 หน้า Community เต็มจอ — ถ้าไม่มีสิทธิ์ใช้จะขึ้นชวนปลดล็อก (แบบ 2)
 function CommunityOverlay({ t, userId, authProfile, session, openThread, close }) {
   const canUse = authProfile?.can_use_community || authProfile?.role === "admin";
-  const [tab, setTab] = useState("feed"); // feed | search | bookmarks | profile
+  const [tab, setTab] = useState("feed"); // feed | search | activity | profile
   const [viewProfileId, setViewProfileId] = useState(userId);
   const [showSettings, setShowSettings] = useState(false);
+  const [composing, setComposing] = useState(false);
+  const [feedKey, setFeedKey] = useState(0); // บังคับรีโหลดฟีดหลังโพสต์ใหม่
+  const [unread, setUnread] = useState(0);
   const openProfile = (id) => { setViewProfileId(id); setTab("profile"); };
 
-  const tabs = [
-    { k: "feed", ic: "🏠", label: "ฟีด" },
-    { k: "search", ic: "🔍", label: "ค้นหา" },
-    { k: "bookmarks", ic: "🔖", label: "บันทึก" },
-    { k: "profile", ic: "👤", label: "ฉัน" },
-  ];
+  // นับแจ้งเตือนที่ยังไม่อ่าน
+  useEffect(() => {
+    if (!canUse || !userId) return;
+    (async () => {
+      try { const { count } = await supabase.from("community_activity").select("*", { count: "exact", head: true }).eq("user_id", userId).eq("read", false); setUnread(count || 0); } catch (e) {}
+    })();
+  }, [userId, tab, canUse]);
 
   return (
     <ModalPortal>
@@ -2938,22 +2942,36 @@ function CommunityOverlay({ t, userId, authProfile, session, openThread, close }
             </div>
           ) : (
             <>
-              {tab === "feed" && <CommunityFeed t={t} userId={userId} session={session} onOpenProfile={openProfile} />}
+              {tab === "feed" && <CommunityFeed key={feedKey} t={t} userId={userId} session={session} onOpenProfile={openProfile} />}
               {tab === "search" && <CommunitySearch t={t} userId={userId} onOpenProfile={openProfile} />}
-              {tab === "bookmarks" && <CommunityBookmarks t={t} userId={userId} onOpenProfile={openProfile} />}
+              {tab === "activity" && <CommunityActivity t={t} userId={userId} onOpenProfile={openProfile} />}
               {tab === "profile" && <CommunityProfile t={t} userId={userId} authProfile={authProfile} profileId={viewProfileId} session={session} onOpenProfile={(id) => setViewProfileId(id)} />}
             </>
           )}
         </div>
 
-        {/* แท็บบาร์ล่าง */}
+        {/* แท็บบาร์ล่าง 5 อัน (ปุ่มโพสต์อยู่กลาง) */}
         {canUse && (
-          <div style={{ display: "flex", borderTop: `1px solid ${t.border}`, background: t.surface, padding: "8px 0 10px", flexShrink: 0 }}>
-            {tabs.map((tb) => {
+          <div style={{ display: "flex", alignItems: "center", borderTop: `1px solid ${t.border}`, background: t.surface, padding: "8px 0 10px", flexShrink: 0 }}>
+            {[{ k: "feed", ic: "🏠", label: "ฟีด" }, { k: "search", ic: "🔍", label: "ค้นหา" }].map((tb) => {
               const on = tab === tb.k;
               return (
-                <button key={tb.k} onClick={() => { setTab(tb.k); if (tb.k === "profile") setViewProfileId(userId); }} style={{ flex: 1, background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+                <button key={tb.k} onClick={() => setTab(tb.k)} style={{ flex: 1, background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
                   <span style={{ fontSize: 19, filter: on ? "none" : "grayscale(.6) opacity(.6)" }}>{tb.ic}</span>
+                  <span style={{ fontSize: 9.5, fontWeight: 700, color: on ? t.accent : t.faint }}>{tb.label}</span>
+                </button>
+              );
+            })}
+            {/* ปุ่มโพสต์กลาง */}
+            <button onClick={() => setComposing(true)} style={{ flex: 1, background: "none", border: "none", cursor: "pointer", display: "flex", justifyContent: "center" }}>
+              <span style={{ width: 42, height: 34, borderRadius: 11, background: t.accent, color: t.onAccent, display: "grid", placeItems: "center", fontSize: 22, fontWeight: 700, lineHeight: 1 }}>+</span>
+            </button>
+            {[{ k: "activity", ic: "♡", label: "กิจกรรม" }, { k: "profile", ic: "👤", label: "ฉัน" }].map((tb) => {
+              const on = tab === tb.k;
+              return (
+                <button key={tb.k} onClick={() => { setTab(tb.k); if (tb.k === "profile") setViewProfileId(userId); }} style={{ flex: 1, background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, position: "relative" }}>
+                  <span style={{ fontSize: tb.k === "activity" ? 21 : 19, lineHeight: 1, color: on ? t.accent : t.faint, filter: tb.k === "activity" ? "none" : (on ? "none" : "grayscale(.6) opacity(.6)") }}>{tb.ic}</span>
+                  {tb.k === "activity" && unread > 0 && <span style={{ position: "absolute", top: -2, right: "50%", marginRight: -16, background: "#E0563E", color: "#fff", fontSize: 8.5, fontWeight: 800, borderRadius: 7, padding: "1px 5px" }}>{unread > 9 ? "9+" : unread}</span>}
                   <span style={{ fontSize: 9.5, fontWeight: 700, color: on ? t.accent : t.faint }}>{tb.label}</span>
                 </button>
               );
@@ -2962,6 +2980,7 @@ function CommunityOverlay({ t, userId, authProfile, session, openThread, close }
         )}
       </div>
       {showSettings && <CommunitySettings t={t} userId={userId} close={() => setShowSettings(false)} />}
+      {composing && <ComposeModal t={t} userId={userId} onDone={() => { setComposing(false); setTab("feed"); setFeedKey((k) => k + 1); }} close={() => setComposing(false)} />}
     </ModalPortal>
   );
 }
@@ -3026,6 +3045,7 @@ function PostCard({ t, post, userId, onOpenProfile, onChanged }) {
   const doLike = async () => {
     const nx = !liked; setLiked(nx); setLikeCount((c) => c + (nx ? 1 : -1));
     await toggleLike(post.id, liked);
+    if (nx) logActivity({ userId: post.author_id, actorId: userId, type: "like", postId: post.id, preview: post.text || "" });
   };
   const loadComments = async () => {
     const { data } = await supabase.from("post_comments").select("*, author:profiles!post_comments_author_id_fkey(id, name, avatar_url)").eq("post_id", post.id).order("created_at", { ascending: true });
@@ -3036,15 +3056,23 @@ function PostCard({ t, post, userId, onOpenProfile, onChanged }) {
     const txt = commentText.trim(); if (!txt) return;
     setCommentText("");
     await supabase.from("post_comments").insert({ post_id: post.id, author_id: userId, text: txt });
+    logActivity({ userId: post.author_id, actorId: userId, type: "comment", postId: post.id, preview: txt });
     loadComments();
   };
   const doRepost = async () => {
     if (reposted) return;
     setReposted(true);
     await supabase.from("posts").insert({ author_id: userId, text: "", images: [], repost_of: post.id });
+    logActivity({ userId: post.author_id, actorId: userId, type: "repost", postId: post.id, preview: post.text || "" });
     onChanged?.();
   };
   const deletePost = async () => { await supabase.from("posts").delete().eq("id", post.id); onChanged?.(); };
+  const hideAuthor = async () => {
+    const nm = (author.community_use_main === false && author.community_name ? author.community_name : author.name) || "คนนี้";
+    if (!window.confirm(`ซ่อนโพสต์ของ ${nm} จากฟีด?\n(เลิกซ่อนได้ที่ ตั้งค่า > คนที่ซ่อนไว้)`)) return;
+    await supabase.from("community_hidden").upsert({ user_id: userId, hidden_id: post.author_id });
+    onChanged?.();
+  };
   const [bookmarked, setBookmarked] = useState(post.bookmarked || false);
   const [showBmMenu, setShowBmMenu] = useState(false);
   const toggleBookmark = async () => {
@@ -3113,6 +3141,7 @@ function PostCard({ t, post, userId, onOpenProfile, onChanged }) {
         </button>
         {post.author_id === userId && !post.repost_of && <button onClick={() => { setEditText(post.text || ""); setEditing(true); }} style={{ background: "none", border: "none", cursor: "pointer", marginLeft: "auto", fontSize: 11, color: t.faint }}>แก้ไข</button>}
         {post.author_id === userId && <button onClick={deletePost} style={{ background: "none", border: "none", cursor: "pointer", marginLeft: post.repost_of ? "auto" : 12, fontSize: 11, color: t.faint }}>ลบ</button>}
+        {post.author_id !== userId && <button onClick={hideAuthor} style={{ background: "none", border: "none", cursor: "pointer", marginLeft: "auto", fontSize: 11, color: t.faint }}>🙈 ซ่อน</button>}
       </div>
       {showBmMenu && <BookmarkPicker t={t} userId={userId} postId={post.id} onDone={() => { setShowBmMenu(false); setBookmarked(true); }} close={() => setShowBmMenu(false)} />}
       {/* คอมเมนต์ */}
@@ -3153,6 +3182,84 @@ function PostCard({ t, post, userId, onOpenProfile, onChanged }) {
 }
 
 // หน้า Feed — โพสต์ของคนที่เรา follow (+ ตัวเราเอง) + ปุ่มโพสต์ใหม่
+// ♡ หน้ากิจกรรม — ใครมาไลก์/คอมเมนต์/ติดตาม/รีโพสต์ ของเรา
+function CommunityActivity({ t, userId, onOpenProfile }) {
+  const [items, setItems] = useState(null);
+  const [filter, setFilter] = useState("all"); // all | like | comment | follow
+
+  const load = async () => {
+    try {
+      let q = supabase.from("community_activity").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(100);
+      if (filter !== "all") q = q.eq("type", filter);
+      const { data } = await q;
+      const rows = data || [];
+      const actorIds = [...new Set(rows.map((r) => r.actor_id))];
+      let amap = {};
+      if (actorIds.length > 0) {
+        const { data: profs } = await supabase.from("profiles").select("id, name, avatar_url, community_name, community_avatar, community_use_main").in("id", actorIds);
+        (profs || []).forEach((p) => { amap[p.id] = p; });
+      }
+      setItems(rows.map((r) => ({ ...r, actor: amap[r.actor_id] })));
+      // mark อ่านแล้ว
+      const unread = rows.filter((r) => !r.read).map((r) => r.id);
+      if (unread.length > 0) supabase.from("community_activity").update({ read: true }).in("id", unread).then(() => {});
+    } catch (e) { setItems([]); }
+  };
+  useEffect(() => { load(); }, [filter]);
+
+  const nameOf = (p) => p ? ((p.community_use_main === false && p.community_name ? p.community_name : p.name) || "ผู้ใช้") : "ผู้ใช้";
+  const avaOf = (p) => p ? (p.community_use_main === false && p.community_avatar ? p.community_avatar : p.avatar_url) : "";
+  const verb = { like: "ถูกใจโพสต์ของคุณ", comment: "แสดงความเห็นในโพสต์ของคุณ", follow: "เริ่มติดตามคุณ", repost: "รีโพสต์โพสต์ของคุณ" };
+  const emo = { like: "❤️", comment: "💬", follow: "👥", repost: "🔁" };
+  const chip = (k, label) => (
+    <button onClick={() => setFilter(k)} style={{ padding: "6px 14px", borderRadius: 16, border: `1.5px solid ${filter === k ? t.accent : t.border}`, background: filter === k ? t.accent : "transparent", color: filter === k ? t.onAccent : t.sub, fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>{label}</button>
+  );
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 14, paddingBottom: 4 }}>
+        {chip("all", "ทั้งหมด")}{chip("like", "❤️ ถูกใจ")}{chip("comment", "💬 ความเห็น")}{chip("follow", "👥 ติดตาม")}
+      </div>
+      {items === null ? <div style={{ textAlign: "center", padding: 30, color: t.faint, fontSize: 13 }}>กำลังโหลด...</div>
+        : items.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "40px 16px" }}>
+            <div style={{ fontSize: 32, marginBottom: 8 }}>🔔</div>
+            <div style={{ fontSize: 13.5, fontWeight: 700, color: t.text, marginBottom: 4 }}>ยังไม่มีกิจกรรม</div>
+            <div style={{ fontSize: 12, color: t.sub }}>เมื่อมีคนถูกใจหรือแสดงความเห็นในโพสต์ของคุณ จะแสดงที่นี่</div>
+          </div>
+        ) : items.map((it) => (
+          <button key={it.id} onClick={() => onOpenProfile?.(it.actor_id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 11, padding: "11px 4px", background: it.read ? "none" : `${t.accent}0D`, border: "none", borderBottom: `1px solid ${t.border}`, cursor: "pointer", textAlign: "left" }}>
+            <div style={{ position: "relative", flexShrink: 0 }}>
+              {avaOf(it.actor) ? <img src={avaOf(it.actor)} alt="" style={{ width: 40, height: 40, borderRadius: 20, objectFit: "cover" }} /> : <div style={{ width: 40, height: 40, borderRadius: 20, background: colorFor(nameOf(it.actor)), display: "grid", placeItems: "center", color: "#fff", fontWeight: 700 }}>{nameOf(it.actor)[0]}</div>}
+              <span style={{ position: "absolute", bottom: -2, right: -4, fontSize: 13 }}>{emo[it.type]}</span>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, color: t.text, lineHeight: 1.4 }}>
+                <span style={{ fontWeight: 800 }}>{nameOf(it.actor)}</span> <span style={{ color: t.sub }}>{verb[it.type] || ""}</span>
+              </div>
+              {it.preview && <div style={{ fontSize: 11.5, color: t.faint, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.preview}</div>}
+            </div>
+            <span style={{ fontSize: 10.5, color: t.faint, flexShrink: 0 }}>{timeAgo(it.created_at)}</span>
+          </button>
+        ))}
+    </div>
+  );
+}
+
+// บันทึกกิจกรรมเพื่อแจ้งเตือนเจ้าของโพสต์/คนถูกติดตาม (ไม่แจ้งถ้าทำกับตัวเอง)
+async function logActivity({ userId, actorId, type, postId = null, preview = "" }) {
+  if (!userId || !actorId || userId === actorId) return;
+  try {
+    // เช็คว่าเจ้าตัวเปิดรับแจ้งเตือนประเภทนี้ไหม (ปิดแล้วไม่ต้องบันทึก)
+    const col = type === "like" ? "community_notify_like" : type === "comment" ? "community_notify_comment" : type === "follow" ? "community_notify_follow" : null;
+    if (col) {
+      const { data: p } = await supabase.from("profiles").select(col).eq("id", userId).maybeSingle();
+      if (p && p[col] === false) return;
+    }
+    await supabase.from("community_activity").insert({ user_id: userId, actor_id: actorId, type, post_id: postId, preview: (preview || "").slice(0, 120) });
+  } catch (e) {}
+}
+
 // เลือกหมวดตอนบันทึกโพสต์ (สร้างหมวดใหม่ได้ด้วย)
 function BookmarkPicker({ t, userId, postId, onDone, close }) {
   const [cats, setCats] = useState([]);
@@ -3239,27 +3346,88 @@ function CommunityBookmarks({ t, userId, onOpenProfile }) {
 // ⚙️ ตั้งค่าชุมชน
 function CommunitySettings({ t, userId, close }) {
   const [cats, setCats] = useState([]);
-  const load = async () => { const { data } = await supabase.from("bookmark_categories").select("*").eq("user_id", userId).order("created_at"); setCats(data || []); };
+  const [prefs, setPrefs] = useState(null); // { community_notify_like, ..., community_private }
+  const [hidden, setHidden] = useState([]);
+
+  const load = async () => {
+    const [{ data: cs }, { data: p }, { data: hids }] = await Promise.all([
+      supabase.from("bookmark_categories").select("*").eq("user_id", userId).order("created_at"),
+      supabase.from("profiles").select("community_notify_like, community_notify_comment, community_notify_follow, community_private").eq("id", userId).maybeSingle(),
+      supabase.from("community_hidden").select("hidden_id").eq("user_id", userId),
+    ]);
+    setCats(cs || []);
+    setPrefs(p || {});
+    const ids = (hids || []).map((h) => h.hidden_id);
+    if (ids.length > 0) {
+      const { data: profs } = await supabase.from("profiles").select("id, name, avatar_url, community_name, community_use_main").in("id", ids);
+      setHidden(profs || []);
+    } else setHidden([]);
+  };
   useEffect(() => { load(); }, []);
+
+  const setPref = async (key, val) => {
+    setPrefs((p) => ({ ...p, [key]: val }));
+    await supabase.from("profiles").update({ [key]: val }).eq("id", userId);
+  };
   const delCat = async (id) => { await supabase.from("bookmark_categories").delete().eq("id", id); load(); };
+  const unhide = async (id) => { await supabase.from("community_hidden").delete().eq("user_id", userId).eq("hidden_id", id); load(); };
+
+  const Toggle = ({ on, onClick }) => (
+    <button onClick={onClick} style={{ width: 44, height: 26, borderRadius: 13, background: on ? t.accent : t.border, position: "relative", border: "none", cursor: "pointer", flexShrink: 0 }}>
+      <div style={{ position: "absolute", top: 3, left: on ? 21 : 3, width: 20, height: 20, borderRadius: 10, background: "#fff", transition: "left .2s" }} />
+    </button>
+  );
+  const SettingRow = ({ label, sub, on, onClick }) => (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "11px 0", borderBottom: `1px solid ${t.border}` }}>
+      <div><div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{label}</div>{sub && <div style={{ fontSize: 11, color: t.faint, marginTop: 1 }}>{sub}</div>}</div>
+      <Toggle on={on} onClick={onClick} />
+    </div>
+  );
+  const secHead = (txt) => <div style={{ fontSize: 12, fontWeight: 800, color: t.faint, textTransform: "uppercase", letterSpacing: .5, margin: "20px 0 4px" }}>{txt}</div>;
+  const nameOf = (p) => (p.community_use_main === false && p.community_name ? p.community_name : p.name) || "ผู้ใช้";
 
   return (
     <ModalPortal>
       <div style={overlay} onClick={close}>
-        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "20px 20px 0 0", padding: 20, maxHeight: "80vh", overflowY: "auto" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "20px 20px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>⚙️ ตั้งค่าชุมชน</div>
             <button onClick={close} style={{ background: "none", border: "none", cursor: "pointer" }}><X size={20} color={t.sub} /></button>
           </div>
-          <div style={{ fontSize: 12, fontWeight: 800, color: t.faint, textTransform: "uppercase", letterSpacing: .5, marginBottom: 8 }}>จัดการหมวดหมู่บันทึก</div>
-          {cats.length === 0 ? <div style={{ fontSize: 12.5, color: t.sub, padding: "8px 0" }}>ยังไม่มีหมวดหมู่ — สร้างได้ตอนกดบันทึกโพสต์</div>
-            : cats.map((c) => (
-              <div key={c.id} style={{ ...card(t), padding: 12, marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: t.text }}>📁 {c.name}</span>
-                <button onClick={() => delCat(c.id)} style={{ background: "none", border: "none", cursor: "pointer" }}><Trash2 size={15} color="#D9534F" /></button>
-              </div>
-            ))}
-          <div style={{ fontSize: 11.5, color: t.faint, marginTop: 6 }}>ลบหมวดแล้วโพสต์ที่บันทึกไว้จะกลับไปอยู่ "ทั่วไป" ไม่หายไป</div>
+
+          {prefs === null ? <div style={{ textAlign: "center", padding: 20, color: t.faint, fontSize: 13 }}>กำลังโหลด...</div> : (
+            <>
+              {secHead("🔔 การแจ้งเตือน (หน้ากิจกรรม)")}
+              <SettingRow label="มีคนถูกใจโพสต์" on={prefs.community_notify_like !== false} onClick={() => setPref("community_notify_like", !(prefs.community_notify_like !== false))} />
+              <SettingRow label="มีคนแสดงความเห็น" on={prefs.community_notify_comment !== false} onClick={() => setPref("community_notify_comment", !(prefs.community_notify_comment !== false))} />
+              <SettingRow label="มีคนติดตามฉัน" on={prefs.community_notify_follow !== false} onClick={() => setPref("community_notify_follow", !(prefs.community_notify_follow !== false))} />
+
+              {secHead("🔒 ความเป็นส่วนตัว")}
+              <SettingRow label="โพสต์ส่วนตัว" sub={prefs.community_private ? "เฉพาะคนที่ติดตามฉันเท่านั้นที่เห็นโพสต์" : "ทุกคนในชุมชนเห็นโพสต์ของฉันได้"} on={!!prefs.community_private} onClick={() => setPref("community_private", !prefs.community_private)} />
+
+              {secHead("🙈 คนที่ซ่อนไว้")}
+              {hidden.length === 0 ? <div style={{ fontSize: 12.5, color: t.sub, padding: "8px 0" }}>ยังไม่ได้ซ่อนใคร — กด ⋯ บนโพสต์ของคนนั้นเพื่อซ่อน</div>
+                : hidden.map((p) => (
+                  <div key={p.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 0", borderBottom: `1px solid ${t.border}` }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      {p.avatar_url ? <img src={p.avatar_url} alt="" style={{ width: 32, height: 32, borderRadius: 16, objectFit: "cover" }} /> : <div style={{ width: 32, height: 32, borderRadius: 16, background: colorFor(nameOf(p)), display: "grid", placeItems: "center", color: "#fff", fontSize: 13, fontWeight: 700 }}>{nameOf(p)[0]}</div>}
+                      <span style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{nameOf(p)}</span>
+                    </div>
+                    <button onClick={() => unhide(p.id)} style={{ background: "none", border: `1px solid ${t.border}`, borderRadius: 10, padding: "5px 12px", cursor: "pointer", fontSize: 11.5, fontWeight: 700, color: t.text }}>เลิกซ่อน</button>
+                  </div>
+                ))}
+
+              {secHead("📁 หมวดหมู่บันทึก")}
+              {cats.length === 0 ? <div style={{ fontSize: 12.5, color: t.sub, padding: "8px 0" }}>ยังไม่มีหมวดหมู่ — สร้างได้ตอนกดบันทึกโพสต์</div>
+                : cats.map((c) => (
+                  <div key={c.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 0", borderBottom: `1px solid ${t.border}` }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: t.text }}>📁 {c.name}</span>
+                    <button onClick={() => delCat(c.id)} style={{ background: "none", border: "none", cursor: "pointer" }}><Trash2 size={15} color="#D9534F" /></button>
+                  </div>
+                ))}
+              <div style={{ fontSize: 11.5, color: t.faint, marginTop: 8 }}>ลบหมวดแล้วโพสต์ที่บันทึกไว้จะกลับไปอยู่ "ทั่วไป" ไม่หายไป</div>
+            </>
+          )}
         </div>
       </div>
     </ModalPortal>
@@ -3274,9 +3442,13 @@ function CommunityFeed({ t, userId, session, onOpenProfile }) {
   const load = async () => {
     setLoading(true);
     try {
-      // คนที่เรา follow + ตัวเราเอง
-      const { data: fol } = await supabase.from("follows").select("following_id").eq("follower_id", userId);
-      const authorIds = [...(fol || []).map((f) => f.following_id), userId];
+      // คนที่เรา follow + ตัวเราเอง (ตัดคนที่ซ่อนไว้ออก)
+      const [{ data: fol }, { data: hid }] = await Promise.all([
+        supabase.from("follows").select("following_id").eq("follower_id", userId),
+        supabase.from("community_hidden").select("hidden_id").eq("user_id", userId),
+      ]);
+      const hiddenSet = new Set((hid || []).map((h) => h.hidden_id));
+      const authorIds = [...(fol || []).map((f) => f.following_id), userId].filter((id) => !hiddenSet.has(id));
       const { data: raw } = await supabase.from("posts").select("*, author:profiles!posts_author_id_fkey(id, name, avatar_url, community_name, community_avatar, community_use_main)").in("author_id", authorIds).order("created_at", { ascending: false }).limit(100);
       const enriched = await enrichPosts(raw || [], userId);
       setPosts(enriched);
@@ -3338,6 +3510,8 @@ function CommunityProfile({ t, userId, profileId, session, onOpenProfile }) {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [listModal, setListModal] = useState(null); // "followers" | "following" | null
+  const [showBookmarks, setShowBookmarks] = useState(false);
+  const [lockedPrivate, setLockedPrivate] = useState(false);
   const isMe = profileId === userId;
 
   // ชื่อ/รูปที่ใช้จริง (ถ้าตั้งแยก social ใช้ค่านั้น ไม่งั้นใช้ของโปรไฟล์หลัก)
@@ -3347,19 +3521,27 @@ function CommunityProfile({ t, userId, profileId, session, onOpenProfile }) {
   const load = async () => {
     setLoading(true);
     try {
-      const { data: p } = await supabase.from("profiles").select("id, name, avatar_url, community_bio, community_name, community_avatar, community_use_main").eq("id", profileId).maybeSingle();
+      const { data: p } = await supabase.from("profiles").select("id, name, avatar_url, community_bio, community_name, community_avatar, community_use_main, community_private").eq("id", profileId).maybeSingle();
       setProf(p);
-      const { data: raw } = await supabase.from("posts").select("*, author:profiles!posts_author_id_fkey(id, name, avatar_url, community_name, community_avatar, community_use_main)").eq("author_id", profileId).order("created_at", { ascending: false }).limit(100);
-      setPosts(await enrichPosts(raw || [], userId));
+      // เช็คว่าเราติดตามเขาอยู่ไหม (ใช้ทั้งปุ่ม follow และเช็คสิทธิ์ดูโพสต์ส่วนตัว)
+      let iFollow = false;
+      if (!isMe) {
+        const { data: f } = await supabase.from("follows").select("*").eq("follower_id", userId).eq("following_id", profileId).maybeSingle();
+        iFollow = !!f; setFollowing(iFollow);
+      }
+      // โพสต์ส่วนตัว: เห็นได้เฉพาะเจ้าตัว หรือคนที่ติดตามเขาอยู่
+      const blocked = !isMe && p?.community_private && !iFollow;
+      setLockedPrivate(blocked);
+      if (blocked) setPosts([]);
+      else {
+        const { data: raw } = await supabase.from("posts").select("*, author:profiles!posts_author_id_fkey(id, name, avatar_url, community_name, community_avatar, community_use_main)").eq("author_id", profileId).order("created_at", { ascending: false }).limit(100);
+        setPosts(await enrichPosts(raw || [], userId));
+      }
       const [{ count: fc }, { count: fgc }] = await Promise.all([
         supabase.from("follows").select("*", { count: "exact", head: true }).eq("following_id", profileId),
         supabase.from("follows").select("*", { count: "exact", head: true }).eq("follower_id", profileId),
       ]);
       setFollowerCount(fc || 0); setFollowingCount(fgc || 0);
-      if (!isMe) {
-        const { data: f } = await supabase.from("follows").select("*").eq("follower_id", userId).eq("following_id", profileId).maybeSingle();
-        setFollowing(!!f);
-      }
     } catch (e) {}
     setLoading(false);
   };
@@ -3367,7 +3549,7 @@ function CommunityProfile({ t, userId, profileId, session, onOpenProfile }) {
 
   const toggleFollow = async () => {
     const nx = !following; setFollowing(nx); setFollowerCount((c) => c + (nx ? 1 : -1));
-    if (nx) await supabase.from("follows").insert({ follower_id: userId, following_id: profileId });
+    if (nx) { await supabase.from("follows").insert({ follower_id: userId, following_id: profileId }); logActivity({ userId: profileId, actorId: userId, type: "follow" }); }
     else await supabase.from("follows").delete().eq("follower_id", userId).eq("following_id", profileId);
   };
 
@@ -3386,15 +3568,37 @@ function CommunityProfile({ t, userId, profileId, session, onOpenProfile }) {
           <div><div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>{posts.length}</div><div style={{ fontSize: 11, color: t.sub }}>โพสต์</div></div>
         </div>
         {isMe ? (
-          <button onClick={() => setEditing(true)} style={{ marginTop: 14, padding: "9px 28px", borderRadius: 12, border: `1px solid ${t.border}`, background: "none", color: t.text, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>แก้ไขโปรไฟล์</button>
+          <div style={{ display: "flex", gap: 8, marginTop: 14, justifyContent: "center" }}>
+            <button onClick={() => setEditing(true)} style={{ padding: "9px 20px", borderRadius: 12, border: `1px solid ${t.border}`, background: "none", color: t.text, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>แก้ไขโปรไฟล์</button>
+            <button onClick={() => setShowBookmarks(true)} style={{ padding: "9px 20px", borderRadius: 12, border: `1px solid ${t.border}`, background: "none", color: t.text, fontWeight: 700, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}><Bookmark size={14} color={t.text} /> บันทึกไว้</button>
+          </div>
         ) : (
           <button onClick={toggleFollow} style={{ marginTop: 14, padding: "9px 28px", borderRadius: 12, border: following ? `1px solid ${t.border}` : "none", background: following ? "none" : "#F2872E", color: following ? t.sub : "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>{following ? "กำลังติดตาม" : "ติดตาม"}</button>
         )}
       </div>
-      {posts.length === 0 ? (
+      {lockedPrivate ? (
+        <div style={{ textAlign: "center", padding: "40px 20px" }}>
+          <div style={{ width: 60, height: 60, borderRadius: 30, background: `${t.accent}1A`, display: "grid", placeItems: "center", margin: "0 auto 14px" }}><LockKeyhole size={26} color={t.accent} /></div>
+          <div style={{ fontSize: 14.5, fontWeight: 800, color: t.text, marginBottom: 5 }}>บัญชีนี้เป็นส่วนตัว</div>
+          <div style={{ fontSize: 12.5, color: t.sub, lineHeight: 1.6, maxWidth: 260, margin: "0 auto" }}>กดติดตามเพื่อดูโพสต์ของ {effName}</div>
+        </div>
+      ) : posts.length === 0 ? (
         <div style={{ textAlign: "center", padding: 30, color: t.faint, fontSize: 13 }}>ยังไม่มีโพสต์</div>
       ) : posts.map((p) => <PostCard key={p.id} t={t} post={p} userId={userId} onOpenProfile={onOpenProfile} onChanged={load} />)}
       {editing && <EditCommunityProfile t={t} userId={userId} prof={prof} onDone={() => { setEditing(false); load(); }} close={() => setEditing(false)} />}
+      {showBookmarks && (
+        <ModalPortal>
+          <div style={{ position: "fixed", inset: 0, background: t.page, zIndex: 110, display: "flex", flexDirection: "column" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 18px 12px", borderBottom: `1px solid ${t.border}`, flexShrink: 0 }}>
+              <button onClick={() => setShowBookmarks(false)} style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 18, width: 36, height: 36, cursor: "pointer", display: "grid", placeItems: "center" }}><ArrowLeft size={18} color={t.text} /></button>
+              <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>🔖 โพสต์ที่บันทึกไว้</div>
+            </div>
+            <div style={{ flex: 1, overflowY: "auto", padding: "16px 18px 40px" }}>
+              <CommunityBookmarks t={t} userId={userId} onOpenProfile={onOpenProfile} />
+            </div>
+          </div>
+        </ModalPortal>
+      )}
       {listModal && <FollowListModal t={t} type={listModal} profileId={profileId} userId={userId} onOpenProfile={(id) => { setListModal(null); onOpenProfile(id); }} close={() => setListModal(null)} />}
     </div>
   );
