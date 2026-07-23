@@ -1234,7 +1234,7 @@ export default function RefHub() {
 
         {/* CONTENT — ความสูงหารด้วยสเกลชดเชย transform:scale ข้างบน กันตอนขยายฟอนต์แล้วท้ายเนื้อหาจมใต้ Dock */}
         <div style={{ position: "relative", zIndex: 2, padding: `16px 18px ${page === "chat" || page === "chatRoom" ? 16 : 120}px`, height: `calc(${(10000 / fontScale).toFixed(2)}vh - 76px)`, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
-          {page === "home" && <HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, goalDone, goalPct, setGoals, notes, setPage, setChatOpen, userId, playlist, setCommunityOpen, isCustomMentor: !!customMentorObj }} />}
+          {page === "home" && <ErrorCatcher t={t}><HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, goalDone, goalPct, setGoals, notes, setPage, setChatOpen, userId, playlist, setCommunityOpen, isCustomMentor: !!customMentorObj }} /></ErrorCatcher>}
           {page === "ledger" && <FinancePage {...{ t, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt), userId }} />}
           {page === "note" && <NotePage {...{ t, notes, setNotes, isNight, userId, session, authProfile }} />}
           {page === "ideas" && <IdeasPage t={t} M={M} userId={userId} session={session} authProfile={authProfile} setAuthProfile={setAuthProfile} setNotes={setNotes} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} />}
@@ -2118,7 +2118,7 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, goa
               <div style={{ fontSize: 11, color: t.sub }}>โลกโซเชียลของ PKNOW</div>
             </div>
           </div>
-          {commPreview.newCount > 0 && <div style={{ background: "#E0563E", color: "#fff", fontSize: 10.5, fontWeight: 800, padding: "3px 9px", borderRadius: 10 }}>{commPreview.newCount} ใหม่</div>}
+          {commPreview.newCount > 0 && <div style={{ background: "#E0563E", color: "#fff", fontSize: 10.5, fontWeight: 800, padding: "3px 9px", borderRadius: 10 }}>{commPreview.newCount > 99 ? "99+" : commPreview.newCount} ใหม่</div>}
         </div>
         {commPreview.avatars.length > 0 ? (
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, position: "relative" }}>
@@ -2853,6 +2853,13 @@ function AdminAddPinMember({ t, session, onCreated }) {
 
 const AVATAR_COLORS = ["#C0658C", "#5C7A99", "#7B6CB0", "#4FB286", "#E0507B", "#3DA5D9", "#B07A4B"];
 const colorFor = (str) => AVATAR_COLORS[[...(str || "?")].reduce((a, c) => a + c.charCodeAt(0), 0) % AVATAR_COLORS.length];
+// ย่อตัวเลขกันล้นการ์ด: 1500 -> "1.5พัน", 1200000 -> "1.2ล้าน"
+const fmtCount = (n) => {
+  n = Number(n) || 0;
+  if (n < 1000) return String(n);
+  if (n < 999500) { const v = n / 1000; return (v < 10 ? v.toFixed(1).replace(/\.0$/, "") : Math.round(v)) + "พัน"; }
+  const v = n / 1000000; return (v < 10 ? v.toFixed(1).replace(/\.0$/, "") : Math.round(v)) + "ล้าน";
+};
 // เวลาแบบ "กี่นาที/ชม./วันที่แล้ว" สำหรับโพสต์ในฟีด
 const timeAgo = (ts) => {
   if (!ts) return "";
@@ -2891,6 +2898,30 @@ function SpinningGlobe({ onClick, size = 38, accent }) {
 }
 
 // 🌐 หน้า Community เต็มจอ — ถ้าไม่มีสิทธิ์ใช้จะขึ้นชวนปลดล็อก (แบบ 2)
+// 🛡️ ตัวดักจับ error — ถ้าส่วนไหนพัง จะโชว์ข้อความบอกแทนที่จะจอดำทั้งหน้า
+class ErrorCatcher extends React.Component {
+  constructor(p) { super(p); this.state = { err: null }; }
+  static getDerivedStateFromError(err) { return { err }; }
+  componentDidCatch(err, info) { console.error("RefHub error:", err, info); }
+  render() {
+    if (this.state.err) {
+      const t = this.props.t || {};
+      return (
+        <div style={{ padding: 24, textAlign: "center" }}>
+          <div style={{ fontSize: 34, marginBottom: 10 }}>⚠️</div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: t.text || "#fff", marginBottom: 6 }}>ส่วนนี้มีปัญหา</div>
+          <div style={{ fontSize: 12, color: t.sub || "#999", lineHeight: 1.6, marginBottom: 14 }}>ลองปิดแล้วเปิดใหม่ ถ้ายังเป็นอยู่ ส่งข้อความข้างล่างนี้ให้ผู้ดูแล</div>
+          <div style={{ fontSize: 11, color: "#E0563E", background: "rgba(224,86,62,.1)", border: "1px solid rgba(224,86,62,.3)", borderRadius: 10, padding: 12, textAlign: "left", wordBreak: "break-word", fontFamily: "monospace" }}>
+            {String(this.state.err?.message || this.state.err)}
+          </div>
+          <button onClick={() => this.setState({ err: null })} style={{ marginTop: 14, padding: "10px 22px", borderRadius: 12, border: "none", background: t.accent || "#F2872E", color: t.onAccent || "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>ลองใหม่</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function CommunityOverlay({ t, userId, authProfile, session, openThread, close }) {
   const canUse = authProfile?.can_use_community || authProfile?.role === "admin";
   const [tab, setTab] = useState("feed"); // feed | search | activity | profile
@@ -2941,12 +2972,12 @@ function CommunityOverlay({ t, userId, authProfile, session, openThread, close }
               <div style={{ fontSize: 12, color: t.faint, marginTop: 22 }}>ติดต่อแอดมินเพื่อขอปลดล็อกสิทธิ์ชุมชน</div>
             </div>
           ) : (
-            <>
+            <ErrorCatcher t={t}>
               {tab === "feed" && <CommunityFeed key={feedKey} t={t} userId={userId} session={session} onOpenProfile={openProfile} />}
               {tab === "search" && <CommunitySearch t={t} userId={userId} onOpenProfile={openProfile} />}
               {tab === "activity" && <CommunityActivity t={t} userId={userId} onOpenProfile={openProfile} />}
               {tab === "profile" && <CommunityProfile t={t} userId={userId} authProfile={authProfile} profileId={viewProfileId} session={session} onOpenProfile={(id) => setViewProfileId(id)} />}
-            </>
+            </ErrorCatcher>
           )}
         </div>
 
@@ -2971,7 +3002,7 @@ function CommunityOverlay({ t, userId, authProfile, session, openThread, close }
               return (
                 <button key={tb.k} onClick={() => { setTab(tb.k); if (tb.k === "profile") setViewProfileId(userId); }} style={{ flex: 1, background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, position: "relative" }}>
                   <span style={{ fontSize: tb.k === "activity" ? 21 : 19, lineHeight: 1, color: on ? t.accent : t.faint, filter: tb.k === "activity" ? "none" : (on ? "none" : "grayscale(.6) opacity(.6)") }}>{tb.ic}</span>
-                  {tb.k === "activity" && unread > 0 && <span style={{ position: "absolute", top: -2, right: "50%", marginRight: -16, background: "#E0563E", color: "#fff", fontSize: 8.5, fontWeight: 800, borderRadius: 7, padding: "1px 5px" }}>{unread > 9 ? "9+" : unread}</span>}
+                  {tb.k === "activity" && unread > 0 && <span style={{ position: "absolute", top: -2, right: "50%", marginRight: -16, background: "#E0563E", color: "#fff", fontSize: 8.5, fontWeight: 800, borderRadius: 7, padding: "1px 5px" }}>{unread > 99 ? "99+" : unread}</span>}
                   <span style={{ fontSize: 9.5, fontWeight: 700, color: on ? t.accent : t.faint }}>{tb.label}</span>
                 </button>
               );
@@ -3125,10 +3156,10 @@ function PostCard({ t, post, userId, onOpenProfile, onChanged }) {
       {/* ปุ่ม action */}
       <div style={{ display: "flex", gap: 20, marginLeft: 48, marginTop: 4, alignItems: "center" }}>
         <button onClick={doLike} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 5, color: liked ? "#E0245E" : t.faint }}>
-          <Heart size={17} fill={liked ? "#E0245E" : "none"} color={liked ? "#E0245E" : t.faint} /> <span style={{ fontSize: 12 }}>{likeCount > 0 ? likeCount : ""}</span>
+          <Heart size={17} fill={liked ? "#E0245E" : "none"} color={liked ? "#E0245E" : t.faint} /> <span style={{ fontSize: 12 }}>{likeCount > 0 ? fmtCount(likeCount) : ""}</span>
         </button>
         <button onClick={openComments} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 5, color: t.faint }}>
-          <MessageCircle size={17} color={t.faint} /> <span style={{ fontSize: 12 }}>{post.comment_count > 0 ? post.comment_count : ""}</span>
+          <MessageCircle size={17} color={t.faint} /> <span style={{ fontSize: 12 }}>{post.comment_count > 0 ? fmtCount(post.comment_count) : ""}</span>
         </button>
         <button onClick={doRepost} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 5, color: reposted ? "#2E9E6B" : t.faint }}>
           <Repeat2 size={18} color={reposted ? "#2E9E6B" : t.faint} />
@@ -3563,9 +3594,9 @@ function CommunityProfile({ t, userId, profileId, session, onOpenProfile }) {
         <div style={{ fontSize: 17, fontWeight: 800, color: t.text }}>{effName}</div>
         {prof.community_bio && <div style={{ fontSize: 12.5, color: t.sub, marginTop: 5, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{prof.community_bio}</div>}
         <div style={{ display: "flex", justifyContent: "center", gap: 20, marginTop: 12 }}>
-          <button onClick={() => setListModal("followers")} style={{ background: "none", border: "none", cursor: "pointer" }}><div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>{followerCount}</div><div style={{ fontSize: 11, color: t.sub }}>ผู้ติดตาม</div></button>
-          <button onClick={() => setListModal("following")} style={{ background: "none", border: "none", cursor: "pointer" }}><div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>{followingCount}</div><div style={{ fontSize: 11, color: t.sub }}>กำลังติดตาม</div></button>
-          <div><div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>{posts.length}</div><div style={{ fontSize: 11, color: t.sub }}>โพสต์</div></div>
+          <button onClick={() => setListModal("followers")} style={{ background: "none", border: "none", cursor: "pointer" }}><div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>{fmtCount(followerCount)}</div><div style={{ fontSize: 11, color: t.sub }}>ผู้ติดตาม</div></button>
+          <button onClick={() => setListModal("following")} style={{ background: "none", border: "none", cursor: "pointer" }}><div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>{fmtCount(followingCount)}</div><div style={{ fontSize: 11, color: t.sub }}>กำลังติดตาม</div></button>
+          <div><div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>{fmtCount(posts.length)}</div><div style={{ fontSize: 11, color: t.sub }}>โพสต์</div></div>
         </div>
         {isMe ? (
           <div style={{ display: "flex", gap: 8, marginTop: 14, justifyContent: "center" }}>
