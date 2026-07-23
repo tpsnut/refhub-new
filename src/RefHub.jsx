@@ -549,7 +549,7 @@ function ImageLightbox({ src, onClose }) {
 
   return (
     <ModalPortal>
-      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.9)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", touchAction: "none" }} onClick={() => scale === 1 && onClose()}>
+      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.9)", zIndex: 150, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", touchAction: "none" }} onClick={() => scale === 1 && onClose()}>
         <button onClick={onClose} style={{ position: "absolute", top: 20, right: 20, background: "rgba(255,255,255,.15)", border: "none", borderRadius: 20, width: 40, height: 40, cursor: "pointer", display: "grid", placeItems: "center", zIndex: 1 }}><X size={22} color="#fff" /></button>
         {scale > 1 && <div style={{ position: "absolute", bottom: 24, left: "50%", transform: "translateX(-50%)", color: "rgba(255,255,255,.6)", fontSize: 11 }}>ดับเบิลแท็ปเพื่อรีเซ็ตซูม</div>}
         <img
@@ -1234,7 +1234,7 @@ export default function RefHub() {
 
         {/* CONTENT — ความสูงหารด้วยสเกลชดเชย transform:scale ข้างบน กันตอนขยายฟอนต์แล้วท้ายเนื้อหาจมใต้ Dock */}
         <div style={{ position: "relative", zIndex: 2, padding: `16px 18px ${page === "chat" || page === "chatRoom" ? 16 : 120}px`, height: `calc(${(10000 / fontScale).toFixed(2)}vh - 76px)`, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
-          {page === "home" && <HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, goalDone, goalPct, setGoals, notes, setPage, setChatOpen, userId, playlist, setCommunityOpen, isCustomMentor: !MENTORS[mentor] }} />}
+          {page === "home" && <HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, goalDone, goalPct, setGoals, notes, setPage, setChatOpen, userId, playlist, setCommunityOpen, isCustomMentor: !!customMentorObj }} />}
           {page === "ledger" && <FinancePage {...{ t, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt), userId }} />}
           {page === "note" && <NotePage {...{ t, notes, setNotes, isNight, userId, session, authProfile }} />}
           {page === "ideas" && <IdeasPage t={t} M={M} userId={userId} session={session} authProfile={authProfile} setAuthProfile={setAuthProfile} setNotes={setNotes} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} />}
@@ -2076,7 +2076,7 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, goa
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 16.5, fontWeight: 700, color: "#fff", lineHeight: 1.4, minHeight: 46 }}>“{quote}”</div>
               <style>{`@keyframes rh-coach-nudge { 0%,88%,100% { transform: translateX(0) rotate(0); } 90% { transform: translateX(-2px) rotate(-1.5deg); } 92% { transform: translateX(2px) rotate(1.5deg); } 94% { transform: translateX(-2px) rotate(-1deg); } 96% { transform: translateX(2px) rotate(1deg); } 98% { transform: translateX(0) rotate(0); } }`}</style>
-              <button onClick={() => setChatOpen(true)} style={{ marginTop: 14, border: "none", cursor: "pointer", background: "rgba(255,255,255,.18)", color: "#fff", fontWeight: 700, fontSize: 13, padding: "9px 16px", borderRadius: 18, display: "inline-flex", alignItems: "center", gap: 6, animation: "rh-coach-nudge 5s ease-in-out infinite" }}>คุยกับโค้ช <ChevronRight size={15} /></button>
+              <button onClick={() => setChatOpen(true)} style={{ marginTop: 14, border: "none", cursor: "pointer", background: "rgba(255,255,255,.18)", color: "#fff", fontWeight: 700, fontSize: 13, padding: "9px 16px", borderRadius: 18, display: "inline-flex", alignItems: "center", gap: 6, animation: "rh-coach-nudge 3s ease-in-out infinite" }}>คุยกับโค้ช <ChevronRight size={15} /></button>
             </div>
             <Ring pct={goalPct} color="#fff" label="เป้าหมาย" />
           </div>
@@ -3165,7 +3165,7 @@ function PostCard({ t, post, userId, onOpenProfile, onChanged }) {
       {lightbox && <ImageLightbox src={lightbox} onClose={() => setLightbox(null)} />}
       {editing && (
         <ModalPortal>
-          <div style={overlay} onClick={() => setEditing(false)}>
+          <div style={overlayHi} onClick={() => setEditing(false)}>
             <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "20px 20px 0 0", padding: 20 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
                 <button onClick={() => setEditing(false)} style={{ background: "none", border: "none", color: t.sub, fontSize: 14, cursor: "pointer" }}>ยกเลิก</button>
@@ -3277,7 +3277,7 @@ function BookmarkPicker({ t, userId, postId, onDone, close }) {
   };
   return (
     <ModalPortal>
-      <div style={overlay} onClick={close}>
+      <div style={overlayHi} onClick={close}>
         <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "20px 20px 0 0", padding: 20, maxHeight: "70vh", overflowY: "auto" }}>
           <div style={{ fontSize: 15, fontWeight: 800, color: t.text, marginBottom: 14, textAlign: "center" }}>🔖 บันทึกลงหมวด</div>
           <button onClick={() => saveTo(null)} style={{ width: "100%", ...card(t), padding: 13, marginBottom: 8, cursor: "pointer", border: `1px solid ${t.border}`, textAlign: "left", fontSize: 13, fontWeight: 700, color: t.text }}>📌 บันทึกทั่วไป (ไม่จัดหมวด)</button>
@@ -3350,18 +3350,17 @@ function CommunitySettings({ t, userId, close }) {
   const [hidden, setHidden] = useState([]);
 
   const load = async () => {
-    const [{ data: cs }, { data: p }, { data: hids }] = await Promise.all([
-      supabase.from("bookmark_categories").select("*").eq("user_id", userId).order("created_at"),
-      supabase.from("profiles").select("community_notify_like, community_notify_comment, community_notify_follow, community_private").eq("id", userId).maybeSingle(),
-      supabase.from("community_hidden").select("hidden_id").eq("user_id", userId),
-    ]);
-    setCats(cs || []);
-    setPrefs(p || {});
-    const ids = (hids || []).map((h) => h.hidden_id);
-    if (ids.length > 0) {
-      const { data: profs } = await supabase.from("profiles").select("id, name, avatar_url, community_name, community_use_main").in("id", ids);
-      setHidden(profs || []);
-    } else setHidden([]);
+    // แยก query แต่ละอันกันพัง — ถ้าตารางไหนยังไม่ถูกสร้าง (ยังไม่ได้รัน SQL) อันอื่นต้องยังทำงานได้
+    try { const { data: cs } = await supabase.from("bookmark_categories").select("*").eq("user_id", userId).order("created_at"); setCats(cs || []); } catch (e) { setCats([]); }
+    try { const { data: p } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle(); setPrefs(p || {}); } catch (e) { setPrefs({}); }
+    try {
+      const { data: hids } = await supabase.from("community_hidden").select("hidden_id").eq("user_id", userId);
+      const ids = (hids || []).map((h) => h.hidden_id);
+      if (ids.length > 0) {
+        const { data: profs } = await supabase.from("profiles").select("id, name, avatar_url, community_name, community_use_main").in("id", ids);
+        setHidden(profs || []);
+      } else setHidden([]);
+    } catch (e) { setHidden([]); }
   };
   useEffect(() => { load(); }, []);
 
@@ -3388,7 +3387,7 @@ function CommunitySettings({ t, userId, close }) {
 
   return (
     <ModalPortal>
-      <div style={overlay} onClick={close}>
+      <div style={overlayHi} onClick={close}>
         <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "20px 20px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>⚙️ ตั้งค่าชุมชน</div>
@@ -3521,7 +3520,8 @@ function CommunityProfile({ t, userId, profileId, session, onOpenProfile }) {
   const load = async () => {
     setLoading(true);
     try {
-      const { data: p } = await supabase.from("profiles").select("id, name, avatar_url, community_bio, community_name, community_avatar, community_use_main, community_private").eq("id", profileId).maybeSingle();
+      // ใช้ select("*") กันเคสคอลัมน์ใหม่ยังไม่ถูกสร้าง (ยังไม่ได้รัน SQL) แล้วทำให้โปรไฟล์ว่างทั้งหน้า
+      const { data: p } = await supabase.from("profiles").select("*").eq("id", profileId).maybeSingle();
       setProf(p);
       // เช็คว่าเราติดตามเขาอยู่ไหม (ใช้ทั้งปุ่ม follow และเช็คสิทธิ์ดูโพสต์ส่วนตัว)
       let iFollow = false;
@@ -3632,7 +3632,7 @@ function EditCommunityProfile({ t, userId, prof, onDone, close }) {
 
   return (
     <ModalPortal>
-      <div style={overlay} onClick={close}>
+      <div style={overlayHi} onClick={close}>
         <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "20px 20px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
             <button onClick={close} style={{ background: "none", border: "none", color: t.sub, fontSize: 14, cursor: "pointer" }}>ยกเลิก</button>
@@ -3695,7 +3695,7 @@ function FollowListModal({ t, type, profileId, userId, onOpenProfile, close }) {
 
   return (
     <ModalPortal>
-      <div style={overlay} onClick={close}>
+      <div style={overlayHi} onClick={close}>
         <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "20px 20px 0 0", padding: 20, maxHeight: "70vh", overflowY: "auto" }}>
           <div style={{ fontSize: 15, fontWeight: 800, color: t.text, marginBottom: 14, textAlign: "center" }}>{type === "followers" ? "ผู้ติดตาม" : "กำลังติดตาม"}</div>
           {list === null ? <div style={{ textAlign: "center", padding: 20, color: t.faint, fontSize: 13 }}>กำลังโหลด...</div>
@@ -3742,7 +3742,7 @@ function ComposeModal({ t, userId, onDone, close }) {
 
   return (
     <ModalPortal>
-      <div style={overlay} onClick={close}>
+      <div style={overlayHi} onClick={close}>
         <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "20px 20px 0 0", padding: 20, maxHeight: "80vh", overflowY: "auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
             <button onClick={close} style={{ background: "none", border: "none", color: t.sub, fontSize: 14, cursor: "pointer" }}>ยกเลิก</button>
@@ -6663,3 +6663,5 @@ const primaryBtn = (M) => ({ background: `linear-gradient(135deg,${M.accent2 || 
 const navBtn = (t) => ({ width: 34, height: 34, borderRadius: 17, border: `1px solid ${t.border}`, background: "none", cursor: "pointer", fontSize: 20, color: t.text, lineHeight: 1 });
 const ghost = { background: "none", border: "none", cursor: "pointer", padding: 4 };
 const overlay = { position: "fixed", inset: 0, background: "rgba(10,14,25,.5)", zIndex: 50, display: "flex", alignItems: "flex-end", justifyContent: "center", backdropFilter: "blur(2px)" };
+// overlay สำหรับ modal ที่เปิดซ้อนบนหน้าชุมชน (หน้าชุมชนใช้ zIndex 100 ถ้าใช้ overlay ปกติจะจมอยู่ข้างหลังมองไม่เห็น)
+const overlayHi = { ...overlay, zIndex: 130 };
