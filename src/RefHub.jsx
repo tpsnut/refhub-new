@@ -5,7 +5,7 @@ import {
   Sun, Moon, Send, Check, Trash2, X, Wallet, Target, BookOpen, ChevronRight,
   Sparkles, Clock, Search, Volume2, VolumeX, Pencil, Download, ArrowLeft, Users, Camera, Phone, Mic, MicOff, PhoneOff, RefreshCw,
   Utensils, Car, ShoppingBag, Receipt, Gamepad2, HeartPulse, Briefcase, Gift, Coffee, Music,
-  Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi, MessageCircle, MoreVertical, KeyRound, MapPin, Copy, LockKeyhole, LogOut, LayoutGrid, Maximize2, Volume1, Settings, Bookmark, Share2, Repeat2, Heart
+  Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi, MessageCircle, MoreVertical, KeyRound, MapPin, Copy, LockKeyhole, LogOut, LayoutGrid, Maximize2, Volume1, Settings, Bookmark, Share2, Repeat2, Heart, User
 } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, ResponsiveContainer, Tooltip } from "recharts";
 // 📝 BlockNote — editor แบบ Notion (toggle, checklist, หัวข้อ, แนบรูป/ไฟล์) สำหรับหน้าโน้ตฉบับเต็ม
@@ -2860,15 +2860,22 @@ const fmtCount = (n) => {
   if (n < 999500) { const v = n / 1000; return (v < 10 ? v.toFixed(1).replace(/\.0$/, "") : Math.round(v)) + "พัน"; }
   const v = n / 1000000; return (v < 10 ? v.toFixed(1).replace(/\.0$/, "") : Math.round(v)) + "ล้าน";
 };
-// เวลาแบบ "กี่นาที/ชม./วันที่แล้ว" สำหรับโพสต์ในฟีด
+// เวลาแบบย่อสำหรับโพสต์ในฟีด — ใหม่ๆ บอกเป็น "กี่นาที/ชม./วัน", เก่ากว่านั้นบอกวันที่+เวลา
 const timeAgo = (ts) => {
   if (!ts) return "";
-  const s = Math.floor((Date.now() - new Date(ts)) / 1000);
+  const d = new Date(ts);
+  const s = Math.floor((Date.now() - d) / 1000);
   if (s < 60) return "เมื่อกี้";
   if (s < 3600) return `${Math.floor(s / 60)} นาที`;
   if (s < 86400) return `${Math.floor(s / 3600)} ชม.`;
   if (s < 604800) return `${Math.floor(s / 86400)} วัน`;
-  return new Date(ts).toLocaleDateString("th-TH", { day: "numeric", month: "short" });
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  return d.toLocaleString("th-TH", { day: "numeric", month: "short", ...(sameYear ? {} : { year: "2-digit" }), hour: "2-digit", minute: "2-digit" }).replace(" น.", "");
+};
+// วันที่+เวลาเต็ม (ใช้ตอนกดดู / hover)
+const fullDT = (ts) => {
+  if (!ts) return "";
+  return new Date(ts).toLocaleString("th-TH", { dateStyle: "long", timeStyle: "short" });
 };
 
 // 🌍 ลูกโลก — มีดาวข้างใน + เส้น grid หมุน (สีตามธีม ส่งผ่าน accent)
@@ -2898,6 +2905,34 @@ function SpinningGlobe({ onClick, size = 38, accent }) {
 }
 
 // 🌐 หน้า Community เต็มจอ — ถ้าไม่มีสิทธิ์ใช้จะขึ้นชวนปลดล็อก (แบบ 2)
+// ✨ ตราสัญลักษณ์ P..KNOW บนหัวฟีด — รวม 3 เอฟเฟค: จุดกระพริบ + แสงกวาด + เรืองแสง
+function PKnowBanner({ accent = "#F2872E" }) {
+  return (
+    <div style={{ textAlign: "center", marginBottom: 12 }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');
+        @keyframes pkb-dot { 0%,100% { opacity:.2 } 50% { opacity:1 } }
+        @keyframes pkb-sweep { 0% { background-position: 140% 0 } 100% { background-position: -140% 0 } }
+        @keyframes pkb-glow { 0%,100% { filter: drop-shadow(0 0 3px ${accent}55) } 50% { filter: drop-shadow(0 0 14px ${accent}) drop-shadow(0 0 26px ${accent}77) } }
+        .pkb-wrap { display:inline-block; animation: pkb-glow 2.6s ease-in-out infinite; }
+        .pkb-txt {
+          font-family: Anton, Impact, 'Arial Black', sans-serif;
+          font-size: 25px; letter-spacing: 1.5px; line-height: 1;
+          background: linear-gradient(90deg, ${accent} 0%, #FFE0BB 45%, ${accent} 90%);
+          background-size: 240% 100%;
+          -webkit-background-clip: text; background-clip: text; color: transparent;
+          animation: pkb-sweep 3s linear infinite;
+        }
+        .pkb-d { animation: pkb-dot 1.4s ease-in-out infinite; }
+        .pkb-d2 { animation-delay:.2s } .pkb-d3 { animation-delay:.4s }
+      `}</style>
+      <div className="pkb-wrap">
+        <span className="pkb-txt">P<span className="pkb-d">.</span><span className="pkb-d pkb-d2">.</span><span className="pkb-d pkb-d3">.</span>KNOW</span>
+      </div>
+    </div>
+  );
+}
+
 // 🛡️ ตัวดักจับ error — ถ้าส่วนไหนพัง จะโชว์ข้อความบอกแทนที่จะจอดำทั้งหน้า
 class ErrorCatcher extends React.Component {
   constructor(p) { super(p); this.state = { err: null }; }
@@ -2984,25 +3019,27 @@ function CommunityOverlay({ t, userId, authProfile, session, openThread, close }
         {/* แท็บบาร์ล่าง 5 อัน (ปุ่มโพสต์อยู่กลาง) */}
         {canUse && (
           <div style={{ display: "flex", alignItems: "center", borderTop: `1px solid ${t.border}`, background: t.surface, padding: "8px 0 10px", flexShrink: 0 }}>
-            {[{ k: "feed", ic: "🏠", label: "ฟีด" }, { k: "search", ic: "🔍", label: "ค้นหา" }].map((tb) => {
-              const on = tab === tb.k;
+            {[{ k: "feed", Ic: Home, label: "ฟีด" }, { k: "search", Ic: Search, label: "ค้นหา" }].map((tb) => {
+              const on = tab === tb.k, Ic = tb.Ic;
               return (
-                <button key={tb.k} onClick={() => setTab(tb.k)} style={{ flex: 1, background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
-                  <span style={{ fontSize: 19, filter: on ? "none" : "grayscale(.6) opacity(.6)" }}>{tb.ic}</span>
+                <button key={tb.k} onClick={() => setTab(tb.k)} style={{ flex: 1, background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                  <Ic size={22} color={on ? t.accent : t.faint} fill={on ? t.accent : "none"} strokeWidth={2} />
                   <span style={{ fontSize: 9.5, fontWeight: 700, color: on ? t.accent : t.faint }}>{tb.label}</span>
                 </button>
               );
             })}
-            {/* ปุ่มโพสต์กลาง */}
-            <button onClick={() => setComposing(true)} style={{ flex: 1, background: "none", border: "none", cursor: "pointer", display: "flex", justifyContent: "center" }}>
-              <span style={{ width: 42, height: 34, borderRadius: 11, background: t.accent, color: t.onAccent, display: "grid", placeItems: "center", fontSize: 22, fontWeight: 700, lineHeight: 1 }}>+</span>
+            {/* ปุ่มโพสต์กลาง — วงกลมใหญ่ */}
+            <button onClick={() => setComposing(true)} style={{ flex: 1, background: "none", border: "none", cursor: "pointer", display: "flex", justifyContent: "center", alignItems: "center" }} title="โพสต์ใหม่">
+              <span style={{ width: 52, height: 52, borderRadius: 26, background: t.accent, display: "grid", placeItems: "center", boxShadow: `0 4px 14px ${t.accent}66`, marginTop: -14 }}>
+                <Plus size={26} color={t.onAccent} strokeWidth={2.6} />
+              </span>
             </button>
-            {[{ k: "activity", ic: "♡", label: "กิจกรรม" }, { k: "profile", ic: "👤", label: "ฉัน" }].map((tb) => {
-              const on = tab === tb.k;
+            {[{ k: "activity", Ic: Heart, label: "กิจกรรม" }, { k: "profile", Ic: User, label: "ฉัน" }].map((tb) => {
+              const on = tab === tb.k, Ic = tb.Ic;
               return (
-                <button key={tb.k} onClick={() => { setTab(tb.k); if (tb.k === "profile") setViewProfileId(userId); }} style={{ flex: 1, background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, position: "relative" }}>
-                  <span style={{ fontSize: tb.k === "activity" ? 21 : 19, lineHeight: 1, color: on ? t.accent : t.faint, filter: tb.k === "activity" ? "none" : (on ? "none" : "grayscale(.6) opacity(.6)") }}>{tb.ic}</span>
-                  {tb.k === "activity" && unread > 0 && <span style={{ position: "absolute", top: -2, right: "50%", marginRight: -16, background: "#E0563E", color: "#fff", fontSize: 8.5, fontWeight: 800, borderRadius: 7, padding: "1px 5px" }}>{unread > 99 ? "99+" : unread}</span>}
+                <button key={tb.k} onClick={() => { setTab(tb.k); if (tb.k === "profile") setViewProfileId(userId); }} style={{ flex: 1, background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, position: "relative" }}>
+                  <Ic size={22} color={on ? t.accent : t.faint} fill={on ? t.accent : "none"} strokeWidth={2} />
+                  {tb.k === "activity" && unread > 0 && <span style={{ position: "absolute", top: -3, right: "50%", marginRight: -17, background: "#E0563E", color: "#fff", fontSize: 8.5, fontWeight: 800, borderRadius: 7, padding: "1px 5px" }}>{unread > 99 ? "99+" : unread}</span>}
                   <span style={{ fontSize: 9.5, fontWeight: 700, color: on ? t.accent : t.faint }}>{tb.label}</span>
                 </button>
               );
@@ -3069,6 +3106,7 @@ function PostCard({ t, post, userId, onOpenProfile, onChanged }) {
   const [commentText, setCommentText] = useState("");
   const [reposted, setReposted] = useState(false);
   const [lightbox, setLightbox] = useState(null);
+  const [showFullTime, setShowFullTime] = useState(false);
   const { toggleLike } = usePostActions(userId);
   const author = post.author || {};
   const orig = post.original; // ถ้าเป็นรีโพสต์ = โพสต์ต้นฉบับ
@@ -3140,7 +3178,9 @@ function PostCard({ t, post, userId, onOpenProfile, onChanged }) {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <button onClick={() => onOpenProfile?.(a.id)} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 13.5, fontWeight: 800, color: t.text }}>{aName}</button>
-                  <span style={{ fontSize: 11, color: t.faint }}>{timeAgo(show.created_at)}</span>
+                  <button onClick={(e) => { e.stopPropagation(); setShowFullTime((v) => !v); }} title={fullDT(show.created_at)} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 11, color: t.faint, flexShrink: 0 }}>
+                    {showFullTime ? fullDT(show.created_at) : timeAgo(show.created_at)}
+                  </button>
                 </div>
                 {show.text && <div style={{ fontSize: 13.5, color: t.text, marginTop: 3, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{show.text}</div>}
               </div>
@@ -3183,7 +3223,8 @@ function PostCard({ t, post, userId, onOpenProfile, onChanged }) {
               {c.author?.avatar_url ? <img src={c.author.avatar_url} alt="" style={{ width: 26, height: 26, borderRadius: 13, objectFit: "cover", flexShrink: 0 }} /> : <div style={{ width: 26, height: 26, borderRadius: 13, background: colorFor(c.author?.name || "?"), display: "grid", placeItems: "center", color: "#fff", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{(c.author?.name || "?")[0]}</div>}
               <div style={{ flex: 1 }}>
                 <span style={{ fontSize: 12.5, fontWeight: 700, color: t.text }}>{c.author?.name || "ผู้ใช้"}</span>
-                <span style={{ fontSize: 12.5, color: t.text, marginLeft: 6 }}>{c.text}</span>
+                <span style={{ fontSize: 10, color: t.faint, marginLeft: 6 }} title={fullDT(c.created_at)}>{timeAgo(c.created_at)}</span>
+                <div style={{ fontSize: 12.5, color: t.text, marginTop: 1 }}>{c.text}</div>
               </div>
             </div>
           ))}
@@ -3240,8 +3281,16 @@ function CommunityActivity({ t, userId, onOpenProfile }) {
 
   const nameOf = (p) => p ? ((p.community_use_main === false && p.community_name ? p.community_name : p.name) || "ผู้ใช้") : "ผู้ใช้";
   const avaOf = (p) => p ? (p.community_use_main === false && p.community_avatar ? p.community_avatar : p.avatar_url) : "";
-  const verb = { like: "ถูกใจโพสต์ของคุณ", comment: "แสดงความเห็นในโพสต์ของคุณ", follow: "เริ่มติดตามคุณ", repost: "รีโพสต์โพสต์ของคุณ" };
-  const emo = { like: "❤️", comment: "💬", follow: "👥", repost: "🔁" };
+  const verb = { like: "ถูกใจโพสต์ของคุณ", comment: "แสดงความเห็นในโพสต์ของคุณ", follow: "เริ่มติดตามคุณ", repost: "รีโพสต์โพสต์ของคุณ", follow_request: "ขอติดตามคุณ" };
+  const emo = { like: "❤️", comment: "💬", follow: "👥", repost: "🔁", follow_request: "🔔" };
+
+  // กดรับ / ปฏิเสธ คำขอติดตาม
+  const respondRequest = async (actorId, accept) => {
+    if (accept) await supabase.from("follows").update({ status: "accepted" }).eq("follower_id", actorId).eq("following_id", userId);
+    else await supabase.from("follows").delete().eq("follower_id", actorId).eq("following_id", userId);
+    await supabase.from("community_activity").delete().eq("user_id", userId).eq("actor_id", actorId).eq("type", "follow_request");
+    load();
+  };
   const chip = (k, label) => (
     <button onClick={() => setFilter(k)} style={{ padding: "6px 14px", borderRadius: 16, border: `1.5px solid ${filter === k ? t.accent : t.border}`, background: filter === k ? t.accent : "transparent", color: filter === k ? t.onAccent : t.sub, fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>{label}</button>
   );
@@ -3270,7 +3319,14 @@ function CommunityActivity({ t, userId, onOpenProfile }) {
               </div>
               {it.preview && <div style={{ fontSize: 11.5, color: t.faint, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.preview}</div>}
             </div>
-            <span style={{ fontSize: 10.5, color: t.faint, flexShrink: 0 }}>{timeAgo(it.created_at)}</span>
+            {it.type === "follow_request" ? (
+              <span style={{ display: "flex", gap: 6, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+                <span role="button" onClick={() => respondRequest(it.actor_id, true)} style={{ padding: "6px 12px", borderRadius: 10, background: t.accent, color: t.onAccent, fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>รับ</span>
+                <span role="button" onClick={() => respondRequest(it.actor_id, false)} style={{ padding: "6px 10px", borderRadius: 10, border: `1px solid ${t.border}`, color: t.sub, fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>ปฏิเสธ</span>
+              </span>
+            ) : (
+              <span title={fullDT(it.created_at)} style={{ fontSize: 10.5, color: t.faint, flexShrink: 0 }}>{timeAgo(it.created_at)}</span>
+            )}
           </button>
         ))}
     </div>
@@ -3474,7 +3530,7 @@ function CommunityFeed({ t, userId, session, onOpenProfile }) {
     try {
       // คนที่เรา follow + ตัวเราเอง (ตัดคนที่ซ่อนไว้ออก)
       const [{ data: fol }, { data: hid }] = await Promise.all([
-        supabase.from("follows").select("following_id").eq("follower_id", userId),
+        supabase.from("follows").select("following_id").eq("follower_id", userId).eq("status", "accepted"),
         supabase.from("community_hidden").select("hidden_id").eq("user_id", userId),
       ]);
       const hiddenSet = new Set((hid || []).map((h) => h.hidden_id));
@@ -3489,8 +3545,9 @@ function CommunityFeed({ t, userId, session, onOpenProfile }) {
 
   return (
     <div>
-      <button onClick={() => setComposing(true)} style={{ ...card(t), padding: 12, marginBottom: 14, width: "100%", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", border: "none", textAlign: "left" }}>
-        <div style={{ width: 34, height: 34, borderRadius: 17, background: "#F2872E", display: "grid", placeItems: "center", flexShrink: 0 }}><Plus size={18} color="#fff" /></div>
+      <PKnowBanner accent={t.accent} />
+      <button onClick={() => setComposing(true)} style={{ ...card(t), padding: 12, marginBottom: 14, width: "100%", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", border: `1px solid ${t.border}`, textAlign: "left" }}>
+        <div style={{ width: 34, height: 34, borderRadius: 17, background: t.accent, display: "grid", placeItems: "center", flexShrink: 0 }}><Plus size={18} color={t.onAccent} /></div>
         <span style={{ fontSize: 13, color: t.sub }}>มีอะไรใหม่...</span>
       </button>
       {loading ? (
@@ -3535,13 +3592,14 @@ function CommunityProfile({ t, userId, profileId, session, onOpenProfile }) {
   const [prof, setProf] = useState(null);
   const [posts, setPosts] = useState([]);
   const [followerCount, setFollowerCount] = useState(0);
-  const [following, setFollowing] = useState(false);
+  const [followState, setFollowState] = useState("none"); // none | pending | accepted
   const [followingCount, setFollowingCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [listModal, setListModal] = useState(null); // "followers" | "following" | null
   const [showBookmarks, setShowBookmarks] = useState(false);
   const [lockedPrivate, setLockedPrivate] = useState(false);
+  const [avatarZoom, setAvatarZoom] = useState(null); // URL รูปโปรไฟล์ที่กดดูแบบเต็มจอ
   const isMe = profileId === userId;
 
   // ชื่อ/รูปที่ใช้จริง (ถ้าตั้งแยก social ใช้ค่านั้น ไม่งั้นใช้ของโปรไฟล์หลัก)
@@ -3558,19 +3616,22 @@ function CommunityProfile({ t, userId, profileId, session, onOpenProfile }) {
       let iFollow = false;
       if (!isMe) {
         const { data: f } = await supabase.from("follows").select("*").eq("follower_id", userId).eq("following_id", profileId).maybeSingle();
-        iFollow = !!f; setFollowing(iFollow);
+        iFollow = f?.status === "accepted"; setFollowState(f ? (f.status || "accepted") : "none");
       }
       // โพสต์ส่วนตัว: เห็นได้เฉพาะเจ้าตัว หรือคนที่ติดตามเขาอยู่
       const blocked = !isMe && p?.community_private && !iFollow;
       setLockedPrivate(blocked);
       if (blocked) setPosts([]);
       else {
-        const { data: raw } = await supabase.from("posts").select("*, author:profiles!posts_author_id_fkey(id, name, avatar_url, community_name, community_avatar, community_use_main)").eq("author_id", profileId).order("created_at", { ascending: false }).limit(100);
+        let q = supabase.from("posts").select("*, author:profiles!posts_author_id_fkey(id, name, avatar_url, community_name, community_avatar, community_use_main)").eq("author_id", profileId);
+        // ถ้าไม่ใช่เจ้าตัวและยังไม่ได้ติดตาม -> เห็นเฉพาะโพสต์สาธารณะ
+        if (!isMe && !iFollow) q = q.eq("visibility", "public");
+        const { data: raw } = await q.order("created_at", { ascending: false }).limit(100);
         setPosts(await enrichPosts(raw || [], userId));
       }
       const [{ count: fc }, { count: fgc }] = await Promise.all([
-        supabase.from("follows").select("*", { count: "exact", head: true }).eq("following_id", profileId),
-        supabase.from("follows").select("*", { count: "exact", head: true }).eq("follower_id", profileId),
+        supabase.from("follows").select("*", { count: "exact", head: true }).eq("following_id", profileId).eq("status", "accepted"),
+        supabase.from("follows").select("*", { count: "exact", head: true }).eq("follower_id", profileId).eq("status", "accepted"),
       ]);
       setFollowerCount(fc || 0); setFollowingCount(fgc || 0);
     } catch (e) {}
@@ -3579,9 +3640,19 @@ function CommunityProfile({ t, userId, profileId, session, onOpenProfile }) {
   useEffect(() => { load(); }, [profileId]);
 
   const toggleFollow = async () => {
-    const nx = !following; setFollowing(nx); setFollowerCount((c) => c + (nx ? 1 : -1));
-    if (nx) { await supabase.from("follows").insert({ follower_id: userId, following_id: profileId }); logActivity({ userId: profileId, actorId: userId, type: "follow" }); }
-    else await supabase.from("follows").delete().eq("follower_id", userId).eq("following_id", profileId);
+    if (followState === "none") {
+      // บัญชีส่วนตัว -> ส่งคำขอรออนุมัติ / บัญชีทั่วไป -> ติดตามได้เลย
+      const needApprove = !!prof?.community_private;
+      await supabase.from("follows").insert({ follower_id: userId, following_id: profileId, status: needApprove ? "pending" : "accepted" });
+      setFollowState(needApprove ? "pending" : "accepted");
+      if (!needApprove) setFollowerCount((c) => c + 1);
+      logActivity({ userId: profileId, actorId: userId, type: needApprove ? "follow_request" : "follow" });
+    } else {
+      // ยกเลิกคำขอ หรือ เลิกติดตาม
+      if (followState === "accepted") setFollowerCount((c) => Math.max(0, c - 1));
+      await supabase.from("follows").delete().eq("follower_id", userId).eq("following_id", profileId);
+      setFollowState("none");
+    }
   };
 
   if (loading) return <div style={{ textAlign: "center", padding: 30, color: t.faint, fontSize: 13 }}>กำลังโหลด...</div>;
@@ -3590,7 +3661,16 @@ function CommunityProfile({ t, userId, profileId, session, onOpenProfile }) {
   return (
     <div>
       <div style={{ ...card(t), padding: 18, marginBottom: 14, textAlign: "center" }}>
-        {effAva ? <img src={effAva} alt="" style={{ width: 76, height: 76, borderRadius: 38, objectFit: "cover", margin: "0 auto 10px" }} /> : <div style={{ width: 76, height: 76, borderRadius: 38, background: colorFor(effName), display: "grid", placeItems: "center", color: "#fff", fontSize: 30, fontWeight: 700, margin: "0 auto 10px" }}>{effName[0]}</div>}
+        {effAva ? (
+          <button onClick={() => setAvatarZoom(effAva)} title="แตะเพื่อดูรูปเต็ม" style={{ background: "none", border: "none", padding: 0, cursor: "zoom-in", display: "block", margin: "0 auto 10px", position: "relative", lineHeight: 0 }}>
+            <img src={effAva} alt="" style={{ width: 88, height: 88, borderRadius: 44, objectFit: "cover", border: `2.5px solid ${t.accent}`, boxShadow: `0 0 0 4px ${t.accent}22` }} />
+            <span style={{ position: "absolute", bottom: 2, right: 2, width: 24, height: 24, borderRadius: 12, background: t.accent, display: "grid", placeItems: "center", border: `2px solid ${t.page}` }}>
+              <Search size={11} color={t.onAccent} strokeWidth={3} />
+            </span>
+          </button>
+        ) : (
+          <div style={{ width: 88, height: 88, borderRadius: 44, background: colorFor(effName), display: "grid", placeItems: "center", color: "#fff", fontSize: 34, fontWeight: 700, margin: "0 auto 10px" }}>{effName[0]}</div>
+        )}
         <div style={{ fontSize: 17, fontWeight: 800, color: t.text }}>{effName}</div>
         {prof.community_bio && <div style={{ fontSize: 12.5, color: t.sub, marginTop: 5, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{prof.community_bio}</div>}
         <div style={{ display: "flex", justifyContent: "center", gap: 20, marginTop: 12 }}>
@@ -3604,7 +3684,7 @@ function CommunityProfile({ t, userId, profileId, session, onOpenProfile }) {
             <button onClick={() => setShowBookmarks(true)} style={{ padding: "9px 20px", borderRadius: 12, border: `1px solid ${t.border}`, background: "none", color: t.text, fontWeight: 700, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}><Bookmark size={14} color={t.text} /> บันทึกไว้</button>
           </div>
         ) : (
-          <button onClick={toggleFollow} style={{ marginTop: 14, padding: "9px 28px", borderRadius: 12, border: following ? `1px solid ${t.border}` : "none", background: following ? "none" : "#F2872E", color: following ? t.sub : "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>{following ? "กำลังติดตาม" : "ติดตาม"}</button>
+          <button onClick={toggleFollow} style={{ marginTop: 14, padding: "9px 28px", borderRadius: 12, border: followState === "none" ? "none" : `1px solid ${t.border}`, background: followState === "none" ? t.accent : "none", color: followState === "none" ? t.onAccent : t.sub, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>{followState === "accepted" ? "กำลังติดตาม" : followState === "pending" ? "⏳ รออนุมัติ" : "ติดตาม"}</button>
         )}
       </div>
       {lockedPrivate ? (
@@ -3616,6 +3696,7 @@ function CommunityProfile({ t, userId, profileId, session, onOpenProfile }) {
       ) : posts.length === 0 ? (
         <div style={{ textAlign: "center", padding: 30, color: t.faint, fontSize: 13 }}>ยังไม่มีโพสต์</div>
       ) : posts.map((p) => <PostCard key={p.id} t={t} post={p} userId={userId} onOpenProfile={onOpenProfile} onChanged={load} />)}
+      {avatarZoom && <ImageLightbox src={avatarZoom} onClose={() => setAvatarZoom(null)} />}
       {editing && <EditCommunityProfile t={t} userId={userId} prof={prof} onDone={() => { setEditing(false); load(); }} close={() => setEditing(false)} />}
       {showBookmarks && (
         <ModalPortal>
@@ -3713,7 +3794,7 @@ function FollowListModal({ t, type, profileId, userId, onOpenProfile, close }) {
       try {
         const col = type === "followers" ? "follower_id" : "following_id";
         const matchCol = type === "followers" ? "following_id" : "follower_id";
-        const { data: rows } = await supabase.from("follows").select(col).eq(matchCol, profileId);
+        const { data: rows } = await supabase.from("follows").select(col).eq(matchCol, profileId).eq("status", "accepted");
         const ids = (rows || []).map((r) => r[col]);
         if (ids.length === 0) { setList([]); return; }
         const { data: profs } = await supabase.from("profiles").select("id, name, avatar_url, community_name, community_avatar, community_use_main").in("id", ids);
@@ -3749,6 +3830,7 @@ function ComposeModal({ t, userId, onDone, close }) {
   const [images, setImages] = useState([]); // URL ที่อัปโหลดแล้ว
   const [uploading, setUploading] = useState(false);
   const [posting, setPosting] = useState(false);
+  const [visibility, setVisibility] = useState("public"); // public | followers
   const fileRef = useRef(null);
 
   const uploadImages = async (e) => {
@@ -3766,7 +3848,7 @@ function ComposeModal({ t, userId, onDone, close }) {
   const post = async () => {
     if (!text.trim() && images.length === 0) return;
     setPosting(true);
-    await supabase.from("posts").insert({ author_id: userId, text: text.trim(), images });
+    await supabase.from("posts").insert({ author_id: userId, text: text.trim(), images, visibility });
     setPosting(false);
     onDone?.();
   };
@@ -3793,6 +3875,16 @@ function ComposeModal({ t, userId, onDone, close }) {
           )}
           <button onClick={() => fileRef.current?.click()} style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 10, border: `1px solid ${t.border}`, background: "none", color: t.text, cursor: "pointer", fontSize: 12.5, fontWeight: 700 }}>{uploading ? "กำลังอัปโหลด..." : "📷 เพิ่มรูป"}</button>
           <input ref={fileRef} type="file" accept="image/*" multiple onChange={uploadImages} style={{ display: "none" }} />
+
+          {/* ใครเห็นโพสต์นี้ได้บ้าง */}
+          <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${t.border}` }}>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 7 }}>ใครเห็นโพสต์นี้ได้</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              {[{ k: "public", ic: "🌐", lb: "ทุกคนในชุมชน" }, { k: "followers", ic: "🔒", lb: "เฉพาะผู้ติดตาม" }].map((o) => (
+                <button key={o.k} onClick={() => setVisibility(o.k)} style={{ flex: 1, padding: "10px 8px", borderRadius: 12, border: `1.5px solid ${visibility === o.k ? t.accent : t.border}`, background: visibility === o.k ? `${t.accent}1A` : "none", color: visibility === o.k ? t.accent : t.sub, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{o.ic} {o.lb}</button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </ModalPortal>
