@@ -2911,7 +2911,7 @@ function PKnowBanner({ accent = "#F2872E" }) {
     <div style={{ textAlign: "center", marginBottom: 12 }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');
-        @keyframes pkb-dot { 0%,100% { opacity:.2 } 50% { opacity:1 } }
+        @keyframes pkb-dot { 0%,100% { opacity:.5; transform: scale(.9) } 50% { opacity:1; transform: scale(1.15) } }
         @keyframes pkb-sweep { 0% { background-position: 140% 0 } 100% { background-position: -140% 0 } }
         @keyframes pkb-glow { 0%,100% { filter: drop-shadow(0 0 3px ${accent}55) } 50% { filter: drop-shadow(0 0 14px ${accent}) drop-shadow(0 0 26px ${accent}77) } }
         .pkb-wrap { display:inline-block; animation: pkb-glow 2.6s ease-in-out infinite; }
@@ -2923,7 +2923,7 @@ function PKnowBanner({ accent = "#F2872E" }) {
           -webkit-background-clip: text; background-clip: text; color: transparent;
           animation: pkb-sweep 3s linear infinite;
         }
-        .pkb-d { animation: pkb-dot 1.4s ease-in-out infinite; }
+        .pkb-d { animation: pkb-dot 1.4s ease-in-out infinite; display:inline-block; color:${accent}; -webkit-text-fill-color:${accent}; }
         .pkb-d2 { animation-delay:.2s } .pkb-d3 { animation-delay:.4s }
       `}</style>
       <div className="pkb-wrap">
@@ -3098,7 +3098,7 @@ function usePostActions(userId) {
 }
 
 // การ์ดโพสต์ 1 อัน (ใช้ทั้งใน feed และหน้าโปรไฟล์)
-function PostCard({ t, post, userId, onOpenProfile, onChanged }) {
+function PostCard({ t, post, userId, onOpenProfile, onChanged, onTag }) {
   const [liked, setLiked] = useState(post.liked);
   const [likeCount, setLikeCount] = useState(post.like_count || 0);
   const [showComments, setShowComments] = useState(false);
@@ -3182,7 +3182,15 @@ function PostCard({ t, post, userId, onOpenProfile, onChanged }) {
                     {showFullTime ? fullDT(show.created_at) : timeAgo(show.created_at)}
                   </button>
                 </div>
-                {show.text && <div style={{ fontSize: 13.5, color: t.text, marginTop: 3, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{show.text}</div>}
+                {show.text && (
+                  <div style={{ fontSize: 13.5, color: t.text, marginTop: 3, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
+                    {String(show.text).split(/(#[^\s#]+)/g).map((seg, i) =>
+                      seg.startsWith("#") && seg.length > 1
+                        ? <span key={i} role="button" onClick={(e) => { e.stopPropagation(); onTag?.(seg.slice(1)); }} style={{ color: t.accent, fontWeight: 700, cursor: "pointer" }}>{seg}</span>
+                        : <span key={i}>{seg}</span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
             {showImgs.length > 0 && (
@@ -3524,41 +3532,101 @@ function CommunityFeed({ t, userId, session, onOpenProfile }) {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [composing, setComposing] = useState(false);
+  const [mode, setMode] = useState("explore"); // explore = โพสต์สาธารณะทุกคน / following = เฉพาะคนที่ติดตาม
+  const [q, setQ] = useState("");              // คำค้น (ชื่อคน / ข้อความ / #แท็ก)
+  const [who, setWho] = useState("all");       // all | mine
+
+  // กรองในเครื่องทันที ไม่ต้องยิงเน็ตใหม่ -> ค้นหาไว
+  const shown = React.useMemo(() => {
+    let list = posts;
+    if (who === "mine") list = list.filter((p) => p.author_id === userId);
+    const kw = q.trim().toLowerCase();
+    if (kw) {
+      const isTag = kw.startsWith("#");
+      const term = isTag ? kw.slice(1) : kw;
+      list = list.filter((p) => {
+        const src = p.original || p;
+        const text = String(src.text || "").toLowerCase();
+        if (isTag) return text.includes("#" + term);
+        const a = src.author || {};
+        const nm = String((a.community_use_main === false && a.community_name ? a.community_name : a.name) || "").toLowerCase();
+        return text.includes(term) || nm.includes(term);
+      });
+    }
+    return list;
+  }, [posts, q, who, userId]);
 
   const load = async () => {
     setLoading(true);
     try {
-      // คนที่เรา follow + ตัวเราเอง (ตัดคนที่ซ่อนไว้ออก)
       const [{ data: fol }, { data: hid }] = await Promise.all([
         supabase.from("follows").select("following_id").eq("follower_id", userId).eq("status", "accepted"),
         supabase.from("community_hidden").select("hidden_id").eq("user_id", userId),
       ]);
       const hiddenSet = new Set((hid || []).map((h) => h.hidden_id));
-      const authorIds = [...(fol || []).map((f) => f.following_id), userId].filter((id) => !hiddenSet.has(id));
-      const { data: raw } = await supabase.from("posts").select("*, author:profiles!posts_author_id_fkey(id, name, avatar_url, community_name, community_avatar, community_use_main)").in("author_id", authorIds).order("created_at", { ascending: false }).limit(100);
-      const enriched = await enrichPosts(raw || [], userId);
-      setPosts(enriched);
+      const followSet = new Set((fol || []).map((f) => f.following_id));
+      const sel = "*, author:profiles!posts_author_id_fkey(id, name, avatar_url, community_name, community_avatar, community_use_main, community_private)";
+      let raw = [];
+
+      if (mode === "following") {
+        // เฉพาะคนที่ติดตาม + ตัวเราเอง (เห็นได้ทั้งโพสต์สาธารณะและเฉพาะผู้ติดตาม)
+        const ids = [...followSet, userId].filter((id) => !hiddenSet.has(id));
+        const { data } = await supabase.from("posts").select(sel).in("author_id", ids).order("created_at", { ascending: false }).limit(100);
+        raw = data || [];
+      } else {
+        // สำรวจ: โพสต์สาธารณะของทุกคน + โพสต์ของเราเอง
+        const { data } = await supabase.from("posts").select(sel).eq("visibility", "public").order("created_at", { ascending: false }).limit(100);
+        raw = (data || []).filter((p) => {
+          if (hiddenSet.has(p.author_id)) return false;                      // คนที่เราซ่อนไว้
+          if (p.author_id === userId) return true;                           // ของเราเองเห็นเสมอ
+          if (p.author?.community_private) return followSet.has(p.author_id); // บัญชีส่วนตัวต้องติดตามก่อน
+          return true;
+        });
+      }
+      setPosts(await enrichPosts(raw, userId));
     } catch (e) {}
     setLoading(false);
   };
-  useEffect(() => { load(); }, [userId]);
+  useEffect(() => { load(); }, [userId, mode]);
 
   return (
     <div>
       <PKnowBanner accent={t.accent} />
+
+      {/* สลับมุมมองฟีด */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 10, background: t.surface, border: `1px solid ${t.border}`, borderRadius: 14, padding: 4 }}>
+        {[{ k: "explore", lb: "🌐 สำรวจ" }, { k: "following", lb: "👥 ติดตามอยู่" }].map((o) => (
+          <button key={o.k} onClick={() => setMode(o.k)} style={{ flex: 1, padding: "8px 0", borderRadius: 10, border: "none", cursor: "pointer", background: mode === o.k ? t.accent : "none", color: mode === o.k ? t.onAccent : t.sub, fontSize: 12.5, fontWeight: 700 }}>{o.lb}</button>
+        ))}
+      </div>
+
+      {/* ค้นหาแบบไว — พิมพ์ชื่อคน / ข้อความ / #แท็ก */}
+      <div style={{ position: "relative", marginBottom: 10 }}>
+        <Search size={15} color={t.faint} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ค้นหาชื่อคน ข้อความ หรือ #แท็ก" style={{ ...input(t), paddingLeft: 34, paddingRight: q ? 34 : 14 }} />
+        {q && <button onClick={() => setQ("")} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", padding: 4 }}><X size={15} color={t.faint} /></button>}
+      </div>
+
+      {/* ตัวกรอง */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 12, overflowX: "auto", paddingBottom: 2 }}>
+        {[{ k: "all", lb: "ทั้งหมด" }, { k: "mine", lb: "📝 ของฉัน" }].map((o) => (
+          <button key={o.k} onClick={() => setWho(o.k)} style={{ padding: "6px 14px", borderRadius: 16, border: `1.5px solid ${who === o.k ? t.accent : t.border}`, background: who === o.k ? t.accent : "transparent", color: who === o.k ? t.onAccent : t.sub, fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>{o.lb}</button>
+        ))}
+      </div>
+
       <button onClick={() => setComposing(true)} style={{ ...card(t), padding: 12, marginBottom: 14, width: "100%", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", border: `1px solid ${t.border}`, textAlign: "left" }}>
         <div style={{ width: 34, height: 34, borderRadius: 17, background: t.accent, display: "grid", placeItems: "center", flexShrink: 0 }}><Plus size={18} color={t.onAccent} /></div>
         <span style={{ fontSize: 13, color: t.sub }}>มีอะไรใหม่...</span>
       </button>
       {loading ? (
         <div style={{ textAlign: "center", padding: 30, color: t.faint, fontSize: 13 }}>กำลังโหลด...</div>
-      ) : posts.length === 0 ? (
+      ) : shown.length === 0 ? (
         <div style={{ textAlign: "center", padding: "30px 16px" }}>
-          <div style={{ fontSize: 32, marginBottom: 8 }}>🌱</div>
-          <div style={{ fontSize: 13.5, fontWeight: 700, color: t.text, marginBottom: 4 }}>ยังไม่มีโพสต์ในฟีด</div>
-          <div style={{ fontSize: 12, color: t.sub, lineHeight: 1.6 }}>ลองโพสต์อะไรสักอย่าง หรือไปติดตามคนอื่นเพื่อเห็นโพสต์ของเขาที่นี่</div>
+          <div style={{ fontSize: 32, marginBottom: 8 }}>{q ? "🔍" : mode === "explore" ? "🌱" : "👥"}</div>
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: t.text, marginBottom: 4 }}>{q ? "ไม่พบโพสต์ที่ตรงกับที่ค้นหา" : who === "mine" ? "คุณยังไม่มีโพสต์" : mode === "explore" ? "ยังไม่มีโพสต์สาธารณะ" : "ยังไม่มีโพสต์จากคนที่ติดตาม"}</div>
+          <div style={{ fontSize: 12, color: t.sub, lineHeight: 1.6 }}>{q ? "ลองพิมพ์คำอื่น หรือกด ✕ เพื่อล้างการค้นหา" : who === "mine" ? "กดปุ่มโพสต์เพื่อเริ่มเขียนอันแรก" : mode === "explore" ? "ลองโพสต์อะไรสักอย่างเป็นคนแรก" : "ลองกดแท็บ \"สำรวจ\" เพื่อหาคนน่าสนใจไปติดตาม"}</div>
         </div>
-      ) : posts.map((p) => <PostCard key={p.id} t={t} post={p} userId={userId} onOpenProfile={onOpenProfile} onChanged={load} />)}
+      ) : shown.map((p) => <PostCard key={p.id} t={t} post={p} userId={userId} onOpenProfile={onOpenProfile} onChanged={load} onTag={(tag) => setQ("#" + tag)} />)}
       {composing && <ComposeModal t={t} userId={userId} onDone={() => { setComposing(false); load(); }} close={() => setComposing(false)} />}
     </div>
   );
