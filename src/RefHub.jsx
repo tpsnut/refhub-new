@@ -7,7 +7,7 @@ import {
   Utensils, Car, ShoppingBag, Receipt, Gamepad2, HeartPulse, Briefcase, Gift, Coffee, Music,
   Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi, MessageCircle, MoreVertical, KeyRound, MapPin, Copy, LockKeyhole, LogOut, LayoutGrid, Maximize2, Volume1, Settings, Bookmark, Share2, Repeat2, Heart, User
 } from "lucide-react";
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, ResponsiveContainer, Tooltip } from "recharts";
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, LineChart, Line } from "recharts";
 // 📝 BlockNote — editor แบบ Notion (toggle, checklist, หัวข้อ, แนบรูป/ไฟล์) สำหรับหน้าโน้ตฉบับเต็ม
 import { useCreateBlockNote } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
@@ -664,6 +664,7 @@ export default function RefHub() {
   const [page, setPage] = useState(() => { try { return sessionStorage.getItem("refhub:page") || "home"; } catch (e) { return "home"; } });
   const [notes, setNotes] = useState([]);
   const [goals, setGoals] = useState([]);
+  const [goalTemplates, setGoalTemplates] = useState([]); // แม่แบบเป้าหมายประจำสัปดาห์ [{id, text, daysOfWeek, difficulty, active}]
   const [tx, setTx] = useState([]);
   const [profile, setProfile] = useState({ name: "", avatar: "" });
   const [autoNight, setAutoNight] = useState(false);
@@ -773,6 +774,28 @@ export default function RefHub() {
           .eq("user_id", userId);
         if (goalsErr) console.error("โหลดเป้าหมายไม่สำเร็จ (ไม่แตะข้อมูลเดิม):", goalsErr.message);
         else if (dbGoals) setGoals(dbGoals.map((g) => ({ ...g, doneDate: g.done_date || null })));
+
+        // 3b. ดึงแม่แบบเป้าหมายประจำสัปดาห์ + สร้างรายการของ "วันนี้" อัตโนมัติถ้ายังไม่มี (ไม่แตะรายการเก่า ไม่สร้างซ้ำ)
+        const { data: dbTemplates, error: tplErr } = await supabase
+          .from("goal_templates")
+          .select("*")
+          .eq("user_id", userId)
+          .eq("active", true);
+        if (tplErr) console.error("โหลดแม่แบบเป้าหมายไม่สำเร็จ (ไม่แตะข้อมูลเดิม):", tplErr.message);
+        else if (dbTemplates) {
+          const templates = dbTemplates.map((tp) => ({ id: tp.id, text: tp.text, daysOfWeek: tp.days_of_week || [], difficulty: tp.difficulty || "normal", active: tp.active }));
+          setGoalTemplates(templates);
+          const todayDow = (new Date().getDay() + 6) % 7; // จันทร์=0 ... อาทิตย์=6
+          const today = todayStr();
+          const existingByTemplate = new Set((dbGoals || []).filter((g) => g.template_id && g.date === today).map((g) => g.template_id));
+          const toCreate = templates.filter((tp) => tp.daysOfWeek.includes(todayDow) && !existingByTemplate.has(tp.id));
+          if (toCreate.length > 0) {
+            const newRows = toCreate.map((tp) => ({ id: uid(), user_id: userId, text: tp.text, date: today, done: false, template_id: tp.id, difficulty: tp.difficulty }));
+            const { error: genErr } = await supabase.from("goals").insert(newRows.map(({ id, user_id, text, date, done, template_id, difficulty }) => ({ id, user_id, text, date, done, template_id, difficulty })));
+            if (genErr) console.error("สร้างเป้าหมายประจำวันจากแม่แบบไม่สำเร็จ:", genErr.message);
+            else setGoals((gs) => [...gs, ...newRows.map((r) => ({ ...r, doneDate: null }))]);
+          }
+        }
 
         // 4. ดึงสมุดโน้ต (Notes)
         const { data: dbNotes, error: notesErr } = await supabase
@@ -1257,7 +1280,7 @@ export default function RefHub() {
 
         {/* CONTENT — ความสูงหารด้วยสเกลชดเชย transform:scale ข้างบน กันตอนขยายฟอนต์แล้วท้ายเนื้อหาจมใต้ Dock */}
         <div style={{ position: "relative", zIndex: 2, padding: `16px 18px ${page === "chat" || page === "chatRoom" ? 16 : 120}px`, height: `calc(${(10000 / fontScale).toFixed(2)}vh - 76px)`, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
-          {page === "home" && <ErrorCatcher t={t}><HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, goalDone, goalPct, setGoals, notes, setPage, setChatOpen, userId, playlist, setCommunityOpen }} /></ErrorCatcher>}
+          {page === "home" && <ErrorCatcher t={t}><HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, allGoals: goals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, userId, authProfile, playlist, setCommunityOpen }} /></ErrorCatcher>}
           {page === "ledger" && <FinancePage {...{ t, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt), userId }} />}
           {page === "note" && <NotePage {...{ t, notes, setNotes, isNight, userId, session, authProfile }} />}
           {page === "ideas" && <IdeasPage t={t} M={M} userId={userId} session={session} authProfile={authProfile} setAuthProfile={setAuthProfile} setNotes={setNotes} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} />}
@@ -1340,7 +1363,7 @@ export default function RefHub() {
             </div>
           </div>
         )}
-        {accountSettingsOpen && <AccountSettingsModal t={t} authProfile={authProfile} userId={userId} session={session} close={() => setAccountSettingsOpen(false)} />}
+        {accountSettingsOpen && <AccountSettingsModal t={t} authProfile={authProfile} setAuthProfile={setAuthProfile} userId={userId} session={session} close={() => setAccountSettingsOpen(false)} />}
         {myActivityOpen && <MyActivityModal t={t} userId={userId} close={() => setMyActivityOpen(false)} />}
         {communityOpen && <CommunityOverlay t={t} userId={userId} authProfile={authProfile} session={session} openThread={() => {}} close={() => setCommunityOpen(false)} />}
         {chatOpen && <ChatModal t={t} M={M} mentor={mentor} setMentor={setMentor} authProfile={authProfile} setAuthProfile={setAuthProfile} customMentors={customMentors} setCustomMentors={setCustomMentors} userId={userId} session={session} goals={goals} askAiTopic={askAiTopic} close={() => { setChatOpen(false); setAskAiTopic(null); }} />}
@@ -1591,18 +1614,60 @@ function AuthPage() {
   );
 }
 
-// 🕘 ประวัติการใช้งานของฉัน — ทุกคนดูของตัวเองได้ (ไม่ใช่แค่แอดมิน) เห็นแบบเดียวกับที่แอดมินเห็น (สรุปเท่านั้น)
+// 🕘 ประวัติการใช้งานของฉัน — ทุกคนดูของตัวเองได้ (ไม่ใช่แค่แอดมิน) กรองตามช่วงเวลาได้เหมือนหน้าการเงิน
 function MyActivityModal({ t, userId, close }) {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [periodMode, setPeriodMode] = useState("week"); // day | week | month | range
+  const [anchor, setAnchor] = useState(todayStr());
+  const [rangeStart, setRangeStart] = useState(todayStr());
+  const [rangeEnd, setRangeEnd] = useState(todayStr());
+
+  const weekRangeOf = (dateStr) => {
+    const d = new Date(dateStr + "T00:00:00");
+    const dow = (d.getDay() + 6) % 7; // จันทร์=0 ... อาทิตย์=6
+    const mon = new Date(d); mon.setDate(d.getDate() - dow);
+    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+    return { start: mon.toISOString().slice(0, 10), end: sun.toISOString().slice(0, 10) };
+  };
+  const shiftAnchor = (dir) => {
+    const d = new Date(anchor + "T00:00:00");
+    if (periodMode === "day") d.setDate(d.getDate() + dir);
+    else if (periodMode === "week") d.setDate(d.getDate() + dir * 7);
+    else d.setMonth(d.getMonth() + dir);
+    setAnchor(d.toISOString().slice(0, 10));
+  };
+
+  let rangeFrom, rangeTo, periodLabel;
+  if (periodMode === "day") {
+    rangeFrom = anchor; rangeTo = anchor;
+    const d = new Date(anchor + "T00:00:00");
+    periodLabel = `${d.getDate()} ${["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."][d.getMonth()]} ${d.getFullYear() + 543}`;
+  } else if (periodMode === "week") {
+    const { start, end } = weekRangeOf(anchor); rangeFrom = start; rangeTo = end;
+    periodLabel = `${dateLabel(start)} – ${dateLabel(end)}`;
+  } else if (periodMode === "range") {
+    rangeFrom = rangeStart; rangeTo = rangeEnd;
+    periodLabel = `${rangeStart} – ${rangeEnd}`;
+  } else {
+    const sel = monthOf(anchor);
+    const [y, m] = sel.split("-"); const lastDay = new Date(+y, +m, 0).getDate();
+    rangeFrom = `${sel}-01`; rangeTo = `${sel}-${String(lastDay).padStart(2, "0")}`;
+    periodLabel = thMonth(sel);
+  }
 
   useEffect(() => {
+    setLoading(true);
     (async () => {
-      const { data } = await supabase.from("activity_log").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(100);
+      const { data } = await supabase.from("activity_log").select("*").eq("user_id", userId)
+        .gte("created_at", rangeFrom + "T00:00:00")
+        .lte("created_at", rangeTo + "T23:59:59")
+        .order("created_at", { ascending: false })
+        .limit(300);
       setLogs(data || []);
       setLoading(false);
     })();
-  }, [userId]);
+  }, [userId, rangeFrom, rangeTo]);
 
   const moduleMeta = {
     finance: { label: "การเงิน", icon: Wallet, color: "#E8894A" },
@@ -1624,10 +1689,30 @@ function MyActivityModal({ t, userId, close }) {
           <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>ประวัติการใช้งานของฉัน</div>
           <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
         </div>
-        <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 16 }}>สรุปสิ่งที่คุณทำในแอปย้อนหลัง 100 รายการล่าสุด</div>
+        <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 14 }}>สรุปสิ่งที่คุณทำในแอป</div>
+
+        <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+          {[["day", "วัน"], ["week", "สัปดาห์"], ["month", "เดือน"], ["range", "กำหนดเอง"]].map(([v, lb]) => (
+            <button key={v} onClick={() => setPeriodMode(v)} style={{ flex: 1, padding: "7px 0", borderRadius: 10, cursor: "pointer", border: `1.5px solid ${periodMode === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 11.5, background: periodMode === v ? t.accent : "transparent", color: periodMode === v ? t.onAccent : t.sub }}>{lb}</button>
+          ))}
+        </div>
+
+        {periodMode === "range" ? (
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 14 }}>
+            <input type="date" value={rangeStart} onChange={(e) => setRangeStart(e.target.value)} style={{ ...input(t), fontSize: 12 }} />
+            <span style={{ color: t.faint }}>–</span>
+            <input type="date" value={rangeEnd} onChange={(e) => setRangeEnd(e.target.value)} style={{ ...input(t), fontSize: 12 }} />
+          </div>
+        ) : (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+            <button onClick={() => shiftAnchor(-1)} style={navBtn(t)}>‹</button>
+            <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text }}>{periodLabel}</div>
+            <button onClick={() => shiftAnchor(1)} style={navBtn(t)}>›</button>
+          </div>
+        )}
 
         {loading && <Empty t={t} text="กำลังโหลด..." />}
-        {!loading && logs.length === 0 && <Empty t={t} text="ยังไม่มีประวัติการใช้งาน" />}
+        {!loading && logs.length === 0 && <Empty t={t} text="ช่วงนี้ยังไม่มีประวัติการใช้งาน" />}
 
         {Object.keys(groups).map((d) => (
           <div key={d} style={{ marginBottom: 14 }}>
@@ -1654,7 +1739,7 @@ function MyActivityModal({ t, userId, close }) {
   );
 }
 
-function AccountSettingsModal({ t, authProfile, userId, session, close }) {
+function AccountSettingsModal({ t, authProfile, setAuthProfile, userId, session, close }) {
   const [newEmail, setNewEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -1738,6 +1823,18 @@ function AccountSettingsModal({ t, authProfile, userId, session, close }) {
           <textarea value={fbText} onChange={(e) => setFbText(e.target.value)} placeholder="พิมพ์ข้อเสนอแนะที่นี่..." rows={4} style={{ ...input(t), resize: "vertical", marginBottom: 8, fontFamily: "inherit" }} />
           {fbSent && <div style={{ fontSize: 11.5, color: "#2E9E6B", marginBottom: 8 }}>ส่งแล้ว ขอบคุณมากครับ 🙏</div>}
           <button onClick={sendFeedback} disabled={fbBusy || !fbText.trim()} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "11px 0", opacity: fbBusy || !fbText.trim() ? 0.6 : 1 }}>{fbBusy ? "กำลังส่ง..." : "ส่งข้อเสนอแนะ"}</button>
+        </div>
+
+        <div style={{ ...card(t), padding: 14, marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 4 }}>🏆 กระดานผู้นำเป้าหมาย</div>
+              <div style={{ fontSize: 11.5, color: t.sub, lineHeight: 1.6 }}>เปิดแล้วคนอื่นในบ้านจะเห็นแต้มสัปดาห์นี้ของคุณในกระดานผู้นำ (ไม่เห็นรายละเอียดเป้าหมาย เห็นแค่แต้มรวม)</div>
+            </div>
+            <button onClick={async () => { const next = !authProfile?.show_on_leaderboard; await supabase.from("profiles").update({ show_on_leaderboard: next }).eq("id", userId); setAuthProfile((p) => ({ ...p, show_on_leaderboard: next })); }} style={{ flexShrink: 0, marginLeft: 12, width: 46, height: 26, borderRadius: 13, border: "none", cursor: "pointer", background: authProfile?.show_on_leaderboard ? t.accent : t.border, position: "relative", transition: "background .15s" }}>
+              <span style={{ position: "absolute", top: 3, left: authProfile?.show_on_leaderboard ? 23 : 3, width: 20, height: 20, borderRadius: 10, background: "#fff", transition: "left .15s" }} />
+            </button>
+          </div>
         </div>
 
         <div style={{ ...card(t), padding: 14, marginBottom: 16 }}>
@@ -2104,22 +2201,225 @@ function TrackRow({ t, M, track, active, playing, folders, isFirst, isLast, onPl
 const greet = (night) => { const h = new Date().getHours(); return h < 6 ? "ดึกแล้ว พักบ้างนะ 🌙" : h < 12 ? "สวัสดีตอนเช้า ☀️" : h < 18 ? "สวัสดีตอนบ่าย 🌤️" : "ค่ำแล้ว วันนี้เป็นไงบ้าง 🌙"; };
 
 // ---------------- Home ----------------
-function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, goalDone, goalPct, setGoals, notes, setPage, setChatOpen, userId, playlist, setCommunityOpen }) {
+// 🎯 เพิ่มเป้าหมาย — เลือกได้ว่าทำครั้งเดียววันนี้ หรือ ตั้งเป็นตารางประจำสัปดาห์ (เลือกวันเองหรือทุกวัน) + ระดับความหิน
+function AddGoalModal({ t, userId, setGoals, goalTemplates, setGoalTemplates, close }) {
+  const [mode, setMode] = useState("once"); // once | recurring
+  const [text, setText] = useState("");
+  const [days, setDays] = useState([]); // 0=จ ... 6=อา
+  const [difficulty, setDifficulty] = useState("normal");
+  const [busy, setBusy] = useState(false);
+  const dayLabels = ["จ", "อ", "พ", "พฤ", "ศ", "ส", "อา"];
+  const diffEmoji = { easy: "🟢", normal: "🟡", hard: "🔴" };
+
+  const toggleDay = (i) => setDays((ds) => (ds.includes(i) ? ds.filter((x) => x !== i) : [...ds, i].sort()));
+
+  const save = async () => {
+    if (!text.trim()) return;
+    if (mode === "recurring" && days.length === 0) return;
+    setBusy(true);
+    try {
+      if (mode === "once") {
+        const g = { id: uid(), text: text.trim(), done: false, date: todayStr(), doneDate: null, difficulty };
+        setGoals((gs) => [...gs, g]);
+        if (userId) { await supabase.from("goals").insert({ id: g.id, user_id: userId, text: g.text, done: g.done, date: g.date, done_date: g.doneDate, difficulty }); logAudit(userId, "goals", "add", "เพิ่มเป้าหมาย"); }
+      } else {
+        const { data, error } = await supabase.from("goal_templates").insert({ user_id: userId, text: text.trim(), days_of_week: days, difficulty }).select().single();
+        if (!error && data) {
+          setGoalTemplates((ts) => [...ts, { id: data.id, text: data.text, daysOfWeek: data.days_of_week, difficulty: data.difficulty, active: true }]);
+          logAudit(userId, "goals", "add", "ตั้งเป้าหมายประจำสัปดาห์ใหม่");
+          // ถ้าวันนี้ตรงกับวันที่เลือกไว้ สร้างรายการของวันนี้ให้เลย ไม่ต้องรอรีเฟรชหน้า
+          const todayDow = (new Date().getDay() + 6) % 7;
+          if (days.includes(todayDow)) {
+            const g = { id: uid(), text: text.trim(), done: false, date: todayStr(), doneDate: null, template_id: data.id, difficulty };
+            setGoals((gs) => [...gs, g]);
+            await supabase.from("goals").insert({ id: g.id, user_id: userId, text: g.text, done: false, date: g.date, template_id: data.id, difficulty });
+          }
+        }
+      }
+      close();
+    } finally { setBusy(false); }
+  };
+
+  const pauseTemplate = async (id) => {
+    await supabase.from("goal_templates").update({ active: false, archived_at: new Date().toISOString() }).eq("id", id);
+    setGoalTemplates((ts) => ts.filter((x) => x.id !== id));
+  };
+
+  const disabled = busy || !text.trim() || (mode === "recurring" && days.length === 0);
+
+  return (
+    <div style={overlay} onClick={close}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "88vh", overflowY: "auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <div style={{ fontSize: 17, fontWeight: 800, color: t.text }}>เพิ่มเป้าหมาย</div>
+          <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+        </div>
+
+        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+          {[["once", "ครั้งเดียว (วันนี้)"], ["recurring", "ทำประจำ (ตั้งตาราง)"]].map(([v, lb]) => (
+            <button key={v} onClick={() => setMode(v)} style={{ flex: 1, padding: "10px 0", borderRadius: 12, cursor: "pointer", border: `1.5px solid ${mode === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 12.5, background: mode === v ? t.accent : "transparent", color: mode === v ? t.onAccent : t.sub }}>{lb}</button>
+          ))}
+        </div>
+
+        <input value={text} onChange={(e) => setText(e.target.value)} placeholder="เช่น ออกกำลังกาย 30 นาที" style={{ ...input(t), marginBottom: 16 }} autoFocus />
+
+        {mode === "recurring" && (
+          <>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: t.sub }}>ทำวันไหนบ้าง</div>
+              <button onClick={() => setDays([0, 1, 2, 3, 4, 5, 6])} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11.5, color: t.accent, fontWeight: 700 }}>ทุกวัน</button>
+            </div>
+            <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
+              {dayLabels.map((lb, i) => (
+                <button key={i} onClick={() => toggleDay(i)} style={{ flex: 1, padding: "9px 0", borderRadius: 10, cursor: "pointer", border: `1.5px solid ${days.includes(i) ? t.accent : t.border}`, fontWeight: 700, fontSize: 12, background: days.includes(i) ? t.accent : "transparent", color: days.includes(i) ? t.onAccent : t.sub }}>{lb}</button>
+              ))}
+            </div>
+          </>
+        )}
+
+        <div style={{ fontSize: 12, fontWeight: 700, color: t.sub, marginBottom: 8 }}>ระดับความหิน</div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+          {[["easy", "🟢 เบาๆ"], ["normal", "🟡 ปกติ"], ["hard", "🔴 โหด"]].map(([v, lb]) => (
+            <button key={v} onClick={() => setDifficulty(v)} style={{ flex: 1, padding: "9px 0", borderRadius: 10, cursor: "pointer", border: `1.5px solid ${difficulty === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 11.5, background: difficulty === v ? `${t.accent}18` : "transparent", color: t.text }}>{lb}</button>
+          ))}
+        </div>
+
+        <button onClick={save} disabled={disabled} style={{ ...primaryBtn(t), width: "100%", padding: "13px 0", fontSize: 15, opacity: disabled ? 0.6 : 1 }}>{busy ? "กำลังบันทึก..." : "บันทึก"}</button>
+
+        {goalTemplates.length > 0 && (
+          <div style={{ marginTop: 22 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: t.sub, marginBottom: 8 }}>เป้าหมายประจำที่ตั้งไว้</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {goalTemplates.map((tp) => (
+                <div key={tp.id} style={{ ...card(t), padding: "9px 12px", display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 10 }}>{diffEmoji[tp.difficulty]}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12.5, color: t.text, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tp.text}</div>
+                    <div style={{ fontSize: 10, color: t.faint }}>{tp.daysOfWeek.length === 7 ? "ทุกวัน" : tp.daysOfWeek.map((i) => dayLabels[i]).join(" ")}</div>
+                  </div>
+                  <button onClick={() => pauseTemplate(tp.id)} style={ghost} title="หยุด/ลบเป้าหมายประจำนี้"><Trash2 size={14} color={t.faint} /></button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// 🏆 กระดานผู้นำ — เห็นแค่คนที่เปิด opt-in ไว้เอง (show_on_leaderboard) คำนวณผ่าน SECURITY DEFINER function บนฐานข้อมูล
+// จะได้ไม่ต้องให้ client อ่านตาราง goals ของคนอื่นตรงๆ (ปลอดภัย เห็นแค่แต้มรวม ไม่เห็นรายการเป้าหมายจริงของใคร)
+function LeaderboardModal({ t, userId, close }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      const { data, error } = await supabase.rpc("get_goal_leaderboard");
+      if (error) console.error("โหลดกระดานผู้นำไม่สำเร็จ:", error.message);
+      setRows(data || []);
+      setLoading(false);
+    })();
+  }, []);
+
+  const medals = ["🥇", "🥈", "🥉"];
+
+  return (
+    <div style={overlay} onClick={close}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "80vh", overflowY: "auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>🏆 กระดานผู้นำสัปดาห์นี้</div>
+          <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+        </div>
+        <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 16 }}>เห็นเฉพาะคนที่เปิดเข้าร่วมเอง (ตั้งค่าได้ที่ตั้งค่าบัญชี)</div>
+
+        {loading && <Empty t={t} text="กำลังโหลด..." />}
+        {!loading && rows.length === 0 && <Empty t={t} text="ยังไม่มีใครเข้าร่วมกระดานผู้นำเลย ชวนคนในบ้านเปิด toggle ในตั้งค่าบัญชีได้เลย" />}
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {rows.map((r, i) => (
+            <div key={r.user_id} style={{ ...card(t), padding: "12px 14px", display: "flex", alignItems: "center", gap: 12, border: r.user_id === userId ? `1.5px solid ${t.accent}` : undefined }}>
+              <div style={{ width: 26, fontSize: i < 3 ? 18 : 13, fontWeight: 800, color: t.sub, textAlign: "center", flexShrink: 0 }}>{medals[i] || `#${i + 1}`}</div>
+              {r.avatar_url ? (
+                <img src={r.avatar_url} alt="" style={{ width: 34, height: 34, borderRadius: 12, objectFit: "cover", flexShrink: 0 }} />
+              ) : (
+                <div style={{ width: 34, height: 34, borderRadius: 12, background: colorFor(r.name || "?"), color: "#fff", display: "grid", placeItems: "center", fontSize: 14, fontWeight: 700, flexShrink: 0 }}>{(r.name || "?")[0]?.toUpperCase()}</div>
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: t.text }}>{r.name || "ไม่ทราบชื่อ"}{r.user_id === userId ? " (คุณ)" : ""}</div>
+                <div style={{ fontSize: 10.5, color: t.faint }}>ทำสำเร็จ {r.done_count} รายการ</div>
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: t.accent, flexShrink: 0 }}>{r.points}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// 📣 แชร์สถิติเป้าหมาย/streak ไปหน้าชุมชน — เปิดให้แก้ข้อความก่อนโพสต์เสมอ (ไม่โพสต์ให้เองเงียบๆ)
+function ShareGoalModal({ t, userId, authProfile, weekPoints, bestStreak, badge, close }) {
+  const defaultText = `${badge || "🎯"} สัปดาห์นี้ทำเป้าหมายได้ ${weekPoints} แต้ม${bestStreak > 0 ? ` ต่อเนื่อง ${bestStreak} วันแล้ว!` : "!"}`;
+  const [text, setText] = useState(defaultText);
+  const [posting, setPosting] = useState(false);
+
+  const post = async () => {
+    if (!text.trim()) return;
+    setPosting(true);
+    const { error } = await supabase.from("posts").insert({ author_id: userId, text: text.trim(), images: [], visibility: "public" });
+    setPosting(false);
+    if (!error) { logAudit(userId, "community", "post", "แชร์สถิติเป้าหมายไปชุมชน"); close(); }
+  };
+
+  return (
+    <div style={overlay} onClick={close}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>แชร์ไปหน้าชุมชน</div>
+          <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+        </div>
+        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={4} style={{ ...input(t), resize: "vertical", marginBottom: 14, fontFamily: "inherit" }} />
+        <button onClick={post} disabled={posting || !text.trim()} style={{ ...primaryBtn(t), width: "100%", padding: "12px 0", opacity: posting || !text.trim() ? 0.6 : 1 }}>{posting ? "กำลังโพสต์..." : "โพสต์เลย"}</button>
+      </div>
+    </div>
+  );
+}
+
+function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, allGoals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, userId, authProfile, playlist, setCommunityOpen }) {
   const [viewingPinned, setViewingPinned] = useState(null);
   const [commentingId, setCommentingId] = useState(null);
   const pinnedMedia = (playlist || []).filter((p) => p.kind === "link" && p.pinnedHome);
-  const [goalText, setGoalText] = useState("");
+  const [addGoalOpen, setAddGoalOpen] = useState(false);
+  const [leaderboardOpen, setLeaderboardOpen] = useState(false);
+  const [shareGoalOpen, setShareGoalOpen] = useState(false);
   const latestNote = notes[0];
   const todayNet = tx.filter((x) => x.date === todayStr()).reduce((s, x) => s + (x.type === "in" ? x.amount : -x.amount), 0);
 
-  // เพิ่มเป้าหมายพร้อมบันทึกลง Supabase ทันที (กันหายถ้ารีเฟรชเร็วเกินกว่า background sync จะทันบันทึก)
-  const addGoal = () => {
-    if (!goalText.trim()) return;
-    const g = { id: uid(), text: goalText.trim(), done: false, date: todayStr(), doneDate: null };
-    setGoals((gs) => [...gs, g]);
-    setGoalText("");
-    if (userId) { supabase.from("goals").insert({ id: g.id, user_id: userId, text: g.text, done: g.done, date: g.date, done_date: g.doneDate }).then(() => {}, () => {}); logAudit(userId, "goals", "add", "เพิ่มเป้าหมาย"); }
-  };
+  // 🏆 คำนวณแต้ม + streak ที่ดีที่สุด จากข้อมูลเป้าหมายทั้งหมด (ไม่ใช่แค่วันนี้)
+  const diffPoints = { easy: 1, normal: 2, hard: 3 };
+  const pointsInRange = (fromDate) => (allGoals || []).filter((g) => g.done && g.date && (!fromDate || g.date >= fromDate)).reduce((s, g) => s + (diffPoints[g.difficulty] || 2), 0);
+  const weekStartStr = (() => { const d = new Date(); const dow = (d.getDay() + 6) % 7; d.setDate(d.getDate() - dow); return d.toISOString().slice(0, 10); })();
+  const monthStartStr = todayStr().slice(0, 7) + "-01";
+  const weekPoints = pointsInRange(weekStartStr);
+  const monthPoints = pointsInRange(monthStartStr);
+  const allTimePoints = pointsInRange(null);
+
+  const bestStreak = (() => {
+    const byText = {};
+    (allGoals || []).forEach((g) => { if (!g.date) return; const k = g.text.trim().toLowerCase(); if (!k) return; (byText[k] = byText[k] || new Set()).add(g.done ? (g.doneDate || g.date) : null); });
+    let best = 0;
+    Object.values(byText).forEach((doneDatesSet) => {
+      const set = new Set([...doneDatesSet].filter(Boolean));
+      let streak = 0; let d = new Date();
+      if (!set.has(todayStr())) d.setDate(d.getDate() - 1);
+      while (set.has(d.toISOString().slice(0, 10))) { streak++; d.setDate(d.getDate() - 1); }
+      if (streak > best) best = streak;
+    });
+    return best;
+  })();
+  const badge = bestStreak >= 100 ? "💎" : bestStreak >= 30 ? "🏆" : bestStreak >= 7 ? "🔥" : null;
 
   // 📢 ป้ายประกาศระบบ — โหลดของที่ active อยู่ + ฟังการเปลี่ยนแปลงแบบสด + จำว่าปิดอันไหนไปแล้ว
   const [announcements, setAnnouncements] = useState([]);
@@ -2251,6 +2551,16 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, goa
           <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text }}>เป้าหมายวันนี้</div>
           <button onClick={() => setPage("goalsReport")} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, color: t.accent, fontSize: 11, fontWeight: 700 }}>ดูย้อนหลัง <ChevronRight size={13} /></button>
         </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, padding: "10px 12px", borderRadius: 12, background: `${t.accent}10` }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 17, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 4 }}>{weekPoints} แต้ม {badge && <span style={{ fontSize: 14 }}>{badge}</span>}</div>
+            <div style={{ fontSize: 10.5, color: t.sub }}>สัปดาห์นี้ · เดือนนี้ {monthPoints} · สะสม {allTimePoints}{bestStreak > 0 ? ` · ต่อเนื่อง ${bestStreak} วัน` : ""}</div>
+          </div>
+          <button onClick={() => setLeaderboardOpen(true)} style={{ display: "flex", alignItems: "center", gap: 4, padding: "7px 11px", borderRadius: 10, border: "none", background: t.accent, color: t.onAccent, cursor: "pointer", fontSize: 11.5, fontWeight: 700 }}>🏆 กระดาน</button>
+          {badge && <button onClick={() => setShareGoalOpen(true)} style={{ display: "flex", alignItems: "center", padding: "7px 9px", borderRadius: 10, border: `1px solid ${t.border}`, background: "none", cursor: "pointer" }} title="แชร์ไปหน้าชุมชน"><Share2 size={14} color={t.sub} /></button>}
+        </div>
+
         <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
           {goals.length === 0 && <div style={{ fontSize: 12.5, color: t.sub }}>ยังไม่มีเป้าหมาย เพิ่มอันแรกเลย 👇</div>}
           {goals.map((g) => (
@@ -2258,7 +2568,11 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, goa
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <button onClick={() => { const nd = !g.done; const dd = nd ? todayStr() : null; setGoals((gs) => gs.map((x) => (x.id === g.id ? { ...x, done: nd, doneDate: dd } : x))); if (userId) { supabase.from("goals").update({ done: nd, done_date: dd }).eq("id", g.id).then(() => {}, () => {}); if (nd) logAudit(userId, "goals", "complete", "ทำเป้าหมายสำเร็จ"); } }} style={{ width: 22, height: 22, borderRadius: 7, border: `2px solid ${g.done ? t.accent : t.faint}`, background: g.done ? t.accent : "transparent", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}>{g.done && <Check size={14} color={t.onAccent} />}</button>
                 <button onClick={() => setCommentingId(commentingId === g.id ? null : g.id)} style={{ flex: 1, minWidth: 0, background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}>
-                  <div style={{ fontSize: 13.5, color: g.done ? t.sub : t.text, textDecoration: g.done ? "line-through" : "none" }}>{g.text}</div>
+                  <div style={{ fontSize: 13.5, color: g.done ? t.sub : t.text, textDecoration: g.done ? "line-through" : "none", display: "flex", alignItems: "center", gap: 5 }}>
+                    {g.difficulty && <span style={{ fontSize: 10 }}>{{ easy: "🟢", normal: "🟡", hard: "🔴" }[g.difficulty]}</span>}
+                    {g.text}
+                    {g.template_id && <Repeat2 size={11} color={t.faint} />}
+                  </div>
                   {g.comment && <div style={{ fontSize: 10.5, color: t.faint, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>💬 {g.comment}</div>}
                 </button>
                 <button onClick={() => setCommentingId(commentingId === g.id ? null : g.id)} style={ghost} title="เพิ่มคอมเมนต์/สถานะ"><MessageCircle size={14} color={g.comment ? t.accent : t.faint} /></button>
@@ -2272,11 +2586,13 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, goa
             </div>
           ))}
         </div>
-        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-          <input value={goalText} onChange={(e) => setGoalText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addGoal(); }} placeholder="เพิ่มเป้าหมายวันนี้..." style={input(t)} />
-          <button onClick={addGoal} style={{ ...primaryBtn(t), padding: "0 16px" }}>เพิ่ม</button>
+        <div style={{ marginTop: 12 }}>
+          <button onClick={() => setAddGoalOpen(true)} style={{ ...primaryBtn(t), width: "100%", padding: "11px 0", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Plus size={16} /> เพิ่มเป้าหมาย</button>
         </div>
       </div>
+      {addGoalOpen && <AddGoalModal t={t} userId={userId} setGoals={setGoals} goalTemplates={goalTemplates} setGoalTemplates={setGoalTemplates} close={() => setAddGoalOpen(false)} />}
+      {leaderboardOpen && <LeaderboardModal t={t} userId={userId} close={() => setLeaderboardOpen(false)} />}
+      {shareGoalOpen && <ShareGoalModal t={t} userId={userId} authProfile={authProfile} weekPoints={weekPoints} bestStreak={bestStreak} badge={badge} close={() => setShareGoalOpen(false)} />}
 
       {pinnedMedia.length > 0 && (
         <div style={{ ...card(t), marginTop: 16, padding: 16 }}>
@@ -5031,6 +5347,43 @@ function GoalsReportPage({ t, goals, setGoals, userId }) {
   // กราฟแท่งแนวโน้ม 14 วันล่าสุด
   const trend = days.slice(-14).map((d) => { const dt = new Date(d); return { label: `${dt.getDate()}/${dt.getMonth() + 1}`, สำเร็จ: doneCountByDate[d] || 0 }; });
 
+  // 🥧 วงกลม: สัดส่วนสำเร็จ/พลาด สัปดาห์นี้
+  const weekRangeOfNow = () => {
+    const d = new Date(); const dow = (d.getDay() + 6) % 7;
+    const mon = new Date(d); mon.setDate(d.getDate() - dow);
+    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+    return { start: mon.toISOString().slice(0, 10), end: sun.toISOString().slice(0, 10) };
+  };
+  const { start: weekStart, end: weekEnd } = weekRangeOfNow();
+  const thisWeek = dated.filter((g) => g.date >= weekStart && g.date <= weekEnd);
+  const weekDone = thisWeek.filter((g) => g.done).length;
+  const weekMissed = thisWeek.length - weekDone;
+  const pieData = [
+    { name: "สำเร็จ", value: weekDone, color: "#2E9E6B" },
+    { name: "ยังไม่ทำ", value: weekMissed, color: "#8A93A8" },
+  ];
+
+  // 📈 เส้น: % ความสำเร็จรายสัปดาห์ ย้อนหลัง 10 สัปดาห์
+  const weeklyTrend = []; 
+  for (let i = 9; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i * 7);
+    const dow = (d.getDay() + 6) % 7;
+    const mon = new Date(d); mon.setDate(d.getDate() - dow);
+    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+    const ws = mon.toISOString().slice(0, 10), we = sun.toISOString().slice(0, 10);
+    const wgoals = dated.filter((g) => g.date >= ws && g.date <= we);
+    const pct = wgoals.length ? Math.round((wgoals.filter((g) => g.done).length / wgoals.length) * 100) : 0;
+    weeklyTrend.push({ label: `${mon.getDate()}/${mon.getMonth() + 1}`, "สำเร็จ%": pct });
+  }
+
+  // 📊 แท่ง: อัตราสำเร็จแยกตามวันในสัปดาห์ (จ-อา) — เห็นว่าวันไหนทำได้ดี/แย่
+  const dayLabelsTh = ["จ", "อ", "พ", "พฤ", "ศ", "ส", "อา"];
+  const byWeekday = dayLabelsTh.map((lb, i) => {
+    const rows = dated.filter((g) => (new Date(g.date + "T00:00:00").getDay() + 6) % 7 === i);
+    const pct = rows.length ? Math.round((rows.filter((g) => g.done).length / rows.length) * 100) : 0;
+    return { วัน: lb, "สำเร็จ%": pct };
+  });
+
   const heatColor = (n) => {
     if (!n) return t.star ? "rgba(255,255,255,.06)" : "rgba(0,0,0,.05)";
     const ratio = n / maxCount;
@@ -5082,6 +5435,60 @@ function GoalsReportPage({ t, goals, setGoals, userId }) {
                   <Tooltip />
                   <Bar dataKey="สำเร็จ" fill={t.accent} radius={[4, 4, 0, 0]} />
                 </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 14, marginBottom: 14, flexWrap: "wrap" }}>
+            <div style={{ ...card(t), padding: 16, flex: 1, minWidth: 160 }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: t.text, marginBottom: 4 }}>สัปดาห์นี้</div>
+              <div style={{ fontSize: 11, color: t.sub, marginBottom: 6 }}>{weekDone}/{thisWeek.length || 0} สำเร็จ</div>
+              <div style={{ width: "100%", height: 130, position: "relative" }}>
+                {thisWeek.length === 0 ? (
+                  <div style={{ display: "grid", placeItems: "center", height: "100%", fontSize: 11, color: t.faint }}>ยังไม่มีข้อมูลสัปดาห์นี้</div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={pieData} dataKey="value" nameKey="name" innerRadius={34} outerRadius={55} paddingAngle={2}>
+                        {pieData.map((e, i) => <Cell key={i} fill={e.color} stroke="none" />)}
+                      </Pie>
+                      <Tooltip formatter={(v) => `${v} รายการ`} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
+                {thisWeek.length > 0 && (
+                  <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", pointerEvents: "none" }}>
+                    <div style={{ fontSize: 17, fontWeight: 800, color: t.text }}>{Math.round((weekDone / thisWeek.length) * 100)}%</div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div style={{ ...card(t), padding: 16, flex: 1, minWidth: 160 }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: t.text, marginBottom: 10 }}>รายวันในสัปดาห์ (%)</div>
+              <div style={{ width: "100%", height: 130 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={byWeekday}>
+                    <XAxis dataKey="วัน" tick={{ fontSize: 10, fill: t.sub }} axisLine={false} tickLine={false} />
+                    <Tooltip formatter={(v) => `${v}%`} />
+                    <Bar dataKey="สำเร็จ%" fill="#3DA5D9" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ ...card(t), padding: 16, marginBottom: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: t.text, marginBottom: 2 }}>พัฒนาการรายสัปดาห์</div>
+            <div style={{ fontSize: 11, color: t.sub, marginBottom: 10 }}>% ความสำเร็จ ย้อนหลัง 10 สัปดาห์</div>
+            <div style={{ width: "100%", height: 140 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={weeklyTrend}>
+                  <XAxis dataKey="label" tick={{ fontSize: 9, fill: t.sub }} axisLine={false} tickLine={false} />
+                  <YAxis domain={[0, 100]} tick={{ fontSize: 9, fill: t.sub }} axisLine={false} tickLine={false} width={28} />
+                  <Tooltip formatter={(v) => `${v}%`} />
+                  <Line type="monotone" dataKey="สำเร็จ%" stroke={t.accent} strokeWidth={2.5} dot={{ r: 3, fill: t.accent }} />
+                </LineChart>
               </ResponsiveContainer>
             </div>
           </div>
