@@ -679,6 +679,7 @@ export default function RefHub() {
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [communityOpen, setCommunityOpen] = useState(false); // เปิดหน้า Community (โลกใน navbar)
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
+  const [myActivityOpen, setMyActivityOpen] = useState(false);
   const [chatUnread, setChatUnread] = useState(0); // จำนวนข้อความแชทที่ยังไม่ได้อ่าน (คำนวณจริงในหน้าแชท)
   const [msgToast, setMsgToast] = useState(null); // ป็อปอัพแจ้งข้อความใหม่ทั่วทั้งแอป { name, text, threadId, at }
   useEffect(() => { if (!msgToast) return; const id = setTimeout(() => setMsgToast(null), 4000); return () => clearTimeout(id); }, [msgToast?.at]);
@@ -1329,6 +1330,9 @@ export default function RefHub() {
                 <button onClick={() => { setAccountSettingsOpen(true); setMoreMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
                   <KeyRound size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>ตั้งค่าบัญชี</span>
                 </button>
+                <button onClick={() => { setMyActivityOpen(true); setMoreMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
+                  <Clock size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>ประวัติการใช้งานของฉัน</span>
+                </button>
                 <button onClick={() => supabase.auth.signOut()} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
                   <X size={18} color="#D9534F" /><span style={{ fontSize: 14, color: "#D9534F" }}>ออกจากระบบ</span>
                 </button>
@@ -1337,6 +1341,7 @@ export default function RefHub() {
           </div>
         )}
         {accountSettingsOpen && <AccountSettingsModal t={t} authProfile={authProfile} userId={userId} session={session} close={() => setAccountSettingsOpen(false)} />}
+        {myActivityOpen && <MyActivityModal t={t} userId={userId} close={() => setMyActivityOpen(false)} />}
         {communityOpen && <CommunityOverlay t={t} userId={userId} authProfile={authProfile} session={session} openThread={() => {}} close={() => setCommunityOpen(false)} />}
         {chatOpen && <ChatModal t={t} M={M} mentor={mentor} setMentor={setMentor} authProfile={authProfile} setAuthProfile={setAuthProfile} customMentors={customMentors} setCustomMentors={setCustomMentors} userId={userId} session={session} goals={goals} askAiTopic={askAiTopic} close={() => { setChatOpen(false); setAskAiTopic(null); }} />}
         {activeCall && (
@@ -1581,6 +1586,69 @@ function AuthPage() {
         <button onClick={submit} disabled={loading || (needsCaptcha && !captchaToken)} style={{ background: loading || (needsCaptcha && !captchaToken) ? "#4A362A" : "#F2872E", border: "none", borderRadius: 14, padding: "13px 0", fontSize: 14, fontWeight: 700, color: "#141414", cursor: loading ? "default" : "pointer", marginTop: 6 }}>
           {loading ? "กำลังดำเนินการ..." : mode === "login" ? "เข้าสู่ระบบ" : "สมัครสมาชิก"}
         </button>
+      </div>
+    </div>
+  );
+}
+
+// 🕘 ประวัติการใช้งานของฉัน — ทุกคนดูของตัวเองได้ (ไม่ใช่แค่แอดมิน) เห็นแบบเดียวกับที่แอดมินเห็น (สรุปเท่านั้น)
+function MyActivityModal({ t, userId, close }) {
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("activity_log").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(100);
+      setLogs(data || []);
+      setLoading(false);
+    })();
+  }, [userId]);
+
+  const moduleMeta = {
+    finance: { label: "การเงิน", icon: Wallet, color: "#E8894A" },
+    goals: { label: "เป้าหมาย", icon: Target, color: "#3DA5D9" },
+    notes: { label: "โน้ต", icon: StickyNote, color: "#7B6CB0" },
+    community: { label: "ชุมชน", icon: Users, color: "#C0658C" },
+    mentor: { label: "แชทโค้ช", icon: Sparkles, color: "#2E9E6B" },
+    auth: { label: "บัญชี", icon: KeyRound, color: "#8A93A8" },
+  };
+
+  // จัดกลุ่มตามวันที่ ให้อ่านง่ายเหมือนหน้าการเงิน
+  const groups = {};
+  logs.forEach((l) => { const d = (l.created_at || "").slice(0, 10); (groups[d] = groups[d] || []).push(l); });
+
+  return (
+    <div style={overlay} onClick={close}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>ประวัติการใช้งานของฉัน</div>
+          <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+        </div>
+        <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 16 }}>สรุปสิ่งที่คุณทำในแอปย้อนหลัง 100 รายการล่าสุด</div>
+
+        {loading && <Empty t={t} text="กำลังโหลด..." />}
+        {!loading && logs.length === 0 && <Empty t={t} text="ยังไม่มีประวัติการใช้งาน" />}
+
+        {Object.keys(groups).map((d) => (
+          <div key={d} style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: t.faint, marginBottom: 6 }}>{dateLabel(d)}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {groups[d].map((l) => {
+                const meta = moduleMeta[l.module] || { label: l.module, icon: Clock, color: t.faint };
+                const Ic = meta.icon;
+                return (
+                  <div key={l.id} style={{ ...card(t), padding: "10px 12px", display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ width: 30, height: 30, borderRadius: 10, background: `${meta.color}22`, display: "grid", placeItems: "center", flexShrink: 0 }}><Ic size={14} color={meta.color} /></div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12.5, color: t.text, fontWeight: 600 }}>{l.summary}</div>
+                      <div style={{ fontSize: 10.5, color: t.faint }}>{meta.label} · {new Date(l.created_at).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
