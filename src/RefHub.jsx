@@ -75,6 +75,13 @@ const FALLBACK_CAT = { label: "อื่นๆ", iconKey: "Wallet", color: "#8A9
 const catList = (categories, kind) => categories.filter((c) => c.kind === kind);
 const findCat = (categories, id) => categories.find((c) => c.id === id) || FALLBACK_CAT;
 
+// 📋 Activity log — เก็บแค่ "ทำอะไรที่ไหนตอนไหน" ห้ามใส่เนื้อหาอ่อนไหว (ยอดเงิน/เนื้อหาโน้ต/ข้อความแชท) ลงใน summary เด็ดขาด
+// ยิงแบบ fire-and-forget เสมอ ไม่ await ไม่บล็อก UI และไม่ทำให้ฟีเจอร์หลักพังถ้า log ล้มเหลว
+const logAudit = (userId, module, action, summary) => {
+  if (!userId) return;
+  supabase.from("activity_log").insert({ user_id: userId, module, action, summary }).then(() => {}, () => {});
+};
+
 
 // ---------------- Ambient music engine (generative, royalty-free) ----------------
 class Ambient {
@@ -1626,6 +1633,18 @@ function AccountSettingsModal({ t, authProfile, userId, session, close }) {
     } finally { setBusy(false); }
   };
 
+  // 💬 ข้อเสนอแนะ — ตั้งใจให้เรียบง่ายที่สุด (แค่พิมพ์กับกดส่ง) ลดความเกร็ง ให้กล้าเขียนตรงๆ
+  const [fbText, setFbText] = useState("");
+  const [fbBusy, setFbBusy] = useState(false);
+  const [fbSent, setFbSent] = useState(false);
+  const sendFeedback = async () => {
+    if (!fbText.trim()) return;
+    setFbBusy(true);
+    const { error } = await supabase.from("feedback").insert({ user_id: userId, message: fbText.trim() });
+    setFbBusy(false);
+    if (!error) { setFbSent(true); setFbText(""); setTimeout(() => setFbSent(false), 4000); }
+  };
+
   return (
     <div style={overlay} onClick={close}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
@@ -1633,6 +1652,14 @@ function AccountSettingsModal({ t, authProfile, userId, session, close }) {
         <div style={{ ...card(t), padding: 14, marginBottom: 16 }}>
           <div style={{ fontSize: 12, color: t.sub, marginBottom: 4 }}>เข้าสู่ระบบด้วย</div>
           <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{isPinAccount ? `ชื่อผู้ใช้ + PIN (${authProfile?.username})` : authProfile?.email}</div>
+        </div>
+
+        <div style={{ ...card(t), padding: 14, marginBottom: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 4 }}>💬 เสนอไอเดีย/ข้อเสนอแนะ</div>
+          <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 10, lineHeight: 1.6 }}>ส่งตรงถึงแอดมินคนเดียว เขียนได้อย่างสบายใจเลย ไม่ว่าจะติหรือชม อยากได้ฟีเจอร์ไหนเพิ่ม หรือเจอจุดไหนใช้งานไม่ลื่น บอกได้หมด</div>
+          <textarea value={fbText} onChange={(e) => setFbText(e.target.value)} placeholder="พิมพ์ข้อเสนอแนะที่นี่..." rows={4} style={{ ...input(t), resize: "vertical", marginBottom: 8, fontFamily: "inherit" }} />
+          {fbSent && <div style={{ fontSize: 11.5, color: "#2E9E6B", marginBottom: 8 }}>ส่งแล้ว ขอบคุณมากครับ 🙏</div>}
+          <button onClick={sendFeedback} disabled={fbBusy || !fbText.trim()} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "11px 0", opacity: fbBusy || !fbText.trim() ? 0.6 : 1 }}>{fbBusy ? "กำลังส่ง..." : "ส่งข้อเสนอแนะ"}</button>
         </div>
 
         <div style={{ ...card(t), padding: 14, marginBottom: 16 }}>
@@ -2013,7 +2040,7 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, goa
     const g = { id: uid(), text: goalText.trim(), done: false, date: todayStr(), doneDate: null };
     setGoals((gs) => [...gs, g]);
     setGoalText("");
-    if (userId) supabase.from("goals").insert({ id: g.id, user_id: userId, text: g.text, done: g.done, date: g.date, done_date: g.doneDate }).then(() => {}, () => {});
+    if (userId) { supabase.from("goals").insert({ id: g.id, user_id: userId, text: g.text, done: g.done, date: g.date, done_date: g.doneDate }).then(() => {}, () => {}); logAudit(userId, "goals", "add", "เพิ่มเป้าหมาย"); }
   };
 
   // 📢 ป้ายประกาศระบบ — โหลดของที่ active อยู่ + ฟังการเปลี่ยนแปลงแบบสด + จำว่าปิดอันไหนไปแล้ว
@@ -2151,13 +2178,13 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, goa
           {goals.map((g) => (
             <div key={g.id}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <button onClick={() => { const nd = !g.done; const dd = nd ? todayStr() : null; setGoals((gs) => gs.map((x) => (x.id === g.id ? { ...x, done: nd, doneDate: dd } : x))); if (userId) supabase.from("goals").update({ done: nd, done_date: dd }).eq("id", g.id).then(() => {}, () => {}); }} style={{ width: 22, height: 22, borderRadius: 7, border: `2px solid ${g.done ? t.accent : t.faint}`, background: g.done ? t.accent : "transparent", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}>{g.done && <Check size={14} color={t.onAccent} />}</button>
+                <button onClick={() => { const nd = !g.done; const dd = nd ? todayStr() : null; setGoals((gs) => gs.map((x) => (x.id === g.id ? { ...x, done: nd, doneDate: dd } : x))); if (userId) { supabase.from("goals").update({ done: nd, done_date: dd }).eq("id", g.id).then(() => {}, () => {}); if (nd) logAudit(userId, "goals", "complete", "ทำเป้าหมายสำเร็จ"); } }} style={{ width: 22, height: 22, borderRadius: 7, border: `2px solid ${g.done ? t.accent : t.faint}`, background: g.done ? t.accent : "transparent", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}>{g.done && <Check size={14} color={t.onAccent} />}</button>
                 <button onClick={() => setCommentingId(commentingId === g.id ? null : g.id)} style={{ flex: 1, minWidth: 0, background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}>
                   <div style={{ fontSize: 13.5, color: g.done ? t.sub : t.text, textDecoration: g.done ? "line-through" : "none" }}>{g.text}</div>
                   {g.comment && <div style={{ fontSize: 10.5, color: t.faint, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>💬 {g.comment}</div>}
                 </button>
                 <button onClick={() => setCommentingId(commentingId === g.id ? null : g.id)} style={ghost} title="เพิ่มคอมเมนต์/สถานะ"><MessageCircle size={14} color={g.comment ? t.accent : t.faint} /></button>
-                <button onClick={() => { setGoals((gs) => gs.filter((x) => x.id !== g.id)); if (userId) supabase.from("goals").delete().eq("id", g.id).then(() => {}, () => {}); }} style={ghost}><Trash2 size={15} color={t.faint} /></button>
+                <button onClick={() => { setGoals((gs) => gs.filter((x) => x.id !== g.id)); if (userId) { supabase.from("goals").delete().eq("id", g.id).then(() => {}, () => {}); logAudit(userId, "goals", "delete", "ลบเป้าหมาย"); } }} style={ghost}><Trash2 size={15} color={t.faint} /></button>
               </div>
               {commentingId === g.id && (
                 <div style={{ display: "flex", gap: 6, marginTop: 6, marginLeft: 32 }}>
@@ -2201,6 +2228,11 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, goa
 // ---------------- Finance (full) ----------------
 function FinancePage({ t, tx, setTx, categories, openAdd, openExport, userId }) {
   const [editingTx, setEditingTx] = useState(null);
+  const [viewReceipt, setViewReceipt] = useState(null); // signed url ของรูปสลิป/ใบเสร็จที่กำลังดู
+  const openReceipt = async (path) => {
+    const { data, error } = await supabase.storage.from("receipts").createSignedUrl(path, 120);
+    if (!error && data?.signedUrl) setViewReceipt(data.signedUrl);
+  };
   const [periodMode, setPeriodMode] = useState("month"); // day | week | month | range
   const [anchor, setAnchor] = useState(todayStr());       // วันที่อ้างอิงสำหรับ day/week/month
   const [rangeStart, setRangeStart] = useState(todayStr());
@@ -2380,8 +2412,9 @@ function FinancePage({ t, tx, setTx, categories, openAdd, openExport, userId }) 
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <div style={{ fontSize: 14.5, fontWeight: 800, color: x.type === "in" ? "#2E9E6B" : t.text }}>{x.type === "in" ? "+" : "−"}{x.amount.toLocaleString()}</div>
+                  {x.receipt_path && <button onClick={() => openReceipt(x.receipt_path)} style={ghost} title="ดูรูปสลิป/ใบเสร็จ"><Receipt size={15} color={t.accent} /></button>}
                   <button onClick={() => setEditingTx(x)} style={ghost} title="แก้ไข"><Pencil size={15} color={t.faint} /></button>
-                  <button onClick={() => { setTx((l) => l.filter((y) => y.id !== x.id)); if (userId) supabase.from("transactions").delete().eq("id", x.id).then(() => {}, () => {}); }} style={ghost}><Trash2 size={15} color={t.faint} /></button>
+                  <button onClick={() => { setTx((l) => l.filter((y) => y.id !== x.id)); if (userId) { supabase.from("transactions").delete().eq("id", x.id).then(() => {}, () => {}); logAudit(userId, "finance", "delete", "ลบรายการการเงิน"); } }} style={ghost}><Trash2 size={15} color={t.faint} /></button>
                 </div>
               </div>
             ); })}
@@ -2389,6 +2422,7 @@ function FinancePage({ t, tx, setTx, categories, openAdd, openExport, userId }) 
         </div>
       ))}
       {editingTx && <EditTxModal t={t} x={editingTx} categories={categories} userId={userId} setTx={setTx} close={() => setEditingTx(null)} />}
+      {viewReceipt && <ImageLightbox src={viewReceipt} onClose={() => setViewReceipt(null)} />}
     </>
   );
 }
@@ -2432,6 +2466,94 @@ function ReactionManagerCard({ t }) {
         <input value={newEmoji} onChange={(e) => setNewEmoji(e.target.value)} placeholder="😍" style={{ ...input(t), width: 60, textAlign: "center", fontSize: 16, padding: "8px 4px" }} maxLength={4} />
         <input value={newLabel} onChange={(e) => setNewLabel(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addType()} placeholder="ชื่อ เช่น ว้าว" style={{ ...input(t), flex: 1 }} />
         <button onClick={addType} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), padding: "0 16px" }}>เพิ่ม</button>
+      </div>
+    </div>
+  );
+}
+
+// 📊 หน้ากิจกรรมของแอดมิน — เห็นแค่สรุป (ไม่มียอดเงิน/เนื้อหาโน้ต/ข้อความแชท) + ข้อเสนอแนะจากผู้ใช้
+function AdminActivityPanel({ t, members }) {
+  const [logs, setLogs] = useState([]);
+  const [feedback, setFeedback] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      const { data: l } = await supabase.from("activity_log").select("*").order("created_at", { ascending: false }).limit(300);
+      const { data: f } = await supabase.from("feedback").select("*").order("created_at", { ascending: false }).limit(100);
+      setLogs(l || []); setFeedback(f || []);
+      setLoading(false);
+    })();
+  }, []);
+
+  const memberOf = (id) => members.find((m) => m.id === id);
+  const moduleLabel = { finance: "การเงิน", goals: "เป้าหมาย", notes: "โน้ต", community: "ชุมชน", mentor: "แชทโค้ช" };
+
+  const days = []; for (let i = 13; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); days.push(d.toISOString().slice(0, 10)); }
+  const chartData = days.map((d) => {
+    const dayLogs = logs.filter((x) => (x.created_at || "").slice(0, 10) === d);
+    return {
+      d: d.slice(5),
+      การเงิน: dayLogs.filter((x) => x.module === "finance").length,
+      เป้าหมาย: dayLogs.filter((x) => x.module === "goals").length,
+      โน้ต: dayLogs.filter((x) => x.module === "notes").length,
+      ชุมชน: dayLogs.filter((x) => x.module === "community").length,
+      โค้ช: dayLogs.filter((x) => x.module === "mentor").length,
+    };
+  });
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ ...card(t), padding: 16 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text, marginBottom: 2 }}>ความเคลื่อนไหวในแอป</div>
+        <div style={{ fontSize: 11, color: t.sub, marginBottom: 10 }}>14 วันล่าสุด · แยกตามหมวด (ไม่รวมรายละเอียดอ่อนไหว)</div>
+        <div style={{ width: "100%", height: 180 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData}>
+              <XAxis dataKey="d" tick={{ fontSize: 9, fill: t.sub }} axisLine={false} tickLine={false} />
+              <Tooltip />
+              <Bar dataKey="การเงิน" stackId="a" fill="#E8894A" />
+              <Bar dataKey="เป้าหมาย" stackId="a" fill="#3DA5D9" />
+              <Bar dataKey="โน้ต" stackId="a" fill="#7B6CB0" />
+              <Bar dataKey="ชุมชน" stackId="a" fill="#C0658C" />
+              <Bar dataKey="โค้ช" stackId="a" fill="#2E9E6B" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      <div>
+        <div style={{ fontSize: 12.5, fontWeight: 800, color: t.sub, marginBottom: 8 }}>รายการล่าสุด</div>
+        {loading && <Empty t={t} text="กำลังโหลด..." />}
+        {!loading && logs.length === 0 && <Empty t={t} text="ยังไม่มีความเคลื่อนไหว" />}
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {logs.slice(0, 40).map((l) => { const m = memberOf(l.user_id); return (
+            <div key={l.id} style={{ ...card(t), padding: "10px 12px", display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ width: 28, height: 28, borderRadius: 9, background: colorFor(m?.name || "?"), color: "#fff", display: "grid", placeItems: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{(m?.name || "?")[0]?.toUpperCase()}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12.5, color: t.text }}><b>{m?.name || "ไม่ทราบชื่อ"}</b> — {l.summary}</div>
+                <div style={{ fontSize: 10.5, color: t.faint }}>{moduleLabel[l.module] || l.module} · {new Date(l.created_at).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}</div>
+              </div>
+            </div>
+          ); })}
+        </div>
+      </div>
+
+      <div>
+        <div style={{ fontSize: 12.5, fontWeight: 800, color: t.sub, marginBottom: 8 }}>💬 ข้อเสนอแนะจากผู้ใช้</div>
+        {!loading && feedback.length === 0 && <Empty t={t} text="ยังไม่มีข้อเสนอแนะ" />}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {feedback.map((f) => { const m = memberOf(f.user_id); return (
+            <div key={f.id} style={{ ...card(t), padding: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                {m?.avatar_url ? <img src={m.avatar_url} alt="" style={{ width: 24, height: 24, borderRadius: 8, objectFit: "cover" }} /> : <div style={{ width: 24, height: 24, borderRadius: 8, background: colorFor(m?.name || "?"), color: "#fff", display: "grid", placeItems: "center", fontSize: 10, fontWeight: 700 }}>{(m?.name || "?")[0]?.toUpperCase()}</div>}
+                <div style={{ fontSize: 12, fontWeight: 700, color: t.text }}>{m?.name || m?.email || "ไม่ทราบชื่อ"}</div>
+                <div style={{ fontSize: 10, color: t.faint, marginLeft: "auto" }}>{new Date(f.created_at).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}</div>
+              </div>
+              <div style={{ fontSize: 13, color: t.text, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{f.message}</div>
+            </div>
+          ); })}
+        </div>
       </div>
     </div>
   );
@@ -2515,7 +2637,7 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts, authProfil
       )}
 
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-        {[["overview", "ภาพรวม"], ["members", "สมาชิก"], ["announce", "ประกาศ"], ["add", "เพิ่มสมาชิก"]].map(([v, lb]) => (
+        {[["overview", "ภาพรวม"], ["members", "สมาชิก"], ["activity", "กิจกรรม"], ["announce", "ประกาศ"], ["add", "เพิ่มสมาชิก"]].map(([v, lb]) => (
           <button key={v} onClick={() => setTab(v)} style={{ flex: 1, padding: "9px 0", borderRadius: 12, cursor: "pointer", border: `1.5px solid ${tab === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 12.5, background: tab === v ? t.accent : "transparent", color: tab === v ? t.onAccent : t.sub }}>{lb}</button>
         ))}
       </div>
@@ -2615,6 +2737,7 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts, authProfil
         </div>
       )}
 
+      {tab === "activity" && <AdminActivityPanel t={t} members={members} />}
       {tab === "announce" && <AnnouncementsAdmin t={t} userId={userId} />}
       {tab === "add" && <AdminAddPinMember t={t} session={session} onCreated={loadMembers} />}
 
@@ -3238,7 +3361,7 @@ function PostCard({ t, post, userId, onOpenProfile, onChanged, onTag }) {
     logActivity({ userId: post.author_id, actorId: userId, type: "repost", postId: post.id, preview: post.text || "" });
     onChanged?.();
   };
-  const deletePost = async () => { await supabase.from("posts").delete().eq("id", post.id); onChanged?.(); };
+  const deletePost = async () => { await supabase.from("posts").delete().eq("id", post.id); logAudit(userId, "community", "delete", "ลบโพสต์ในชุมชน"); onChanged?.(); };
   const hideAuthor = async () => {
     const nm = (author.community_use_main === false && author.community_name ? author.community_name : author.name) || "คนนี้";
     if (!window.confirm(`ซ่อนโพสต์ของ ${nm} จากฟีด?\n(เลิกซ่อนได้ที่ ตั้งค่า > คนที่ซ่อนไว้)`)) return;
@@ -4046,6 +4169,7 @@ function ComposeModal({ t, userId, onDone, close }) {
     const finalText = text.trim();
     const mentionIds = mentioned.filter((m) => finalText.includes(`@${m.name}`)).map((m) => m.id); // เอาเฉพาะที่ยังพิมพ์อยู่จริงในข้อความ (กันเผลอลบ @ชื่อ ทิ้งไปแล้ว)
     await supabase.from("posts").insert({ author_id: userId, text: finalText, images, visibility, mentioned_ids: mentionIds });
+    logAudit(userId, "community", "post", "โพสต์ใหม่ในชุมชน");
     mentionIds.forEach((id) => logActivity({ userId: id, actorId: userId, type: "mention", preview: finalText }));
     setPosting(false);
     onDone?.();
@@ -4950,6 +5074,7 @@ function EditTxModal({ t, x, categories, userId, setTx, close }) {
     const updated = { type, cat, amount: a, note: note.trim() || findCat(categories, cat).label, date };
     setTx((l) => l.map((y) => (y.id === x.id ? { ...y, ...updated } : y)));
     if (userId) await supabase.from("transactions").update(updated).eq("id", x.id);
+    logAudit(userId, "finance", "edit", "แก้ไขรายการการเงิน");
     setBusy(false);
     close();
   };
@@ -5056,6 +5181,7 @@ function AddTxModal({ t, tx, setTx, categories, moveCategory, deleteCategory, ad
     finally { setScanning(false); }
   };
 
+  const [receiptZoom, setReceiptZoom] = useState(false);
   const clearReceipt = () => { setPendingReceipt(null); setScanResult(null); setScanError(""); };
 
   const add = () => {
@@ -5069,6 +5195,7 @@ function AddTxModal({ t, tx, setTx, categories, moveCategory, deleteCategory, ad
     const docType = scanResult?.doc_type || null;
     if (userId) {
       supabase.from("transactions").insert({ id: newTx.id, user_id: userId, type: newTx.type, cat: newTx.cat, amount: newTx.amount, note: newTx.note, date: newTx.date, items, doc_type: docType }).then(() => {}, () => {});
+      logAudit(userId, "finance", "add", "เพิ่มรายการการเงิน");
       // อัปโหลดรูปสลิป/ใบเสร็จเข้า bucket ส่วนตัว (ไม่ public ต่างจากรูปอื่นในแอป เพราะมีข้อมูลการเงิน)
       if (pendingReceipt) {
         fetch(pendingReceipt.dataUrl).then((res) => res.blob()).then((blob) => {
@@ -5096,7 +5223,7 @@ function AddTxModal({ t, tx, setTx, categories, moveCategory, deleteCategory, ad
           </button>
         ) : (
           <div style={{ ...card(t), padding: 10, marginBottom: 14, display: "flex", gap: 10, alignItems: "flex-start" }}>
-            <img src={pendingReceipt.dataUrl} alt="" style={{ width: 52, height: 52, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} />
+            <img src={pendingReceipt.dataUrl} alt="" onClick={() => setReceiptZoom(true)} style={{ width: 52, height: 52, borderRadius: 10, objectFit: "cover", flexShrink: 0, cursor: "pointer" }} />
             <div style={{ flex: 1, minWidth: 0 }}>
               {scanning && <div style={{ fontSize: 12, color: t.sub, fontWeight: 700 }}>กำลังอ่านข้อมูล...</div>}
               {!scanning && scanError && <div style={{ fontSize: 11.5, color: "#D9534F" }}>{scanError}</div>}
@@ -5155,6 +5282,7 @@ function AddTxModal({ t, tx, setTx, categories, moveCategory, deleteCategory, ad
         <button onClick={add} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "13px 0", fontSize: 15 }}>บันทึก</button>
       </div>
       {manageOpen && <CategoryManagerModal t={t} categories={categories} moveCategory={moveCategory} deleteCategory={deleteCategory} addCategory={addCategory} close={() => setManageOpen(false)} />}
+      {receiptZoom && pendingReceipt && <ImageLightbox src={pendingReceipt.dataUrl} onClose={() => setReceiptZoom(false)} />}
     </div>
   );
 }
@@ -5337,14 +5465,14 @@ function NotePage({ t, notes, setNotes, isNight, userId, session, authProfile })
     if (!title.trim() && !plain) return;
     const newNote = { id: uid(), title: title.trim(), body: body || migrateBody(""), date: todayStr(), pinned: false, tags: parseTags(tagsInput) };
     setNotes((n) => [newNote, ...n]);
-    if (userId) supabase.from("notes").insert({ id: newNote.id, user_id: userId, title: newNote.title, body: newNote.body, date: newNote.date, pinned: newNote.pinned, tags: newNote.tags }).then(() => {}, () => {});
+    if (userId) { supabase.from("notes").insert({ id: newNote.id, user_id: userId, title: newNote.title, body: newNote.body, date: newNote.date, pinned: newNote.pinned, tags: newNote.tags }).then(() => {}, () => {}); logAudit(userId, "notes", "add", "เพิ่มโน้ต"); }
     setTitle(""); setBody(null); setTagsInput(""); setDraftKey((k) => k + 1);
   };
   const startEdit = (n) => { setEditingId(n.id); setEditTitle(n.title); setEditBody(migrateBody(n.body)); setEditTags((n.tags || []).join(", ")); };
   const saveEdit = () => {
     const newTitle = editTitle.trim(), newTags = parseTags(editTags);
     setNotes((list) => list.map((n) => (n.id === editingId ? { ...n, title: newTitle, body: editBody, tags: newTags } : n)));
-    if (userId) supabase.from("notes").update({ title: newTitle, body: editBody, tags: newTags }).eq("id", editingId).then(() => {}, () => {});
+    if (userId) { supabase.from("notes").update({ title: newTitle, body: editBody, tags: newTags }).eq("id", editingId).then(() => {}, () => {}); logAudit(userId, "notes", "edit", "แก้ไขโน้ต"); }
     setEditingId(null);
   };
   const togglePin = (id) => {
@@ -5493,7 +5621,7 @@ function NotePage({ t, notes, setNotes, isNight, userId, session, authProfile })
                     <button onClick={() => exportOneMd(n)} style={ghost} title="Export เป็น Markdown"><Download size={15} color={t.faint} /></button>
                     <button onClick={() => togglePin(n.id)} style={ghost} title="ปักหมุด"><Target size={15} color={n.pinned ? t.accent : t.faint} /></button>
                     <button onClick={() => startEdit(n)} style={ghost} title="แก้ไข"><Pencil size={15} color={t.faint} /></button>
-                    <button onClick={() => { setNotes((x) => x.filter((y) => y.id !== n.id)); if (userId) supabase.from("notes").delete().eq("id", n.id).then(() => {}, () => {}); }} style={ghost} title="ลบ"><Trash2 size={15} color={t.faint} /></button>
+                    <button onClick={() => { setNotes((x) => x.filter((y) => y.id !== n.id)); if (userId) { supabase.from("notes").delete().eq("id", n.id).then(() => {}, () => {}); logAudit(userId, "notes", "delete", "ลบโน้ต"); } }} style={ghost} title="ลบ"><Trash2 size={15} color={t.faint} /></button>
                   </div>
                 </div>
                 {viewingId === n.id ? (
@@ -5933,7 +6061,7 @@ function ChatModal({ t, M, mentor, setMentor, authProfile, setAuthProfile, custo
   const newChat = async () => {
     const g = greeting(); const sid = crypto.randomUUID();
     setMsgs([g]); setCurrentSessionId(sid); setShowHistList(false);
-    if (userId) supabase.from("mentor_chat_messages").insert({ user_id: userId, mentor, session_id: sid, who: g.who, text: g.text }).then(({ error }) => { if (error) console.error("บันทึกข้อความทักทายไม่สำเร็จ:", error.message); }, () => {});
+    if (userId) { supabase.from("mentor_chat_messages").insert({ user_id: userId, mentor, session_id: sid, who: g.who, text: g.text }).then(({ error }) => { if (error) console.error("บันทึกข้อความทักทายไม่สำเร็จ:", error.message); }, () => {}); logAudit(userId, "mentor", "new_session", "เริ่มบทสนทนาใหม่กับโค้ช"); }
   };
 
   // ดูแชทเก่าที่เลือกจากรายการประวัติ (สลับไปดู/คุยต่อใน session นั้น)
