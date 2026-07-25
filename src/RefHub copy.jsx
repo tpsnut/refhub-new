@@ -790,29 +790,10 @@ export default function RefHub() {
           const existingByTemplate = new Set((dbGoals || []).filter((g) => g.template_id && g.date === today).map((g) => g.template_id));
           const toCreate = templates.filter((tp) => tp.daysOfWeek.includes(todayDow) && !existingByTemplate.has(tp.id));
           if (toCreate.length > 0) {
-            const newRows = toCreate.map((tp) => ({ 
-              id: uid(), 
-              user_id: userId, 
-              text: tp.text, 
-              comment: tp.comment || tp.note || "", 
-              date: today, 
-              done: false, 
-              template_id: tp.id, 
-              difficulty: tp.difficulty 
-            }));
-          
-            const { error: genErr } = await supabase.from("goals").insert(
-              newRows.map(({ id, user_id, text, comment, date, done, template_id, difficulty }) => ({ 
-                id, 
-                user_id, 
-                text, 
-                comment, 
-                date, 
-                done, 
-                template_id, 
-                difficulty 
-              }))
-            );
+            const newRows = toCreate.map((tp) => ({ id: uid(), user_id: userId, text: tp.text, date: today, done: false, template_id: tp.id, difficulty: tp.difficulty }));
+            const { error: genErr } = await supabase.from("goals").insert(newRows.map(({ id, user_id, text, date, done, template_id, difficulty }) => ({ id, user_id, text, date, done, template_id, difficulty })));
+            if (genErr) console.error("สร้างเป้าหมายประจำวันจากแม่แบบไม่สำเร็จ:", genErr.message);
+            else setGoals((gs) => [...gs, ...newRows.map((r) => ({ ...r, doneDate: null }))]);
           }
         }
 
@@ -5341,7 +5322,7 @@ function GoalsReportPage({ t, goals, setGoals, userId }) {
   dated.forEach((g) => {
     const key = g.text.trim().toLowerCase();
     if (!key) return;
-    if (!groups[key]) groups[key] = { label: g.text.trim(), total: 0, done: 0, doneDates: [], comment: g.comment || "" };
+    if (!groups[key]) groups[key] = { label: g.text.trim(), total: 0, done: 0, doneDates: [] };
     groups[key].total += 1;
     if (g.done) { groups[key].done += 1; groups[key].doneDates.push(g.doneDate || g.date); }
   });
@@ -5409,37 +5390,22 @@ function GoalsReportPage({ t, goals, setGoals, userId }) {
     return `${t.accent}${Math.round(30 + ratio * 70).toString(16).padStart(2, "0")}`;
   };
 
-  // ✏️ แก้ไขย้อนหลัง: สลับสถานะสำเร็จ/ไม่สำเร็จของวันในอดีต (ส่ง comment ไปด้วยเสมอ)
+  // ✏️ แก้ไขย้อนหลัง: สลับสถานะสำเร็จ/ไม่สำเร็จของวันในอดีต (สร้างแถวใหม่ให้ถ้าวันนั้นยังไม่เคยมีเลย)
   const toggleRetroDate = async (label, date) => {
     const existing = dated.find((g) => g.text.trim().toLowerCase() === label.toLowerCase() && g.date === date);
-    const targetGroup = groups[label.toLowerCase()];
-    const currentComment = existing?.comment || targetGroup?.comment || "";
-
     if (existing) {
       const nextDone = !existing.done;
       setGoals((gs) => gs.map((g) => (g.id === existing.id ? { ...g, done: nextDone, doneDate: nextDone ? date : null } : g)));
-      if (userId && typeof supabase !== "undefined") {
-        try {
-          await supabase.from("goals").update({ done: nextDone, done_date: nextDone ? date : null, comment: currentComment }).eq("id", existing.id);
-        } catch (err) {
-          console.error("Error updating retro goal:", err);
-        }
-      }
+      if (userId) await supabase.from("goals").update({ done: nextDone, done_date: nextDone ? date : null }).eq("id", existing.id);
     } else {
-      const newGoal = { id: typeof uid === "function" ? uid() : Date.now().toString(), text: label, comment: currentComment, date, done: true, doneDate: date };
+      const newGoal = { id: uid(), text: label, date, done: true, doneDate: date };
       setGoals((gs) => [...gs, newGoal]);
-      if (userId && typeof supabase !== "undefined") {
-        try {
-          await supabase.from("goals").insert({ id: newGoal.id, user_id: userId, text: label, comment: currentComment, date, done: true, done_date: date });
-        } catch (err) {
-          console.error("Error inserting retro goal:", err);
-        }
-      }
+      if (userId) await supabase.from("goals").insert({ id: newGoal.id, user_id: userId, text: label, date, done: true, done_date: date }).then(() => {}, () => {});
     }
   };
 
   return (
-    <div style={{ paddingBottom: 130 }}>
+    <>
       <PageHead t={t} title="รายงานเป้าหมาย" sub="ย้อนดูว่าแต่ละวันทำอะไรไปบ้าง ทำบ่อยแค่ไหน" icon={<Target size={20} color={t.accent} />} />
 
       {dated.length === 0 ? (
@@ -5533,6 +5499,7 @@ function GoalsReportPage({ t, goals, setGoals, userId }) {
               const pct = Math.round((g.done / g.total) * 100);
               const streak = calcStreak(g.doneDates);
               const isOpen = expandedGroup === g.label;
+              // สร้างช่วง log ย้อนหลัง 21 วัน (หรือตั้งแต่เริ่มมีเป้าหมายนี้ ถ้าใหม่กว่า)
               const firstDate = dated.filter((x) => x.text.trim().toLowerCase() === g.label.toLowerCase()).map((x) => x.date).sort()[0];
               const daysBack = firstDate ? Math.min(21, Math.round((new Date() - new Date(firstDate)) / 86400000) + 1) : 21;
               const logDates = Array.from({ length: daysBack }, (_, k) => { const d = new Date(); d.setDate(d.getDate() - (daysBack - 1 - k)); return d.toISOString().slice(0, 10); });
@@ -5573,7 +5540,7 @@ function GoalsReportPage({ t, goals, setGoals, userId }) {
           </div>
         </>
       )}
-    </div>
+    </>
   );
 }
 
