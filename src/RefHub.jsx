@@ -5034,14 +5034,24 @@ function AddTxModal({ t, tx, setTx, categories, moveCategory, deleteCategory, ad
       });
       const data = await r.json();
       if (!r.ok || data.error) { setScanError(data.error || "อ่านสลิป/ใบเสร็จไม่สำเร็จ"); return; }
-      setScanResult(data);
+      let catMatched = false;
       if (data.amount) setAmount(String(data.amount));
       if (data.date) setDate(data.date);
       if (data.merchant) setNote(data.merchant);
       if (data.suggested_category) {
-        const found = categories.find((c) => c.id === data.suggested_category);
-        if (found) { setType(found.kind); setCat(found.id); setCatError(false); }
+        const raw = String(data.suggested_category).trim();
+        // AI บางครั้งตอบชื่อหมวด (label) แทน id ทั้งที่สั่งให้ตอบ id — เผื่อไว้ทุกทาง กันไม่ได้เลือกให้เฉยๆ
+        const found = categories.find((c) => c.id === raw)
+          || categories.find((c) => c.id.toLowerCase() === raw.toLowerCase())
+          || categories.find((c) => c.label === raw);
+        if (found) { setType(found.kind); setCat(found.id); setCatError(false); catMatched = true; }
       }
+      if (!catMatched) {
+        // เดาไม่ได้เลย — อย่างน้อยเลือก "อื่นๆ" ให้ไว้ก่อน ลดงานที่ต้องกดเอง (คนยังเปลี่ยนเองได้เสมอ)
+        const fallback = categories.find((c) => c.label === "อื่นๆ" && c.kind === "out") || categories.find((c) => c.kind === "out");
+        if (fallback) { setType(fallback.kind); setCat(fallback.id); setCatError(false); }
+      }
+      setScanResult({ ...data, catMatched });
     } catch (e) { setScanError("เชื่อมต่อไม่สำเร็จ: " + e.message); }
     finally { setScanning(false); }
   };
@@ -5093,6 +5103,7 @@ function AddTxModal({ t, tx, setTx, categories, moveCategory, deleteCategory, ad
               {!scanning && !scanError && scanResult && (
                 <div style={{ fontSize: 11.5, color: t.sub }}>
                   อ่านสำเร็จ ({scanResult.doc_type === "receipt" ? "ใบเสร็จ" : "สลิปโอนเงิน"}) — เช็คข้อมูลด้านล่างก่อนบันทึก
+                  {!scanResult.catMatched && <div style={{ color: "#E8894A", marginTop: 2 }}>⚠️ เดาหมวดหมู่ไม่ได้ ตั้งเป็น "อื่นๆ" ไว้ก่อน — เลือกหมวดที่ถูกต้องเองด้านล่างด้วยนะ</div>}
                   {scanResult.doc_type === "receipt" && Array.isArray(scanResult.items) && scanResult.items.length > 0 && (
                     <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 2 }}>
                       {scanResult.items.map((it, i) => (
