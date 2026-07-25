@@ -890,7 +890,10 @@ export default function RefHub() {
   // 🔐 เช็ค session ตอนเปิดแอปครั้งแรก + คอยฟังการเปลี่ยนแปลง (ล็อกอิน/ล็อกเอาต์) ตลอดเวลา
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setAuthChecked(true); });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, s) => { setSession(s); setAuthChecked(true); });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, s) => {
+      setSession(s); setAuthChecked(true);
+      if (_event === "SIGNED_IN" && s?.user?.id) logAudit(s.user.id, "auth", "login", "เข้าสู่ระบบ");
+    });
     return () => listener.subscription.unsubscribe();
   }, []);
 
@@ -982,6 +985,13 @@ export default function RefHub() {
         if (payload.new.id === userId) return; // ไม่ต้องแจ้งเตือนตัวเอง
         setAdminAlerts((a) => [{ id: uid(), text: `${payload.new.name || payload.new.email} สมัครสมาชิกใหม่ รอการอนุมัติ`, time: Date.now() }, ...a].slice(0, 20));
         notifyPush([userId], "🆕 มีคนสมัครสมาชิกใหม่", `${payload.new.name || payload.new.email} รอการอนุมัติอยู่`, session?.access_token);
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "activity_log" }, async (payload) => {
+        if (payload.new.user_id === userId) return; // ไม่ต้องแจ้งเตือนการกระทำของตัวเอง
+        const { data: prof } = await supabase.from("profiles").select("name, email").eq("id", payload.new.user_id).maybeSingle();
+        const who = prof?.name || prof?.email || "สมาชิก";
+        const label = payload.new.module === "auth" ? "เข้าสู่ระบบ" : payload.new.summary;
+        setAdminAlerts((a) => [{ id: uid(), text: `${who} — ${label}`, time: Date.now() }, ...a].slice(0, 20));
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -2636,9 +2646,9 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts, authProfil
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 14, overflowX: "auto", paddingBottom: 2 }}>
         {[["overview", "ภาพรวม"], ["members", "สมาชิก"], ["activity", "กิจกรรม"], ["announce", "ประกาศ"], ["add", "เพิ่มสมาชิก"]].map(([v, lb]) => (
-          <button key={v} onClick={() => setTab(v)} style={{ flex: 1, padding: "9px 0", borderRadius: 12, cursor: "pointer", border: `1.5px solid ${tab === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 12.5, background: tab === v ? t.accent : "transparent", color: tab === v ? t.onAccent : t.sub }}>{lb}</button>
+          <button key={v} onClick={() => setTab(v)} style={{ flexShrink: 0, padding: "9px 16px", borderRadius: 12, cursor: "pointer", border: `1.5px solid ${tab === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 12.5, background: tab === v ? t.accent : "transparent", color: tab === v ? t.onAccent : t.sub, whiteSpace: "nowrap" }}>{lb}</button>
         ))}
       </div>
 
@@ -5994,7 +6004,7 @@ function ChatHistoryListModal({ t, userId, mentor, currentSessionId, onSelect, c
 
   return (
     <ModalPortal>
-      <div style={overlay} onClick={close}>
+      <div style={overlayHi} onClick={close}>
         <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "75vh", overflowY: "auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>ประวัติแชทเก่า</div>
