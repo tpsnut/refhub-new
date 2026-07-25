@@ -696,13 +696,18 @@ export default function RefHub() {
   const mode = isNight ? "night" : "day";
   const t = palette(mode, theme);
   const customMentorObj = customMentors.find((c) => c.id === mentor);
-  const M = MENTORS[mentor] || (customMentorObj ? {
+  // ⚠️ เดิมเช็ค MENTORS[mentor] || (...) แต่ MENTORS.none มีอยู่จริงในอ็อบเจกต์ เลยชนะ || ก่อนเสมอ
+  // ทำให้ไม่มีวันไปถึงส่วนที่เอารูปที่ user ตั้งเองมาใส่ — ต้องเช็ค "none" แยกเป็นเคสแรกสุด
+  const M = mentor === "none"
+    ? { ...MENTORS.none, avatarUrl: authProfile?.assistant_avatar_url || null } // ผู้ช่วยทั่วไป — ใช้รูปที่ user ตั้งเองได้ (เก็บใน profiles)
+    : MENTORS[mentor] ? { ...MENTORS[mentor], avatarUrl: authProfile?.builtin_mentor_avatars?.[mentor] || null } // Loid/Itachi/Bond — ก็ตั้งรูปเองได้เหมือนกัน (เก็บใน profiles.builtin_mentor_avatars แยกเป็นคนละคีย์ต่อโค้ช)
+    : (customMentorObj ? {
     name: customMentorObj.name, full: customMentorObj.name, tag: customMentorObj.description || "โค้ชส่วนตัวของคุณ", mood: "เป็นมิตร ตั้งใจช่วยเหลือ",
     letter: (customMentorObj.name || "?")[0]?.toUpperCase() || "A", accent: "#8A93A8", accent2: "#A7ADB8", onAccent: "#ffffff",
     scale: [261.6, 293.7, 329.6, 392.0, 440.0], root: 130.8, avatarUrl: customMentorObj.avatarUrl || null,
     quotes: ["พร้อมช่วยเหลือคุณเสมอ", "ถามอะไรมาได้เลย", "มาลองคิดไปด้วยกัน", "ทุกก้าวเล็กๆ มีความหมาย"],
     replies: ["ลองเล่าเพิ่มเติมได้ไหมครับ จะได้ช่วยได้ตรงจุดขึ้น", "เข้าใจแล้ว ลองมาดูกันทีละขั้นตอนนะครับ", "นี่เป็นมุมมองที่น่าสนใจ ลองคิดต่อดูอีกหน่อยไหมครับ"],
-  } : { ...MENTORS.none, avatarUrl: authProfile?.assistant_avatar_url || null }); // ผู้ช่วยทั่วไป — ใช้รูปที่ user ตั้งเองได้ (เก็บใน profiles)
+  } : { ...MENTORS.none, avatarUrl: authProfile?.assistant_avatar_url || null });
 
   useEffect(() => { const c = () => { const h = new Date().getHours(); setAutoNight(h >= 18 || h < 6); }; c(); const id = setInterval(c, 60000); return () => clearInterval(id); }, []);
   useEffect(() => { const id = setInterval(() => setQuoteIdx((i) => i + 1), 9000); return () => clearInterval(id); }, []);
@@ -1234,7 +1239,7 @@ export default function RefHub() {
 
         {/* CONTENT — ความสูงหารด้วยสเกลชดเชย transform:scale ข้างบน กันตอนขยายฟอนต์แล้วท้ายเนื้อหาจมใต้ Dock */}
         <div style={{ position: "relative", zIndex: 2, padding: `16px 18px ${page === "chat" || page === "chatRoom" ? 16 : 120}px`, height: `calc(${(10000 / fontScale).toFixed(2)}vh - 76px)`, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
-          {page === "home" && <ErrorCatcher t={t}><HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, goalDone, goalPct, setGoals, notes, setPage, setChatOpen, userId, playlist, setCommunityOpen, isCustomMentor: !!customMentorObj }} /></ErrorCatcher>}
+          {page === "home" && <ErrorCatcher t={t}><HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, goalDone, goalPct, setGoals, notes, setPage, setChatOpen, userId, playlist, setCommunityOpen, isCustomMentor: !!customMentorObj || mentor === "none" }} /></ErrorCatcher>}
           {page === "ledger" && <FinancePage {...{ t, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt), userId }} />}
           {page === "note" && <NotePage {...{ t, notes, setNotes, isNight, userId, session, authProfile }} />}
           {page === "ideas" && <IdeasPage t={t} M={M} userId={userId} session={session} authProfile={authProfile} setAuthProfile={setAuthProfile} setNotes={setNotes} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} />}
@@ -2070,7 +2075,7 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, goa
         <div style={{ position: "relative" }}>
           <button onClick={() => setMentorPick(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ fontSize: isCustomMentor ? 14.5 : 11.5, fontWeight: isCustomMentor ? 800 : 700, color: isCustomMentor ? "#141414" : "rgba(255,255,255,.55)", letterSpacing: .5 }}>{isNight ? "โค้ชคืนนี้" : "โค้ชวันนี้"} · {M.name.toUpperCase()}</span>
-            <span style={{ fontSize: 10, color: "rgba(255,255,255,.5)" }}>เปลี่ยน ▾</span>
+            <span style={{ fontSize: 10, fontWeight: 800, color: "#D9302F" }}>เปลี่ยน ▾</span>
           </button>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, gap: 14 }}>
             <div style={{ flex: 1 }}>
@@ -6635,6 +6640,12 @@ function MentorPicker({ t, mentor, setMentor, authProfile, setAuthProfile, userI
         // ผู้ช่วยทั่วไป — เก็บรูปไว้ในโปรไฟล์ผู้ใช้เอง (ไม่ใช่ตาราง custom_mentors)
         await supabase.from("profiles").update({ assistant_avatar_url: data.publicUrl }).eq("id", userId);
         setAuthProfile((p) => ({ ...p, assistant_avatar_url: data.publicUrl }));
+      } else if (MENTORS[id]) {
+        // โค้ช 3 ตัวหลักที่ฝังในระบบ (Loid/Itachi/Bond) — เป็นค่าคงที่ในโค้ด ไม่มีแถวในฐานข้อมูล
+        // เก็บเป็น jsonb {mentorId: url} ในโปรไฟล์แทน จะได้ไม่ต้องเพิ่มคอลัมน์ทุกครั้งที่มีโค้ชใหม่
+        const nextMap = { ...(authProfile?.builtin_mentor_avatars || {}), [id]: data.publicUrl };
+        await supabase.from("profiles").update({ builtin_mentor_avatars: nextMap }).eq("id", userId);
+        setAuthProfile((p) => ({ ...p, builtin_mentor_avatars: nextMap }));
       } else {
         await supabase.from("custom_mentors").update({ avatar_url: data.publicUrl }).eq("id", id);
         setCustomMentors((cs) => cs.map((c) => (c.id === id ? { ...c, avatarUrl: data.publicUrl } : c)));
@@ -6668,13 +6679,25 @@ function MentorPicker({ t, mentor, setMentor, authProfile, setAuthProfile, userI
 
     {!creating ? (
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {isAdmin && Object.entries(MENTORS).filter(([k]) => k !== "none").map(([k, m]) => (
+        {isAdmin && Object.entries(MENTORS).filter(([k]) => k !== "none").map(([k, m]) => {
+          const savedAva = authProfile?.builtin_mentor_avatars?.[k];
+          return (
           <button key={k} onClick={() => pick(k)} style={{ display: "flex", alignItems: "center", gap: 14, padding: 14, borderRadius: 18, cursor: "pointer", textAlign: "left", background: t.surface, border: `2px solid ${mentor === k ? m.accent : t.border}` }}>
-            <span style={{ width: 46, height: 46, borderRadius: 23, background: `linear-gradient(135deg,${m.accent2},${m.accent})`, color: m.onAccent, display: "grid", placeItems: "center", fontWeight: 800, fontSize: 18, flexShrink: 0 }}>{m.letter}</span>
+            <div style={{ position: "relative", flexShrink: 0 }}>
+              {savedAva ? (
+                <img src={savedAva} alt="" style={{ width: 46, height: 46, borderRadius: 23, objectFit: "cover" }} />
+              ) : (
+                <span style={{ width: 46, height: 46, borderRadius: 23, background: `linear-gradient(135deg,${m.accent2},${m.accent})`, color: m.onAccent, display: "grid", placeItems: "center", fontWeight: 800, fontSize: 18 }}>{m.letter}</span>
+              )}
+              <button onClick={(e) => { e.stopPropagation(); setAvatarTargetId(k); avatarFileRef.current?.click(); }} style={{ position: "absolute", bottom: -3, right: -3, width: 20, height: 20, borderRadius: 10, background: t.accent, border: `2px solid ${t.surface}`, cursor: "pointer", display: "grid", placeItems: "center" }}>
+                <Camera size={10} color={t.onAccent} />
+              </button>
+            </div>
             <div style={{ flex: 1 }}><div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>{m.full}</div><div style={{ fontSize: 12, color: t.sub }}>{m.tag}</div></div>
             {mentor === k && <Check size={20} color={m.accent} />}
           </button>
-        ))}
+          );
+        })}
         <button onClick={() => pick("none")} style={{ display: "flex", alignItems: "center", gap: 14, padding: 14, borderRadius: 18, cursor: "pointer", textAlign: "left", background: t.surface, border: `2px solid ${mentor === "none" ? MENTORS.none.accent : t.border}` }}>
           <div style={{ position: "relative", flexShrink: 0 }}>
             {authProfile?.assistant_avatar_url ? (
