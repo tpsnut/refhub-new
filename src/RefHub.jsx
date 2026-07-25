@@ -1350,7 +1350,7 @@ export default function RefHub() {
         {profileLightbox && profile.avatar && <ImageLightbox src={profile.avatar} onClose={() => setProfileLightbox(false)} />}
         {searchOpen && <SearchOverlay t={t} notes={notes} goals={goals} tx={tx} categories={categories} setPage={setPage} close={() => setSearchOpen(false)} />}
         {musicOpen && <MusicModal {...{ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, moveTrack, toggleFavorite, volume, setVolume, userId, close: () => setMusicOpen(false) }} />}
-        {addOpen && <AddTxModal t={t} tx={tx} setTx={setTx} categories={categories} moveCategory={moveCategory} deleteCategory={deleteCategory} addCategory={addCategory} userId={userId} close={() => setAddOpen(false)} />}
+        {addOpen && <AddTxModal t={t} tx={tx} setTx={setTx} categories={categories} moveCategory={moveCategory} deleteCategory={deleteCategory} addCategory={addCategory} userId={userId} session={session} close={() => setAddOpen(false)} />}
         {exportText != null && <ExportModal t={t} text={exportText} close={() => setExportText(null)} />}
 
         {/* hidden audio player for file tracks */}
@@ -2476,13 +2476,6 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts, authProfil
   const setCanViewLocations = async (id, can_view_locations) => { const { error } = await supabase.from("profiles").update({ can_view_locations }).eq("id", id); if (error) { alert("ตั้งสิทธิ์ดูตำแหน่งไม่สำเร็จ: " + error.message); console.error(error); } loadMembers(); };
   const remindNotification = async (id) => { await supabase.from("profiles").update({ notif_reminder_at: new Date().toISOString() }).eq("id", id); loadMembers(); };
   const setPremiumAi = async (id, premium_ai) => { await supabase.from("profiles").update({ premium_ai }).eq("id", id); loadMembers(); };
-  const setCanUseSorting = async (id, can_use_sorting) => { await supabase.from("profiles").update({ can_use_sorting }).eq("id", id); loadMembers(); };
-  const approveSwitch = async (targetUserId) => {
-    const r = await fetch("/api/chat-room", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "approve_switch", targetUserId, callerToken: session?.access_token }) });
-    const data = await r.json();
-    if (data.error) alert("อนุมัติไม่สำเร็จ: " + data.error);
-    loadMembers();
-  };
   const setMentorLimit = async (id, mentor_limit) => { await supabase.from("profiles").update({ mentor_limit }).eq("id", id); loadMembers(); };
   const resetMentorPick = async (id) => { await supabase.from("custom_mentors").delete().eq("user_id", id); loadMembers(); };
   const setTopicLimit = async (id, topic_limit) => { await supabase.from("profiles").update({ topic_limit }).eq("id", id); loadMembers(); };
@@ -2630,7 +2623,7 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts, authProfil
           <MemberDetailModal
             t={t} m={detailMember} isSelf={detailMember.id === userId}
             isOnline={isOnline(detailMember.last_seen)}
-            setApproved={setApproved} setRole={setRole} setCanChat={setCanChat} setCanUseCommunity={setCanUseCommunity} setCanViewLocations={setCanViewLocations} remindNotification={remindNotification} setPremiumAi={setPremiumAi} setCanUseSorting={setCanUseSorting} approveSwitch={approveSwitch}
+            setApproved={setApproved} setRole={setRole} setCanChat={setCanChat} setCanUseCommunity={setCanUseCommunity} setCanViewLocations={setCanViewLocations} remindNotification={remindNotification} setPremiumAi={setPremiumAi}
             setMentorLimit={setMentorLimit} setTopicLimit={setTopicLimit} setDailyArticleLimit={setDailyArticleLimit} setCanRefreshArticles={setCanRefreshArticles} resetMentorPick={resetMentorPick}
             removeMember={removeMember}
             close={() => setDetailMember(null)}
@@ -2641,7 +2634,7 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts, authProfil
   );
 }
 
-function MemberDetailModal({ t, m, isSelf, isOnline, setApproved, setRole, setCanChat, setCanUseCommunity, setCanViewLocations, setMentorLimit, setTopicLimit, setDailyArticleLimit, setCanRefreshArticles, resetMentorPick, removeMember, remindNotification, setPremiumAi, setCanUseSorting, approveSwitch, close }) {
+function MemberDetailModal({ t, m, isSelf, isOnline, setApproved, setRole, setCanChat, setCanUseCommunity, setCanViewLocations, setMentorLimit, setTopicLimit, setDailyArticleLimit, setCanRefreshArticles, resetMentorPick, removeMember, remindNotification, setPremiumAi, close }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const Row = ({ label, children }) => (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: `1px solid ${t.border}` }}>
@@ -2695,15 +2688,6 @@ function MemberDetailModal({ t, m, isSelf, isOnline, setApproved, setRole, setCa
         <Row label="AI พรีเมียม (Gemini จ่ายเงิน/DeepSeek)">
           <button onClick={() => setPremiumAi(m.id, !m.premium_ai)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 10, border: `1px solid ${m.premium_ai ? "#2E9E6B" : t.border}`, cursor: "pointer", background: m.premium_ai ? "#2E9E6B18" : "none", color: m.premium_ai ? "#2E9E6B" : t.sub, fontSize: 12, fontWeight: 700 }}>{m.premium_ai ? "เปิดอยู่" : "ปิดอยู่ (กดเพื่อเปิด)"}</button>
         </Row>
-        <Row label="เข้าร่วมห้องคัดสรร (R/E/F)">
-          <button onClick={() => setCanUseSorting(m.id, !m.can_use_sorting)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 10, border: `1px solid ${m.can_use_sorting ? "#2E9E6B" : t.border}`, cursor: "pointer", background: m.can_use_sorting ? "#2E9E6B18" : "none", color: m.can_use_sorting ? "#2E9E6B" : t.sub, fontSize: 12, fontWeight: 700 }}>{m.can_use_sorting ? "เปิดอยู่" : "ปิดอยู่ (กดเพื่อเปิด)"}</button>
-        </Row>
-        {m.sorted_group && <Row label="กลุ่มที่คัดสรรแล้ว"><span style={{ fontSize: 12.5, fontWeight: 700, color: t.text }}>{{ reason: "🧠 Reason", emotion: "❤️ Emotion", force: "✊ Force" }[m.sorted_group]}</span></Row>}
-        {m.group_switch_request && (
-          <Row label={`ขอสลับไป: ${{ reason: "🧠 Reason", emotion: "❤️ Emotion", force: "✊ Force" }[m.group_switch_request]}`}>
-            <button onClick={() => approveSwitch(m.id)} style={{ padding: "6px 12px", borderRadius: 10, border: "none", background: "#2E9E6B", color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>อนุมัติ</button>
-          </Row>
-        )}
         {!isSelf && m.role !== "admin" && (
           <Row label="ใช้งานเต็มรูปแบบ (ไม่เห็นหน้า Admin)">
             <button onClick={() => setRole(m.id, m.role === "trusted" ? "member" : "trusted")} style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 10, border: `1px solid ${m.role === "trusted" ? "#2E9E6B" : t.border}`, cursor: "pointer", background: m.role === "trusted" ? "#2E9E6B18" : "none", color: m.role === "trusted" ? "#2E9E6B" : t.sub, fontSize: 12, fontWeight: 700 }}>{m.role === "trusted" ? "เปิดอยู่" : "ปิดอยู่ (กดเพื่อเปิด)"}</button>
@@ -4109,7 +4093,6 @@ function ChatEntryPage({ t, M, userId, authProfile, session, openThread }) {
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sheet, setSheet] = useState(null); // null | "menu" | "create" | "join" | "direct"
-  const [showSorting, setShowSorting] = useState(false);
   const [chatMode, setChatMode] = useState("normal"); // normal | community
   const [showMyPassport, setShowMyPassport] = useState(false);
   const [friendCode, setFriendCode] = useState("");
@@ -4295,12 +4278,6 @@ function ChatEntryPage({ t, M, userId, authProfile, session, openThread }) {
                     <button onClick={() => setSheet("create")} style={{ display: "flex", alignItems: "center", gap: 12, padding: 14, borderRadius: 14, border: `1px solid ${t.border}`, background: "none", cursor: "pointer", textAlign: "left" }}><Plus size={18} color={t.accent} /><div><div style={{ fontSize: 13.5, fontWeight: 700, color: t.text }}>สร้างห้องใหม่</div><div style={{ fontSize: 11, color: t.sub }}>ตั้งชื่อ+รูป แล้วชวนคนอื่นด้วยโค้ด</div></div></button>
                     <button onClick={() => setSheet("join")} style={{ display: "flex", alignItems: "center", gap: 12, padding: 14, borderRadius: 14, border: `1px solid ${t.border}`, background: "none", cursor: "pointer", textAlign: "left" }}><KeyRound size={18} color={t.accent} /><div><div style={{ fontSize: 13.5, fontWeight: 700, color: t.text }}>เข้าร่วมห้องด้วยโค้ด</div><div style={{ fontSize: 11, color: t.sub }}>มีโค้ดห้องจากคนอื่นแล้ว</div></div></button>
                     <button onClick={() => setSheet("direct")} style={{ display: "flex", alignItems: "center", gap: 12, padding: 14, borderRadius: 14, border: `1px solid ${t.border}`, background: "none", cursor: "pointer", textAlign: "left" }}><MessageCircle size={18} color={t.accent} /><div><div style={{ fontSize: 13.5, fontWeight: 700, color: t.text }}>เริ่มแชทส่วนตัว 1-1</div><div style={{ fontSize: 11, color: t.sub }}>แลกโค้ดส่วนตัวกับเพื่อน</div></div></button>
-                    {authProfile?.can_use_sorting && (
-                      <button onClick={() => { closeSheet(); setShowSorting(true); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: 14, borderRadius: 14, border: "1px solid #F2872E55", background: "#F2872E1A", cursor: "pointer", textAlign: "left" }}>
-                        <Sparkles size={18} color="#F2872E" />
-                        <div><div style={{ fontSize: 13.5, fontWeight: 700, color: t.text }}>เข้าร่วมห้องคัดสรร</div><div style={{ fontSize: 11, color: t.sub }}>{authProfile?.sorted_group ? "ไปที่ห้องกลุ่มของคุณ" : "ทำแบบทดสอบ รู้ผลว่าคุณอยู่กลุ่มไหน"}</div></div>
-                      </button>
-                    )}
                   </div>
                 </>
               )}
@@ -4356,651 +4333,10 @@ function ChatEntryPage({ t, M, userId, authProfile, session, openThread }) {
         </ModalPortal>
       )}
         </>
-      {showSorting && <SortingQuizModal t={t} userId={userId} authProfile={authProfile} session={session} openThread={openThread} close={() => setShowSorting(false)} />}
     </>
   );
 }
 
-
-// 🏠 ระบบคัดสรรกลุ่ม R-E-F
-const PROFILE_BG_OPTIONS = [
-  { key: "sunset", grad: "linear-gradient(135deg,#F6A56B,#E0507B)" },
-  { key: "ocean", grad: "linear-gradient(135deg,#4A90D9,#2E6FA8)" },
-  { key: "forest", grad: "linear-gradient(135deg,#6FBF8B,#2E9E6B)" },
-  { key: "purple", grad: "linear-gradient(135deg,#B080E0,#7A5CC9)" },
-  { key: "gold", grad: "linear-gradient(135deg,#F0C368,#E0A030)" },
-  { key: "night", grad: "linear-gradient(135deg,#4A5578,#26304A)" },
-  { key: "cherry", grad: "linear-gradient(135deg,#F5A3B8,#D9536F)" },
-  { key: "mint", grad: "linear-gradient(135deg,#9DE0C8,#4FB88F)" },
-  { key: "coral", grad: "linear-gradient(135deg,#FF9E80,#F4511E)" },
-  { key: "sky", grad: "linear-gradient(135deg,#A8D8F0,#5CA9DB)" },
-  { key: "rosegold", grad: "linear-gradient(135deg,#F0C4B8,#D98E7C)" },
-  { key: "galaxy", grad: "linear-gradient(135deg,#2B2159,#7A4FBF,#D976A8)" },
-];
-const bgGradient = (key) => PROFILE_BG_OPTIONS.find((b) => b.key === key)?.grad || PROFILE_BG_OPTIONS[0].grad;
-
-const GROUP_META = {
-  reason: { label: "Reason", emoji: "🧠", color: "#4A90D9", threadId: "00000000-0000-0000-0000-0000000000f1", desc: "นักคิด วางแผน ใช้เหตุผลนำอารมณ์" },
-  emotion: { label: "Emotion", emoji: "❤️", color: "#E0507B", threadId: "00000000-0000-0000-0000-0000000000f2", desc: "นักรู้สึก ใส่ใจความสัมพันธ์ ตัดสินใจด้วยหัวใจ" },
-  force: { label: "Force", emoji: "✊", color: "#E0A030", threadId: "00000000-0000-0000-0000-0000000000f3", desc: "นักลงมือทำ พลังงานสูง ไม่ชอบคิดนาน" },
-};
-const QUIZ_QUESTIONS = [
-  { q: "มีเวลาว่างทั้งวันแบบไม่ได้วางแผนอะไรเลย คุณจะ...", options: [
-    { text: "คิดว่าจะทำอะไรให้คุ้มค่าที่สุดก่อน", g: "reason" }, { text: "ทำตามอารมณ์ตอนนั้นเลย", g: "emotion" }, { text: "ลุกไปทำอะไรสักอย่างทันที", g: "force" },
-  ]},
-  { q: "เจอปัญหาใหญ่ในงาน สิ่งแรกที่คุณทำคือ...", options: [
-    { text: "วิเคราะห์หาสาเหตุก่อน", g: "reason" }, { text: "ถามความรู้สึกคนในทีมก่อน", g: "emotion" }, { text: "ลงมือแก้เลยแล้วปรับหน้างาน", g: "force" },
-  ]},
-  { q: "ทะเลาะกับเพื่อนสนิท คุณมักจะ...", options: [
-    { text: "ขอเวลาคิดทบทวนเหตุผลทั้ง 2 ฝ่ายก่อน", g: "reason" }, { text: "อยากคุยกันตรงๆ ให้เข้าใจความรู้สึกกัน", g: "emotion" }, { text: "หาทางแก้ปัญหาให้จบเร็วที่สุด", g: "force" },
-  ]},
-  { q: "ได้รับข่าวไม่ดีกะทันหัน คุณจะ...", options: [
-    { text: "ตั้งสติ ประเมินสถานการณ์ก่อน", g: "reason" }, { text: "ต้องการใครสักคนอยู่ด้วย", g: "emotion" }, { text: "หาทางจัดการทันที", g: "force" },
-  ]},
-  { q: "ดูหนังจบเรื่องหนึ่ง คุณมักจะ...", options: [
-    { text: "วิเคราะห์โครงเรื่อง/เหตุผลตัวละคร", g: "reason" }, { text: "อินไปกับความรู้สึกตัวละครหลัก", g: "emotion" }, { text: "อยากลุกไปทำอะไรต่อทันที", g: "force" },
-  ]},
-  { q: "เพื่อนชวนลองของใหม่ที่ไม่เคยทำมาก่อน คุณจะ...", options: [
-    { text: "ขอศึกษาข้อมูลก่อนตัดสินใจ", g: "reason" }, { text: "ถ้ารู้สึกสนุกก็ลองเลย", g: "emotion" }, { text: "ตอบตกลงทันทีไม่ต้องคิดเยอะ", g: "force" },
-  ]},
-];
-
-function SortingQuizModal({ t, userId, authProfile, session, openThread, close }) {
-  const isAdmin = authProfile?.role === "admin";
-  const [step, setStep] = useState(isAdmin || authProfile?.sorted_group ? "hub" : "intro"); // intro | quiz | tie | reveal | hub
-  const [qIdx, setQIdx] = useState(0);
-  const [scores, setScores] = useState({ reason: 0, emotion: 0, force: 0 });
-  const [tiedGroups, setTiedGroups] = useState([]);
-  const [resultGroup, setResultGroup] = useState(authProfile?.sorted_group || null);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-  const [switchTarget, setSwitchTarget] = useState(null);
-  const [houses, setHouses] = useState(null); // {reason:{name,avatarUrl}, emotion:{...}, force:{...}}
-  const [showMembers, setShowMembers] = useState(false);
-  const fileRef = useRef(null);
-  const [uploadingFor, setUploadingFor] = useState(null);
-
-  // 👑 แอดมิน: เข้าได้ทั้ง 3 ห้องอัตโนมัติ ไม่ต้องทำแบบทดสอบ
-  useEffect(() => {
-    if (!isAdmin) return;
-    fetch("/api/chat-room", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "admin_join_all", callerToken: session?.access_token }) })
-      .then((r) => r.json()).then((d) => { if (d.error) console.error("เข้าห้องคัดสรรอัตโนมัติไม่สำเร็จ:", d.error); });
-  }, [isAdmin]);
-
-  // ดึงชื่อ/รูปของ 3 ห้องมาโชว์
-  useEffect(() => {
-    if (step !== "hub") return;
-    const ids = Object.values(GROUP_META).map((g) => g.threadId);
-    supabase.from("chat_threads").select("id, name, avatar_url").in("id", ids).then(({ data, error }) => {
-      if (error) { console.error("โหลดข้อมูลห้องคัดสรรไม่สำเร็จ:", error.message); return; }
-      const map = {};
-      Object.entries(GROUP_META).forEach(([key, meta]) => {
-        const row = data?.find((d) => d.id === meta.threadId);
-        map[key] = { name: row?.name || `${meta.emoji} ${meta.label}`, avatarUrl: row?.avatar_url || null };
-      });
-      setHouses(map);
-    });
-  }, [step]);
-
-  const uploadHouseImage = async (e, groupKey) => {
-    const f = e.target.files?.[0]; if (!f) return;
-    e.target.value = "";
-    setUploadingFor(groupKey);
-    try {
-      const path = `sorting-houses/${groupKey}-${uid()}.jpg`;
-      const { error: upErr } = await supabase.storage.from("attachments").upload(path, f);
-      if (upErr) throw upErr;
-      const { data } = supabase.storage.from("attachments").getPublicUrl(path);
-      await supabase.from("chat_threads").update({ avatar_url: data.publicUrl }).eq("id", GROUP_META[groupKey].threadId);
-      setHouses((h) => ({ ...h, [groupKey]: { ...h[groupKey], avatarUrl: data.publicUrl } }));
-    } catch (e2) { alert("เปลี่ยนรูปไม่สำเร็จ: " + e2.message); } finally { setUploadingFor(null); }
-  };
-
-  const answer = (g) => {
-    const next = { ...scores, [g]: scores[g] + 1 };
-    setScores(next);
-    if (qIdx + 1 < QUIZ_QUESTIONS.length) { setQIdx(qIdx + 1); return; }
-    // ตอบครบแล้ว -> หาผู้ชนะ เช็คว่าเสมอกันไหม
-    const max = Math.max(...Object.values(next));
-    const winners = Object.entries(next).filter(([, v]) => v === max).map(([k]) => k);
-    if (winners.length > 1) { setTiedGroups(winners); setStep("tie"); }
-    else { finalize(winners[0]); }
-  };
-
-  const finalize = async (group) => {
-    setBusy(true); setErr("");
-    try {
-      const r = await fetch("/api/chat-room", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "sort", group, callerToken: session?.access_token }) });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error);
-      setResultGroup(group);
-      setStep("reveal");
-    } catch (e) { setErr(e.message); } finally { setBusy(false); }
-  };
-
-  const requestSwitch = async () => {
-    if (!switchTarget) return;
-    setBusy(true);
-    try {
-      const r = await fetch("/api/chat-room", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "request_switch", group: switchTarget, callerToken: session?.access_token }) });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error);
-      setErr(""); alert("ส่งคำขอสลับกลุ่มแล้ว รอแอดมินอนุมัติ");
-      setSwitchTarget(null);
-    } catch (e) { setErr(e.message); } finally { setBusy(false); }
-  };
-
-  return (
-    <ModalPortal>
-      <div style={overlay} onClick={step === "quiz" ? undefined : close}>
-        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 24, maxHeight: "85vh", overflowY: "auto" }}>
-          {step === "intro" && (
-            <>
-              <div style={{ fontSize: 18, fontWeight: 800, color: t.text, marginBottom: 8 }}>✨ ห้องคัดสรร</div>
-              <div style={{ fontSize: 13, color: t.sub, lineHeight: 1.7, marginBottom: 20 }}>ตอบคำถาม 6 ข้อสั้นๆ เพื่อดูว่าคุณเข้ากับกลุ่มไหน แล้วจะได้เข้าร่วมชุมชนของกลุ่มนั้นถาวร ไม่ต้องคิดนาน ตอบตามสัญชาตญาณได้เลย</div>
-              <button onClick={() => setStep("quiz")} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "13px 0" }}>เริ่มทำแบบทดสอบ</button>
-            </>
-          )}
-
-          {step === "quiz" && (
-            <>
-              <div style={{ fontSize: 11, color: t.faint, marginBottom: 6 }}>ข้อ {qIdx + 1}/{QUIZ_QUESTIONS.length}</div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 18, lineHeight: 1.5 }}>{QUIZ_QUESTIONS[qIdx].q}</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {QUIZ_QUESTIONS[qIdx].options.map((opt, i) => (
-                  <button key={i} onClick={() => answer(opt.g)} style={{ padding: 16, borderRadius: 14, border: `1px solid ${t.border}`, background: t.surface, cursor: "pointer", textAlign: "left", fontSize: 13.5, color: t.text }}>{opt.text}</button>
-                ))}
-              </div>
-            </>
-          )}
-
-          {step === "tie" && (
-            <>
-              <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 6 }}>คะแนนสูสีมาก! 🤔</div>
-              <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 18 }}>คุณเข้าได้ทั้ง 2 กลุ่มนี้พอๆ กัน เลือกกลุ่มที่รู้สึกตรงกับตัวเองที่สุด</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {tiedGroups.map((g) => (
-                  <button key={g} onClick={() => finalize(g)} disabled={busy} style={{ padding: 16, borderRadius: 14, border: `2px solid ${GROUP_META[g].color}`, background: `${GROUP_META[g].color}18`, cursor: "pointer", textAlign: "left" }}>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>{GROUP_META[g].emoji} {GROUP_META[g].label}</div>
-                    <div style={{ fontSize: 11.5, color: t.sub, marginTop: 2 }}>{GROUP_META[g].desc}</div>
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-
-          {step === "reveal" && resultGroup && (
-            <div style={{ textAlign: "center", padding: "20px 0" }}>
-              <div style={{ fontSize: 13, color: t.sub, marginBottom: 16 }}>คุณถูกคัดสรรเข้ากลุ่ม...</div>
-              <div style={{ fontSize: 56, marginBottom: 10, animation: "rh-pop .5s ease" }}>{GROUP_META[resultGroup].emoji}</div>
-              <style>{`@keyframes rh-pop { 0% { transform: scale(0); opacity:0; } 60% { transform: scale(1.15); opacity:1; } 100% { transform: scale(1); } }`}</style>
-              <div style={{ fontSize: 24, fontWeight: 800, color: GROUP_META[resultGroup].color, marginBottom: 8 }}>{GROUP_META[resultGroup].label}</div>
-              <div style={{ fontSize: 13, color: t.sub, marginBottom: 24 }}>{GROUP_META[resultGroup].desc}</div>
-              <button onClick={() => setStep("hub")} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "13px 0" }}>ดูห้องคัดสรรทั้งหมด</button>
-            </div>
-          )}
-
-          {step === "hub" && (
-            <>
-              <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 4 }}>{isAdmin ? "🏠 จัดการห้องคัดสรร" : "🏠 ห้องคัดสรร"}</div>
-              <div style={{ fontSize: 12, color: t.sub, marginBottom: 16 }}>{isAdmin ? "แอดมินเข้าได้ทุกห้อง จัดการรูปภาพได้เต็มที่" : "ชุมชนของคุณ"}</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                {Object.entries(GROUP_META).map(([key, meta]) => {
-                  const house = houses?.[key];
-                  const isMine = resultGroup === key;
-                  const canEnter = isAdmin || isMine;
-                  return (
-                    <div key={key} style={{ borderRadius: 20, overflow: "hidden", border: `2px solid ${isMine ? meta.color : t.border}`, position: "relative" }}>
-                      <div onClick={() => canEnter && (close(), openThread(meta.threadId, house?.name || `${meta.emoji} ${meta.label}`, true, house?.avatarUrl || null))}
-                        style={{ height: 110, background: house?.avatarUrl ? `url(${house.avatarUrl}) center/cover` : `linear-gradient(135deg, ${meta.color}55, ${meta.color}22)`, display: "flex", alignItems: "flex-end", padding: 14, cursor: canEnter ? "pointer" : "default", position: "relative" }}>
-                        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,.55), transparent)" }} />
-                        <div style={{ position: "relative", color: "#fff" }}>
-                          <div style={{ fontSize: 16, fontWeight: 800, display: "flex", alignItems: "center", gap: 6 }}>{meta.emoji} {meta.label} {isMine && <span style={{ fontSize: 9, fontWeight: 800, background: meta.color, padding: "2px 7px", borderRadius: 8 }}>ของคุณ</span>}</div>
-                          <div style={{ fontSize: 10.5, opacity: .85 }}>{meta.desc}</div>
-                        </div>
-                        {isAdmin && (
-                          <button onClick={(e) => { e.stopPropagation(); setUploadingFor(key); fileRef.current?.click(); }} style={{ position: "absolute", top: 10, right: 10, background: "rgba(0,0,0,.4)", border: "none", borderRadius: 14, width: 30, height: 30, cursor: "pointer", display: "grid", placeItems: "center" }} title="เปลี่ยนรูปห้องนี้">
-                            {uploadingFor === key ? <span style={{ fontSize: 10, color: "#fff" }}>...</span> : <Camera size={14} color="#fff" />}
-                          </button>
-                        )}
-                      </div>
-                      {!canEnter && <div style={{ padding: "8px 14px", fontSize: 11, color: t.faint, background: t.surface }}>🔒 ดูได้เฉพาะสมาชิกกลุ่มนี้</div>}
-                    </div>
-                  );
-                })}
-              </div>
-              <input ref={fileRef} type="file" accept="image/*" onChange={(e) => uploadHouseImage(e, uploadingFor)} style={{ display: "none" }} />
-
-              <button onClick={() => setShowMembers(true)} style={{ width: "100%", marginTop: 16, padding: 14, borderRadius: 14, border: `1.5px dashed ${t.border}`, background: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, color: t.sub, fontSize: 13, fontWeight: 700 }}>
-                <Users size={16} /> ดูสมาชิกทุกกลุ่ม + พาสปอร์ต
-              </button>
-              {showMembers && <SortingMembersModal t={t} userId={userId} authProfile={authProfile} session={session} openThread={openThread} close={() => setShowMembers(false)} />}
-
-              {!isAdmin && resultGroup && (
-                <div style={{ marginTop: 20 }}>
-                  {authProfile?.group_switch_request ? (
-                    <div style={{ fontSize: 11.5, color: t.faint, textAlign: "center" }}>คำขอสลับไป {GROUP_META[authProfile.group_switch_request]?.label} กำลังรอแอดมินอนุมัติ</div>
-                  ) : (
-                    <>
-                      <div style={{ fontSize: 12, color: t.sub, marginBottom: 8, textAlign: "center" }}>รู้สึกไม่ตรงกับกลุ่มนี้? ขอสลับได้ (ต้องรอแอดมินอนุมัติ)</div>
-                      <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                        {Object.keys(GROUP_META).filter((g) => g !== resultGroup).map((g) => (
-                          <button key={g} onClick={() => setSwitchTarget(g)} style={{ flex: 1, padding: "8px 0", borderRadius: 10, border: `1.5px solid ${switchTarget === g ? GROUP_META[g].color : t.border}`, background: switchTarget === g ? `${GROUP_META[g].color}18` : "none", cursor: "pointer", fontSize: 12, fontWeight: 700, color: t.text }}>{GROUP_META[g].emoji} {GROUP_META[g].label}</button>
-                        ))}
-                      </div>
-                      {switchTarget && <button onClick={requestSwitch} disabled={busy} style={{ width: "100%", padding: "9px 0", borderRadius: 10, border: "none", background: "#D9534F", color: "#fff", cursor: "pointer", fontSize: 12.5, fontWeight: 700 }}>ส่งคำขอสลับไป {GROUP_META[switchTarget].label}</button>}
-                    </>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-
-          {err && <div style={{ fontSize: 12, color: "#D9534F", marginTop: 12, textAlign: "center" }}>{err}</div>}
-        </div>
-      </div>
-    </ModalPortal>
-  );
-}
-
-// 👥 รายชื่อสมาชิกทุกกลุ่มในห้องคัดสรร (ข้ามกลุ่มได้ ดูพาสปอร์ต+ทักแชทได้เท่านั้น เข้าห้องแชทกลุ่มอื่นไม่ได้)
-function SortingMembersModal({ t, userId, authProfile, session, openThread, close }) {
-  const [members, setMembers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [viewingProfile, setViewingProfile] = useState(null);
-
-  useEffect(() => {
-    (async () => {
-      const { data: profs, error } = await supabase.from("profiles").select("id, name, avatar_url, sorted_group").not("sorted_group", "is", null);
-      if (error) { console.error("โหลดสมาชิกห้องคัดสรรไม่สำเร็จ:", error.message); setLoading(false); return; }
-      setMembers(profs || []);
-      setLoading(false);
-    })();
-  }, []);
-
-  const byGroup = (g) => members.filter((m) => m.sorted_group === g);
-
-  return (
-    <ModalPortal>
-      <div style={overlay} onClick={close}>
-        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-            <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>สมาชิกห้องคัดสรรทั้งหมด</div>
-            <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
-          </div>
-          {loading && <Empty t={t} text="กำลังโหลด..." />}
-          {!loading && Object.entries(GROUP_META).map(([key, meta]) => (
-            <div key={key} style={{ marginBottom: 18 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 800, color: meta.color, marginBottom: 8 }}>{meta.emoji} {meta.label} ({byGroup(key).length})</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-                {byGroup(key).map((m) => (
-                  <button key={m.id} onClick={() => setViewingProfile(m.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", width: 64 }}>
-                    {m.avatar_url ? <img src={m.avatar_url} alt="" style={{ width: 50, height: 50, borderRadius: 25, objectFit: "cover", border: `2px solid ${meta.color}` }} /> : <div style={{ width: 50, height: 50, borderRadius: 25, background: colorFor(m.name), color: "#fff", display: "grid", placeItems: "center", fontWeight: 700, border: `2px solid ${meta.color}` }}>{m.name?.[0]}</div>}
-                    <div style={{ fontSize: 10.5, color: t.text, textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", width: "100%" }}>{m.name}</div>
-                  </button>
-                ))}
-                {byGroup(key).length === 0 && <div style={{ fontSize: 11.5, color: t.faint }}>ยังไม่มีใครในกลุ่มนี้</div>}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-      {viewingProfile && <Hi5ProfileModal t={t} profileId={viewingProfile} userId={userId} authProfile={authProfile} session={session} openThread={openThread} close={() => setViewingProfile(null)} />}
-    </ModalPortal>
-  );
-}
-
-// 🛂 พาสปอร์ต — พื้นหลังแต่งเอง, เพลงประจำตัว, ป้ายทักษะ (ตราประทับ), มู้ดวันนี้, กระดานฝากข้อความ (ลายเซ็นผู้มาเยือน), ไลค์
-function Hi5ProfileModal({ t, profileId, userId, authProfile, session, openThread, close }) {
-  const isMe = profileId === userId;
-  const [prof, setProf] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [testimonials, setTestimonials] = useState([]);
-  const [reactionTypes, setReactionTypes] = useState([]);
-  const [reactionCounts, setReactionCounts] = useState({});
-  const [myReaction, setMyReaction] = useState(null);
-  const [showReactionPicker, setShowReactionPicker] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-  const [newMsg, setNewMsg] = useState("");
-  const [editing, setEditing] = useState(false);
-  const [myMedia, setMyMedia] = useState([]);
-  const [tagInput, setTagInput] = useState("");
-  const [msgBusy, setMsgBusy] = useState(false);
-  const [msgErr, setMsgErr] = useState("");
-  const bgPhotoRef = useRef(null);
-  const [bgUploading, setBgUploading] = useState(false);
-  const passportAvatarRef = useRef(null);
-  const [avatarUploading, setAvatarUploading] = useState(false);
-  const coverDragRef = useRef({ dragging: false, startY: 0, startPos: 50 });
-
-  const uploadBgPhoto = async (e) => {
-    const f = e.target.files?.[0]; if (!f) return;
-    e.target.value = "";
-    setBgUploading(true);
-    try {
-      const path = `passport-covers/${userId}-${uid()}.jpg`;
-      const { error: upErr } = await supabase.storage.from("attachments").upload(path, f);
-      if (upErr) throw upErr;
-      const { data } = supabase.storage.from("attachments").getPublicUrl(path);
-      await supabase.from("profiles").update({ profile_bg_photo: data.publicUrl, profile_bg_photo_pos: "50%" }).eq("id", userId);
-      setProf((p) => ({ ...p, profile_bg_photo: data.publicUrl, profile_bg_photo_pos: "50%" }));
-    } catch (e2) { alert("อัปโหลดรูปปกไม่สำเร็จ: " + e2.message); } finally { setBgUploading(false); }
-  };
-  const clearBgPhoto = async () => { await supabase.from("profiles").update({ profile_bg_photo: null }).eq("id", userId); setProf((p) => ({ ...p, profile_bg_photo: null })); };
-
-  // 🖱️ ลาก/เลื่อนปรับตำแหน่งรูปปกได้ (แบบ Facebook cover photo)
-  const onCoverDragStart = (clientY) => { coverDragRef.current = { dragging: true, startY: clientY, startPos: parseInt(prof.profile_bg_photo_pos) || 50 }; };
-  const onCoverDragMove = (clientY) => {
-    if (!coverDragRef.current.dragging) return;
-    const delta = clientY - coverDragRef.current.startY;
-    const next = Math.max(0, Math.min(100, coverDragRef.current.startPos - delta / 2));
-    setProf((p) => ({ ...p, profile_bg_photo_pos: `${Math.round(next)}%` }));
-  };
-  const onCoverDragEnd = async () => {
-    if (!coverDragRef.current.dragging) return;
-    coverDragRef.current.dragging = false;
-    await supabase.from("profiles").update({ profile_bg_photo_pos: prof.profile_bg_photo_pos }).eq("id", userId);
-  };
-
-  // 📷 รูปโปรไฟล์เฉพาะ Passport (แยกจากรูปโปรไฟล์หลักของแอปได้ หรือจะใช้รูปเดียวกันก็ได้)
-  const uploadPassportAvatar = async (e) => {
-    const f = e.target.files?.[0]; if (!f) return;
-    e.target.value = "";
-    setAvatarUploading(true);
-    try {
-      const path = `passport-avatars/${userId}-${uid()}.jpg`;
-      const { error: upErr } = await supabase.storage.from("attachments").upload(path, f);
-      if (upErr) throw upErr;
-      const { data } = supabase.storage.from("attachments").getPublicUrl(path);
-      await supabase.from("profiles").update({ passport_avatar_url: data.publicUrl, passport_use_main_avatar: false }).eq("id", userId);
-      setProf((p) => ({ ...p, passport_avatar_url: data.publicUrl, passport_use_main_avatar: false }));
-    } catch (e2) { alert("อัปโหลดรูปไม่สำเร็จ: " + e2.message); } finally { setAvatarUploading(false); }
-  };
-  const toggleUseMainAvatar = async (val) => {
-    await supabase.from("profiles").update({ passport_use_main_avatar: val }).eq("id", userId);
-    setProf((p) => ({ ...p, passport_use_main_avatar: val }));
-  };
-
-  const startChat = async () => {
-    setMsgBusy(true); setMsgErr("");
-    try {
-      const r = await fetch("/api/chat-room", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "start_direct", targetUserId: profileId, callerToken: session?.access_token }) });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error);
-      openThread(data.threadId, data.friendName, false);
-    } catch (e) { setMsgErr(e.message); } finally { setMsgBusy(false); }
-  };
-
-  const load = async () => {
-    setLoading(true);
-    const { data: p } = await supabase.from("profiles").select("*").eq("id", profileId).single();
-    setProf(p);
-    const { data: ts } = await supabase.from("profile_testimonials").select("*, author:author_id(name)").eq("owner_id", profileId).order("created_at", { ascending: false });
-    if (ts) {
-      const authorIds = [...new Set(ts.map((x) => x.author_id))];
-      const { data: authors } = authorIds.length ? await supabase.from("profiles").select("id, name").in("id", authorIds) : { data: [] };
-      setTestimonials(ts.map((x) => ({ ...x, authorName: authors?.find((a) => a.id === x.author_id)?.name || "ไม่ทราบชื่อ" })));
-    }
-    const { data: rt } = await supabase.from("reaction_types").select("*").order("sort_order", { ascending: true });
-    setReactionTypes(rt || []);
-    const { data: reactions } = await supabase.from("profile_likes").select("liker_id, reaction_type").eq("owner_id", profileId);
-    const counts = {};
-    (reactions || []).forEach((r) => { counts[r.reaction_type || "like"] = (counts[r.reaction_type || "like"] || 0) + 1; });
-    setReactionCounts(counts);
-    setMyReaction(reactions?.find((r) => r.liker_id === userId)?.reaction_type || null);
-    if (!isMe) {
-      const { data: muteRow } = await supabase.from("user_mutes").select("*").eq("muter_id", userId).eq("muted_id", profileId).maybeSingle();
-      setIsMuted(!!muteRow);
-    }
-    setLoading(false);
-  };
-  useEffect(() => { load(); }, [profileId]);
-
-  useEffect(() => {
-    if (!isMe) return;
-    supabase.from("playlists").select("id, name, url, platform, kind").eq("user_id", userId).then(({ data }) => setMyMedia(data || []));
-  }, [isMe]);
-
-  const setReaction = async (typeId) => {
-    setShowReactionPicker(false);
-    if (myReaction === typeId) {
-      // กดซ้ำอันเดิม -> เอาออก
-      await supabase.from("profile_likes").delete().eq("owner_id", profileId).eq("liker_id", userId);
-      setReactionCounts((c) => ({ ...c, [typeId]: Math.max(0, (c[typeId] || 1) - 1) }));
-      setMyReaction(null);
-    } else {
-      await supabase.from("profile_likes").upsert({ owner_id: profileId, liker_id: userId, reaction_type: typeId }, { onConflict: "owner_id,liker_id" });
-      setReactionCounts((c) => {
-        const next = { ...c };
-        if (myReaction) next[myReaction] = Math.max(0, (next[myReaction] || 1) - 1);
-        next[typeId] = (next[typeId] || 0) + 1;
-        return next;
-      });
-      setMyReaction(typeId);
-    }
-  };
-  const totalReactions = Object.values(reactionCounts).reduce((a, b) => a + b, 0);
-
-  const toggleMute = async () => {
-    if (isMuted) {
-      await supabase.from("user_mutes").delete().eq("muter_id", userId).eq("muted_id", profileId);
-      setIsMuted(false);
-    } else {
-      await supabase.from("user_mutes").insert({ muter_id: userId, muted_id: profileId });
-      setIsMuted(true);
-    }
-  };
-
-  const postTestimonial = async () => {
-    if (!newMsg.trim()) return;
-    const { error } = await supabase.from("profile_testimonials").insert({ owner_id: profileId, author_id: userId, text: newMsg.trim() });
-    if (error) { alert("ฝากข้อความไม่สำเร็จ: " + error.message); return; }
-    setNewMsg(""); load();
-  };
-  const deleteTestimonial = async (id) => { await supabase.from("profile_testimonials").delete().eq("id", id); load(); };
-
-  const setBg = async (key) => { await supabase.from("profiles").update({ profile_bg: key }).eq("id", userId); setProf((p) => ({ ...p, profile_bg: key })); };
-  const setSong = async (track) => {
-    await supabase.from("profiles").update({ profile_song_name: track.name, profile_song_url: track.url, profile_song_platform: track.platform || "youtube" }).eq("id", userId);
-    setProf((p) => ({ ...p, profile_song_name: track.name, profile_song_url: track.url, profile_song_platform: track.platform || "youtube" }));
-  };
-  const clearSong = async () => { await supabase.from("profiles").update({ profile_song_name: null, profile_song_url: null, profile_song_platform: null }).eq("id", userId); setProf((p) => ({ ...p, profile_song_name: null, profile_song_url: null })); };
-  const addTag = async () => {
-    if (!tagInput.trim()) return;
-    const next = [...(prof.skill_tags || []), tagInput.trim()].slice(0, 8);
-    await supabase.from("profiles").update({ skill_tags: next }).eq("id", userId);
-    setProf((p) => ({ ...p, skill_tags: next })); setTagInput("");
-  };
-  const removeTag = async (tag) => {
-    const next = (prof.skill_tags || []).filter((x) => x !== tag);
-    await supabase.from("profiles").update({ skill_tags: next }).eq("id", userId);
-    setProf((p) => ({ ...p, skill_tags: next }));
-  };
-  const setMood = async (emoji) => {
-    const today = todayStr();
-    await supabase.from("profiles").update({ mood_emoji: emoji, mood_date: today }).eq("id", userId);
-    setProf((p) => ({ ...p, mood_emoji: emoji, mood_date: today }));
-  };
-
-  if (loading || !prof) return <ModalPortal><div style={overlay} onClick={close}><div style={{ padding: 40, textAlign: "center", color: "#fff" }}>กำลังโหลด...</div></div></ModalPortal>;
-
-  const meta = GROUP_META[prof.sorted_group];
-  const moodToday = prof.mood_date === todayStr() ? prof.mood_emoji : null;
-  const MOOD_OPTIONS = ["😄", "😌", "😴", "😤", "🥰", "😐", "🤩", "😢"];
-
-  return (
-    <ModalPortal>
-      <div style={overlay} onClick={close}>
-        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", maxHeight: "88vh", overflowY: "auto" }}>
-          {/* 🎨 หัวโปรไฟล์ พื้นหลังแต่งเอง — ลากปรับตำแหน่งปกได้ตอนอยู่โหมดแก้ไข */}
-          <div
-            onMouseDown={(e) => isMe && editing && prof.profile_bg_photo && onCoverDragStart(e.clientY)}
-            onMouseMove={(e) => isMe && editing && onCoverDragMove(e.clientY)}
-            onMouseUp={onCoverDragEnd} onMouseLeave={onCoverDragEnd}
-            onTouchStart={(e) => isMe && editing && prof.profile_bg_photo && onCoverDragStart(e.touches[0].clientY)}
-            onTouchMove={(e) => isMe && editing && onCoverDragMove(e.touches[0].clientY)}
-            onTouchEnd={onCoverDragEnd}
-            style={{ background: prof.profile_bg_photo ? `url(${prof.profile_bg_photo}) center ${prof.profile_bg_photo_pos || "50%"}/cover` : bgGradient(prof.profile_bg), padding: "28px 20px 20px", position: "relative", borderRadius: "24px 24px 0 0", cursor: isMe && editing && prof.profile_bg_photo ? "ns-resize" : "default", touchAction: isMe && editing && prof.profile_bg_photo ? "none" : "auto" }}
-          >
-            {prof.profile_bg_photo && <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(0,0,0,.15), rgba(0,0,0,.5))", borderRadius: "24px 24px 0 0", pointerEvents: "none" }} />}
-            {isMe && editing && prof.profile_bg_photo && <div style={{ position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", fontSize: 10, color: "#fff", background: "rgba(0,0,0,.4)", padding: "3px 10px", borderRadius: 8, pointerEvents: "none" }}>↕ ลากขึ้น-ลงเพื่อปรับตำแหน่งปก</div>}
-            <button onClick={close} style={{ position: "absolute", top: 14, right: 14, background: "rgba(0,0,0,.25)", border: "none", borderRadius: 16, width: 32, height: 32, cursor: "pointer", display: "grid", placeItems: "center" }}><X size={18} color="#fff" /></button>
-            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-              <div style={{ position: "relative" }}>
-                {(() => {
-                  const showAvatar = prof.passport_use_main_avatar !== false ? prof.avatar_url : prof.passport_avatar_url;
-                  return showAvatar ? <img src={showAvatar} alt="" style={{ width: 66, height: 66, borderRadius: 33, objectFit: "cover", border: "3px solid #fff" }} /> : <div style={{ width: 66, height: 66, borderRadius: 33, background: "rgba(255,255,255,.3)", color: "#fff", display: "grid", placeItems: "center", fontSize: 24, fontWeight: 800, border: "3px solid #fff" }}>{prof.name?.[0]}</div>;
-                })()}
-                {moodToday && <span style={{ position: "absolute", bottom: -2, right: -2, fontSize: 20 }}>{moodToday}</span>}
-                {isMe && editing && (
-                  <button onClick={() => passportAvatarRef.current?.click()} style={{ position: "absolute", bottom: -2, left: -2, width: 22, height: 22, borderRadius: 11, background: t.accent, border: "2px solid #fff", cursor: "pointer", display: "grid", placeItems: "center" }} title="เปลี่ยนรูป Passport">
-                    <Camera size={10} color={t.onAccent} />
-                  </button>
-                )}
-              </div>
-              <div>
-                <div style={{ fontSize: 18, fontWeight: 800, color: "#fff" }}>{prof.name}</div>
-                {meta && <div style={{ fontSize: 11, fontWeight: 700, color: "#fff", background: "rgba(0,0,0,.25)", display: "inline-block", padding: "2px 8px", borderRadius: 8, marginTop: 4 }}>{meta.emoji} {meta.label}</div>}
-              </div>
-            </div>
-          </div>
-          <input ref={passportAvatarRef} type="file" accept="image/*" onChange={uploadPassportAvatar} style={{ display: "none" }} />
-
-          <div style={{ padding: 20 }}>
-            {/* 🎭 Reaction + 💬 ทักแชท + 🔇 Mute */}
-            {!isMe && (
-              <div style={{ position: "relative", display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-                <button onClick={() => setShowReactionPicker((s) => !s)} style={{ display: "flex", alignItems: "center", gap: 6, background: myReaction ? `${t.accent}18` : "none", border: `1px solid ${myReaction ? t.accent : t.border}`, borderRadius: 12, padding: "8px 14px", cursor: "pointer" }}>
-                  <span style={{ fontSize: 15 }}>{myReaction ? reactionTypes.find((r) => r.id === myReaction)?.emoji : "👍"}</span>
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: myReaction ? t.accent : t.text }}>{myReaction ? reactionTypes.find((r) => r.id === myReaction)?.label : "แสดงความรู้สึก"} · {totalReactions}</span>
-                </button>
-                {showReactionPicker && (
-                  <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 6, background: t.surface, border: `1px solid ${t.border}`, borderRadius: 14, padding: 8, display: "flex", gap: 4, boxShadow: "0 6px 18px rgba(0,0,0,.15)", zIndex: 2 }}>
-                    {reactionTypes.map((r) => (
-                      <button key={r.id} onClick={() => setReaction(r.id)} title={r.label} style={{ width: 38, height: 38, borderRadius: 10, border: "none", background: myReaction === r.id ? `${t.accent}25` : "none", cursor: "pointer", fontSize: 20, display: "grid", placeItems: "center" }}>{r.emoji}</button>
-                    ))}
-                  </div>
-                )}
-                <button onClick={startChat} disabled={msgBusy} style={{ display: "flex", alignItems: "center", gap: 6, background: t.accent, border: "none", borderRadius: 12, padding: "8px 14px", cursor: "pointer" }}>
-                  <MessageCircle size={15} color={t.onAccent} />
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: t.onAccent }}>{msgBusy ? "..." : "ทักแชท"}</span>
-                </button>
-                <button onClick={toggleMute} style={{ display: "flex", alignItems: "center", gap: 6, background: isMuted ? "#D9534F18" : "none", border: `1px solid ${isMuted ? "#D9534F" : t.border}`, borderRadius: 12, padding: "8px 14px", cursor: "pointer" }} title={isMuted ? "เลิก mute คนนี้" : "Mute คนนี้ (ไม่อยากให้มาก่อกวน)"}>
-                  <VolumeX size={15} color={isMuted ? "#D9534F" : t.sub} />
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: isMuted ? "#D9534F" : t.text }}>{isMuted ? "Mute อยู่" : "Mute"}</span>
-                </button>
-              </div>
-            )}
-            {msgErr && <div style={{ fontSize: 11.5, color: "#D9534F", marginBottom: 12 }}>{msgErr}</div>}
-            {isMe && totalReactions > 0 && (
-              <div style={{ fontSize: 12, color: t.sub, marginBottom: 16 }}>
-                {reactionTypes.filter((r) => reactionCounts[r.id]).map((r) => `${r.emoji} ${reactionCounts[r.id]}`).join("  ")} · รวม {totalReactions} รีแอคชัน
-              </div>
-            )}
-
-            {/* 🎭 ป้ายทักษะ */}
-            {((prof.skill_tags || []).length > 0 || isMe) && (
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>🏷️ ตราประทับ (เก่งเรื่องอะไร)</div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {(prof.skill_tags || []).map((tag) => (
-                    <span key={tag} style={{ fontSize: 11.5, fontWeight: 700, color: t.accent, background: `${t.accent}18`, padding: "4px 10px", borderRadius: 10, display: "flex", alignItems: "center", gap: 4 }}>
-                      {tag} {isMe && editing && <X size={11} style={{ cursor: "pointer" }} onClick={() => removeTag(tag)} />}
-                    </span>
-                  ))}
-                  {isMe && editing && (
-                    <div style={{ display: "flex", gap: 4 }}>
-                      <input value={tagInput} onChange={(e) => setTagInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addTag()} placeholder="+ เพิ่มป้าย" style={{ fontSize: 11.5, padding: "4px 8px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.inputBg, color: t.text, width: 100 }} />
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* 🎵 เพลงประจำตัว */}
-            {(prof.profile_song_url || (isMe && editing)) && (
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>🎵 เพลงประจำตัว</div>
-                {prof.profile_song_url ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, ...card(t), padding: 10 }}>
-                    <Music size={16} color={t.accent} />
-                    <div style={{ flex: 1, fontSize: 12, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{prof.profile_song_name}</div>
-                    {isMe && editing && <button onClick={clearSong} style={ghost}><X size={14} color={t.faint} /></button>}
-                  </div>
-                ) : isMe && editing && <div style={{ fontSize: 11, color: t.faint }}>ยังไม่ได้เลือกเพลง เลือกจากรายการด้านล่าง</div>}
-                {isMe && editing && myMedia.length > 0 && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8, maxHeight: 140, overflowY: "auto" }}>
-                    {myMedia.map((mtrack) => (
-                      <button key={mtrack.id} onClick={() => setSong(mtrack)} style={{ textAlign: "left", padding: "6px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: "none", cursor: "pointer", fontSize: 11.5, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{mtrack.name}</button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* 🎨 พื้นหลัง + มู้ด (โหมดแก้ไข เฉพาะเจ้าของ) */}
-            {isMe && (
-              <div style={{ marginBottom: 16 }}>
-                <button onClick={() => setEditing((e) => !e)} style={{ width: "100%", padding: "10px 0", borderRadius: 10, border: `1px solid ${t.accent}`, background: editing ? t.accent : "none", color: editing ? t.onAccent : t.accent, cursor: "pointer", fontSize: 12.5, fontWeight: 700, marginBottom: editing ? 12 : 0 }}>{editing ? "เสร็จแล้ว ปิดโหมดแก้ไข" : "🛂 แต่งพาสปอร์ตของฉัน"}</button>
-                {editing && (
-                  <>
-                    <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>รูปโปรไฟล์ Passport</div>
-                    <div style={{ display: "flex", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
-                      <button onClick={() => toggleUseMainAvatar(true)} style={{ padding: "8px 14px", borderRadius: 10, border: `1.5px solid ${prof.passport_use_main_avatar !== false ? t.accent : t.border}`, background: prof.passport_use_main_avatar !== false ? `${t.accent}18` : "none", color: t.text, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>ใช้รูปเดียวกับหน้าแอป</button>
-                      <button onClick={() => passportAvatarRef.current?.click()} style={{ padding: "8px 14px", borderRadius: 10, border: `1.5px solid ${prof.passport_use_main_avatar === false ? t.accent : t.border}`, background: prof.passport_use_main_avatar === false ? `${t.accent}18` : "none", color: t.text, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>{avatarUploading ? "กำลังอัปโหลด..." : "📷 ใช้รูปอื่นแยกต่างหาก"}</button>
-                    </div>
-                    <div style={{ fontSize: 10, color: t.faint, marginBottom: 12 }}>เลือก "ใช้รูปอื่นแยกต่างหาก" แล้วเลือกไฟล์ใหม่ได้เลย ไม่กระทบรูปโปรไฟล์หลักของแอป</div>
-                    <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, margin: "10px 0 6px" }}>สีพื้นหลัง</div>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-                      {PROFILE_BG_OPTIONS.map((bg) => (
-                        <button key={bg.key} onClick={() => setBg(bg.key)} style={{ width: 36, height: 36, borderRadius: 10, background: bg.grad, border: prof.profile_bg === bg.key && !prof.profile_bg_photo ? `3px solid ${t.text}` : "none", cursor: "pointer" }} />
-                      ))}
-                    </div>
-                    <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>หรือใช้รูปของตัวเองแทน (ลากปรับตำแหน่งได้หลังอัปโหลด)</div>
-                    <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-                      <button onClick={() => bgPhotoRef.current?.click()} style={{ padding: "8px 14px", borderRadius: 10, border: `1px solid ${t.border}`, background: "none", color: t.text, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>{bgUploading ? "กำลังอัปโหลด..." : "📷 อัปโหลดรูปปก"}</button>
-                      {prof.profile_bg_photo && <button onClick={clearBgPhoto} style={{ padding: "8px 14px", borderRadius: 10, border: `1px solid ${t.border}`, background: "none", color: t.faint, cursor: "pointer", fontSize: 12 }}>เอารูปออก</button>}
-                    </div>
-                    <input ref={bgPhotoRef} type="file" accept="image/*" onChange={uploadBgPhoto} style={{ display: "none" }} />
-                    <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>มู้ดวันนี้ (เปลี่ยนได้วันละครั้ง)</div>
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      {MOOD_OPTIONS.map((e2) => (
-                        <button key={e2} onClick={() => setMood(e2)} style={{ fontSize: 20, width: 38, height: 38, borderRadius: 10, border: `1.5px solid ${moodToday === e2 ? t.accent : t.border}`, background: moodToday === e2 ? `${t.accent}18` : "none", cursor: "pointer" }}>{e2}</button>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* 📜 สมุดเยี่ยม (ลายเซ็นผู้มาเยือน) */}
-            <div>
-              <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 8 }}>📜 สมุดเยี่ยม ({testimonials.length})</div>
-              {!isMe && (
-                <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-                  <input value={newMsg} onChange={(e) => setNewMsg(e.target.value)} onKeyDown={(e) => e.key === "Enter" && postTestimonial()} placeholder="ฝากข้อความถึงเขา..." style={{ ...input(t), flex: 1, fontSize: 12.5 }} />
-                  <button onClick={postTestimonial} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), padding: "0 16px" }}>ฝาก</button>
-                </div>
-              )}
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {testimonials.map((ts) => (
-                  <div key={ts.id} style={{ ...card(t), padding: 10 }}>
-                    <div style={{ fontSize: 12.5, color: t.text, marginBottom: 4 }}>{ts.text}</div>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <div style={{ fontSize: 10, color: t.faint }}>— {ts.authorName}</div>
-                      {(isMe || ts.author_id === userId) && <button onClick={() => deleteTestimonial(ts.id)} style={{ ...ghost, padding: 3 }}><Trash2 size={12} color={t.faint} /></button>}
-                    </div>
-                  </div>
-                ))}
-                {testimonials.length === 0 && <div style={{ fontSize: 11.5, color: t.faint, textAlign: "center", padding: "10px 0" }}>ยังไม่มีใครฝากข้อความไว้</div>}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </ModalPortal>
-  );
-}
 
 function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, activeCall, setActiveCall, setCallMinimized }) {
 
@@ -5645,7 +4981,7 @@ function EditTxModal({ t, x, categories, userId, setTx, close }) {
 }
 
 
-function AddTxModal({ t, tx, setTx, categories, moveCategory, deleteCategory, addCategory, userId, close }) {
+function AddTxModal({ t, tx, setTx, categories, moveCategory, deleteCategory, addCategory, userId, session, close }) {
   const [type, setType] = useState("out");
   const [cat, setCat] = useState(null); // ไม่ default หมวดหมู่ไว้แล้ว ต้องให้ผู้ใช้เลือกเอง
   const [catError, setCatError] = useState(false);
@@ -5663,6 +4999,55 @@ function AddTxModal({ t, tx, setTx, categories, moveCategory, deleteCategory, ad
     });
   };
 
+  // 🧾 สแกนสลิป/ใบเสร็จด้วย AI — เติมฟอร์มให้อัตโนมัติ ผู้ใช้เช็คก่อนกดบันทึกเสมอ
+  const receiptFileRef = useRef(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState("");
+  const [pendingReceipt, setPendingReceipt] = useState(null); // { dataUrl, mime }
+  const [scanResult, setScanResult] = useState(null); // { doc_type, items, source }
+
+  const pickReceipt = (e) => {
+    const f = e.target.files?.[0]; if (!f) return;
+    e.target.value = "";
+    const rd = new FileReader();
+    rd.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const max = 1400; const scale = Math.min(1, max / Math.max(img.width, img.height));
+        const c = document.createElement("canvas"); c.width = img.width * scale; c.height = img.height * scale;
+        const ctx = c.getContext("2d"); ctx.drawImage(img, 0, 0, c.width, c.height);
+        const dataUrl = c.toDataURL("image/jpeg", 0.85);
+        setPendingReceipt({ dataUrl, mime: "image/jpeg" });
+        scanReceipt(dataUrl);
+      };
+      img.src = rd.result;
+    };
+    rd.readAsDataURL(f);
+  };
+
+  const scanReceipt = async (dataUrl) => {
+    setScanning(true); setScanError(""); setScanResult(null);
+    try {
+      const r = await fetch("/api/receipt-scan", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: dataUrl, userId, callerToken: session?.access_token, categoryOptions: categories.map((c) => ({ id: c.id, label: c.label, kind: c.kind })) }),
+      });
+      const data = await r.json();
+      if (!r.ok || data.error) { setScanError(data.error || "อ่านสลิป/ใบเสร็จไม่สำเร็จ"); return; }
+      setScanResult(data);
+      if (data.amount) setAmount(String(data.amount));
+      if (data.date) setDate(data.date);
+      if (data.merchant) setNote(data.merchant);
+      if (data.suggested_category) {
+        const found = categories.find((c) => c.id === data.suggested_category);
+        if (found) { setType(found.kind); setCat(found.id); setCatError(false); }
+      }
+    } catch (e) { setScanError("เชื่อมต่อไม่สำเร็จ: " + e.message); }
+    finally { setScanning(false); }
+  };
+
+  const clearReceipt = () => { setPendingReceipt(null); setScanResult(null); setScanError(""); };
+
   const add = () => {
     const a = parseFloat(amount);
     if (!a || a <= 0) return;
@@ -5670,7 +5055,20 @@ function AddTxModal({ t, tx, setTx, categories, moveCategory, deleteCategory, ad
     const finalNote = note.trim() || findCat(categories, cat).label;
     const newTx = { id: uid(), type, cat, amount: a, note: finalNote, date };
     setTx((l) => [newTx, ...l]);
-    if (userId) supabase.from("transactions").insert({ id: newTx.id, user_id: userId, type: newTx.type, cat: newTx.cat, amount: newTx.amount, note: newTx.note, date: newTx.date }).then(() => {}, () => {});
+    const items = scanResult?.doc_type === "receipt" && Array.isArray(scanResult.items) ? scanResult.items : null;
+    const docType = scanResult?.doc_type || null;
+    if (userId) {
+      supabase.from("transactions").insert({ id: newTx.id, user_id: userId, type: newTx.type, cat: newTx.cat, amount: newTx.amount, note: newTx.note, date: newTx.date, items, doc_type: docType }).then(() => {}, () => {});
+      // อัปโหลดรูปสลิป/ใบเสร็จเข้า bucket ส่วนตัว (ไม่ public ต่างจากรูปอื่นในแอป เพราะมีข้อมูลการเงิน)
+      if (pendingReceipt) {
+        fetch(pendingReceipt.dataUrl).then((res) => res.blob()).then((blob) => {
+          const path = `${userId}/${newTx.id}.jpg`;
+          supabase.storage.from("receipts").upload(path, blob, { contentType: "image/jpeg" }).then(({ error }) => {
+            if (!error) supabase.from("transactions").update({ receipt_path: path }).eq("id", newTx.id).then(() => {}, () => {});
+          }, () => {});
+        });
+      }
+    }
     close();
   };
 
@@ -5681,6 +5079,36 @@ function AddTxModal({ t, tx, setTx, categories, moveCategory, deleteCategory, ad
           <div style={{ fontSize: 17, fontWeight: 800, color: t.text }}>เพิ่มรายการ</div>
           <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
         </div>
+        <input ref={receiptFileRef} type="file" accept="image/*" capture="environment" onChange={pickReceipt} style={{ display: "none" }} />
+        {!pendingReceipt ? (
+          <button onClick={() => receiptFileRef.current?.click()} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", padding: "12px 0", borderRadius: 14, border: `1.5px dashed ${t.accent}`, background: `${t.accent}10`, color: t.accent, cursor: "pointer", fontWeight: 700, fontSize: 13, marginBottom: 14 }}>
+            <Camera size={17} /> แนบรูปสลิป/ใบเสร็จ (AI อ่านให้อัตโนมัติ)
+          </button>
+        ) : (
+          <div style={{ ...card(t), padding: 10, marginBottom: 14, display: "flex", gap: 10, alignItems: "flex-start" }}>
+            <img src={pendingReceipt.dataUrl} alt="" style={{ width: 52, height: 52, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {scanning && <div style={{ fontSize: 12, color: t.sub, fontWeight: 700 }}>กำลังอ่านข้อมูล...</div>}
+              {!scanning && scanError && <div style={{ fontSize: 11.5, color: "#D9534F" }}>{scanError}</div>}
+              {!scanning && !scanError && scanResult && (
+                <div style={{ fontSize: 11.5, color: t.sub }}>
+                  อ่านสำเร็จ ({scanResult.doc_type === "receipt" ? "ใบเสร็จ" : "สลิปโอนเงิน"}) — เช็คข้อมูลด้านล่างก่อนบันทึก
+                  {scanResult.doc_type === "receipt" && Array.isArray(scanResult.items) && scanResult.items.length > 0 && (
+                    <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 2 }}>
+                      {scanResult.items.map((it, i) => (
+                        <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: t.faint }}>
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "70%" }}>{it.name}</span>
+                          <span>{Number(it.price).toLocaleString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <button onClick={clearReceipt} style={{ ...ghost, flexShrink: 0 }}><X size={16} color={t.sub} /></button>
+          </div>
+        )}
         <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
           {[["out", "จ่ายออก", "#D9534F"], ["in", "รับเข้า", "#2E9E6B"]].map(([v, lb, c]) => (
             <button key={v} onClick={() => { setType(v); setCat(null); setCatError(false); }} style={{ flex: 1, padding: "10px 0", borderRadius: 12, cursor: "pointer", border: `1.5px solid ${type === v ? c : t.border}`, fontWeight: 700, fontSize: 13.5, background: type === v ? c : "transparent", color: type === v ? "#fff" : t.sub }}>{lb}</button>
@@ -6417,7 +5845,7 @@ function ChatHistoryListModal({ t, userId, mentor, currentSessionId, onSelect, c
       setSessions(list);
     } finally { setLoading(false); }
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { if (userId) load(); }, [userId, mentor]);
 
   const delSession = async (sid) => {
     await supabase.from("mentor_chat_messages").delete().eq("user_id", userId).eq("mentor", mentor).eq("session_id", sid);
@@ -6488,7 +5916,7 @@ function ChatModal({ t, M, mentor, setMentor, authProfile, setAuthProfile, custo
       setMsgs((data || []).map((r) => ({ who: r.who, text: r.text, image: r.image || null })));
     } finally { setHistLoading(false); }
   };
-  useEffect(() => { loadHistory(); }, [mentor]);
+  useEffect(() => { if (userId) loadHistory(); }, [mentor, userId]);
 
   // เริ่มแชทใหม่ = สร้าง session ใหม่ ไม่แตะของเก่าเลย (ดูย้อนหลังได้ทีหลังผ่านปุ่ม "ประวัติเก่า")
   const newChat = async () => {
