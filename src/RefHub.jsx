@@ -5079,7 +5079,7 @@ function AddTxModal({ t, tx, setTx, categories, moveCategory, deleteCategory, ad
           <div style={{ fontSize: 17, fontWeight: 800, color: t.text }}>เพิ่มรายการ</div>
           <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
         </div>
-        <input ref={receiptFileRef} type="file" accept="image/*" capture="environment" onChange={pickReceipt} style={{ display: "none" }} />
+        <input ref={receiptFileRef} type="file" accept="image/*" onChange={pickReceipt} style={{ display: "none" }} />
         {!pendingReceipt ? (
           <button onClick={() => receiptFileRef.current?.click()} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", padding: "12px 0", borderRadius: 14, border: `1.5px dashed ${t.accent}`, background: `${t.accent}10`, color: t.accent, cursor: "pointer", fontWeight: 700, fontSize: 13, marginBottom: 14 }}>
             <Camera size={17} /> แนบรูปสลิป/ใบเสร็จ (AI อ่านให้อัตโนมัติ)
