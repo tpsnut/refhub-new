@@ -702,7 +702,7 @@ export default function RefHub() {
     scale: [261.6, 293.7, 329.6, 392.0, 440.0], root: 130.8, avatarUrl: customMentorObj.avatarUrl || null,
     quotes: ["พร้อมช่วยเหลือคุณเสมอ", "ถามอะไรมาได้เลย", "มาลองคิดไปด้วยกัน", "ทุกก้าวเล็กๆ มีความหมาย"],
     replies: ["ลองเล่าเพิ่มเติมได้ไหมครับ จะได้ช่วยได้ตรงจุดขึ้น", "เข้าใจแล้ว ลองมาดูกันทีละขั้นตอนนะครับ", "นี่เป็นมุมมองที่น่าสนใจ ลองคิดต่อดูอีกหน่อยไหมครับ"],
-  } : MENTORS.none);
+  } : { ...MENTORS.none, avatarUrl: authProfile?.assistant_avatar_url || null }); // ผู้ช่วยทั่วไป — ใช้รูปที่ user ตั้งเองได้ (เก็บใน profiles)
 
   useEffect(() => { const c = () => { const h = new Date().getHours(); setAutoNight(h >= 18 || h < 6); }; c(); const id = setInterval(c, 60000); return () => clearInterval(id); }, []);
   useEffect(() => { const id = setInterval(() => setQuoteIdx((i) => i + 1), 9000); return () => clearInterval(id); }, []);
@@ -2860,6 +2860,84 @@ const fmtCount = (n) => {
   if (n < 999500) { const v = n / 1000; return (v < 10 ? v.toFixed(1).replace(/\.0$/, "") : Math.round(v)) + "พัน"; }
   const v = n / 1000000; return (v < 10 ? v.toFixed(1).replace(/\.0$/, "") : Math.round(v)) + "ล้าน";
 };
+// แยกข้อความออกเป็นส่วนๆ สำหรับไฮไลต์ #แท็ก และ @แท็กชื่อคน
+// mentions: [{id, name}] รายชื่อคนที่ถูกแท็กจริงในข้อความนี้ (มาจาก mentioned_ids ที่บันทึกไว้ตอนโพสต์ — แม่นยำแม้ชื่อมีเว้นวรรค เพราะค้นหาด้วยชื่อเป๊ะๆ ไม่เดาขอบเขตคำ)
+function splitRichText(text, mentions = []) {
+  if (!text) return [];
+  const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const found = (mentions || []).filter((m) => m?.name && text.includes(`@${m.name}`)).sort((a, b) => b.name.length - a.name.length);
+  const mentionPattern = found.map((m) => esc(`@${m.name}`)).join("|");
+  const pattern = mentionPattern ? `(${mentionPattern}|#[^\\s#]+)` : `(#[^\\s#]+)`;
+  return text.split(new RegExp(pattern, "g")).filter((s) => s !== "").map((seg) => {
+    if (seg.startsWith("#") && seg.length > 1) return { type: "tag", value: seg };
+    const m = found.find((mm) => seg === `@${mm.name}`);
+    if (m) return { type: "mention", value: seg, id: m.id };
+    return { type: "text", value: seg };
+  });
+}
+// แสดงข้อความที่มี #แท็ก / @แท็กชื่อคน กดได้ (ใช้ทั้งในโพสต์และคอมเมนต์)
+function RichText({ text, mentions, t, onTag, onOpenProfile }) {
+  return splitRichText(text, mentions).map((seg, i) => {
+    if (seg.type === "tag") return <span key={i} role="button" onClick={(e) => { e.stopPropagation(); onTag?.(seg.value.slice(1)); }} style={{ color: t.accent, fontWeight: 700, cursor: "pointer" }}>{seg.value}</span>;
+    if (seg.type === "mention") return <span key={i} role="button" onClick={(e) => { e.stopPropagation(); onOpenProfile?.(seg.id); }} style={{ color: t.accent, fontWeight: 700, cursor: "pointer" }}>{seg.value}</span>;
+    return <span key={i}>{seg.value}</span>;
+  });
+}
+// ช่องพิมพ์ที่พิมพ์ "@" แล้วเลือกคนได้ (แชร์ใช้ทั้งเขียนโพสต์และคอมเมนต์)
+function MentionInput({ value, onChange, onSend, mentioned, setMentioned, t, placeholder, isTextarea, autoFocus, style }) {
+  const [showList, setShowList] = useState(false);
+  const [results, setResults] = useState([]);
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    if (!showList) return;
+    const h = setTimeout(async () => {
+      try {
+        const { data } = await supabase.from("profiles").select("id, name, community_name, community_use_main, avatar_url, community_avatar").ilike("name", `%${query}%`).limit(6);
+        setResults(data || []);
+      } catch (e) { setResults([]); }
+    }, 200);
+    return () => clearTimeout(h);
+  }, [query, showList]);
+
+  const handleChange = (e) => {
+    const v = e.target.value;
+    onChange(v);
+    const m = /@([^\s@#]*)$/.exec(v); // มี "@คำ" ค้างอยู่ท้ายข้อความไหม
+    if (m) { setQuery(m[1]); setShowList(true); } else setShowList(false);
+  };
+  const pickPerson = (p) => {
+    const name = (p.community_use_main === false && p.community_name) ? p.community_name : p.name || "ผู้ใช้";
+    const next = value.replace(/@([^\s@#]*)$/, `@${name} `);
+    onChange(next);
+    setMentioned?.((list) => (list.some((x) => x.id === p.id) ? list : [...list, { id: p.id, name }]));
+    setShowList(false);
+  };
+
+  return (
+    <div style={{ position: "relative", flex: 1 }}>
+      {showList && results.length > 0 && (
+        <div style={{ position: "absolute", bottom: "100%", left: 0, right: 0, marginBottom: 6, background: t.page, border: `1px solid ${t.border}`, borderRadius: 12, boxShadow: "0 -4px 16px rgba(0,0,0,.15)", maxHeight: 180, overflowY: "auto", zIndex: 20 }}>
+          {results.map((p) => {
+            const nm = (p.community_use_main === false && p.community_name) ? p.community_name : p.name || "ผู้ใช้";
+            const ava = (p.community_use_main === false && p.community_avatar) ? p.community_avatar : p.avatar_url;
+            return (
+              <button key={p.id} onClick={() => pickPerson(p)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
+                {ava ? <img src={ava} alt="" style={{ width: 26, height: 26, borderRadius: 13, objectFit: "cover" }} /> : <div style={{ width: 26, height: 26, borderRadius: 13, background: colorFor(nm), display: "grid", placeItems: "center", color: "#fff", fontSize: 11, fontWeight: 700 }}>{nm[0]}</div>}
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: t.text }}>{nm}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {isTextarea ? (
+        <textarea value={value} onChange={handleChange} placeholder={placeholder} autoFocus={autoFocus} style={style} />
+      ) : (
+        <input value={value} onChange={handleChange} onKeyDown={(e) => e.key === "Enter" && !showList && onSend?.()} placeholder={placeholder} style={style} />
+      )}
+    </div>
+  );
+}
 // เวลาแบบย่อสำหรับโพสต์ในฟีด — ใหม่ๆ บอกเป็น "กี่นาที/ชม./วัน", เก่ากว่านั้นบอกวันที่+เวลา
 const timeAgo = (ts) => {
   if (!ts) return "";
@@ -3104,6 +3182,8 @@ function PostCard({ t, post, userId, onOpenProfile, onChanged, onTag }) {
   const [showComments, setShowComments] = useState(false);
   const [comments, setComments] = useState([]);
   const [commentText, setCommentText] = useState("");
+  const [commentMentioned, setCommentMentioned] = useState([]); // [{id,name}] คนที่แท็กไว้ในคอมเมนต์ที่กำลังพิมพ์
+  const [replyTo, setReplyTo] = useState(null); // { id, name } คอมเมนต์ที่กำลังตอบกลับอยู่
   const [reposted, setReposted] = useState(false);
   const [lightbox, setLightbox] = useState(null);
   const [showFullTime, setShowFullTime] = useState(false);
@@ -3117,16 +3197,50 @@ function PostCard({ t, post, userId, onOpenProfile, onChanged, onTag }) {
     if (nx) logActivity({ userId: post.author_id, actorId: userId, type: "like", postId: post.id, preview: post.text || "" });
   };
   const loadComments = async () => {
-    const { data } = await supabase.from("post_comments").select("*, author:profiles!post_comments_author_id_fkey(id, name, avatar_url)").eq("post_id", post.id).order("created_at", { ascending: true });
-    setComments(data || []);
+    const { data } = await supabase.from("post_comments").select("*, author:profiles!post_comments_author_id_fkey(id, name, avatar_url, community_name, community_use_main)").eq("post_id", post.id).order("created_at", { ascending: true });
+    const rows = data || [];
+    if (rows.length === 0) { setComments([]); return; }
+    const ids = rows.map((c) => c.id);
+    const [{ data: likes }, { data: myLikes }] = await Promise.all([
+      supabase.from("comment_likes").select("comment_id").in("comment_id", ids),
+      supabase.from("comment_likes").select("comment_id").in("comment_id", ids).eq("user_id", userId),
+    ]);
+    const likeCountMap = {}; (likes || []).forEach((l) => { likeCountMap[l.comment_id] = (likeCountMap[l.comment_id] || 0) + 1; });
+    const myLikedSet = new Set((myLikes || []).map((l) => l.comment_id));
+    const byId = Object.fromEntries(rows.map((c) => [c.id, c]));
+    const nameOf = (c) => c ? ((c.author?.community_use_main === false && c.author?.community_name ? c.author.community_name : c.author?.name) || "ผู้ใช้") : "";
+    // ดึงชื่อคนที่ถูกแท็กในคอมเมนต์เหล่านี้
+    const allMentionIds = [...new Set(rows.flatMap((c) => c.mentioned_ids || []))];
+    let mentionMap = {};
+    if (allMentionIds.length > 0) {
+      const { data: mProfs } = await supabase.from("profiles").select("id, name, community_name, community_use_main").in("id", allMentionIds);
+      (mProfs || []).forEach((p) => { mentionMap[p.id] = (p.community_use_main === false && p.community_name ? p.community_name : p.name) || "ผู้ใช้"; });
+    }
+    setComments(rows.map((c) => ({
+      ...c,
+      like_count: likeCountMap[c.id] || 0,
+      liked: myLikedSet.has(c.id),
+      replyToName: c.reply_to_id ? nameOf(byId[c.reply_to_id]) : null,
+      mentions: (c.mentioned_ids || []).map((id) => ({ id, name: mentionMap[id] })).filter((m) => m.name),
+    })));
   };
   const openComments = () => { setShowComments((s) => !s); if (!showComments) loadComments(); };
   const sendComment = async () => {
     const txt = commentText.trim(); if (!txt) return;
     setCommentText("");
-    await supabase.from("post_comments").insert({ post_id: post.id, author_id: userId, text: txt });
+    const mentionIds = commentMentioned.filter((m) => txt.includes(`@${m.name}`)).map((m) => m.id);
+    setCommentMentioned([]);
+    const replyingTo = replyTo; setReplyTo(null);
+    const { data } = await supabase.from("post_comments").insert({ post_id: post.id, author_id: userId, text: txt, reply_to_id: replyingTo?.id || null, mentioned_ids: mentionIds }).select().maybeSingle();
     logActivity({ userId: post.author_id, actorId: userId, type: "comment", postId: post.id, preview: txt });
+    if (replyingTo && replyingTo.authorId && replyingTo.authorId !== post.author_id) logActivity({ userId: replyingTo.authorId, actorId: userId, type: "comment", postId: post.id, preview: txt });
+    mentionIds.forEach((id) => logActivity({ userId: id, actorId: userId, type: "mention", postId: post.id, preview: txt }));
     loadComments();
+  };
+  const toggleCommentLike = async (c) => {
+    setComments((list) => list.map((x) => x.id === c.id ? { ...x, liked: !x.liked, like_count: x.like_count + (x.liked ? -1 : 1) } : x));
+    if (c.liked) await supabase.from("comment_likes").delete().eq("comment_id", c.id).eq("user_id", userId);
+    else { await supabase.from("comment_likes").insert({ comment_id: c.id, user_id: userId }); logActivity({ userId: c.author_id, actorId: userId, type: "like", postId: post.id, preview: c.text }); }
   };
   const doRepost = async () => {
     if (reposted) return;
@@ -3184,11 +3298,7 @@ function PostCard({ t, post, userId, onOpenProfile, onChanged, onTag }) {
                 </div>
                 {show.text && (
                   <div style={{ fontSize: 13.5, color: t.text, marginTop: 3, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
-                    {String(show.text).split(/(#[^\s#]+)/g).map((seg, i) =>
-                      seg.startsWith("#") && seg.length > 1
-                        ? <span key={i} role="button" onClick={(e) => { e.stopPropagation(); onTag?.(seg.slice(1)); }} style={{ color: t.accent, fontWeight: 700, cursor: "pointer" }}>{seg}</span>
-                        : <span key={i}>{seg}</span>
-                    )}
+                    <RichText text={show.text} mentions={show.mentions || post.mentions} t={t} onTag={onTag} onOpenProfile={onOpenProfile} />
                   </div>
                 )}
               </div>
@@ -3226,19 +3336,37 @@ function PostCard({ t, post, userId, onOpenProfile, onChanged, onTag }) {
       {/* คอมเมนต์ */}
       {showComments && (
         <div style={{ marginLeft: 48, marginTop: 12, borderTop: `1px solid ${t.border}`, paddingTop: 10 }}>
-          {comments.map((c) => (
-            <div key={c.id} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-              {c.author?.avatar_url ? <img src={c.author.avatar_url} alt="" style={{ width: 26, height: 26, borderRadius: 13, objectFit: "cover", flexShrink: 0 }} /> : <div style={{ width: 26, height: 26, borderRadius: 13, background: colorFor(c.author?.name || "?"), display: "grid", placeItems: "center", color: "#fff", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{(c.author?.name || "?")[0]}</div>}
-              <div style={{ flex: 1 }}>
-                <span style={{ fontSize: 12.5, fontWeight: 700, color: t.text }}>{c.author?.name || "ผู้ใช้"}</span>
+          {comments.map((c) => {
+            const cName = (c.author?.community_use_main === false && c.author?.community_name ? c.author.community_name : c.author?.name) || "ผู้ใช้";
+            return (
+            <div key={c.id} style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+              <button onClick={() => onOpenProfile?.(c.author_id)} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", flexShrink: 0 }}>
+                {c.author?.avatar_url ? <img src={c.author.avatar_url} alt="" style={{ width: 26, height: 26, borderRadius: 13, objectFit: "cover" }} /> : <div style={{ width: 26, height: 26, borderRadius: 13, background: colorFor(cName), display: "grid", placeItems: "center", color: "#fff", fontSize: 11, fontWeight: 700 }}>{cName[0]}</div>}
+              </button>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {c.replyToName && <div style={{ fontSize: 10.5, color: t.faint, marginBottom: 1 }}>↳ ตอบกลับ {c.replyToName}</div>}
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: t.text }}>{cName}</span>
                 <span style={{ fontSize: 10, color: t.faint, marginLeft: 6 }} title={fullDT(c.created_at)}>{timeAgo(c.created_at)}</span>
-                <div style={{ fontSize: 12.5, color: t.text, marginTop: 1 }}>{c.text}</div>
+                <div style={{ fontSize: 12.5, color: t.text, marginTop: 1, lineHeight: 1.4 }}><RichText text={c.text} mentions={c.mentions} t={t} onTag={onTag} onOpenProfile={onOpenProfile} /></div>
+                <div style={{ display: "flex", gap: 14, marginTop: 4 }}>
+                  <button onClick={() => toggleCommentLike(c)} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 3, color: c.liked ? "#E0245E" : t.faint }}>
+                    <Heart size={12.5} fill={c.liked ? "#E0245E" : "none"} color={c.liked ? "#E0245E" : t.faint} /> <span style={{ fontSize: 10.5 }}>{c.like_count > 0 ? fmtCount(c.like_count) : ""}</span>
+                  </button>
+                  <button onClick={() => setReplyTo({ id: c.id, name: cName, authorId: c.author_id })} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 10.5, color: t.faint, fontWeight: 700 }}>ตอบกลับ</button>
+                </div>
               </div>
             </div>
-          ))}
-          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-            <input value={commentText} onChange={(e) => setCommentText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendComment()} placeholder="แสดงความเห็น..." style={{ ...input(t), flex: 1, fontSize: 12.5 }} />
-            <button onClick={sendComment} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), padding: "0 14px" }}>ส่ง</button>
+            );
+          })}
+          {replyTo && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6, background: `${t.accent}14`, borderRadius: 10, padding: "5px 10px", marginBottom: 6 }}>
+              <span style={{ fontSize: 11, color: t.sub, flex: 1 }}>กำลังตอบกลับ <b style={{ color: t.accent }}>{replyTo.name}</b></span>
+              <button onClick={() => setReplyTo(null)} style={{ background: "none", border: "none", cursor: "pointer", padding: 2 }}><X size={13} color={t.faint} /></button>
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 6, marginTop: 8, alignItems: "flex-start" }}>
+            <MentionInput value={commentText} onChange={setCommentText} onSend={sendComment} mentioned={commentMentioned} setMentioned={setCommentMentioned} t={t} placeholder={replyTo ? `ตอบกลับ ${replyTo.name}...` : "แสดงความเห็น... (พิมพ์ @ เพื่อแท็ก)"} style={{ ...input(t), fontSize: 12.5 }} />
+            <button onClick={sendComment} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), padding: "0 14px", height: 38 }}>ส่ง</button>
           </div>
         </div>
       )}
@@ -3289,8 +3417,8 @@ function CommunityActivity({ t, userId, onOpenProfile }) {
 
   const nameOf = (p) => p ? ((p.community_use_main === false && p.community_name ? p.community_name : p.name) || "ผู้ใช้") : "ผู้ใช้";
   const avaOf = (p) => p ? (p.community_use_main === false && p.community_avatar ? p.community_avatar : p.avatar_url) : "";
-  const verb = { like: "ถูกใจโพสต์ของคุณ", comment: "แสดงความเห็นในโพสต์ของคุณ", follow: "เริ่มติดตามคุณ", repost: "รีโพสต์โพสต์ของคุณ", follow_request: "ขอติดตามคุณ" };
-  const emo = { like: "❤️", comment: "💬", follow: "👥", repost: "🔁", follow_request: "🔔" };
+  const verb = { like: "ถูกใจโพสต์ของคุณ", comment: "แสดงความเห็นในโพสต์ของคุณ", follow: "เริ่มติดตามคุณ", repost: "รีโพสต์โพสต์ของคุณ", follow_request: "ขอติดตามคุณ", mention: "แท็กคุณในโพสต์/คอมเมนต์" };
+  const emo = { like: "❤️", comment: "💬", follow: "👥", repost: "🔁", follow_request: "🔔", mention: "📣" };
 
   // กดรับ / ปฏิเสธ คำขอติดตาม
   const respondRequest = async (actorId, accept) => {
@@ -3652,7 +3780,16 @@ async function enrichPosts(raw, userId) {
     const { data: origs } = await supabase.from("posts").select("*, author:profiles!posts_author_id_fkey(id, name, avatar_url, community_name, community_avatar, community_use_main)").in("id", repostIds);
     (origs || []).forEach((o) => { origMap[o.id] = o; });
   }
-  return raw.map((p) => ({ ...p, like_count: likeCount[p.id] || 0, comment_count: commentCount[p.id] || 0, liked: myLiked.has(p.id), bookmarked: myBm.has(p.id), original: p.repost_of ? origMap[p.repost_of] : null }));
+  // แปะชื่อคนที่ถูกแท็ก (@) ให้แต่ละโพสต์ ไว้ให้ RichText ไฮไลต์ได้ถูกคน
+  const allMentionIds = [...new Set(raw.flatMap((p) => p.mentioned_ids || []).concat(Object.values(origMap).flatMap((o) => o.mentioned_ids || [])))];
+  let mentionMap = {};
+  if (allMentionIds.length > 0) {
+    const { data: mProfs } = await supabase.from("profiles").select("id, name, community_name, community_use_main").in("id", allMentionIds);
+    (mProfs || []).forEach((p) => { mentionMap[p.id] = (p.community_use_main === false && p.community_name ? p.community_name : p.name) || "ผู้ใช้"; });
+  }
+  const namesFor = (ids) => (ids || []).map((id) => ({ id, name: mentionMap[id] })).filter((m) => m.name);
+  Object.values(origMap).forEach((o) => { o.mentions = namesFor(o.mentioned_ids); });
+  return raw.map((p) => ({ ...p, like_count: likeCount[p.id] || 0, comment_count: commentCount[p.id] || 0, liked: myLiked.has(p.id), bookmarked: myBm.has(p.id), original: p.repost_of ? origMap[p.repost_of] : null, mentions: namesFor(p.mentioned_ids) }));
 }
 
 // หน้าโปรไฟล์ — โพสต์ของคนนั้น + จำนวนผู้ติดตาม + ปุ่ม follow
@@ -3899,6 +4036,7 @@ function ComposeModal({ t, userId, onDone, close }) {
   const [uploading, setUploading] = useState(false);
   const [posting, setPosting] = useState(false);
   const [visibility, setVisibility] = useState("public"); // public | followers
+  const [mentioned, setMentioned] = useState([]); // [{id, name}] คนที่แท็กไว้ (เลือกจากดรอปดาวน์ @)
   const fileRef = useRef(null);
 
   const uploadImages = async (e) => {
@@ -3916,7 +4054,10 @@ function ComposeModal({ t, userId, onDone, close }) {
   const post = async () => {
     if (!text.trim() && images.length === 0) return;
     setPosting(true);
-    await supabase.from("posts").insert({ author_id: userId, text: text.trim(), images, visibility });
+    const finalText = text.trim();
+    const mentionIds = mentioned.filter((m) => finalText.includes(`@${m.name}`)).map((m) => m.id); // เอาเฉพาะที่ยังพิมพ์อยู่จริงในข้อความ (กันเผลอลบ @ชื่อ ทิ้งไปแล้ว)
+    await supabase.from("posts").insert({ author_id: userId, text: finalText, images, visibility, mentioned_ids: mentionIds });
+    mentionIds.forEach((id) => logActivity({ userId: id, actorId: userId, type: "mention", preview: finalText }));
     setPosting(false);
     onDone?.();
   };
@@ -3930,7 +4071,7 @@ function ComposeModal({ t, userId, onDone, close }) {
             <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>โพสต์ใหม่</div>
             <button onClick={post} disabled={posting || (!text.trim() && images.length === 0)} style={{ background: "#F2872E", border: "none", color: "#fff", fontSize: 13, fontWeight: 700, padding: "7px 16px", borderRadius: 10, cursor: "pointer", opacity: posting || (!text.trim() && images.length === 0) ? 0.5 : 1 }}>{posting ? "กำลังโพสต์..." : "โพสต์"}</button>
           </div>
-          <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="มีอะไรใหม่..." autoFocus style={{ ...input(t), width: "100%", minHeight: 100, resize: "vertical", fontSize: 14, lineHeight: 1.5 }} />
+          <MentionInput value={text} onChange={setText} mentioned={mentioned} setMentioned={setMentioned} t={t} placeholder="มีอะไรใหม่... (พิมพ์ @ เพื่อแท็กคน)" isTextarea autoFocus style={{ ...input(t), width: "100%", minHeight: 100, resize: "vertical", fontSize: 14, lineHeight: 1.5 }} />
           {images.length > 0 && (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
               {images.map((url, i) => (
@@ -4863,6 +5004,8 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState("");
   const [confirmDeleteMsgId, setConfirmDeleteMsgId] = useState(null);
+  const [msgMenuId, setMsgMenuId] = useState(null); // id ข้อความที่กดค้างอยู่ (โชว์เมนูแก้ไข/ลบชั่วคราวแทนที่จะค้างตลอด)
+  const longPressRef = useRef(null);
   const [senderMap, setSenderMap] = useState({}); // sender_id -> { name } กันโชว์ชื่อผิดคนตอนหลายคนคุยในห้องเดียวกัน
   const [uploading, setUploading] = useState(false);
   const [typingName, setTypingName] = useState(null); // ชื่อคนที่กำลังพิมพ์อยู่ (null = ไม่มีใครพิมพ์)
@@ -4993,7 +5136,10 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
     await supabase.from("chat_messages").update({ text: editText.trim(), edited_at: new Date().toISOString() }).eq("id", editingId);
     setEditingId(null);
   };
-  const deleteMsg = async (id) => { await supabase.from("chat_messages").delete().eq("id", id); setConfirmDeleteMsgId(null); };
+  const deleteMsg = async (id) => { await supabase.from("chat_messages").delete().eq("id", id); setConfirmDeleteMsgId(null); setMsgMenuId(null); };
+  // กดค้าง 380ms บนข้อความตัวเอง -> เปิดเมนูแก้ไข/ลบ (แทนที่จะโชว์ปุ่มค้างตลอดใต้ทุกข้อความ)
+  const startLongPress = (m) => { longPressRef.current = setTimeout(() => setMsgMenuId(m.id), 380); };
+  const cancelLongPress = () => { if (longPressRef.current) { clearTimeout(longPressRef.current); longPressRef.current = null; } };
 
   // 📎 แนบรูป/ไฟล์ในแชท — เก็บผ่าน Supabase Storage bucket "attachments" (ตัวเดียวกับที่ใช้ในโน้ต)
   const pickFile = async (e) => {
@@ -5061,7 +5207,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
           const isLastMine = mine && m.id === [...messages].reverse().find((x) => x.sender_id === userId)?.id;
           const readByCount = isLastMine ? otherMembers.filter((u) => reads[u.id] && new Date(reads[u.id]) >= new Date(m.created_at)).length : 0;
           return (
-            <div key={m.id} style={{ display: "flex", flexDirection: "column", alignItems: mine ? "flex-end" : "flex-start", maxWidth: "84%", alignSelf: mine ? "flex-end" : "flex-start" }}>
+            <div key={m.id} style={{ display: "flex", flexDirection: "column", alignItems: mine ? "flex-end" : "flex-start", maxWidth: "84%", alignSelf: mine ? "flex-end" : "flex-start", position: "relative" }}>
               {!mine && thread.isGroup && <div style={{ fontSize: 10.5, color: t.faint, marginBottom: 2, paddingLeft: 34 }}>{senderName}</div>}
               <div style={{ display: "flex", gap: 8, flexDirection: mine ? "row-reverse" : "row" }}>
                 {!mine && (senderMap[m.sender_id]?.avatarUrl ? (
@@ -5104,7 +5250,16 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
                     setCallDetail({ timeline, durationMins: maxDur, at: group[0]?.created_at });
                   };
                   return (
-                  <div onClick={isCallMsg ? openCallDetail : undefined} style={{ background: mine ? t.accent : t.surface, color: mine ? t.onAccent : t.text, padding: m.attachment_url ? 6 : "9px 13px", borderRadius: 14, fontSize: 13.5, lineHeight: 1.4, border: mine ? "none" : `1px solid ${t.border}`, cursor: isCallMsg ? "pointer" : "default" }}>
+                  <div
+                    onClick={isCallMsg ? openCallDetail : undefined}
+                    onMouseDown={mine && !m.attachment_url ? () => startLongPress(m) : undefined}
+                    onMouseUp={mine && !m.attachment_url ? cancelLongPress : undefined}
+                    onMouseLeave={mine && !m.attachment_url ? cancelLongPress : undefined}
+                    onTouchStart={mine && !m.attachment_url ? () => startLongPress(m) : undefined}
+                    onTouchEnd={mine && !m.attachment_url ? cancelLongPress : undefined}
+                    onTouchMove={mine && !m.attachment_url ? cancelLongPress : undefined}
+                    style={{ background: mine ? t.accent : t.surface, color: mine ? t.onAccent : t.text, padding: m.attachment_url ? 6 : "9px 13px", borderRadius: 14, fontSize: 13.5, lineHeight: 1.4, border: mine ? "none" : `1px solid ${t.border}`, cursor: isCallMsg ? "pointer" : (mine ? "default" : "default"), userSelect: "none", WebkitUserSelect: "none" }}
+                  >
                     {m.attachment_type === "image" && <img src={m.attachment_url} alt="" onClick={() => setLightbox(m.attachment_url)} style={{ maxWidth: 200, borderRadius: 10, display: "block", cursor: "pointer" }} />}
                     {m.attachment_type === "file" && (
                       <a href={m.attachment_url} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: 6, color: "inherit", textDecoration: "underline", padding: "3px 7px" }}><FileText size={14} /> {m.attachment_name}</a>
@@ -5114,15 +5269,19 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
                   );
                 })()}
               </div>
-              {mine && editingId !== m.id && !m.attachment_url && (
-                <div style={{ display: "flex", gap: 10, marginTop: 3, paddingRight: 2 }}>
-                  <button onClick={() => startEdit(m)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 10.5, color: t.faint }}>แก้ไข</button>
-                  {confirmDeleteMsgId === m.id ? (
-                    <button onClick={() => deleteMsg(m.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 10.5, color: "#D9534F", fontWeight: 700 }}>ยืนยันลบ?</button>
-                  ) : (
-                    <button onClick={() => setConfirmDeleteMsgId(m.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 10.5, color: t.faint }}>ลบ</button>
-                  )}
-                </div>
+              {/* เมนูแก้ไข/ลบ — โผล่เฉพาะตอนกดค้าง ไม่ค้างอยู่ตลอดใต้ทุกข้อความ (กันหน้าจอรก) */}
+              {msgMenuId === m.id && (
+                <>
+                  <div onClick={() => { setMsgMenuId(null); setConfirmDeleteMsgId(null); }} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+                  <div style={{ position: "absolute", top: "100%", [mine ? "right" : "left"]: 0, marginTop: 4, zIndex: 41, background: t.page, border: `1px solid ${t.border}`, borderRadius: 12, boxShadow: "0 6px 18px rgba(0,0,0,.18)", display: "flex", overflow: "hidden" }}>
+                    <button onClick={() => { startEdit(m); setMsgMenuId(null); }} style={{ padding: "9px 16px", background: "none", border: "none", cursor: "pointer", fontSize: 12.5, color: t.text, fontWeight: 600, borderRight: `1px solid ${t.border}` }}>แก้ไข</button>
+                    {confirmDeleteMsgId === m.id ? (
+                      <button onClick={() => deleteMsg(m.id)} style={{ padding: "9px 16px", background: "none", border: "none", cursor: "pointer", fontSize: 12.5, color: "#D9534F", fontWeight: 700 }}>ยืนยันลบ?</button>
+                    ) : (
+                      <button onClick={() => setConfirmDeleteMsgId(m.id)} style={{ padding: "9px 16px", background: "none", border: "none", cursor: "pointer", fontSize: 12.5, color: "#D9534F", fontWeight: 600 }}>ลบ</button>
+                    )}
+                  </div>
+                </>
               )}
               {isLastMine && otherMembers.length > 0 && (
                 <div style={{ fontSize: 10, color: t.faint, marginTop: 2, paddingRight: 2 }}>
@@ -6390,8 +6549,8 @@ function ChatModal({ t, M, mentor, setMentor, authProfile, setAuthProfile, custo
     }
   };
   return (
-    <div style={overlay} onClick={close}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, height: "82vh", background: t.page, borderRadius: "24px 24px 0 0", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 100, background: t.page }}>
+      <div style={{ width: "100%", maxWidth: 440, height: "100%", margin: "0 auto", background: t.page, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         <div style={{ padding: 16, display: "flex", alignItems: "center", gap: 12, background: t.hero }}>
           <button onClick={() => setSwitchPick(true)} style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0, background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}>
             {M.avatarUrl ? (
@@ -6472,8 +6631,14 @@ function MentorPicker({ t, mentor, setMentor, authProfile, setAuthProfile, userI
       const { error: upErr } = await supabase.storage.from("attachments").upload(path, blob);
       if (upErr) throw upErr;
       const { data } = supabase.storage.from("attachments").getPublicUrl(path);
-      await supabase.from("custom_mentors").update({ avatar_url: data.publicUrl }).eq("id", id);
-      setCustomMentors((cs) => cs.map((c) => (c.id === id ? { ...c, avatarUrl: data.publicUrl } : c)));
+      if (id === "none") {
+        // ผู้ช่วยทั่วไป — เก็บรูปไว้ในโปรไฟล์ผู้ใช้เอง (ไม่ใช่ตาราง custom_mentors)
+        await supabase.from("profiles").update({ assistant_avatar_url: data.publicUrl }).eq("id", userId);
+        setAuthProfile((p) => ({ ...p, assistant_avatar_url: data.publicUrl }));
+      } else {
+        await supabase.from("custom_mentors").update({ avatar_url: data.publicUrl }).eq("id", id);
+        setCustomMentors((cs) => cs.map((c) => (c.id === id ? { ...c, avatarUrl: data.publicUrl } : c)));
+      }
     } catch (e) { setErr("เปลี่ยนรูปไม่สำเร็จ: " + e.message); }
   };
 
@@ -6511,7 +6676,16 @@ function MentorPicker({ t, mentor, setMentor, authProfile, setAuthProfile, userI
           </button>
         ))}
         <button onClick={() => pick("none")} style={{ display: "flex", alignItems: "center", gap: 14, padding: 14, borderRadius: 18, cursor: "pointer", textAlign: "left", background: t.surface, border: `2px solid ${mentor === "none" ? MENTORS.none.accent : t.border}` }}>
-          <span style={{ width: 46, height: 46, borderRadius: 23, background: `linear-gradient(135deg,${MENTORS.none.accent2},${MENTORS.none.accent})`, color: "#fff", display: "grid", placeItems: "center", fontWeight: 800, fontSize: 18, flexShrink: 0 }}>{MENTORS.none.letter}</span>
+          <div style={{ position: "relative", flexShrink: 0 }}>
+            {authProfile?.assistant_avatar_url ? (
+              <img src={authProfile.assistant_avatar_url} alt="" style={{ width: 46, height: 46, borderRadius: 23, objectFit: "cover" }} />
+            ) : (
+              <span style={{ width: 46, height: 46, borderRadius: 23, background: `linear-gradient(135deg,${MENTORS.none.accent2},${MENTORS.none.accent})`, color: "#fff", display: "grid", placeItems: "center", fontWeight: 800, fontSize: 18 }}>{MENTORS.none.letter}</span>
+            )}
+            <button onClick={(e) => { e.stopPropagation(); setAvatarTargetId("none"); avatarFileRef.current?.click(); }} style={{ position: "absolute", bottom: -3, right: -3, width: 20, height: 20, borderRadius: 10, background: t.accent, border: `2px solid ${t.surface}`, cursor: "pointer", display: "grid", placeItems: "center" }}>
+              <Camera size={10} color={t.onAccent} />
+            </button>
+          </div>
           <div style={{ flex: 1 }}><div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>{MENTORS.none.full}</div><div style={{ fontSize: 12, color: t.sub }}>{MENTORS.none.tag}</div></div>
           {mentor === "none" && <Check size={20} color={MENTORS.none.accent} />}
         </button>
