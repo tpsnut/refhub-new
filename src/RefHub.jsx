@@ -2306,24 +2306,25 @@ function AddGoalModal({ t, userId, setGoals, goalTemplates, setGoalTemplates, cl
         <button onClick={save} disabled={disabled} style={{ ...primaryBtn(t), width: "100%", padding: "13px 0", fontSize: 15, opacity: disabled ? 0.6 : 1 }}>{busy ? "กำลังบันทึก..." : "บันทึก"}</button>
 
         {goalTemplates.length > 0 && (
-          <div style={{ marginTop: 22 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: t.sub, marginBottom: 8 }}>เป้าหมายประจำที่ตั้งไว้</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {goalTemplates.map((tp) => (
-                <div key={tp.id} style={{ ...card(t), padding: "9px 12px", display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 10 }}>{diffEmoji[tp.difficulty]}</span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12.5, color: t.text, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tp.text}</div>
-                    <div style={{ fontSize: 10, color: t.faint }}>{tp.daysOfWeek.length === 7 ? "ทุกวัน" : tp.daysOfWeek.map((i) => dayLabels[i]).join(" ")}</div>
-                  </div>
-                  <button onClick={() => pauseTemplate(tp.id)} style={ghost} title="หยุด/ลบเป้าหมายประจำนี้"><Trash2 size={14} color={t.faint} /></button>
-                </div>
-              ))}
-            </div>
+  // 🟢 แก้ไขบรรทัดนี้: เพิ่ม paddingBottom: 90 เพื่อดันเนื้อหาขึ้นมาจาก Dock Bar
+  <div style={{ marginTop: 22, paddingBottom: 90 }}>
+    <div style={{ fontSize: 12, fontWeight: 700, color: t.sub, marginBottom: 8 }}>เป้าหมายประจำที่ตั้งไว้</div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      {goalTemplates.map((tp) => (
+        <div key={tp.id} style={{ ...card(t), padding: "9px 12px", display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 10 }}>{diffEmoji[tp.difficulty]}</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12.5, color: t.text, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tp.text}</div>
+            <div style={{ fontSize: 10, color: t.faint }}>{tp.daysOfWeek.length === 7 ? "ทุกวัน" : tp.daysOfWeek.map((i) => dayLabels[i]).join(" ")}</div>
           </div>
-        )}
-      </div>
+          <button onClick={() => pauseTemplate(tp.id)} style={ghost} title="หยุด/ลบเป้าหมายประจำนี้"><Trash2 size={14} color={t.faint} /></button>
+        </div>
+      ))}
     </div>
+  </div>
+)}
+</div>
+</div>
   );
 }
 
