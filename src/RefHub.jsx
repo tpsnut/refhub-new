@@ -2600,7 +2600,29 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
               </div>
               {commentingId === g.id && (
                 <div style={{ display: "flex", gap: 6, marginTop: 6, marginLeft: 32 }}>
-                  <input defaultValue={g.comment || ""} autoFocus onKeyDown={(e) => { if (e.key === "Enter") { const val = e.target.value.trim(); setGoals((gs) => gs.map((x) => (x.id === g.id ? { ...x, comment: val || null } : x))); if (userId) supabase.from("goals").update({ comment: val || null }).eq("id", g.id).then(() => {}, () => {}); setCommentingId(null); } }} placeholder="คอมเมนต์/สถานะเล็กๆ เช่น 'ทำได้ครึ่งทาง'..." style={{ ...input(t), fontSize: 12, padding: "6px 10px" }} />
+                  <input
+                    value={g.comment || ""}
+                    autoFocus
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setGoals((gs) => gs.map((x) => (x.id === g.id ? { ...x, comment: val } : x)));
+                    }}
+                    onBlur={async (e) => {
+                      const val = e.target.value.trim();
+                      setGoals((gs) => gs.map((x) => (x.id === g.id ? { ...x, comment: val || null } : x)));
+                      if (userId && typeof supabase !== "undefined") {
+                        await supabase.from("goals").update({ comment: val || null }).eq("id", g.id);
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.target.blur(); // เมื่อกด Enter ให้หลุดโฟกัสเพื่อไปยิง onBlur เซฟให้อัตโนมัติ
+                        setCommentingId(null);
+                      }
+                    }}
+                    placeholder="คอมเมนต์/สถานะเล็กๆ เช่น 'ทำได้ครึ่งทาง'..."
+                    style={{ ...input(t), fontSize: 12, padding: "6px 10px" }}
+                  />
                 </div>
               )}
             </div>
