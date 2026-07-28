@@ -130,6 +130,29 @@ async function fetchOneSource(source) {
   });
 }
 
+// สลับผลลัพธ์เป็นบล็อกๆ ตามลำดับแหล่งที่กำหนดไว้ (แหล่งแรกในนิยาม FEED_SOURCES ขึ้นก่อนเสมอ)
+// เช่น ไทยรัฐ 5 ข่าว -> กูเกิลนิวส์ 5 ข่าว -> ไทยรัฐ 5 ข่าว -> กูเกิลนิวส์ 5 ข่าว จนครบ maxTotal
+// ถ้าแหล่งใดหมดก่อน จะดึงจากแหล่งที่เหลืออยู่ต่อจนครบ ไม่ทิ้งที่ว่างไว้เฉยๆ
+function interleaveBlocks(arraysInOrder, blockSize, maxTotal) {
+  const result = [];
+  const cursors = arraysInOrder.map(() => 0);
+  let progressed = true;
+  while (progressed && result.length < maxTotal) {
+    progressed = false;
+    for (let i = 0; i < arraysInOrder.length; i++) {
+      const arr = arraysInOrder[i];
+      let taken = 0;
+      while (taken < blockSize && cursors[i] < arr.length && result.length < maxTotal) {
+        result.push(arr[cursors[i]]);
+        cursors[i]++;
+        taken++;
+        progressed = true;
+      }
+    }
+  }
+  return result;
+}
+
 async function fetchNews(category, force) {
   const sources = FEED_SOURCES[category];
   if (!sources) throw new Error("หมวดหมู่ไม่ถูกต้อง");
@@ -138,21 +161,19 @@ async function fetchNews(category, force) {
   if (!force && cached && Date.now() - cached.ts < CACHE_TTL_MS) return cached.data;
 
   const results = await Promise.allSettled(sources.map(fetchOneSource));
-  const merged = [];
+  const perSourceLists = []; // เก็บตามลำดับที่นิยามไว้ใน FEED_SOURCES (ไทยรัฐมาก่อนเสมอ)
   const failures = [];
   results.forEach((r, i) => {
-    if (r.status === "fulfilled") merged.push(...r.value);
+    if (r.status === "fulfilled") perSourceLists.push(r.value);
     else failures.push(`${sources[i].label}: ${r.reason.message}`);
   });
 
   // ถ้าทุกแหล่งพังหมด ถึงจะ error ให้เห็น — ถ้ามีอย่างน้อย 1 แหล่งสำเร็จ ใช้ของที่ได้ต่อไปเงียบๆ
-  if (merged.length === 0 && failures.length > 0) {
+  if (perSourceLists.length === 0 && failures.length > 0) {
     throw new Error(failures.join(" | "));
   }
 
-  // เรียงข่าวล่าสุดขึ้นก่อน แล้วตัดเหลือ 20 ข่าว (กันไม่ให้ยาวเกินไปตอนรวมหลายแหล่ง)
-  merged.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
-  const items = merged.slice(0, 20);
+  const items = interleaveBlocks(perSourceLists, 5, 20);
 
   cache[category] = { data: items, ts: Date.now() };
   return items;
