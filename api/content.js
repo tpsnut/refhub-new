@@ -17,7 +17,9 @@ const FEED_SOURCES = {
   game: { url: "https://www.beartai.com/read-category/game/feed/", label: "Beartai" },
   life: { url: "https://www.beartai.com/read-category/life/feed/", label: "Beartai" },
   entertainment: { url: "https://www.thairath.co.th/rss/entertain", label: "Thairath" },
-  world: { url: "https://www.thairath.co.th/rss/foreign", label: "Thairath" },
+  // Thairath ไม่มีฟีดแยกเฉพาะหมวดต่างประเทศ — ใช้ฟีดรวมทุกหมวด (/rss/news) แล้วกรองเอาเฉพาะ
+  // ข่าวที่ลิงก์มีคำว่า /news/foreign/ (ยืนยันจากโครงสร้างจริงของฟีดแล้วว่าใช้ path นี้บอกหมวด)
+  world: { url: "https://www.thairath.co.th/rss/news", label: "Thairath", filterLinkContains: "/news/foreign/" },
 };
 
 // cache ในหน่วยความจำของ serverless instance — ลดจำนวนครั้งที่ยิง RSS จริง (10 นาที)
@@ -73,12 +75,18 @@ async function fetchNews(category) {
   const cached = cache[category];
   if (cached && Date.now() - cached.ts < CACHE_TTL_MS) return cached.data;
 
-  const r = await fetch(source.url, { headers: { "User-Agent": "Mozilla/5.0 (RefHub NewsBot)" } });
+  const r = await fetch(source.url, { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" } });
   if (!r.ok) throw new Error(`ดึง RSS ไม่สำเร็จ (${r.status}) จาก ${source.label}`);
   const xml = await r.text();
 
+  // ถ้าเป็นฟีดรวมที่ต้องกรองเฉพาะหมวด (เช่น world) ดึงมาเยอะกว่าปกติก่อนกรอง เพราะข่าวหมวดที่ต้องการเป็นแค่ส่วนหนึ่งของฟีดรวม
+  const rawLimit = source.filterLinkContains ? 60 : 20;
   const itemMatches = xml.match(/<item>[\s\S]*?<\/item>/g) || [];
-  const items = itemMatches.slice(0, 20).map((itemXml) => {
+  let candidates = itemMatches.slice(0, rawLimit);
+  if (source.filterLinkContains) {
+    candidates = candidates.filter((itemXml) => itemXml.includes(source.filterLinkContains));
+  }
+  const items = candidates.slice(0, 20).map((itemXml) => {
     const title = decodeEntities(stripCdata(tagContent(itemXml, "title")));
     const link = decodeEntities(stripCdata(tagContent(itemXml, "link")));
     const pubDate = stripCdata(tagContent(itemXml, "pubDate"));
