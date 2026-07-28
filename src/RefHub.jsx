@@ -790,30 +790,49 @@ export default function RefHub() {
           const existingByTemplate = new Set((dbGoals || []).filter((g) => g.template_id && g.date === today).map((g) => g.template_id));
           const toCreate = templates.filter((tp) => tp.daysOfWeek.includes(todayDow) && !existingByTemplate.has(tp.id));
           if (toCreate.length > 0) {
-            const newRows = toCreate.map((tp) => ({ 
-              id: uid(), 
-              user_id: userId, 
-              text: tp.text, 
-              comment: tp.comment || tp.note || "", 
-              date: today, 
-              done: false, 
-              template_id: tp.id, 
-              difficulty: tp.difficulty 
+            const newRows = toCreate.map((tp) => ({
+              id: uid(),
+              user_id: userId,
+              text: tp.text,
+              comment: tp.comment || tp.note || "",
+              date: today,
+              done: false,
+              template_id: tp.id,
+              difficulty: tp.difficulty
             }));
-          
+
             const { error: genErr } = await supabase.from("goals").insert(
-              newRows.map(({ id, user_id, text, comment, date, done, template_id, difficulty }) => ({ 
-                id, 
-                user_id, 
-                text, 
-                comment, 
-                date, 
-                done, 
-                template_id, 
-                difficulty 
+              newRows.map(({ id, user_id, text, comment, date, done, template_id, difficulty }) => ({
+                id,
+                user_id,
+                text,
+                comment,
+                date,
+                done,
+                template_id,
+                difficulty
               }))
             );
+            if (genErr) console.error("สร้างเป้าหมายประจำวันจากแม่แบบไม่สำเร็จ:", genErr.message);
+            else setGoals((gs) => [...gs, ...newRows.map((r) => ({ ...r, doneDate: null }))]);
           }
+        }
+
+        // 3c. ดึงหมวดหมู่การเงิน — เดิมไม่เคยบันทึกลงฐานข้อมูลเลย (แก้/เพิ่ม/ลบ อยู่แค่ในเครื่อง หายเมื่อเปิดแอปใหม่) ตอนนี้โหลด/บันทึกจริงแล้ว
+        const { data: dbCats, error: catsErr } = await supabase
+          .from("categories")
+          .select("*")
+          .eq("user_id", userId)
+          .order("sort_order", { ascending: true });
+        if (catsErr) console.error("โหลดหมวดหมู่ไม่สำเร็จ (ไม่แตะข้อมูลเดิม):", catsErr.message);
+        else if (dbCats && dbCats.length > 0) {
+          setCategories(dbCats.map((c) => ({ id: c.id, label: c.label, iconKey: c.icon_key, color: c.color, kind: c.kind })));
+        } else {
+          // ยังไม่เคยมีหมวดหมู่ในฐานข้อมูลเลย (ผู้ใช้ใหม่ หรือของเก่าก่อนแก้บั๊กนี้) — สร้างค่าเริ่มต้นให้ครั้งแรกครั้งเดียว
+          const seedRows = DEFAULT_CATEGORIES.map((c, i) => ({ id: c.id, user_id: userId, label: c.label, icon_key: c.iconKey, color: c.color, kind: c.kind, sort_order: i }));
+          const { error: seedErr } = await supabase.from("categories").insert(seedRows);
+          if (seedErr) console.error("สร้างหมวดหมู่เริ่มต้นไม่สำเร็จ:", seedErr.message);
+          setCategories(DEFAULT_CATEGORIES);
         }
 
         // 4. ดึงสมุดโน้ต (Notes)
@@ -845,20 +864,35 @@ export default function RefHub() {
           setPlaylist(mappedPlaylist);
         }
 
+        // 5b. ดึงหมวดหมู่สื่อ/เพลง (media_folders) — เดิมเก็บแค่ localStorage เท่านั้น (หายได้ถ้า browser ล้าง storage เช่น Safari บน iPhone ที่ล้าง PWA storage อัตโนมัติถ้าไม่ได้เปิดแอปเกิน 7 วัน) ย้ายมาเก็บถาวรบน Supabase แทน
+        const { data: dbFolders, error: folderErr } = await supabase
+          .from("media_folders")
+          .select("*")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: true });
+        if (folderErr) console.error("โหลดหมวดหมู่สื่อไม่สำเร็จ (ไม่แตะข้อมูลเดิม):", folderErr.message);
+        else if (dbFolders && dbFolders.length > 0) {
+          setFolders(dbFolders.map((f) => ({ id: f.id, name: f.name })));
+        } else {
+          // ยังไม่เคยมีในฐานข้อมูลเลย เผื่อมีของเก่าจาก localStorage (ก่อนแก้บั๊กนี้) ย้ายเข้าฐานข้อมูลให้ครั้งเดียว กันข้อมูลหาย
+          try {
+            const old = JSON.parse(localStorage.getItem("refhub:folders") || "[]");
+            if (Array.isArray(old) && old.length > 0) {
+              setFolders(old);
+              await supabase.from("media_folders").insert(old.map((f) => ({ id: f.id, user_id: userId, name: f.name })));
+            }
+          } catch (e) {}
+        }
+
       } catch (e) {
         console.error("โหลดข้อมูลจาก Cloud ผิดพลาด: ", e);
       }
-      // หมวดหมู่เพลง (folders) ยังไม่มีตารางบน Supabase — เก็บไว้ใน localStorage ไปก่อน
-      try { const f = JSON.parse(localStorage.getItem("refhub:folders") || "[]"); setFolders(f); } catch (e) {}
-      try { const c = JSON.parse(localStorage.getItem("refhub:categories") || "null"); if (c && Array.isArray(c) && c.length) setCategories(c); } catch (e) {}
+      // หมวดหมู่เพลง (folders) ย้ายไปเก็บบน Supabase แล้ว (โหลดในบล็อกด้านบน) — เหลือแค่ fontScale ที่ยัง fallback ผ่าน localStorage
       try { const fs = JSON.parse(localStorage.getItem("refhub:fontScale") || "null"); if (fs) setFontScale(fs); } catch (e) {}
       setLoaded(true);
     })(); 
   }, [userId]);
 
-  // เซฟหมวดหมู่เพลงกลับลง localStorage ทุกครั้งที่เปลี่ยน
-  useEffect(() => { if (!loaded) return; try { localStorage.setItem("refhub:folders", JSON.stringify(folders)); } catch (e) {} }, [folders, loaded]);
-  useEffect(() => { if (!loaded) return; try { localStorage.setItem("refhub:categories", JSON.stringify(categories)); } catch (e) {} }, [categories, loaded]);
   useEffect(() => { if (!loaded) return; try { localStorage.setItem("refhub:fontScale", JSON.stringify(fontScale)); } catch (e) {} }, [fontScale, loaded]);
   // 📏 ซิงค์ขนาดตัวอักษรกับฐานข้อมูลด้วย (จำได้ข้ามอุปกรณ์ ไม่ใช่แค่เครื่องเดียวที่เคยตั้งไว้)
   useEffect(() => { if (authProfile?.font_scale) setFontScale(authProfile.font_scale); }, [authProfile?.font_scale]);
@@ -1162,6 +1196,7 @@ export default function RefHub() {
   };
 
   // 💰 จัดการหมวดหมู่การเงิน (เพิ่ม/ลบ/สลับลำดับ) — ใช้ได้ทั้งฝั่งรับเข้าและจ่ายออก
+  // เดิมแก้แค่ state ในเครื่อง ไม่เคยบันทึกลงฐานข้อมูลเลย ทำให้หมวดหมู่ที่สร้าง/สลับ/ลบ หายไปทุกครั้งที่เปิดแอปใหม่ — แก้ให้ sync กับ Supabase จริงทุกจุด
   const moveCategory = (id, dir) => {
     setCategories((cats) => {
       const kind = cats.find((c) => c.id === id)?.kind;
@@ -1173,13 +1208,24 @@ export default function RefHub() {
       const arr = [...cats];
       const ia = sameKindIdx[pos], ib = sameKindIdx[newPos];
       [arr[ia], arr[ib]] = [arr[ib], arr[ia]];
+      if (userId) {
+        arr.forEach((c, i) => { supabase.from("categories").update({ sort_order: i }).eq("user_id", userId).eq("id", c.id).then(() => {}, () => {}); });
+      }
       return arr;
     });
   };
-  const deleteCategory = (id) => setCategories((cats) => cats.filter((c) => c.id !== id));
+  const deleteCategory = (id) => {
+    setCategories((cats) => cats.filter((c) => c.id !== id));
+    if (userId) supabase.from("categories").delete().eq("user_id", userId).eq("id", id).then(() => {}, () => {});
+  };
   const addCategory = ({ label, iconKey, color, kind }) => {
     if (!label.trim()) return;
-    setCategories((cats) => [...cats, { id: uid(), label: label.trim(), iconKey, color, kind }]);
+    const id = uid();
+    setCategories((cats) => {
+      const sortOrder = cats.length;
+      if (userId) supabase.from("categories").insert({ id, user_id: userId, label: label.trim(), icon_key: iconKey, color, kind, sort_order: sortOrder }).then(() => {}, () => {});
+      return [...cats, { id, label: label.trim(), iconKey, color, kind }];
+    });
   };
 
   const todayGoals = goals.filter((g) => (g.date || todayStr()) === todayStr());
@@ -2004,9 +2050,11 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
     if (!nm) return;
     const f = { id: uid(), name: nm };
     setFolders((fs) => [...fs, f]); setTab(f.id); setNewFolderName(""); setAddingFolder(false);
+    if (userId) supabase.from("media_folders").insert({ id: f.id, user_id: userId, name: f.name }).then(({ error }) => { if (error) console.error("บันทึกหมวดหมู่สื่อไม่สำเร็จ:", error.message); }, () => {});
   };
   const setTrackFolder = (id, folderId) => setPlaylist((p) => p.map((x) => (x.id === id ? { ...x, folderId: folderId || null } : x)));
   const deleteFolder = (folderId) => {
+    if (userId) supabase.from("media_folders").delete().eq("user_id", userId).eq("id", folderId).then(() => {}, () => {});
     setFolders((fs) => fs.filter((f) => f.id !== folderId));
     setPlaylist((p) => p.map((x) => (x.folderId === folderId ? { ...x, folderId: null } : x)));
     setTab((cur) => (cur === folderId ? "all" : cur));
@@ -2268,63 +2316,68 @@ function AddGoalModal({ t, userId, setGoals, goalTemplates, setGoalTemplates, cl
 
   return (
     <div style={overlay} onClick={close}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "88vh", overflowY: "auto" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-          <div style={{ fontSize: 17, fontWeight: 800, color: t.text }}>เพิ่มเป้าหมาย</div>
-          <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
-        </div>
-
-        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-          {[["once", "ครั้งเดียว (วันนี้)"], ["recurring", "ทำประจำ (ตั้งตาราง)"]].map(([v, lb]) => (
-            <button key={v} onClick={() => setMode(v)} style={{ flex: 1, padding: "10px 0", borderRadius: 12, cursor: "pointer", border: `1.5px solid ${mode === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 12.5, background: mode === v ? t.accent : "transparent", color: mode === v ? t.onAccent : t.sub }}>{lb}</button>
-          ))}
-        </div>
-
-        <input value={text} onChange={(e) => setText(e.target.value)} placeholder="เช่น ออกกำลังกาย 30 นาที" style={{ ...input(t), marginBottom: 16 }} autoFocus />
-
-        {mode === "recurring" && (
-          <>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: t.sub }}>ทำวันไหนบ้าง</div>
-              <button onClick={() => setDays([0, 1, 2, 3, 4, 5, 6])} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11.5, color: t.accent, fontWeight: 700 }}>ทุกวัน</button>
-            </div>
-            <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
-              {dayLabels.map((lb, i) => (
-                <button key={i} onClick={() => toggleDay(i)} style={{ flex: 1, padding: "9px 0", borderRadius: 10, cursor: "pointer", border: `1.5px solid ${days.includes(i) ? t.accent : t.border}`, fontWeight: 700, fontSize: 12, background: days.includes(i) ? t.accent : "transparent", color: days.includes(i) ? t.onAccent : t.sub }}>{lb}</button>
-              ))}
-            </div>
-          </>
-        )}
-
-        <div style={{ fontSize: 12, fontWeight: 700, color: t.sub, marginBottom: 8 }}>ระดับความหิน</div>
-        <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-          {[["easy", "🟢 เบาๆ"], ["normal", "🟡 ปกติ"], ["hard", "🔴 โหด"]].map(([v, lb]) => (
-            <button key={v} onClick={() => setDifficulty(v)} style={{ flex: 1, padding: "9px 0", borderRadius: 10, cursor: "pointer", border: `1.5px solid ${difficulty === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 11.5, background: difficulty === v ? `${t.accent}18` : "transparent", color: t.text }}>{lb}</button>
-          ))}
-        </div>
-
-        <button onClick={save} disabled={disabled} style={{ ...primaryBtn(t), width: "100%", padding: "13px 0", fontSize: 15, opacity: disabled ? 0.6 : 1 }}>{busy ? "กำลังบันทึก..." : "บันทึก"}</button>
-
-        {goalTemplates.length > 0 && (
-  // 🟢 แก้ไขบรรทัดนี้: เพิ่ม paddingBottom: 90 เพื่อดันเนื้อหาขึ้นมาจาก Dock Bar
-  <div style={{ marginTop: 22, paddingBottom: 90 }}>
-    <div style={{ fontSize: 12, fontWeight: 700, color: t.sub, marginBottom: 8 }}>เป้าหมายประจำที่ตั้งไว้</div>
-    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      {goalTemplates.map((tp) => (
-        <div key={tp.id} style={{ ...card(t), padding: "9px 12px", display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 10 }}>{diffEmoji[tp.difficulty]}</span>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 12.5, color: t.text, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tp.text}</div>
-            <div style={{ fontSize: 10, color: t.faint }}>{tp.daysOfWeek.length === 7 ? "ทุกวัน" : tp.daysOfWeek.map((i) => dayLabels[i]).join(" ")}</div>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", maxHeight: "85vh", display: "flex", flexDirection: "column" }}>
+        <div style={{ padding: "20px 20px 0", flexShrink: 0 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <div style={{ fontSize: 17, fontWeight: 800, color: t.text }}>เพิ่มเป้าหมาย</div>
+            <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
           </div>
-          <button onClick={() => pauseTemplate(tp.id)} style={ghost} title="หยุด/ลบเป้าหมายประจำนี้"><Trash2 size={14} color={t.faint} /></button>
         </div>
-      ))}
+
+        <div style={{ padding: "0 20px", overflowY: "auto", flex: 1, minHeight: 0 }}>
+          <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+            {[["once", "ครั้งเดียว (วันนี้)"], ["recurring", "ทำประจำ (ตั้งตาราง)"]].map(([v, lb]) => (
+              <button key={v} onClick={() => setMode(v)} style={{ flex: 1, padding: "10px 0", borderRadius: 12, cursor: "pointer", border: `1.5px solid ${mode === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 12.5, background: mode === v ? t.accent : "transparent", color: mode === v ? t.onAccent : t.sub }}>{lb}</button>
+            ))}
+          </div>
+
+          <input value={text} onChange={(e) => setText(e.target.value)} placeholder="เช่น ออกกำลังกาย 30 นาที" style={{ ...input(t), marginBottom: 16 }} autoFocus />
+
+          {mode === "recurring" && (
+            <>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: t.sub }}>ทำวันไหนบ้าง</div>
+                <button onClick={() => setDays([0, 1, 2, 3, 4, 5, 6])} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11.5, color: t.accent, fontWeight: 700 }}>ทุกวัน</button>
+              </div>
+              <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
+                {dayLabels.map((lb, i) => (
+                  <button key={i} onClick={() => toggleDay(i)} style={{ flex: 1, padding: "9px 0", borderRadius: 10, cursor: "pointer", border: `1.5px solid ${days.includes(i) ? t.accent : t.border}`, fontWeight: 700, fontSize: 12, background: days.includes(i) ? t.accent : "transparent", color: days.includes(i) ? t.onAccent : t.sub }}>{lb}</button>
+                ))}
+              </div>
+            </>
+          )}
+
+          <div style={{ fontSize: 12, fontWeight: 700, color: t.sub, marginBottom: 8 }}>ระดับความหิน</div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+            {[["easy", "🟢 เบาๆ"], ["normal", "🟡 ปกติ"], ["hard", "🔴 โหด"]].map(([v, lb]) => (
+              <button key={v} onClick={() => setDifficulty(v)} style={{ flex: 1, padding: "9px 0", borderRadius: 10, cursor: "pointer", border: `1.5px solid ${difficulty === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 11.5, background: difficulty === v ? `${t.accent}18` : "transparent", color: t.text }}>{lb}</button>
+            ))}
+          </div>
+
+          {goalTemplates.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: t.sub, marginBottom: 8 }}>เป้าหมายประจำที่ตั้งไว้</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {goalTemplates.map((tp) => (
+                  <div key={tp.id} style={{ ...card(t), padding: "9px 12px", display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 10 }}>{diffEmoji[tp.difficulty]}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12.5, color: t.text, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tp.text}</div>
+                      <div style={{ fontSize: 10, color: t.faint }}>{tp.daysOfWeek.length === 7 ? "ทุกวัน" : tp.daysOfWeek.map((i) => dayLabels[i]).join(" ")}</div>
+                    </div>
+                    <button onClick={() => pauseTemplate(tp.id)} style={ghost} title="หยุด/ลบเป้าหมายประจำนี้"><Trash2 size={14} color={t.faint} /></button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div style={{ padding: "12px 20px calc(20px + env(safe-area-inset-bottom, 0px) + 78px)", flexShrink: 0, borderTop: `1px solid ${t.border}` }}>
+          <button onClick={save} disabled={disabled} style={{ ...primaryBtn(t), width: "100%", padding: "13px 0", fontSize: 15, opacity: disabled ? 0.6 : 1 }}>{busy ? "กำลังบันทึก..." : "บันทึก"}</button>
+        </div>
+      </div>
     </div>
-  </div>
-)}
-</div>
-</div>
   );
 }
 
