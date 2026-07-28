@@ -2115,18 +2115,21 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
         </div>
 
         {/* แท็บหมวดหมู่ */}
-        <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6, marginBottom: 10 }}>
-          {[{ id: "all", name: "ทั้งหมด" }, { id: "fav", name: "❤ โปรด" }, ...folders].map((f) => (
-            <div key={f.id} style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 2, borderRadius: 16, border: `1.5px solid ${tab === f.id ? t.accent : t.border}`, background: tab === f.id ? t.accent : "transparent", paddingRight: f.id !== "all" && f.id !== "fav" ? 4 : 0 }}>
-              <button onClick={() => setTab(f.id)} style={{ padding: "7px 13px", border: "none", background: "none", cursor: "pointer", fontSize: 12, fontWeight: 700, color: tab === f.id ? t.onAccent : t.sub }}>{f.name}</button>
-              {f.id !== "all" && f.id !== "fav" && (
-                <button onClick={() => deleteFolder(f.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: 3, display: "grid", placeItems: "center" }} title="ลบหมวดหมู่นี้">
-                  <X size={12} color={tab === f.id ? t.onAccent : t.faint} />
-                </button>
-              )}
-            </div>
-          ))}
-          <button onClick={() => setAddingFolder((v) => !v)} style={{ flexShrink: 0, width: 32, height: 32, borderRadius: 16, border: `1.5px dashed ${t.border}`, background: "none", cursor: "pointer", color: t.sub, display: "grid", placeItems: "center" }}><Plus size={15} /></button>
+        <div style={{ position: "relative", marginBottom: 10 }}>
+          <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6 }}>
+            {[{ id: "all", name: "ทั้งหมด" }, { id: "fav", name: "❤ โปรด" }, ...folders].map((f) => (
+              <div key={f.id} style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 2, borderRadius: 16, border: `1.5px solid ${tab === f.id ? t.accent : t.border}`, background: tab === f.id ? t.accent : "transparent", paddingRight: f.id !== "all" && f.id !== "fav" ? 4 : 0 }}>
+                <button onClick={() => setTab(f.id)} style={{ padding: "7px 13px", border: "none", background: "none", cursor: "pointer", fontSize: 12, fontWeight: 700, color: tab === f.id ? t.onAccent : t.sub }}>{f.name}</button>
+                {f.id !== "all" && f.id !== "fav" && (
+                  <button onClick={() => deleteFolder(f.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: 3, display: "grid", placeItems: "center" }} title="ลบหมวดหมู่นี้">
+                    <X size={12} color={tab === f.id ? t.onAccent : t.faint} />
+                  </button>
+                )}
+              </div>
+            ))}
+            <button onClick={() => setAddingFolder((v) => !v)} style={{ flexShrink: 0, width: 32, height: 32, borderRadius: 16, border: `1.5px dashed ${t.border}`, background: "none", cursor: "pointer", color: t.sub, display: "grid", placeItems: "center" }}><Plus size={15} /></button>
+          </div>
+          <div style={{ position: "absolute", right: 0, top: 0, bottom: 6, width: 28, pointerEvents: "none", background: `linear-gradient(to right, transparent, ${t.bg})` }} />
         </div>
         {addingFolder && (
           <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
@@ -3081,10 +3084,13 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts, authProfil
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 14, overflowX: "auto", paddingBottom: 2 }}>
-        {[["overview", "ภาพรวม"], ["members", "สมาชิก"], ["activity", "กิจกรรม"], ["announce", "ประกาศ"], ["add", "เพิ่มสมาชิก"]].map(([v, lb]) => (
-          <button key={v} onClick={() => setTab(v)} style={{ flexShrink: 0, padding: "9px 16px", borderRadius: 12, cursor: "pointer", border: `1.5px solid ${tab === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 12.5, background: tab === v ? t.accent : "transparent", color: tab === v ? t.onAccent : t.sub, whiteSpace: "nowrap" }}>{lb}</button>
-        ))}
+      <div style={{ position: "relative", marginBottom: 14 }}>
+        <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2 }}>
+          {[["overview", "ภาพรวม"], ["members", "สมาชิก"], ["activity", "กิจกรรม"], ["announce", "ประกาศ"], ["add", "เพิ่มสมาชิก"]].map(([v, lb]) => (
+            <button key={v} onClick={() => setTab(v)} style={{ flexShrink: 0, padding: "9px 16px", borderRadius: 12, cursor: "pointer", border: `1.5px solid ${tab === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 12.5, background: tab === v ? t.accent : "transparent", color: tab === v ? t.onAccent : t.sub, whiteSpace: "nowrap" }}>{lb}</button>
+          ))}
+        </div>
+        <div style={{ position: "absolute", right: 0, top: 0, bottom: 2, width: 28, pointerEvents: "none", background: `linear-gradient(to right, transparent, ${t.bg})` }} />
       </div>
 
       {tab === "overview" && (
@@ -3989,8 +3995,11 @@ function CommunityActivity({ t, userId, onOpenProfile }) {
 
   return (
     <div>
-      <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 14, paddingBottom: 4 }}>
-        {chip("all", "ทั้งหมด")}{chip("like", "❤️ ถูกใจ")}{chip("comment", "💬 ความเห็น")}{chip("follow", "👥 ติดตาม")}
+      <div style={{ position: "relative", marginBottom: 14 }}>
+        <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+          {chip("all", "ทั้งหมด")}{chip("like", "❤️ ถูกใจ")}{chip("comment", "💬 ความเห็น")}{chip("follow", "👥 ติดตาม")}
+        </div>
+        <div style={{ position: "absolute", right: 0, top: 0, bottom: 4, width: 28, pointerEvents: "none", background: `linear-gradient(to right, transparent, ${t.bg})` }} />
       </div>
       {items === null ? <div style={{ textAlign: "center", padding: 30, color: t.faint, fontSize: 13 }}>กำลังโหลด...</div>
         : items.length === 0 ? (
@@ -4105,10 +4114,13 @@ function CommunityBookmarks({ t, userId, onOpenProfile }) {
 
   return (
     <div>
-      <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 14, paddingBottom: 4 }}>
-        {chip("all", "ทั้งหมด")}
-        {chip("uncat", "📌 ทั่วไป")}
-        {cats.map((c) => chip(c.id, `📁 ${c.name}`))}
+      <div style={{ position: "relative", marginBottom: 14 }}>
+        <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+          {chip("all", "ทั้งหมด")}
+          {chip("uncat", "📌 ทั่วไป")}
+          {cats.map((c) => chip(c.id, `📁 ${c.name}`))}
+        </div>
+        <div style={{ position: "absolute", right: 0, top: 0, bottom: 4, width: 28, pointerEvents: "none", background: `linear-gradient(to right, transparent, ${t.bg})` }} />
       </div>
       {loading ? <div style={{ textAlign: "center", padding: 30, color: t.faint, fontSize: 13 }}>กำลังโหลด...</div>
         : posts.length === 0 ? (
@@ -5805,13 +5817,16 @@ function AddTxModal({ t, tx, setTx, categories, moveCategory, deleteCategory, ad
           <div style={{ fontSize: 12, fontWeight: 700, color: catError ? "#D9534F" : t.sub }}>หมวดหมู่ {catError && "— กรุณาเลือกก่อนบันทึก"}</div>
           <button onClick={() => setManageOpen(true)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11.5, color: t.accent, fontWeight: 700 }}>จัดการหมวดหมู่</button>
         </div>
-        <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 6, marginBottom: 14 }}>
-          {catList(categories, type).map((c) => { const Ic = ICONS[c.iconKey] || Wallet; const on = cat === c.id; return (
-            <button key={c.id} onClick={() => { setCat(c.id); setCatError(false); }} style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", background: "none", border: "none" }}>
-              <span style={{ width: 48, height: 48, borderRadius: 15, display: "grid", placeItems: "center", background: on ? c.color : `${c.color}20`, border: catError && !on ? `1.5px dashed ${t.faint}` : "none", transition: "all .15s" }}><Ic size={21} color={on ? "#fff" : c.color} /></span>
-              <span style={{ fontSize: 10, color: on ? t.text : t.sub, fontWeight: on ? 700 : 500 }}>{c.label}</span>
-            </button>
-          ); })}
+        <div style={{ position: "relative", marginBottom: 14 }}>
+          <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 6 }}>
+            {catList(categories, type).map((c) => { const Ic = ICONS[c.iconKey] || Wallet; const on = cat === c.id; return (
+              <button key={c.id} onClick={() => { setCat(c.id); setCatError(false); }} style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", background: "none", border: "none" }}>
+                <span style={{ width: 48, height: 48, borderRadius: 15, display: "grid", placeItems: "center", background: on ? c.color : `${c.color}20`, border: catError && !on ? `1.5px dashed ${t.faint}` : "none", transition: "all .15s" }}><Ic size={21} color={on ? "#fff" : c.color} /></span>
+                <span style={{ fontSize: 10, color: on ? t.text : t.sub, fontWeight: on ? 700 : 500 }}>{c.label}</span>
+              </button>
+            ); })}
+          </div>
+          <div style={{ position: "absolute", right: 0, top: 0, bottom: 6, width: 28, pointerEvents: "none", background: `linear-gradient(to right, transparent, ${t.bg})` }} />
         </div>
         <input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" placeholder="จำนวนเงิน (บาท)" style={{ ...input(t), marginBottom: 8, fontSize: 18, fontWeight: 700 }} />
         <div style={{ display: "flex", gap: 6, marginBottom: 10, alignItems: "center", flexWrap: "wrap" }}>
@@ -6135,11 +6150,14 @@ function NotePage({ t, notes, setNotes, isNight, userId, session, authProfile })
       </div>
 
       {allTags.length > 0 && (
-        <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6, marginTop: 14 }}>
-          <button onClick={() => setTagFilter(null)} style={{ flexShrink: 0, padding: "6px 12px", borderRadius: 14, cursor: "pointer", fontSize: 11.5, fontWeight: 700, border: `1.5px solid ${!tagFilter ? t.accent : t.border}`, background: !tagFilter ? t.accent : "transparent", color: !tagFilter ? t.onAccent : t.sub }}>ทั้งหมด</button>
-          {allTags.map((tag) => (
-            <button key={tag} onClick={() => setTagFilter(tag)} style={{ flexShrink: 0, padding: "6px 12px", borderRadius: 14, cursor: "pointer", fontSize: 11.5, fontWeight: 700, border: `1.5px solid ${tagFilter === tag ? t.accent : t.border}`, background: tagFilter === tag ? t.accent : "transparent", color: tagFilter === tag ? t.onAccent : t.sub }}>#{tag}</button>
-          ))}
+        <div style={{ position: "relative", marginTop: 14 }}>
+          <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6 }}>
+            <button onClick={() => setTagFilter(null)} style={{ flexShrink: 0, padding: "6px 12px", borderRadius: 14, cursor: "pointer", fontSize: 11.5, fontWeight: 700, border: `1.5px solid ${!tagFilter ? t.accent : t.border}`, background: !tagFilter ? t.accent : "transparent", color: !tagFilter ? t.onAccent : t.sub }}>ทั้งหมด</button>
+            {allTags.map((tag) => (
+              <button key={tag} onClick={() => setTagFilter(tag)} style={{ flexShrink: 0, padding: "6px 12px", borderRadius: 14, cursor: "pointer", fontSize: 11.5, fontWeight: 700, border: `1.5px solid ${tagFilter === tag ? t.accent : t.border}`, background: tagFilter === tag ? t.accent : "transparent", color: tagFilter === tag ? t.onAccent : t.sub }}>#{tag}</button>
+            ))}
+          </div>
+          <div style={{ position: "absolute", right: 0, top: 0, bottom: 6, width: 28, pointerEvents: "none", background: `linear-gradient(to right, transparent, ${t.bg})` }} />
         </div>
       )}
 
@@ -6492,6 +6510,7 @@ const NEWS_CATEGORIES = [
   { id: "life", label: "🌱 ไลฟ์สไตล์" },
   { id: "entertainment", label: "🎬 บันเทิง" },
   { id: "world", label: "🌏 ต่างประเทศ" },
+  { id: "saved", label: "⭐ บันทึกไว้" },
 ];
 
 function NewsPage({ t, userId, authProfile, setAuthProfile }) {
@@ -6499,11 +6518,30 @@ function NewsPage({ t, userId, authProfile, setAuthProfile }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [savedLinks, setSavedLinks] = useState(new Set());
 
-  const load = (cat) => {
+  const loadSavedLinks = () => {
+    if (!userId) return;
+    supabase.from("saved_news").select("link").eq("user_id", userId).then(({ data }) => {
+      setSavedLinks(new Set((data || []).map((x) => x.link)));
+    });
+  };
+
+  const loadSavedList = () => {
     setLoading(true);
     setError("");
-    fetch(`/api/content?type=news&category=${cat}`)
+    supabase.from("saved_news").select("*").eq("user_id", userId).order("created_at", { ascending: false }).then(({ data, error: e }) => {
+      if (e) setError("โหลดข่าวที่บันทึกไว้ไม่สำเร็จ");
+      setItems((data || []).map((x) => ({ ...x, time: "" })));
+      setLoading(false);
+    });
+  };
+
+  const load = (cat, force) => {
+    if (cat === "saved") { loadSavedList(); return; }
+    setLoading(true);
+    setError("");
+    fetch(`/api/content?type=news&category=${cat}${force ? "&force=1" : ""}`)
       .then((r) => r.json())
       .then((data) => {
         if (data.error) { setError(data.error); setItems([]); }
@@ -6513,45 +6551,95 @@ function NewsPage({ t, userId, authProfile, setAuthProfile }) {
       .finally(() => setLoading(false));
   };
 
+  useEffect(() => { loadSavedLinks(); }, [userId]);
   useEffect(() => { load(category); }, [category]);
 
   const selectCategory = async (cat) => {
     setCategory(cat);
-    // บันทึกหมวดที่เลือกไว้ต่อคน (ไม่ต้อง block UI รอผลลัพธ์)
+    if (cat === "saved") return; // ไม่ต้องบันทึกเป็นหมวดโปรดถาวร เพราะเป็นแค่ที่เก็บชั่วคราว
     if (userId) {
       supabase.from("profiles").update({ news_category: cat }).eq("id", userId).then(() => {});
       setAuthProfile?.((p) => ({ ...p, news_category: cat }));
     }
   };
 
+  const toggleSave = async (x) => {
+    if (!userId) return;
+    const isSaved = savedLinks.has(x.link);
+    if (isSaved) {
+      await supabase.from("saved_news").delete().eq("user_id", userId).eq("link", x.link);
+      setSavedLinks((s) => { const n = new Set(s); n.delete(x.link); return n; });
+      if (category === "saved") setItems((list) => list.filter((y) => y.link !== x.link));
+    } else {
+      await supabase.from("saved_news").insert({ user_id: userId, title: x.title, link: x.link, image: x.image, source: x.source, summary: x.summary });
+      setSavedLinks((s) => new Set(s).add(x.link));
+    }
+  };
+
+  const sendNewsToNote = async (x) => {
+    const body = [
+      { type: "heading", props: { level: 2 }, content: x.title },
+      { type: "paragraph", content: x.summary || "" },
+      { type: "paragraph", content: x.link },
+    ];
+    const newNote = { id: uid(), title: x.title, body, date: todayStr(), pinned: false, tags: ["ข่าว"] };
+    if (userId) {
+      await supabase.from("notes").insert({ id: newNote.id, user_id: userId, title: newNote.title, body: newNote.body, date: newNote.date, pinned: newNote.pinned, tags: newNote.tags });
+      logAudit(userId, "notes", "add", "ส่งข่าวเข้าโน้ต: " + x.title);
+    }
+  };
+
   return (<>
     <PageHead t={t} title="ข่าวสาร" sub="อัปเดตสถานการณ์โลก" icon={<Newspaper size={20} color={t.accent} />} />
-    <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, marginTop: 10, marginBottom: 4 }}>
-      {NEWS_CATEGORIES.map((c) => (
-        <button key={c.id} onClick={() => selectCategory(c.id)} style={{
-          flexShrink: 0, padding: "7px 14px", borderRadius: 999, fontSize: 12.5, fontWeight: 700, cursor: "pointer",
-          border: `1px solid ${category === c.id ? "transparent" : t.border}`,
-          background: category === c.id ? t.accent : t.inputBg,
-          color: category === c.id ? t.onAccent : t.text,
-        }}>{c.label}</button>
-      ))}
+    <style>{`@keyframes rh-news-spin { to { transform: rotate(360deg); } } .rh-news-spin { animation: rh-news-spin 0.8s linear infinite; }`}</style>
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, marginBottom: 4 }}>
+      <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+          {NEWS_CATEGORIES.map((c) => (
+            <button key={c.id} onClick={() => selectCategory(c.id)} style={{
+              flexShrink: 0, padding: "7px 14px", borderRadius: 999, fontSize: 12.5, fontWeight: 700, cursor: "pointer",
+              border: `1px solid ${category === c.id ? "transparent" : t.border}`,
+              background: category === c.id ? t.accent : t.inputBg,
+              color: category === c.id ? t.onAccent : t.text,
+            }}>{c.label}</button>
+          ))}
+        </div>
+        <div style={{ position: "absolute", right: 0, top: 0, bottom: 4, width: 28, pointerEvents: "none", background: `linear-gradient(to right, transparent, ${t.bg})` }} />
+      </div>
+      {category !== "saved" && (
+        <button onClick={() => load(category, true)} disabled={loading} style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 999, border: `1px solid ${t.border}`, background: t.inputBg, display: "grid", placeItems: "center", cursor: "pointer" }} title="รีเฟรชข่าวล่าสุด">
+          <RefreshCw size={15} color={t.text} className={loading ? "rh-news-spin" : ""} />
+        </button>
+      )}
     </div>
     <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8 }}>
-      {loading && <Empty t={t} text="กำลังโหลดข่าว..." />}
+      {loading && <Empty t={t} text="กำลังโหลด..." />}
       {!loading && error && <Empty t={t} text={`⚠️ ${error}`} />}
-      {!loading && !error && items.length === 0 && <Empty t={t} text="ยังไม่มีข่าวในหมวดนี้" />}
+      {!loading && !error && items.length === 0 && <Empty t={t} text={category === "saved" ? "ยังไม่มีข่าวที่บันทึกไว้" : "ยังไม่มีข่าวในหมวดนี้"} />}
       {!loading && !error && items.map((x, i) => (
-        <a key={i} href={x.link} target="_blank" rel="noopener noreferrer" style={{ ...card(t), padding: 14, display: "flex", gap: 12, textDecoration: "none" }}>
-          {x.image && <img src={x.image} alt="" style={{ width: 72, height: 72, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} />}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, gap: 8 }}>
-              <span style={{ fontSize: 10.5, fontWeight: 800, color: t.accent }}>{x.source}</span>
-              <span style={{ fontSize: 10.5, color: t.faint, flexShrink: 0 }}>{x.time}</span>
+        <div key={x.link || i} style={{ ...card(t), padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+          <div onClick={() => window.open(x.link, "_blank", "noopener,noreferrer")} style={{ display: "flex", gap: 12, cursor: "pointer" }}>
+            {x.image && <img src={x.image} alt="" style={{ width: 72, height: 72, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} />}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, gap: 8 }}>
+                <span style={{ fontSize: 10.5, fontWeight: 800, color: t.accent }}>{x.source}</span>
+                {x.time && <span style={{ fontSize: 10.5, color: t.faint, flexShrink: 0 }}>{x.time}</span>}
+              </div>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: t.text, lineHeight: 1.4, marginBottom: 4 }}>{x.title}</div>
+              {x.summary && <div style={{ fontSize: 11.5, color: t.sub, lineHeight: 1.4 }}>{x.summary}</div>}
             </div>
-            <div style={{ fontSize: 13.5, fontWeight: 700, color: t.text, lineHeight: 1.4, marginBottom: 4 }}>{x.title}</div>
-            {x.summary && <div style={{ fontSize: 11.5, color: t.sub, lineHeight: 1.4 }}>{x.summary}</div>}
           </div>
-        </a>
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", borderTop: `1px solid ${t.border}`, paddingTop: 8 }}>
+            <button onClick={() => toggleSave(x)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 8px" }}>
+              <Bookmark size={15} color={savedLinks.has(x.link) ? t.accent : t.faint} fill={savedLinks.has(x.link) ? t.accent : "none"} />
+              <span style={{ fontSize: 11, color: savedLinks.has(x.link) ? t.accent : t.faint, fontWeight: 700 }}>{savedLinks.has(x.link) ? "บันทึกแล้ว" : "บันทึก"}</span>
+            </button>
+            <button onClick={() => sendNewsToNote(x)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 8px" }}>
+              <StickyNote size={15} color={t.faint} />
+              <span style={{ fontSize: 11, color: t.faint, fontWeight: 700 }}>ส่งเข้าโน้ต</span>
+            </button>
+          </div>
+        </div>
       ))}
     </div>
   </>);
