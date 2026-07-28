@@ -12,10 +12,12 @@
 
 // แหล่ง RSS ต่อหมวด — Beartai (สายเทค/ธุรกิจ/เกม/ไลฟ์สไตล์) + Thairath (เสริมบันเทิง/ต่างประเทศ ที่ Beartai ไม่มี)
 const FEED_SOURCES = {
-  tech: { url: "https://www.beartai.com/read-category/tech/feed/", label: "Beartai" },
-  biz: { url: "https://www.beartai.com/read-category/biz/feed/", label: "Beartai" },
-  game: { url: "https://www.beartai.com/read-category/game/feed/", label: "Beartai" },
-  life: { url: "https://www.beartai.com/read-category/life/feed/", label: "Beartai" },
+  // Beartai บล็อก request จาก Vercel ด้วย Cloudflare (ยืนยันแล้วจากการทดสอบจริง) — เปลี่ยนมาใช้ Google News RSS
+  // แทน ซึ่งเปิดให้ระบบอื่นดึงได้โดยไม่บล็อก ค้นหาด้วยคำที่ตรงหมวด แทนการต่อ URL หมวดของสำนักข่าวเดียว
+  tech: { url: "https://news.google.com/rss/search?q=เทคโนโลยี+when:2d&hl=th&gl=TH&ceid=TH:th", label: "Google News", isGoogleNews: true },
+  biz: { url: "https://news.google.com/rss/search?q=เศรษฐกิจ+ธุรกิจ+when:2d&hl=th&gl=TH&ceid=TH:th", label: "Google News", isGoogleNews: true },
+  game: { url: "https://news.google.com/rss/search?q=เกม+when:2d&hl=th&gl=TH&ceid=TH:th", label: "Google News", isGoogleNews: true },
+  life: { url: "https://news.google.com/rss/search?q=ไลฟ์สไตล์+when:2d&hl=th&gl=TH&ceid=TH:th", label: "Google News", isGoogleNews: true },
   entertainment: { url: "https://www.thairath.co.th/rss/entertain", label: "Thairath" },
   // Thairath ไม่มีฟีดแยกเฉพาะหมวดต่างประเทศ — ใช้ฟีดรวมทุกหมวด (/rss/news) แล้วกรองเอาเฉพาะ
   // ข่าวที่ลิงก์มีคำว่า /news/foreign/ (ยืนยันจากโครงสร้างจริงของฟีดแล้วว่าใช้ path นี้บอกหมวด)
@@ -98,18 +100,29 @@ async function fetchNews(category) {
     candidates = candidates.filter((itemXml) => itemXml.includes(source.filterLinkContains));
   }
   const items = candidates.slice(0, 20).map((itemXml) => {
-    const title = decodeEntities(stripCdata(tagContent(itemXml, "title")));
+    let title = decodeEntities(stripCdata(tagContent(itemXml, "title")));
     const link = decodeEntities(stripCdata(tagContent(itemXml, "link")));
     const pubDate = stripCdata(tagContent(itemXml, "pubDate"));
     const rawDesc = decodeEntities(stripCdata(tagContent(itemXml, "description")));
     const summary = stripHtmlTags(rawDesc).slice(0, 160);
     const image = firstImageUrl(itemXml);
+
+    let sourceLabel = source.label;
+    if (source.isGoogleNews) {
+      // Google News RSS ตั้งชื่อ title เป็น "หัวข้อจริง - ชื่อสำนักข่าว" — แยกชื่อสำนักข่าวจริงออกมาแสดงแทน "Google News" เฉยๆ
+      const idx = title.lastIndexOf(" - ");
+      if (idx > 0) {
+        sourceLabel = title.slice(idx + 3).trim();
+        title = title.slice(0, idx).trim();
+      }
+    }
+
     return {
       title,
       link,
       summary,
       image,
-      source: source.label,
+      source: sourceLabel,
       time: timeAgo(pubDate),
       pubDate,
     };
