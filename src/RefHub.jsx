@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
-  Home, Lightbulb, TrendingUp, Plus, Newspaper, Languages, StickyNote,
+  Home, Lightbulb, TrendingUp, Plus, Newspaper, Languages, StickyNote, Eye,
   Sun, Moon, Send, Check, Trash2, X, Wallet, Target, BookOpen, ChevronRight,
   Sparkles, Clock, Search, Volume2, VolumeX, Pencil, Download, ArrowLeft, Users, Camera, Phone, Mic, MicOff, PhoneOff, RefreshCw,
   Utensils, Car, ShoppingBag, Receipt, Gamepad2, HeartPulse, Briefcase, Gift, Coffee, Music,
@@ -6519,6 +6519,41 @@ function NewsPage({ t, userId, authProfile, setAuthProfile }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [savedLinks, setSavedLinks] = useState(new Set());
+  const [stats, setStats] = useState({}); // { [link]: { views, likeCount, likedByMe } }
+
+  const loadStats = async (list) => {
+    const links = list.map((x) => x.link).filter(Boolean);
+    if (links.length === 0) return;
+    const [{ data: statsData }, { data: likesData }] = await Promise.all([
+      supabase.from("news_stats").select("link, views").in("link", links),
+      supabase.from("news_likes").select("link, user_id").in("link", links),
+    ]);
+    const next = {};
+    links.forEach((l) => {
+      const s = (statsData || []).find((x) => x.link === l);
+      const likesForLink = (likesData || []).filter((x) => x.link === l);
+      next[l] = { views: s?.views || 0, likeCount: likesForLink.length, likedByMe: likesForLink.some((x) => x.user_id === userId) };
+    });
+    setStats((prev) => ({ ...prev, ...next }));
+  };
+
+  const toggleLike = async (link) => {
+    if (!userId) return;
+    const cur = stats[link] || { views: 0, likeCount: 0, likedByMe: false };
+    if (cur.likedByMe) {
+      await supabase.from("news_likes").delete().eq("link", link).eq("user_id", userId);
+      setStats((s) => ({ ...s, [link]: { ...cur, likeCount: Math.max(0, cur.likeCount - 1), likedByMe: false } }));
+    } else {
+      await supabase.from("news_likes").insert({ link, user_id: userId });
+      setStats((s) => ({ ...s, [link]: { ...cur, likeCount: cur.likeCount + 1, likedByMe: true } }));
+    }
+  };
+
+  const openNews = (x) => {
+    window.open(x.link, "_blank", "noopener,noreferrer");
+    supabase.rpc("increment_news_view", { p_link: x.link }).then(() => {});
+    setStats((s) => ({ ...s, [x.link]: { ...(s[x.link] || { likeCount: 0, likedByMe: false }), views: (s[x.link]?.views || 0) + 1 } }));
+  };
 
   const loadSavedLinks = () => {
     if (!userId) return;
@@ -6532,8 +6567,10 @@ function NewsPage({ t, userId, authProfile, setAuthProfile }) {
     setError("");
     supabase.from("saved_news").select("*").eq("user_id", userId).order("created_at", { ascending: false }).then(({ data, error: e }) => {
       if (e) setError("โหลดข่าวที่บันทึกไว้ไม่สำเร็จ");
-      setItems((data || []).map((x) => ({ ...x, time: "" })));
+      const list = (data || []).map((x) => ({ ...x, time: "" }));
+      setItems(list);
       setLoading(false);
+      loadStats(list);
     });
   };
 
@@ -6545,7 +6582,7 @@ function NewsPage({ t, userId, authProfile, setAuthProfile }) {
       .then((r) => r.json())
       .then((data) => {
         if (data.error) { setError(data.error); setItems([]); }
-        else setItems(data.items || []);
+        else { const list = data.items || []; setItems(list); loadStats(list); }
       })
       .catch(() => setError("โหลดข่าวไม่สำเร็จ ลองใหม่อีกครั้ง"))
       .finally(() => setLoading(false));
@@ -6640,9 +6677,11 @@ function NewsPage({ t, userId, authProfile, setAuthProfile }) {
       {loading && <Empty t={t} text="กำลังโหลด..." />}
       {!loading && error && <Empty t={t} text={`⚠️ ${error}`} />}
       {!loading && !error && items.length === 0 && <Empty t={t} text={category === "saved" ? "ยังไม่มีข่าวที่บันทึกไว้" : "ยังไม่มีข่าวในหมวดนี้"} />}
-      {!loading && !error && items.map((x, i) => (
+      {!loading && !error && items.map((x, i) => {
+        const st = stats[x.link] || { views: 0, likeCount: 0, likedByMe: false };
+        return (
         <div key={x.link || i} style={{ ...card(t), padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
-          <div onClick={() => window.open(x.link, "_blank", "noopener,noreferrer")} style={{ display: "flex", gap: 12, cursor: "pointer" }}>
+          <div onClick={() => openNews(x)} style={{ display: "flex", gap: 12, cursor: "pointer" }}>
             {x.image && <img src={x.image} alt="" style={{ width: 72, height: 72, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} />}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, gap: 8 }}>
@@ -6653,7 +6692,15 @@ function NewsPage({ t, userId, authProfile, setAuthProfile }) {
               {x.summary && <div style={{ fontSize: 11.5, color: t.sub, lineHeight: 1.4 }}>{x.summary}</div>}
             </div>
           </div>
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", borderTop: `1px solid ${t.border}`, paddingTop: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end", borderTop: `1px solid ${t.border}`, paddingTop: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 4, marginRight: "auto", color: t.faint }}>
+              <Eye size={13} color={t.faint} />
+              <span style={{ fontSize: 11 }}>{st.views}</span>
+            </div>
+            <button onClick={() => toggleLike(x.link)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 8px" }}>
+              <Heart size={15} color={st.likedByMe ? "#E0245E" : t.faint} fill={st.likedByMe ? "#E0245E" : "none"} />
+              <span style={{ fontSize: 11, color: st.likedByMe ? "#E0245E" : t.faint, fontWeight: 700 }}>{st.likeCount > 0 ? st.likeCount : "ไลค์"}</span>
+            </button>
             <button onClick={() => toggleSave(x)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 8px" }}>
               <Bookmark size={15} color={savedLinks.has(x.link) ? t.accent : t.faint} fill={savedLinks.has(x.link) ? t.accent : "none"} />
               <span style={{ fontSize: 11, color: savedLinks.has(x.link) ? t.accent : t.faint, fontWeight: 700 }}>{savedLinks.has(x.link) ? "บันทึกแล้ว" : "บันทึก"}</span>
@@ -6664,7 +6711,7 @@ function NewsPage({ t, userId, authProfile, setAuthProfile }) {
             </button>
           </div>
         </div>
-      ))}
+        ); })}
     </div>
   </>);
 }
