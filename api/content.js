@@ -11,17 +11,32 @@
 // type=vocab  -> (ยังไม่ทำ — เผื่อไว้สำหรับ LangPage)
 
 // แหล่ง RSS ต่อหมวด — Beartai (สายเทค/ธุรกิจ/เกม/ไลฟ์สไตล์) + Thairath (เสริมบันเทิง/ต่างประเทศ ที่ Beartai ไม่มี)
+// แต่ละหมวดมี "แหล่งข่าว" ได้มากกว่า 1 แหล่ง — ผลลัพธ์จะถูกรวมกันแล้วเรียงตามเวลาล่าสุด
+// ถ้าแหล่งไหน fetch ไม่สำเร็จ (URL ผิด/โดนบล็อก) จะข้ามเงียบๆ ไม่ทำให้ทั้งหมวดพัง ตราบใดที่ยังมีอย่างน้อย 1 แหล่งที่ใช้ได้
 const FEED_SOURCES = {
-  // Beartai บล็อก request จาก Vercel ด้วย Cloudflare (ยืนยันแล้วจากการทดสอบจริง) — เปลี่ยนมาใช้ Google News RSS
-  // แทน ซึ่งเปิดให้ระบบอื่นดึงได้โดยไม่บล็อก ค้นหาด้วยคำที่ตรงหมวด แทนการต่อ URL หมวดของสำนักข่าวเดียว
-  tech: { url: "https://news.google.com/rss/search?q=เทคโนโลยี+when:2d&hl=th&gl=TH&ceid=TH:th", label: "Google News", isGoogleNews: true },
-  biz: { url: "https://news.google.com/rss/search?q=เศรษฐกิจ+ธุรกิจ+when:2d&hl=th&gl=TH&ceid=TH:th", label: "Google News", isGoogleNews: true },
-  game: { url: "https://news.google.com/rss/search?q=เกม+when:2d&hl=th&gl=TH&ceid=TH:th", label: "Google News", isGoogleNews: true },
-  life: { url: "https://news.google.com/rss/search?q=ไลฟ์สไตล์+when:2d&hl=th&gl=TH&ceid=TH:th", label: "Google News", isGoogleNews: true },
-  entertainment: { url: "https://www.thairath.co.th/rss/entertain", label: "Thairath" },
+  tech: [
+    { url: "https://www.thairath.co.th/rss/it", label: "Thairath" },
+    { url: "https://news.google.com/rss/search?q=เทคโนโลยี+when:2d&hl=th&gl=TH&ceid=TH:th", label: "Google News", isGoogleNews: true },
+  ],
+  biz: [
+    { url: "https://www.thairath.co.th/rss/economy", label: "Thairath" },
+    { url: "https://news.google.com/rss/search?q=เศรษฐกิจ+ธุรกิจ+when:2d&hl=th&gl=TH&ceid=TH:th", label: "Google News", isGoogleNews: true },
+  ],
+  game: [
+    { url: "https://news.google.com/rss/search?q=เกม+when:2d&hl=th&gl=TH&ceid=TH:th", label: "Google News", isGoogleNews: true },
+  ],
+  life: [
+    { url: "https://www.thairath.co.th/rss/lifestyle", label: "Thairath" },
+    { url: "https://news.google.com/rss/search?q=ไลฟ์สไตล์+when:2d&hl=th&gl=TH&ceid=TH:th", label: "Google News", isGoogleNews: true },
+  ],
+  entertainment: [
+    { url: "https://www.thairath.co.th/rss/entertain", label: "Thairath" },
+  ],
   // Thairath ไม่มีฟีดแยกเฉพาะหมวดต่างประเทศ — ใช้ฟีดรวมทุกหมวด (/rss/news) แล้วกรองเอาเฉพาะ
   // ข่าวที่ลิงก์มีคำว่า /news/foreign/ (ยืนยันจากโครงสร้างจริงของฟีดแล้วว่าใช้ path นี้บอกหมวด)
-  world: { url: "https://www.thairath.co.th/rss/news", label: "Thairath", filterLinkContains: "/news/foreign/" },
+  world: [
+    { url: "https://www.thairath.co.th/rss/news", label: "Thairath", filterLinkContains: "/news/foreign/" },
+  ],
 };
 
 // cache ในหน่วยความจำของ serverless instance — ลดจำนวนครั้งที่ยิง RSS จริง (10 นาที)
@@ -70,13 +85,7 @@ function timeAgo(dateStr) {
   return `${days} วันที่แล้ว`;
 }
 
-async function fetchNews(category) {
-  const source = FEED_SOURCES[category];
-  if (!source) throw new Error("หมวดหมู่ไม่ถูกต้อง");
-
-  const cached = cache[category];
-  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) return cached.data;
-
+async function fetchOneSource(source) {
   const r = await fetch(source.url, {
     headers: {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -99,7 +108,7 @@ async function fetchNews(category) {
   if (source.filterLinkContains) {
     candidates = candidates.filter((itemXml) => itemXml.includes(source.filterLinkContains));
   }
-  const items = candidates.slice(0, 20).map((itemXml) => {
+  return candidates.slice(0, 20).map((itemXml) => {
     let title = decodeEntities(stripCdata(tagContent(itemXml, "title")));
     const link = decodeEntities(stripCdata(tagContent(itemXml, "link")));
     const pubDate = stripCdata(tagContent(itemXml, "pubDate"));
@@ -117,30 +126,47 @@ async function fetchNews(category) {
       }
     }
 
-    return {
-      title,
-      link,
-      summary,
-      image,
-      source: sourceLabel,
-      time: timeAgo(pubDate),
-      pubDate,
-    };
+    return { title, link, summary, image, source: sourceLabel, time: timeAgo(pubDate), pubDate };
   });
+}
+
+async function fetchNews(category, force) {
+  const sources = FEED_SOURCES[category];
+  if (!sources) throw new Error("หมวดหมู่ไม่ถูกต้อง");
+
+  const cached = cache[category];
+  if (!force && cached && Date.now() - cached.ts < CACHE_TTL_MS) return cached.data;
+
+  const results = await Promise.allSettled(sources.map(fetchOneSource));
+  const merged = [];
+  const failures = [];
+  results.forEach((r, i) => {
+    if (r.status === "fulfilled") merged.push(...r.value);
+    else failures.push(`${sources[i].label}: ${r.reason.message}`);
+  });
+
+  // ถ้าทุกแหล่งพังหมด ถึงจะ error ให้เห็น — ถ้ามีอย่างน้อย 1 แหล่งสำเร็จ ใช้ของที่ได้ต่อไปเงียบๆ
+  if (merged.length === 0 && failures.length > 0) {
+    throw new Error(failures.join(" | "));
+  }
+
+  // เรียงข่าวล่าสุดขึ้นก่อน แล้วตัดเหลือ 20 ข่าว (กันไม่ให้ยาวเกินไปตอนรวมหลายแหล่ง)
+  merged.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
+  const items = merged.slice(0, 20);
 
   cache[category] = { data: items, ts: Date.now() };
   return items;
 }
 
 export default async function handler(req, res) {
-  const { type, category } = req.query || {};
+  const { type, category, force } = req.query || {};
 
   try {
     if (type === "news") {
       if (!category || !FEED_SOURCES[category]) {
         return res.status(400).json({ error: "ระบุ category ไม่ถูกต้อง (tech/biz/game/life/entertainment/world)" });
       }
-      const items = await fetchNews(category);
+      const items = await fetchNews(category, force === "1" || force === "true");
       return res.status(200).json({ items });
     }
 
