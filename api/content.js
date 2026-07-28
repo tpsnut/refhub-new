@@ -75,11 +75,22 @@ async function fetchNews(category) {
   const cached = cache[category];
   if (cached && Date.now() - cached.ts < CACHE_TTL_MS) return cached.data;
 
-  const r = await fetch(source.url, { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" } });
+  const r = await fetch(source.url, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      "Accept": "application/rss+xml, application/xml, text/xml, */*",
+      "Accept-Language": "th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7",
+      "Referer": "https://www.google.com/",
+    },
+  });
   if (!r.ok) throw new Error(`ดึง RSS ไม่สำเร็จ (${r.status}) จาก ${source.label}`);
   const xml = await r.text();
 
-  // ถ้าเป็นฟีดรวมที่ต้องกรองเฉพาะหมวด (เช่น world) ดึงมาเยอะกว่าปกติก่อนกรอง เพราะข่าวหมวดที่ต้องการเป็นแค่ส่วนหนึ่งของฟีดรวม
+  // เช็คว่าสิ่งที่ได้กลับมาเป็น RSS จริงไหม — ถ้าไม่ใช่ มักเป็นเพราะโดน Cloudflare หรือระบบป้องกันบอทของปลายทางเสิร์ฟหน้า challenge กลับมาแทน (ตอบ 200 OK ปกติ แต่เนื้อหาไม่ใช่ XML)
+  if (!/<rss|<feed/i.test(xml)) {
+    throw new Error(`${source.label} อาจบล็อกการเข้าถึงจากเซิร์ฟเวอร์ (ไม่ใช่ RSS จริงที่ได้กลับมา)`);
+  }
+
   const rawLimit = source.filterLinkContains ? 60 : 20;
   const itemMatches = xml.match(/<item>[\s\S]*?<\/item>/g) || [];
   let candidates = itemMatches.slice(0, rawLimit);
