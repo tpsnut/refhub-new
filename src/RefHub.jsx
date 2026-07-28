@@ -6606,14 +6606,21 @@ function NewsPage({ t, userId, authProfile, setAuthProfile }) {
     else if (dx > 0 && idx > 0) selectCategory(NEWS_CATEGORIES[idx - 1].id); // ปัดขวา -> หมวดก่อนหน้า
   };
 
+  // เลื่อนเมนูหมวดหมู่ด้านบนให้ตามหมวดที่เลือกอยู่เสมอ (ไม่ว่าจะกดปุ่มหรือปัดจอเปลี่ยน)
+  const catScrollRef = useRef(null);
+  useEffect(() => {
+    const el = catScrollRef.current?.querySelector(`[data-cat="${category}"]`);
+    el?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+  }, [category]);
+
   return (<>
     <PageHead t={t} title="ข่าวสาร" sub="อัปเดตสถานการณ์โลก" icon={<Newspaper size={20} color={t.accent} />} />
     <style>{`@keyframes rh-news-spin { to { transform: rotate(360deg); } } .rh-news-spin { animation: rh-news-spin 0.8s linear infinite; }`}</style>
     <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, marginBottom: 4 }}>
       <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+        <div ref={catScrollRef} style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
           {NEWS_CATEGORIES.map((c) => (
-            <button key={c.id} onClick={() => selectCategory(c.id)} style={{
+            <button key={c.id} data-cat={c.id} onClick={() => selectCategory(c.id)} style={{
               flexShrink: 0, padding: "7px 14px", borderRadius: 999, fontSize: 12.5, fontWeight: 700, cursor: "pointer",
               border: `1px solid ${category === c.id ? "transparent" : t.border}`,
               background: category === c.id ? t.accent : t.inputBg,
