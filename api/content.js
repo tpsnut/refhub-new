@@ -15,7 +15,6 @@
 // ถ้าแหล่งไหน fetch ไม่สำเร็จ (URL ผิด/โดนบล็อก) จะข้ามเงียบๆ ไม่ทำให้ทั้งหมวดพัง ตราบใดที่ยังมีอย่างน้อย 1 แหล่งที่ใช้ได้
 const FEED_SOURCES = {
   tech: [
-    { url: "https://www.thairath.co.th/rss/it", label: "Thairath" },
     { url: "https://news.google.com/rss/search?q=เทคโนโลยี+when:2d&hl=th&gl=TH&ceid=TH:th", label: "Google News", isGoogleNews: true },
   ],
   biz: [
