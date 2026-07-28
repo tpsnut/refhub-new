@@ -6589,6 +6589,23 @@ function NewsPage({ t, userId, authProfile, setAuthProfile }) {
     }
   };
 
+  // ปัดซ้าย/ขวาบนพื้นที่ข่าว เปลี่ยนหมวดหมู่ถัดไป/ก่อนหน้า (ต้องปัดแนวนอนชัดเจน กันชนกับการเลื่อนดูข่าวขึ้นลง)
+  const touchStartRef = useRef(null);
+  const handleTouchStart = (e) => {
+    touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  };
+  const handleTouchEnd = (e) => {
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+    if (!start) return;
+    const dx = e.changedTouches[0].clientX - start.x;
+    const dy = e.changedTouches[0].clientY - start.y;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.3) return; // ต้องปัดแนวนอนเด่นชัด ไม่ใช่แค่เลื่อนขึ้นลง
+    const idx = NEWS_CATEGORIES.findIndex((c) => c.id === category);
+    if (dx < 0 && idx < NEWS_CATEGORIES.length - 1) selectCategory(NEWS_CATEGORIES[idx + 1].id); // ปัดซ้าย -> หมวดถัดไป
+    else if (dx > 0 && idx > 0) selectCategory(NEWS_CATEGORIES[idx - 1].id); // ปัดขวา -> หมวดก่อนหน้า
+  };
+
   return (<>
     <PageHead t={t} title="ข่าวสาร" sub="อัปเดตสถานการณ์โลก" icon={<Newspaper size={20} color={t.accent} />} />
     <style>{`@keyframes rh-news-spin { to { transform: rotate(360deg); } } .rh-news-spin { animation: rh-news-spin 0.8s linear infinite; }`}</style>
@@ -6612,7 +6629,7 @@ function NewsPage({ t, userId, authProfile, setAuthProfile }) {
         </button>
       )}
     </div>
-    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8 }}>
+    <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8 }}>
       {loading && <Empty t={t} text="กำลังโหลด..." />}
       {!loading && error && <Empty t={t} text={`⚠️ ${error}`} />}
       {!loading && !error && items.length === 0 && <Empty t={t} text={category === "saved" ? "ยังไม่มีข่าวที่บันทึกไว้" : "ยังไม่มีข่าวในหมวดนี้"} />}
