@@ -1350,7 +1350,7 @@ export default function RefHub() {
           {page === "note" && <NotePage {...{ t, notes, setNotes, isNight, userId, session, authProfile }} />}
           {page === "ideas" && <IdeasPage t={t} M={M} userId={userId} session={session} authProfile={authProfile} setAuthProfile={setAuthProfile} setNotes={setNotes} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} />}
           {page === "trade" && <TradePage t={t} />}
-          {page === "news" && <NewsPage t={t} />}
+          {page === "news" && <NewsPage t={t} userId={userId} authProfile={authProfile} setAuthProfile={setAuthProfile} />}
           {page === "lang" && <LangPage t={t} />}
           {page === "goalsReport" && <GoalsReportPage t={t} goals={goals} setGoals={setGoals} userId={userId} />}
           {page === "admin" && <AdminPage t={t} session={session} userId={userId} adminAlerts={adminAlerts} setAdminAlerts={setAdminAlerts} authProfile={authProfile} setAuthProfile={setAuthProfile} />}
@@ -2916,50 +2916,6 @@ function FinancePage({ t, tx, setTx, categories, openAdd, openExport, userId }) 
   );
 }
 
-// 🎭 แอดมินจัดการชุด Reaction เอง (เพิ่ม/ลบ/แก้ emoji ได้ทั้งหมด)
-function ReactionManagerCard({ t }) {
-  const [types, setTypes] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [newEmoji, setNewEmoji] = useState("");
-  const [newLabel, setNewLabel] = useState("");
-
-  const load = () => { supabase.from("reaction_types").select("*").order("sort_order", { ascending: true }).then(({ data }) => { setTypes(data || []); setLoading(false); }); };
-  useEffect(() => { load(); }, []);
-
-  const addType = async () => {
-    if (!newEmoji.trim() || !newLabel.trim()) return;
-    const id = newLabel.trim().toLowerCase().replace(/[^a-z0-9ก-๙]/g, "") + "_" + uid();
-    const { error } = await supabase.from("reaction_types").insert({ id, emoji: newEmoji.trim(), label: newLabel.trim(), sort_order: types.length + 1 });
-    if (error) { alert("เพิ่มไม่สำเร็จ: " + error.message); return; }
-    setNewEmoji(""); setNewLabel(""); load();
-  };
-  const removeType = async (id) => { await supabase.from("reaction_types").delete().eq("id", id); load(); };
-
-  return (
-    <div style={{ ...card(t), padding: 16 }}>
-      <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text, marginBottom: 4 }}>🎭 จัดการชุด Reaction (Passport)</div>
-      <div style={{ fontSize: 11, color: t.sub, marginBottom: 12 }}>ปรับชุด reaction ที่ทุกคนใช้กดในหน้า Passport ได้เอง เพิ่ม/ลบได้ตามใจ</div>
-      {loading ? <Empty t={t} text="กำลังโหลด..." /> : (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-          {types.map((r) => (
-            <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 6, background: t.inputBg, border: `1px solid ${t.border}`, borderRadius: 10, padding: "6px 10px" }}>
-              <span style={{ fontSize: 16 }}>{r.emoji}</span>
-              <span style={{ fontSize: 11.5, color: t.text, fontWeight: 700 }}>{r.label}</span>
-              <button onClick={() => removeType(r.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "grid" }}><X size={12} color={t.faint} /></button>
-            </div>
-          ))}
-          {types.length === 0 && <div style={{ fontSize: 11.5, color: t.faint }}>ยังไม่มี reaction เลย เพิ่มอันแรกด้านล่าง</div>}
-        </div>
-      )}
-      <div style={{ display: "flex", gap: 8 }}>
-        <input value={newEmoji} onChange={(e) => setNewEmoji(e.target.value)} placeholder="😍" style={{ ...input(t), width: 60, textAlign: "center", fontSize: 16, padding: "8px 4px" }} maxLength={4} />
-        <input value={newLabel} onChange={(e) => setNewLabel(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addType()} placeholder="ชื่อ เช่น ว้าว" style={{ ...input(t), flex: 1 }} />
-        <button onClick={addType} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), padding: "0 16px" }}>เพิ่ม</button>
-      </div>
-    </div>
-  );
-}
-
 // 📊 หน้ากิจกรรมของแอดมิน — เห็นแค่สรุป (ไม่มียอดเงิน/เนื้อหาโน้ต/ข้อความแชท) + ข้อเสนอแนะจากผู้ใช้
 function AdminActivityPanel({ t, members }) {
   const [logs, setLogs] = useState([]);
@@ -3151,7 +3107,6 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts, authProfil
               </div>
             </div>
           </div>
-          <ReactionManagerCard t={t} />
           <div style={{ display: "flex", gap: 10 }}>
             <div style={{ ...card(t), flex: 1, padding: 16, textAlign: "center" }}>
               <div style={{ fontSize: 22, fontWeight: 800, color: t.text }}>{members.length}</div>
@@ -6530,16 +6485,74 @@ function TradePage({ t }) {
     </div>
   </>);
 }
-function NewsPage({ t }) {
-  const news = [{ s: "Tech", h: "Microsoft ปล่อยฟีเจอร์ AI ใหม่ใน Power Automate", tm: "2 ชม.ที่แล้ว" }, { s: "World", h: "ตลาดหุ้นเอเชียปรับตัวขึ้นรับข่าวเศรษฐกิจ", tm: "4 ชม.ที่แล้ว" }, { s: "AI", h: "โมเดล AI ใหม่ทำงาน coding แม่นขึ้น 30%", tm: "6 ชม.ที่แล้ว" }, { s: "Thailand", h: "อุตสาหกรรมยานยนต์ไทยเร่งลงทุนระบบอัตโนมัติ", tm: "8 ชม.ที่แล้ว" }];
+const NEWS_CATEGORIES = [
+  { id: "tech", label: "💻 เทคโนโลยี" },
+  { id: "biz", label: "💼 ธุรกิจ" },
+  { id: "game", label: "🎮 เกม" },
+  { id: "life", label: "🌱 ไลฟ์สไตล์" },
+  { id: "entertainment", label: "🎬 บันเทิง" },
+  { id: "world", label: "🌏 ต่างประเทศ" },
+];
+
+function NewsPage({ t, userId, authProfile, setAuthProfile }) {
+  const [category, setCategory] = useState(authProfile?.news_category || "tech");
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const load = (cat) => {
+    setLoading(true);
+    setError("");
+    fetch(`/api/content?type=news&category=${cat}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.error) { setError(data.error); setItems([]); }
+        else setItems(data.items || []);
+      })
+      .catch(() => setError("โหลดข่าวไม่สำเร็จ ลองใหม่อีกครั้ง"))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(category); }, [category]);
+
+  const selectCategory = async (cat) => {
+    setCategory(cat);
+    // บันทึกหมวดที่เลือกไว้ต่อคน (ไม่ต้อง block UI รอผลลัพธ์)
+    if (userId) {
+      supabase.from("profiles").update({ news_category: cat }).eq("id", userId).then(() => {});
+      setAuthProfile?.((p) => ({ ...p, news_category: cat }));
+    }
+  };
+
   return (<>
     <PageHead t={t} title="ข่าวสาร" sub="อัปเดตสถานการณ์โลก" icon={<Newspaper size={20} color={t.accent} />} />
-    <MockBanner t={t} text="ตัวอย่าง — ต่อ News API จริงภายหลัง" />
-    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
-      {news.map((x, i) => (<div key={i} style={{ ...card(t), padding: 14 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}><span style={{ fontSize: 10.5, fontWeight: 800, color: t.accent }}>{x.s}</span><span style={{ fontSize: 10.5, color: t.faint }}>{x.tm}</span></div>
-        <div style={{ fontSize: 14, fontWeight: 600, color: t.text, lineHeight: 1.4 }}>{x.h}</div>
-      </div>))}
+    <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, marginTop: 10, marginBottom: 4 }}>
+      {NEWS_CATEGORIES.map((c) => (
+        <button key={c.id} onClick={() => selectCategory(c.id)} style={{
+          flexShrink: 0, padding: "7px 14px", borderRadius: 999, fontSize: 12.5, fontWeight: 700, cursor: "pointer",
+          border: `1px solid ${category === c.id ? "transparent" : t.border}`,
+          background: category === c.id ? t.accent : t.inputBg,
+          color: category === c.id ? t.onAccent : t.text,
+        }}>{c.label}</button>
+      ))}
+    </div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8 }}>
+      {loading && <Empty t={t} text="กำลังโหลดข่าว..." />}
+      {!loading && error && <Empty t={t} text={`⚠️ ${error}`} />}
+      {!loading && !error && items.length === 0 && <Empty t={t} text="ยังไม่มีข่าวในหมวดนี้" />}
+      {!loading && !error && items.map((x, i) => (
+        <a key={i} href={x.link} target="_blank" rel="noopener noreferrer" style={{ ...card(t), padding: 14, display: "flex", gap: 12, textDecoration: "none" }}>
+          {x.image && <img src={x.image} alt="" style={{ width: 72, height: 72, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} />}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, gap: 8 }}>
+              <span style={{ fontSize: 10.5, fontWeight: 800, color: t.accent }}>{x.source}</span>
+              <span style={{ fontSize: 10.5, color: t.faint, flexShrink: 0 }}>{x.time}</span>
+            </div>
+            <div style={{ fontSize: 13.5, fontWeight: 700, color: t.text, lineHeight: 1.4, marginBottom: 4 }}>{x.title}</div>
+            {x.summary && <div style={{ fontSize: 11.5, color: t.sub, lineHeight: 1.4 }}>{x.summary}</div>}
+          </div>
+        </a>
+      ))}
     </div>
   </>);
 }

@@ -1,0 +1,127 @@
+// 📰 RefHub — ดึงเนื้อหาจากภายนอก (ข่าว / หุ้น / คำศัพท์ ในอนาคต) รวมไว้ในไฟล์เดียว
+// ไฟล์นี้วางไว้ที่ /api/content.js ที่ root ของโปรเจกต์ (ข้างๆ src/)
+// ⚠️ แทนที่ api/pin-lookup.js ที่เป็นไฟล์ตาย (ไม่มีจุดไหนเรียกใช้แล้ว ถูก /api/link-pin แทนที่ไปนานแล้ว)
+//    ต้องลบ api/pin-lookup.js ออกจาก repo ด้วย ไม่งั้นจะเกิน 12 ไฟล์ของ Vercel Hobby plan อีกครั้ง
+//
+// ออกแบบให้รองรับหลาย "type" ในไฟล์เดียว กันไม่ให้ชนโควต้า 12 ไฟล์ตอนทำ TradePage/LangPage ในอนาคต
+// วิธีเรียก: GET /api/content?type=news&category=tech
+//
+// type=news   -> ดึง RSS ตามหมวด แปลงเป็น JSON (ใช้งานตอนนี้)
+// type=stocks -> (ยังไม่ทำ — เผื่อไว้สำหรับ TradePage)
+// type=vocab  -> (ยังไม่ทำ — เผื่อไว้สำหรับ LangPage)
+
+// แหล่ง RSS ต่อหมวด — Beartai (สายเทค/ธุรกิจ/เกม/ไลฟ์สไตล์) + Thairath (เสริมบันเทิง/ต่างประเทศ ที่ Beartai ไม่มี)
+const FEED_SOURCES = {
+  tech: { url: "https://www.beartai.com/read-category/tech/feed/", label: "Beartai" },
+  biz: { url: "https://www.beartai.com/read-category/biz/feed/", label: "Beartai" },
+  game: { url: "https://www.beartai.com/read-category/game/feed/", label: "Beartai" },
+  life: { url: "https://www.beartai.com/read-category/life/feed/", label: "Beartai" },
+  entertainment: { url: "https://www.thairath.co.th/rss/entertain", label: "Thairath" },
+  world: { url: "https://www.thairath.co.th/rss/foreign", label: "Thairath" },
+};
+
+// cache ในหน่วยความจำของ serverless instance — ลดจำนวนครั้งที่ยิง RSS จริง (10 นาที)
+// หมายเหตุ: cache นี้อยู่ได้แค่ตราบใดที่ instance เดิมยังไม่ถูก Vercel recycle ไม่ใช่ cache แบบถาวร แต่ช่วยลดโหลดได้จริงในทางปฏิบัติ
+const cache = {}; // { [category]: { data, ts } }
+const CACHE_TTL_MS = 10 * 60 * 1000;
+
+function stripCdata(s) {
+  return (s || "").replace(/<!\[CDATA\[/g, "").replace(/\]\]>/g, "").trim();
+}
+function decodeEntities(s) {
+  return (s || "")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#0*39;/g, "'");
+}
+function stripHtmlTags(s) {
+  return (s || "").replace(/<[^>]*>/g, "").trim();
+}
+function tagContent(xml, tag) {
+  const m = xml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i"));
+  return m ? m[1] : "";
+}
+function firstImageUrl(itemXml) {
+  // ลองหลายรูปแบบที่ RSS มักใช้แนบรูป: media:content, enclosure, หรือ <img> ในตัว description
+  let m = itemXml.match(/<media:content[^>]*url=["']([^"']+)["']/i);
+  if (m) return m[1];
+  m = itemXml.match(/<enclosure[^>]*url=["']([^"']+)["'][^>]*type=["']image/i);
+  if (m) return m[1];
+  m = itemXml.match(/<img[^>]*src=["']([^"']+)["']/i);
+  if (m) return m[1];
+  return null;
+}
+function timeAgo(dateStr) {
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "";
+  const diffMs = Date.now() - d.getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return "เมื่อสักครู่";
+  if (mins < 60) return `${mins} นาทีที่แล้ว`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} ชม.ที่แล้ว`;
+  const days = Math.floor(hrs / 24);
+  return `${days} วันที่แล้ว`;
+}
+
+async function fetchNews(category) {
+  const source = FEED_SOURCES[category];
+  if (!source) throw new Error("หมวดหมู่ไม่ถูกต้อง");
+
+  const cached = cache[category];
+  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) return cached.data;
+
+  const r = await fetch(source.url, { headers: { "User-Agent": "Mozilla/5.0 (RefHub NewsBot)" } });
+  if (!r.ok) throw new Error(`ดึง RSS ไม่สำเร็จ (${r.status}) จาก ${source.label}`);
+  const xml = await r.text();
+
+  const itemMatches = xml.match(/<item>[\s\S]*?<\/item>/g) || [];
+  const items = itemMatches.slice(0, 20).map((itemXml) => {
+    const title = decodeEntities(stripCdata(tagContent(itemXml, "title")));
+    const link = decodeEntities(stripCdata(tagContent(itemXml, "link")));
+    const pubDate = stripCdata(tagContent(itemXml, "pubDate"));
+    const rawDesc = decodeEntities(stripCdata(tagContent(itemXml, "description")));
+    const summary = stripHtmlTags(rawDesc).slice(0, 160);
+    const image = firstImageUrl(itemXml);
+    return {
+      title,
+      link,
+      summary,
+      image,
+      source: source.label,
+      time: timeAgo(pubDate),
+      pubDate,
+    };
+  });
+
+  cache[category] = { data: items, ts: Date.now() };
+  return items;
+}
+
+export default async function handler(req, res) {
+  const { type, category } = req.query || {};
+
+  try {
+    if (type === "news") {
+      if (!category || !FEED_SOURCES[category]) {
+        return res.status(400).json({ error: "ระบุ category ไม่ถูกต้อง (tech/biz/game/life/entertainment/world)" });
+      }
+      const items = await fetchNews(category);
+      return res.status(200).json({ items });
+    }
+
+    // เผื่อไว้สำหรับอนาคต — TradePage / LangPage จะมาเพิ่ม branch ตรงนี้
+    if (type === "stocks") {
+      return res.status(501).json({ error: "ยังไม่ได้ทำส่วนหุ้น" });
+    }
+    if (type === "vocab") {
+      return res.status(501).json({ error: "ยังไม่ได้ทำส่วนคำศัพท์" });
+    }
+
+    return res.status(400).json({ error: "ระบุ type ไม่ถูกต้อง (news/stocks/vocab)" });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+}
