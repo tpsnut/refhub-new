@@ -1328,6 +1328,7 @@ export default function RefHub() {
     if (!cur || cur.kind !== "yt") return;
     const startYt = () => {
       if (!window.YT || !window.YT.Player) { setTimeout(startYt, 300); return; }
+      if (!document.getElementById("yt-mini-player")) { setTimeout(startYt, 300); return; } // 🐛 กันกรณี DOM ยังไม่ทันสร้าง (portal ยังไม่ attach ตอนนี้) ลองใหม่จนกว่าจะเจอ แทนที่จะพังเงียบๆ แล้วไม่มีทางฟื้นเอง
       try {
         if (ytPlayerRef.current && ytPlayerRef.current.loadVideoById) {
           ytPlayerRef.current.loadVideoById(cur.ytId);
@@ -2545,7 +2546,6 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
 function SocialEmbedBody({ t, item }) {
   const twitterRef = useRef(null);
   const tiktokRef = useRef(null);
-  const instaRef = useRef(null);
   const [tiktokEmbedHtml, setTiktokEmbedHtml] = useState(null);
   const [tiktokFailed, setTiktokFailed] = useState(false);
 
@@ -2583,17 +2583,7 @@ function SocialEmbedBody({ t, item }) {
     return () => { try { document.body.removeChild(s); } catch (e) {} };
   }, [tiktokEmbedHtml]);
 
-  // 📸 Instagram — วิธีทางการของ IG (blockquote + embed.js) ได้การ์ดที่เล่นวิดีโอในหน้าได้จริงมากขึ้น (ยังมีลิงก์ "ดูเพิ่มเติมใน Instagram" ติดมาด้วยเสมอ เป็นกติกาการฝังของ IG เอง ไม่ใช่บั๊ก)
-  useEffect(() => {
-    if (item.platform !== "instagram" || !instaRef.current) return;
-    instaRef.current.innerHTML = `<blockquote class="instagram-media" data-instgrm-permalink="${item.url}" data-instgrm-version="14" style="width:100%;max-width:400px;margin:0 auto"></blockquote>`;
-    const process = () => window.instgrm?.Embeds?.process();
-    if (window.instgrm?.Embeds) { process(); return; }
-    const s = document.createElement("script");
-    s.src = "https://www.instagram.com/embed.js"; s.async = true;
-    document.body.appendChild(s);
-    return () => { try { document.body.removeChild(s); } catch (e) {} };
-  }, [item.url]);
+  // 📸 Instagram — ลองใช้วิธีทางการ (blockquote + embed.js) ไปแล้วแต่ยังไม่เสถียร (Meta น่าจะจำกัดสิทธิ์ embed แบบเดียวกับ Facebook/Threads) เปลี่ยนเป็นบอกตรงๆ แทนพยายามฝังแล้วพัง/เด้งออกแอปแบบสุ่ม
 
   return (
     <>
@@ -2604,7 +2594,9 @@ function SocialEmbedBody({ t, item }) {
             : <div style={{ fontSize: 12, color: t.sub, padding: 20, textAlign: "center" }}>{tiktokFailed ? "อ่านลิงก์นี้ไม่ได้ ลองกดเปิดต้นฉบับด้านล่างแทน" : "กำลังโหลด..."}</div>
         )}
         {item.platform === "twitter" && <div ref={twitterRef} style={{ width: "100%" }} />}
-        {item.platform === "instagram" && <div ref={instaRef} style={{ width: "100%" }} />}
+        {item.platform === "instagram" && (
+          <div style={{ fontSize: 12, color: t.sub, padding: 20, textAlign: "center", lineHeight: 1.6 }}>Instagram ฝังดูตรงในแอปได้ไม่เสถียรครับ (Meta จำกัดสิทธิ์คล้าย Facebook/Threads) — กดเปิดต้นฉบับด้านล่างแทนได้เลย</div>
+        )}
         {item.platform === "threads" && (
           <div style={{ fontSize: 12, color: t.sub, padding: 20, textAlign: "center", lineHeight: 1.6 }}>Threads ยังฝังดูตรงในแอปไม่ได้ครับ (ต้องลงทะเบียน Meta Developer App + access token ก่อนถึงจะขอ embed ได้ ต่างจาก TikTok/X ที่เปิดให้ใช้ฟรีไม่ต้องลงทะเบียน) — กดเปิดต้นฉบับด้านล่างแทนได้เลย</div>
         )}
