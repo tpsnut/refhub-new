@@ -2457,25 +2457,22 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
           </div>
         )}
 
-        {/* แท็บหมวดหมู่ — ใช้ pattern เดียวกับ quick toolbar โน้ต: โชว์ "ทั้งหมด/โปรด" เสมอ + "เพิ่มเติม" ขยายเป็นลิสต์แนวตั้งสำหรับหมวดที่สร้างเอง (ไม่เลื่อนแนวนอนแล้ว) */}
+        {/* แท็บหมวดหมู่ — โชว์ "ทั้งหมด/โปรด" + หมวดที่สร้างเองทั้งหมดในแถวเดียวกันเลย (wrap ขึ้นบรรทัดใหม่ได้ถ้าไม่พอ ไม่ต้องเลื่อน) ไม่ต้องกด "เพิ่มเติม" ถึงจะเห็นหมวดที่มีอยู่แล้ว — "เพิ่มเติม" เหลือไว้แค่จัดการ (ลบ/เพิ่มหมวดใหม่) เท่านั้น */}
         <div style={{ marginBottom: 10 }}>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-            {[{ id: "all", name: "ทั้งหมด" }, { id: "fav", name: "❤ โปรด" }].map((f) => (
+            {[{ id: "all", name: "ทั้งหมด" }, { id: "fav", name: "❤ โปรด" }, ...folders].map((f) => (
               <button key={f.id} onClick={() => setTab(f.id)} style={{ padding: "7px 13px", borderRadius: 16, cursor: "pointer", border: `1.5px solid ${tab === f.id ? t.accent : t.border}`, fontWeight: 700, fontSize: 12, background: tab === f.id ? t.accent : "transparent", color: tab === f.id ? t.onAccent : t.sub }}>{f.name}</button>
             ))}
-            {tab !== "all" && tab !== "fav" && (
-              <span style={{ padding: "7px 13px", borderRadius: 16, fontWeight: 700, fontSize: 12, background: t.accent, color: t.onAccent }}>{folders.find((f) => f.id === tab)?.name || "หมวดหมู่"}</span>
-            )}
             <button onClick={() => setShowMoreFolders((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 4, padding: "7px 13px", borderRadius: 16, cursor: "pointer", border: `1.5px solid ${showMoreFolders ? t.accent : t.border}`, fontWeight: 700, fontSize: 12, background: "none", color: t.sub }}>
-              <MoreVertical size={13} color={t.sub} /> เพิ่มเติม <ChevronRight size={12} color={t.sub} style={{ transform: showMoreFolders ? "rotate(90deg)" : "none", transition: "transform .15s" }} />
+              <MoreVertical size={13} color={t.sub} /> จัดการหมวดหมู่ <ChevronRight size={12} color={t.sub} style={{ transform: showMoreFolders ? "rotate(90deg)" : "none", transition: "transform .15s" }} />
             </button>
           </div>
           {showMoreFolders && (
             <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${t.border}` }}>
               {folders.map((f) => (
                 <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 10px", borderRadius: 10, background: tab === f.id ? `${t.accent}18` : "transparent" }}>
-                  <button onClick={() => { setTab(f.id); setShowMoreFolders(false); }} style={{ flex: 1, textAlign: "left", background: "none", border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 700, color: tab === f.id ? t.accent : t.text }}>{f.name}</button>
-                  <button onClick={() => deleteFolder(f.id)} style={ghost} title="ลบหมวดหมู่นี้"><X size={14} color={t.faint} /></button>
+                  <span style={{ flex: 1, fontSize: 12.5, fontWeight: 700, color: tab === f.id ? t.accent : t.text }}>{f.name}</span>
+                  <button onClick={() => askConfirm(`ลบหมวดหมู่ "${f.name}" เลยไหม?`, () => deleteFolder(f.id))} style={ghost} title="ลบหมวดหมู่นี้"><X size={14} color={t.faint} /></button>
                 </div>
               ))}
               {folders.length === 0 && <div style={{ fontSize: 11.5, color: t.faint, padding: "4px 10px" }}>ยังไม่มีหมวดหมู่ที่สร้างเอง</div>}
