@@ -3017,6 +3017,7 @@ function AdminNewsPanel({ t }) {
   const [topLikes, setTopLikes] = useState([]);
   const [customCategories, setCustomCategories] = useState([]);
   const [customGroups, setCustomGroups] = useState([]);
+  const [categoryLimits, setCategoryLimits] = useState({});
   const [newCatLabel, setNewCatLabel] = useState("");
   const [newCatQuery, setNewCatQuery] = useState("");
   const [newCatGroup, setNewCatGroup] = useState("");
@@ -3026,7 +3027,7 @@ function AdminNewsPanel({ t }) {
   const load = async () => {
     setLoading(true);
     const [{ data: settings }, { data: blocked }, { data: statsData }, { data: likesData }, { data: allSources }] = await Promise.all([
-      supabase.from("app_settings").select("*").in("key", ["news_disabled_categories", "news_default_category", "news_custom_categories", "news_custom_groups"]),
+      supabase.from("app_settings").select("*").in("key", ["news_disabled_categories", "news_default_category", "news_custom_categories", "news_custom_groups", "news_category_limits"]),
       supabase.from("blocked_news_sources_global").select("source").order("created_at", { ascending: false }),
       supabase.from("news_stats").select("*").order("views", { ascending: false }).limit(8),
       supabase.from("news_likes").select("link, title"),
@@ -3036,10 +3037,12 @@ function AdminNewsPanel({ t }) {
     const defaultRow = (settings || []).find((s) => s.key === "news_default_category");
     const customCatsRow = (settings || []).find((s) => s.key === "news_custom_categories");
     const customGroupsRow = (settings || []).find((s) => s.key === "news_custom_groups");
+    const limitsRow = (settings || []).find((s) => s.key === "news_category_limits");
     setDisabledCats(disabledRow?.value || []);
     setDefaultCat(defaultRow?.value || "tech");
     setCustomCategories(customCatsRow?.value || []);
     setCustomGroups(customGroupsRow?.value || []);
+    setCategoryLimits(limitsRow?.value || {});
     const blockedList = (blocked || []).map((x) => x.source);
     setGlobalBlocked(blockedList);
     // รวมชื่อแหล่งข่าวที่เคยเห็นจริงทั้งหมด (ไม่ซ้ำ) ตัดอันที่บล็อกไปแล้วออก เอาไว้ทำ dropdown เลือก
@@ -3056,6 +3059,13 @@ function AdminNewsPanel({ t }) {
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
+
+  const saveLimitFor = async (id, val) => {
+    const n = Math.min(50, Math.max(1, parseInt(val, 10) || 10));
+    const next = { ...categoryLimits, [id]: n };
+    setCategoryLimits(next);
+    await supabase.from("app_settings").upsert({ key: "news_category_limits", value: next });
+  };
 
   const toggleCatDisabled = async (id) => {
     const next = disabledCats.includes(id) ? disabledCats.filter((x) => x !== id) : [...disabledCats, id];
@@ -3187,6 +3197,25 @@ function AdminNewsPanel({ t }) {
               </div>
             );
           })}
+        </div>
+      </div>
+
+      <div style={{ ...card(t), padding: 16 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text, marginBottom: 4 }}>🔢 จำนวนข่าวต่อหมวด</div>
+        <div style={{ fontSize: 11, color: t.sub, marginBottom: 12 }}>ตั้งได้สูงสุด 50 เรื่องต่อหมวด (ค่าเริ่มต้น 10 ถ้าไม่ได้ตั้ง)</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {allCatsForAdmin.map((c) => (
+            <div key={c.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 10px", borderRadius: 10, background: t.inputBg }}>
+              <span style={{ fontSize: 13, color: t.text }}>{c.label}</span>
+              <input
+                type="number" min={1} max={50}
+                defaultValue={categoryLimits[c.id] || 10}
+                onBlur={(e) => saveLimitFor(c.id, e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && e.target.blur()}
+                style={{ width: 56, textAlign: "center", background: t.surface, border: `1px solid ${t.border}`, borderRadius: 8, padding: "6px 4px", fontSize: 13, color: t.text }}
+              />
+            </div>
+          ))}
         </div>
       </div>
 
@@ -6794,20 +6823,23 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
   const [disabledCats, setDisabledCats] = useState([]);
   const [customCategories, setCustomCategories] = useState([]); // [{id,label,query,groupId}]
   const [customGroups, setCustomGroups] = useState([]); // [{id,label}]
+  const [categoryLimits, setCategoryLimits] = useState({}); // { [categoryId]: number }
 
   const loadAppSettings = async () => {
     const [{ data: settings }, { data: blocked }] = await Promise.all([
-      supabase.from("app_settings").select("*").in("key", ["news_disabled_categories", "news_default_category", "news_custom_categories", "news_custom_groups"]),
+      supabase.from("app_settings").select("*").in("key", ["news_disabled_categories", "news_default_category", "news_custom_categories", "news_custom_groups", "news_category_limits"]),
       supabase.from("blocked_news_sources_global").select("source"),
     ]);
     const disabledRow = (settings || []).find((s) => s.key === "news_disabled_categories");
     const defaultRow = (settings || []).find((s) => s.key === "news_default_category");
     const customCatsRow = (settings || []).find((s) => s.key === "news_custom_categories");
     const customGroupsRow = (settings || []).find((s) => s.key === "news_custom_groups");
+    const limitsRow = (settings || []).find((s) => s.key === "news_category_limits");
     const disabled = disabledRow?.value || [];
     setDisabledCats(disabled);
     setCustomCategories(customCatsRow?.value || []);
     setCustomGroups(customGroupsRow?.value || []);
+    setCategoryLimits(limitsRow?.value || {});
     setGlobalBlockedSources(new Set((blocked || []).map((x) => x.source)));
     // ถ้ายังไม่เคยเลือกหมวดมาก่อน (ไม่มีค่าใน authProfile) ให้ใช้หมวดเริ่มต้นที่ admin ตั้งไว้แทน "tech"
     if (!authProfile?.news_category && defaultRow?.value) { setCategory(defaultRow.value); return; }
@@ -6898,7 +6930,8 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
     setError("");
     const customCat = customCategories.find((c) => c.id === cat);
     const qParam = customCat ? `&q=${encodeURIComponent(customCat.query || customCat.label)}` : "";
-    fetch(`/api/content?type=news&category=${cat}${qParam}${force ? "&force=1" : ""}`)
+    const limitParam = `&limit=${categoryLimits[cat] || 10}`;
+    fetch(`/api/content?type=news&category=${cat}${qParam}${limitParam}${force ? "&force=1" : ""}`)
       .then((r) => r.json())
       .then((data) => {
         if (data.error) { setError(data.error); setItems([]); }
@@ -6909,7 +6942,7 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
   };
 
   useEffect(() => { loadSavedLinks(); loadBlockedSources(); loadAppSettings(); }, [userId]);
-  useEffect(() => { load(category); }, [category, customCategories]);
+  useEffect(() => { load(category); }, [category, customCategories, categoryLimits]);
 
   const selectCategory = async (cat) => {
     setCategory(cat);

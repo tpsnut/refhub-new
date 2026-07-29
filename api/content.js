@@ -103,7 +103,7 @@ function extractDescription(blockXml) {
   return tagContent(blockXml, "description") || tagContent(blockXml, "summary") || tagContent(blockXml, "content");
 }
 
-async function fetchOneSource(source) {
+async function fetchOneSource(source, perSourceLimit) {
   const r = await fetch(source.url, {
     headers: {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -123,13 +123,14 @@ async function fetchOneSource(source) {
 
   // ฟีดส่วนใหญ่เป็น RSS 2.0 (<item>) แต่บางเจ้า เช่น Blognone ใช้ Atom (<entry>) — รองรับทั้งคู่
   const blockTag = isAtom ? "entry" : "item";
-  const rawLimit = source.filterLinkContains ? 60 : 20;
+  // ดึง raw item มาเผื่อเยอะกว่าที่ต้องการจริง เพราะแหล่งที่ต้องกรอง (filterLinkContains) จะเหลือหลังกรองน้อยกว่าที่ดึงมาก
+  const rawLimit = source.filterLinkContains ? Math.max(perSourceLimit * 3, 60) : Math.max(perSourceLimit * 2, 20);
   const itemMatches = xml.match(new RegExp(`<${blockTag}[\\s>][\\s\\S]*?<\\/${blockTag}>`, "g")) || [];
   let candidates = itemMatches.slice(0, rawLimit);
   if (source.filterLinkContains) {
     candidates = candidates.filter((itemXml) => itemXml.includes(source.filterLinkContains));
   }
-  return candidates.slice(0, 20).map((itemXml) => {
+  return candidates.slice(0, perSourceLimit).map((itemXml) => {
     let title = decodeEntities(stripCdata(tagContent(itemXml, "title")));
     const link = decodeEntities(stripCdata(extractLink(itemXml)));
     const pubDate = stripCdata(extractDate(itemXml));
@@ -174,11 +175,11 @@ function interleaveBlocks(arraysInOrder, blockSize, maxTotal) {
   return result;
 }
 
-async function fetchNews(cacheKey, sources, force) {
-  const cached = cache[cacheKey];
+async function fetchNews(cacheKey, sources, force, limit) {
+  const cached = cache[cacheKey + ":" + limit];
   if (!force && cached && Date.now() - cached.ts < CACHE_TTL_MS) return cached.data;
 
-  const results = await Promise.allSettled(sources.map(fetchOneSource));
+  const results = await Promise.allSettled(sources.map((s) => fetchOneSource(s, limit)));
   const perSourceLists = []; // เก็บตามลำดับที่นิยามไว้ใน FEED_SOURCES (ไทยรัฐมาก่อนเสมอ)
   const failures = [];
   results.forEach((r, i) => {
@@ -196,9 +197,9 @@ async function fetchNews(cacheKey, sources, force) {
     throw new Error(failures.join(" | "));
   }
 
-  const items = interleaveBlocks(perSourceLists, 5, 20);
+  const items = interleaveBlocks(perSourceLists, 5, limit);
 
-  cache[cacheKey] = { data: items, ts: Date.now() };
+  cache[cacheKey + ":" + limit] = { data: items, ts: Date.now() };
   return items;
 }
 
@@ -208,7 +209,7 @@ function googleNewsSourceFromQuery(q) {
 }
 
 export default async function handler(req, res) {
-  const { type, category, force, q } = req.query || {};
+  const { type, category, force, q, limit } = req.query || {};
 
   try {
     if (type === "news") {
@@ -225,7 +226,10 @@ export default async function handler(req, res) {
       } else {
         return res.status(400).json({ error: "ระบุ category หรือ q (คำค้นหาสำหรับหมวด custom) มาด้วย" });
       }
-      const items = await fetchNews(cacheKey, sources, force === "1" || force === "true");
+      // จำกัดจำนวนข่าวที่ 1-50 เรื่อง (default 10 ถ้าไม่ระบุมา) — ป้องกันค่าผิดปกติจากภายนอกด้วย
+      const parsedLimit = parseInt(limit, 10);
+      const safeLimit = Number.isFinite(parsedLimit) ? Math.min(50, Math.max(1, parsedLimit)) : 10;
+      const items = await fetchNews(cacheKey, sources, force === "1" || force === "true", safeLimit);
       return res.status(200).json({ items });
     }
 
