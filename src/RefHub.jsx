@@ -660,7 +660,10 @@ export default function RefHub() {
   const [mentor, setMentor] = useState("none");
   const [customMentors, setCustomMentors] = useState([]); // โค้ชที่ user สร้างเอง (ไม่ใช่แอดมิน) [{id, name, description, avatarUrl}]
   const [theme, setTheme] = useState("default"); // 🎨 ธีมสีแอป: default | red | navy | twilight — แยกอิสระจาก mentor
-  const [fontScale, setFontScale] = useState(100); // 📏 ขนาดตัวอักษร: 100 | 115 | 130 (ปกติ/ใหญ่/ใหญ่มาก)
+  const [fontScale, setFontScale] = useState(() => { // 📏 ขนาดตัวอักษร: 100 | 115 | 130 (ปกติ/ใหญ่/ใหญ่มาก) — อ่านจาก localStorage ทันทีตอน mount กันจอกระพริบกลับไป 100 ก่อนแวบนึง
+    try { const fs = JSON.parse(localStorage.getItem("refhub:fontScale") || "null"); return fs || 100; } catch (e) { return 100; }
+  });
+  const dbFontScaleHydratedRef = useRef(false); // 🔒 กันบั๊ก: ค่าจาก DB (font_scale) เคยไปทับค่าที่เพิ่งเลือกไว้ในเครื่องนี้ทุกครั้งที่ authProfile โหลดใหม่ — ให้ดึงจาก DB มาทับได้แค่ "ครั้งแรก" ตอน hydrate เท่านั้น และเฉพาะตอนที่เครื่องนี้ไม่มีค่าอยู่ในเครื่องอยู่แล้ว (เครื่องใหม่/ล้าง storage)
   const [page, setPage] = useState(() => { try { return sessionStorage.getItem("refhub:page") || "home"; } catch (e) { return "home"; } });
   const [notes, setNotes] = useState([]);
   const [goals, setGoals] = useState([]);
@@ -887,19 +890,33 @@ export default function RefHub() {
       } catch (e) {
         console.error("โหลดข้อมูลจาก Cloud ผิดพลาด: ", e);
       }
-      // หมวดหมู่เพลง (folders) ย้ายไปเก็บบน Supabase แล้ว (โหลดในบล็อกด้านบน) — เหลือแค่ fontScale ที่ยัง fallback ผ่าน localStorage
-      try { const fs = JSON.parse(localStorage.getItem("refhub:fontScale") || "null"); if (fs) setFontScale(fs); } catch (e) {}
+      // หมวดหมู่เพลง (folders) ย้ายไปเก็บบน Supabase แล้ว (โหลดในบล็อกด้านบน) — fontScale อ่านจาก localStorage ตอน mount ไปแล้วผ่าน lazy init ด้านบน ไม่ต้องอ่านซ้ำตรงนี้
       setLoaded(true);
     })(); 
   }, [userId]);
 
   useEffect(() => { if (!loaded) return; try { localStorage.setItem("refhub:fontScale", JSON.stringify(fontScale)); } catch (e) {} }, [fontScale, loaded]);
   // 📏 ซิงค์ขนาดตัวอักษรกับฐานข้อมูลด้วย (จำได้ข้ามอุปกรณ์ ไม่ใช่แค่เครื่องเดียวที่เคยตั้งไว้)
-  useEffect(() => { if (authProfile?.font_scale) setFontScale(authProfile.font_scale); }, [authProfile?.font_scale]);
+  // 🐛 เดิมบั๊ก: effect นี้ setFontScale ทับด้วยค่าจาก DB ทุกครั้งที่ authProfile.font_scale เปลี่ยน/โหลดใหม่
+  //    ถ้า DB มีค่าเก่าค้างอยู่ (เช่น รอบก่อนเขียนขึ้น DB ไม่ทันเพราะปิดแอปไปก่อน/เน็ตหลุด) พอเปิดแอปรอบถัดไป
+  //    ค่าที่เพิ่งเลือกไว้ในเครื่องนี้ (ถูกต้องแล้ว) จะโดนค่าเก่าจาก DB ทับกลับไปแบบเงียบๆ — นี่คืออาการ "เลือกฟอนต์ไว้แล้วหลุด"
+  //    ✅ แก้โดยดึงจาก DB มา "ทับ" ได้แค่ครั้งแรกที่ hydrate เท่านั้น (กันด้วย ref) และเฉพาะตอนที่เครื่องนี้ไม่มีค่าอยู่ในเครื่องอยู่แล้วเท่านั้น (เครื่องใหม่/ล้าง storage) — ถ้ามีค่าในเครื่องอยู่แล้ว ค่าในเครื่องชนะเสมอ แล้วค่อยเขียนทับขึ้น DB แทน (source of truth คือเครื่องปัจจุบันที่ผู้ใช้เพิ่งเลือก)
+  useEffect(() => {
+    if (dbFontScaleHydratedRef.current) return; // hydrate ได้แค่ครั้งเดียวต่อการเปิดแอป กันไม่ให้ทับซ้ำทุกครั้งที่ authProfile โหลดใหม่
+    if (!authProfile?.font_scale) return; // ยังไม่มีค่าใน DB เลย (user ใหม่/ยังไม่เคยตั้ง) ไม่ต้องทำอะไร ปล่อยให้ค่าในเครื่อง/ค่า default ใช้ไปก่อน
+    dbFontScaleHydratedRef.current = true;
+    let localValue = null;
+    try { localValue = JSON.parse(localStorage.getItem("refhub:fontScale") || "null"); } catch (e) {}
+    if (!localValue) setFontScale(authProfile.font_scale); // ไม่มีค่าอยู่ในเครื่องนี้เลย (เครื่องใหม่/ล้าง storage) → ใช้ค่าจาก DB แทน
+    // ถ้ามี localValue อยู่แล้ว ปล่อยผ่าน ไม่ทับ — ค่าที่เครื่องนี้เพิ่งตั้งไว้สำคัญกว่า จะถูกเขียนทับขึ้น DB เองผ่าน effect ถัดไปด้านล่าง
+  }, [authProfile?.font_scale]);
   useEffect(() => {
     if (!loaded || !userId) return;
     if (authProfile?.font_scale === fontScale) return; // ไม่ต้องเขียนซ้ำถ้าค่าตรงกับที่อยู่ในฐานข้อมูลอยู่แล้ว
-    supabase.from("profiles").update({ font_scale: fontScale }).eq("id", userId).then(() => {}, () => {});
+    supabase.from("profiles").update({ font_scale: fontScale }).eq("id", userId).then(
+      () => {},
+      (e) => console.error("บันทึกขนาดตัวอักษรขึ้น DB ไม่สำเร็จ (จะลองใหม่ตอนค่าเปลี่ยนครั้งถัดไป):", e?.message)
+    );
   }, [fontScale, loaded, userId]);
   useEffect(() => { try { sessionStorage.setItem("refhub:page", page); } catch (e) {} }, [page]);
 
