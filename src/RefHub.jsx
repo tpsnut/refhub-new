@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
-  Home, Lightbulb, TrendingUp, Plus, Newspaper, Languages, StickyNote, Eye,
+  Home, Lightbulb, TrendingUp, Plus, Newspaper, Languages, StickyNote, Eye, Menu,
   Sun, Moon, Send, Check, Trash2, X, Wallet, Target, BookOpen, ChevronRight,
   Sparkles, Clock, Search, Volume2, VolumeX, Pencil, Download, ArrowLeft, Users, Camera, Phone, Mic, MicOff, PhoneOff, RefreshCw,
   Utensils, Car, ShoppingBag, Receipt, Gamepad2, HeartPulse, Briefcase, Gift, Coffee, Music,
@@ -6516,6 +6516,7 @@ const NEWS_CATEGORIES = [
 
 function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskAiTopic }) {
   const [category, setCategory] = useState(authProfile?.news_category || "tech");
+  const [menuOpen, setMenuOpen] = useState(false);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -6649,32 +6650,57 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
     else if (dx > 0 && idx > 0) selectCategory(NEWS_CATEGORIES[idx - 1].id); // ปัดขวา -> หมวดก่อนหน้า
   };
 
-  // เลื่อนเมนูหมวดหมู่ด้านบนให้ตามหมวดที่เลือกอยู่เสมอ (ไม่ว่าจะกดปุ่มหรือปัดจอเปลี่ยน)
-  const catScrollRef = useRef(null);
-  useEffect(() => {
-    const el = catScrollRef.current?.querySelector(`[data-cat="${category}"]`);
-    el?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
-  }, [category]);
+  const currentCat = NEWS_CATEGORIES.find((c) => c.id === category);
 
   return (<>
+    <style>{`@keyframes rh-drawer-in { from { transform: translateX(-100%); } to { transform: translateX(0); } } @keyframes rh-drawer-backdrop { from { opacity: 0; } to { opacity: 1; } }`}</style>
+    {menuOpen && (
+      <ModalPortal>
+        <div onClick={() => setMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 130, background: "rgba(10,14,25,.55)", backdropFilter: "blur(2px)", animation: "rh-drawer-backdrop .2s ease-out" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{
+            position: "absolute", left: 0, top: 0, bottom: 0, width: "78%", maxWidth: 300,
+            background: t.page, boxShadow: "6px 0 30px rgba(0,0,0,.3)", animation: "rh-drawer-in .28s cubic-bezier(.2,.9,.3,1)",
+            display: "flex", flexDirection: "column", overflowY: "auto",
+          }}>
+            <div style={{ padding: "18px 18px 14px", background: `linear-gradient(135deg, ${t.accent}, ${t.accent2 || t.accent})`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: t.onAccent }}>หมวดหมู่ข่าว</div>
+                <div style={{ fontSize: 11, color: t.onAccent, opacity: .85, marginTop: 2 }}>เลือกสิ่งที่สนใจ</div>
+              </div>
+              <button onClick={() => setMenuOpen(false)} style={{ background: "rgba(255,255,255,.2)", border: "none", borderRadius: 999, width: 30, height: 30, display: "grid", placeItems: "center", cursor: "pointer" }}>
+                <X size={16} color={t.onAccent} />
+              </button>
+            </div>
+            <div style={{ padding: 10, display: "flex", flexDirection: "column", gap: 3 }}>
+              {NEWS_CATEGORIES.map((c) => (
+                <button key={c.id} onClick={() => { selectCategory(c.id); setMenuOpen(false); }} style={{
+                  display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "13px 14px", borderRadius: 12,
+                  border: "none", cursor: "pointer", textAlign: "left", fontSize: 13.5, fontWeight: 700,
+                  background: category === c.id ? t.accent : "transparent",
+                  color: category === c.id ? t.onAccent : t.text,
+                  transition: "background .15s",
+                }}>
+                  <span style={{ fontSize: 17 }}>{c.label.split(" ")[0]}</span>
+                  <span>{c.label.split(" ").slice(1).join(" ")}</span>
+                  {category === c.id && <span style={{ marginLeft: "auto", width: 6, height: 6, borderRadius: 999, background: t.onAccent }} />}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </ModalPortal>
+    )}
     <PageHead t={t} title="ข่าวสาร" sub="อัปเดตสถานการณ์โลก" icon={<Newspaper size={20} color={t.accent} />} />
     <style>{`@keyframes rh-news-spin { to { transform: rotate(360deg); } } .rh-news-spin { animation: rh-news-spin 0.8s linear infinite; }`}</style>
     <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, marginBottom: 4 }}>
-      <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
-        <div ref={catScrollRef} style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
-          {NEWS_CATEGORIES.map((c) => (
-            <button key={c.id} data-cat={c.id} onClick={() => selectCategory(c.id)} style={{
-              flexShrink: 0, padding: "7px 14px", borderRadius: 999, fontSize: 12.5, fontWeight: 700, cursor: "pointer",
-              border: `1px solid ${category === c.id ? "transparent" : t.border}`,
-              background: category === c.id ? t.accent : t.inputBg,
-              color: category === c.id ? t.onAccent : t.text,
-            }}>{c.label}</button>
-          ))}
-        </div>
-        <div style={{ position: "absolute", right: 0, top: 0, bottom: 4, width: 28, pointerEvents: "none", background: `linear-gradient(to right, transparent, ${t.bg})` }} />
-      </div>
+      <button onClick={() => setMenuOpen(true)} style={{ flexShrink: 0, width: 38, height: 38, borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, display: "grid", placeItems: "center", cursor: "pointer" }} title="เลือกหมวดหมู่">
+        <Menu size={18} color={t.text} />
+      </button>
+      <button onClick={() => setMenuOpen(true)} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 8, padding: "9px 14px", borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, cursor: "pointer", textAlign: "left" }}>
+        <span style={{ fontSize: 14, fontWeight: 800, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{currentCat?.label}</span>
+      </button>
       {category !== "saved" && (
-        <button onClick={() => load(category, true)} disabled={loading} style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 999, border: `1px solid ${t.border}`, background: t.inputBg, display: "grid", placeItems: "center", cursor: "pointer" }} title="รีเฟรชข่าวล่าสุด">
+        <button onClick={() => load(category, true)} disabled={loading} style={{ flexShrink: 0, width: 38, height: 38, borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, display: "grid", placeItems: "center", cursor: "pointer" }} title="รีเฟรชข่าวล่าสุด">
           <RefreshCw size={15} color={t.text} className={loading ? "rh-news-spin" : ""} />
         </button>
       )}
