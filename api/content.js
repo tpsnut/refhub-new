@@ -177,7 +177,7 @@ function interleaveBlocks(arraysInOrder, blockSize, maxTotal) {
 
 async function fetchNews(cacheKey, sources, force, limit) {
   const cached = cache[cacheKey + ":" + limit];
-  if (!force && cached && Date.now() - cached.ts < CACHE_TTL_MS) return cached.data;
+  if (!force && cached && Date.now() - cached.ts < CACHE_TTL_MS) return { items: cached.data, fetchedAt: cached.ts, fromCache: true };
 
   const results = await Promise.allSettled(sources.map((s) => fetchOneSource(s, limit)));
   const perSourceLists = []; // เก็บตามลำดับที่นิยามไว้ใน FEED_SOURCES (ไทยรัฐมาก่อนเสมอ)
@@ -198,9 +198,9 @@ async function fetchNews(cacheKey, sources, force, limit) {
   }
 
   const items = interleaveBlocks(perSourceLists, 5, limit);
-
-  cache[cacheKey + ":" + limit] = { data: items, ts: Date.now() };
-  return items;
+  const ts = Date.now();
+  cache[cacheKey + ":" + limit] = { data: items, ts };
+  return { items, fetchedAt: ts, fromCache: false };
 }
 
 // สร้างแหล่งข่าว Google News จากคำค้นหาที่ admin พิมพ์เอง (สำหรับหมวดที่ admin เพิ่มเองผ่านหน้า admin)
@@ -210,6 +210,7 @@ function googleNewsSourceFromQuery(q) {
 
 export default async function handler(req, res) {
   const { type, category, force, q, limit } = req.query || {};
+  res.setHeader("Cache-Control", "no-store"); // กัน browser/edge เก็บ cache response นี้ไว้เอง (ปัญหาที่เคยเจอ: กดรีเฟรชแล้วดูเหมือนไม่ได้ข้อมูลใหม่)
 
   try {
     if (type === "news") {
@@ -229,8 +230,8 @@ export default async function handler(req, res) {
       // จำกัดจำนวนข่าวที่ 1-50 เรื่อง (default 10 ถ้าไม่ระบุมา) — ป้องกันค่าผิดปกติจากภายนอกด้วย
       const parsedLimit = parseInt(limit, 10);
       const safeLimit = Number.isFinite(parsedLimit) ? Math.min(50, Math.max(1, parsedLimit)) : 10;
-      const items = await fetchNews(cacheKey, sources, force === "1" || force === "true", safeLimit);
-      return res.status(200).json({ items });
+      const { items, fetchedAt, fromCache } = await fetchNews(cacheKey, sources, force === "1" || force === "true", safeLimit);
+      return res.status(200).json({ items, fetchedAt, fromCache });
     }
 
     // เผื่อไว้สำหรับอนาคต — TradePage / LangPage จะมาเพิ่ม branch ตรงนี้

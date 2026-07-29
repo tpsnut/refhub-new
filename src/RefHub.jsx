@@ -25,14 +25,27 @@ import { supabase } from "./supabaseClient";
 // 🔀 ===== ระบบลากวางจัดเรียง (Drag & Drop reorder) ใช้ร่วมกันได้ทั้งแอป =====
 // ใช้ dnd-kit — ดักการลากที่ "drag handle" (ไอคอน ⋮⋮) เท่านั้น ไม่ใช่ทั้งแถว กันชนกับปุ่มอื่นในแถวเดียวกัน (แก้ไข/ลบ ฯลฯ)
 // และกันชนกับการเลื่อนดู list ปกติบนมือถือ (ถ้าดักทั้งแถวจะปนกับ scroll)
+// 🖐️ ต้องกดค้างที่ handle ก่อนถึงจะเริ่มลากได้จริง (กันมือโดนแล้วลากทันทีโดยไม่ตั้งใจ) — ระหว่างกดค้าง handle จะเข้มขึ้น (ผ่าน priming) ให้รู้ว่าใกล้ลากได้แล้ว
+const DRAG_HOLD_MS = 550;
 function SortableRow({ id, children, disabled }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled });
+  const [priming, setPriming] = useState(false);
+  const timerRef = useRef(null);
+  const cancelPriming = () => { if (timerRef.current) clearTimeout(timerRef.current); timerRef.current = null; setPriming(false); };
   const style = { transform: DndCSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1, position: "relative", zIndex: isDragging ? 10 : "auto" };
-  return <div ref={setNodeRef} style={style}>{children({ handleProps: { ...attributes, ...listeners, style: { touchAction: "none", cursor: disabled ? "default" : "grab" } } })}</div>;
+  const handleProps = {
+    ...attributes, ...listeners,
+    onPointerDown: (e) => { timerRef.current = setTimeout(() => setPriming(true), DRAG_HOLD_MS); listeners.onPointerDown?.(e); },
+    onPointerUp: (e) => { cancelPriming(); listeners.onPointerUp?.(e); },
+    onPointerLeave: (e) => { cancelPriming(); listeners.onPointerLeave?.(e); },
+    onPointerCancel: (e) => { cancelPriming(); listeners.onPointerCancel?.(e); },
+    style: { touchAction: "none", cursor: disabled ? "default" : "grab" },
+  };
+  return <div ref={setNodeRef} style={style}>{children({ handleProps, priming: priming || isDragging })}</div>;
 }
-// items: array ของ object ใดๆ / getId: (item) => string ไอดีที่ไม่ซ้ำ / onReorder: (newItemsArray) => void / renderItem: (item, index, {handleProps}) => JSX
+// items: array ของ object ใดๆ / getId: (item) => string ไอดีที่ไม่ซ้ำ / onReorder: (newItemsArray) => void / renderItem: (item, index, {handleProps, priming}) => JSX
 function DragReorderList({ items, getId, onReorder, renderItem, disabled }) {
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } })); // ต้องขยับ 6px ก่อนเริ่มลากจริง กันมือสั่นตอนแตะ/แค่กดเฉยๆ
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { delay: DRAG_HOLD_MS, tolerance: 8 } })); // ต้องกดค้างก่อนถึงเริ่มลากจริง (ไม่ใช่แค่ขยับนิดเดียวแล้วลากทันที) กันมือโดนแล้วลากพลาด
   const handleDragEnd = (event) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -46,7 +59,7 @@ function DragReorderList({ items, getId, onReorder, renderItem, disabled }) {
       <SortableContext items={items.map(getId)} strategy={verticalListSortingStrategy}>
         {items.map((item, i) => (
           <SortableRow key={getId(item)} id={getId(item)} disabled={disabled}>
-            {({ handleProps }) => renderItem(item, i, { handleProps })}
+            {({ handleProps, priming }) => renderItem(item, i, { handleProps, priming })}
           </SortableRow>
         ))}
       </SortableContext>
@@ -54,31 +67,69 @@ function DragReorderList({ items, getId, onReorder, renderItem, disabled }) {
   );
 }
 
-// 💡 ===== ระบบคำแนะนำการใช้งานครั้งแรก (Coachmark) ใช้ร่วมกันได้ทุกหน้า =====
-// เก็บสถานะ "เคยเห็นแล้ว" ไว้ที่เครื่อง (localStorage) — พอเพราะเป็นแค่คำแนะนำ ไม่ใช่ข้อมูลสำคัญ ถ้า browser ล้าง storage แล้วขึ้นซ้ำก็ไม่เสียหายอะไร
-// ถ้าอยากให้คำแนะนำ "ขึ้นใหม่ให้ทุกคนอีกครั้ง" (เช่น หลังปรับ UI จุดนั้นใหม่) แค่เปลี่ยนเลข HINT_VERSION ด้านล่างตอน deploy รอบถัดไป ไม่ต้องทำหน้าแอดมินแยกต่างหาก
-const HINT_VERSION = "v1";
-function useFirstTimeHint(key) {
-  const storageKey = `refhub:hint:${HINT_VERSION}:${key}`;
-  const [seen, setSeen] = useState(() => { try { return localStorage.getItem(storageKey) === "1"; } catch (e) { return true; } });
-  const dismiss = () => { try { localStorage.setItem(storageKey, "1"); } catch (e) {} setSeen(true); };
-  return [!seen, dismiss]; // [show, dismiss]
+// 💡 ===== ระบบคำแนะนำการใช้งาน (Hint / Coachmark) — แอดมินเขียนข้อความเองได้ + เช็คได้ว่าใครดูไปแล้วบ้าง =====
+// เก็บ "เคยดูแล้ว" ลงตาราง hint_seen จริง (ไม่ใช่ localStorage) เพื่อให้แอดมินดูได้จากหน้าแอดมินว่าใครดูไปแล้วกี่คน
+// คำแนะนำแต่ละจุด (key) ต้องมีแถวใน hint_definitions ก่อน (สร้าง/แก้ข้อความ/เปิดปิดได้จากหน้าแอดมิน) — key ใหม่ต้องเดฟผูกจุดในโค้ดเองก่อน แอดมินแก้ได้แค่ข้อความ+เปิดปิด ไม่ได้เพิ่มจุดใหม่เองได้ (เพราะต้องมีโค้ดรองรับตำแหน่งนั้นจริงๆ)
+function useHint(key, hintDefs, seenHintKeys, dismissHint) {
+  const def = hintDefs.find((h) => h.key === key);
+  const show = !!def?.active && !seenHintKeys.has(key);
+  const text = def?.body || "";
+  const dismiss = () => dismissHint(key);
+  return [show, text, dismiss];
 }
 // ⚠️ ตัว anchor (ปุ่ม/องค์ประกอบที่ชี้ถึง) ต้องห่อด้วย position:"relative" เอง แล้ววาง <Coachmark> เป็น sibling ถัดจาก anchor นั้น
 function Coachmark({ t, show, text, onDismiss, placement = "bottom", align = "left" }) {
-  if (!show) return null;
+  if (!show || !text) return null;
   const vertical = placement === "bottom" ? { top: "calc(100% + 10px)" } : { bottom: "calc(100% + 10px)" };
-  const horizontal = align === "right" ? { right: 0 } : { left: 0 };
-  const arrowSide = align === "right" ? { right: 18 } : { left: 18 };
+  const horizontal = align === "right" ? { right: 0 } : align === "center" ? { left: "50%", transform: "translateX(-50%)" } : { left: 0 };
+  const arrowSide = align === "right" ? { right: 22 } : align === "center" ? { left: "50%", marginLeft: -5 } : { left: 22 };
   return (
-    <div style={{ position: "absolute", ...vertical, ...horizontal, zIndex: 40, background: t.accent, color: t.onAccent, borderRadius: 12, padding: "10px 12px", maxWidth: 230, boxShadow: "0 8px 20px rgba(0,0,0,.22)", fontSize: 12, lineHeight: 1.4 }}>
-      <div style={{ position: "absolute", [placement === "bottom" ? "top" : "bottom"]: -5, ...arrowSide, width: 11, height: 11, background: t.accent, transform: "rotate(45deg)" }} />
-      <div style={{ marginBottom: 8 }}>{text}</div>
-      <button onClick={onDismiss} style={{ background: "rgba(255,255,255,.25)", border: "none", borderRadius: 8, padding: "4px 10px", color: t.onAccent, fontWeight: 700, fontSize: 11, cursor: "pointer" }}>เข้าใจแล้ว</button>
+    <div style={{ position: "absolute", ...vertical, ...horizontal, zIndex: 45, width: 270, background: t.accent, color: t.onAccent, borderRadius: 14, padding: "12px 14px", boxShadow: "0 10px 26px rgba(0,0,0,.25)", fontSize: 13, lineHeight: 1.5 }}>
+      <div style={{ position: "absolute", [placement === "bottom" ? "top" : "bottom"]: -5, ...arrowSide, width: 11, height: 11, background: t.accent, transform: `rotate(45deg)${align === "center" ? "" : ""}` }} />
+      <div style={{ marginBottom: 10 }}>{text}</div>
+      <button onClick={onDismiss} style={{ background: "rgba(255,255,255,.25)", border: "none", borderRadius: 9, padding: "6px 14px", color: t.onAccent, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>เข้าใจแล้ว</button>
     </div>
   );
 }
 
+// ✅ ===== ระบบถามยืนยันก่อนทำ (ลบ/แก้ไข) ใช้ร่วมกันได้ทุกหน้า — ห่อด้วย ModalPortal เองในตัว ปลอดภัยไม่ว่าจะเรียกจากที่ไหนในแอป =====
+function useConfirm(t) {
+  const [pending, setPending] = useState(null); // { message, confirmLabel, onConfirm }
+  const askConfirm = (message, onConfirm, confirmLabel) => setPending({ message, onConfirm, confirmLabel: confirmLabel || "ยืนยัน" });
+  const ConfirmUI = pending ? (
+    <ModalPortal>
+      <div style={overlay} onClick={() => setPending(null)}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 380, background: t?.page || "#fff", borderRadius: 20, padding: 20 }}>
+          <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 18, lineHeight: 1.5, color: t?.text || "#222" }}>{pending.message}</div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={() => setPending(null)} style={{ flex: 1, padding: "11px 0", borderRadius: 12, border: `1.5px solid ${t?.border || "#ddd"}`, background: "none", color: t?.text || "#222", cursor: "pointer", fontWeight: 700, fontSize: 13.5 }}>ยกเลิก</button>
+            <button onClick={() => { pending.onConfirm(); setPending(null); }} style={{ flex: 1, padding: "11px 0", borderRadius: 12, border: "none", background: "#D9534F", color: "#fff", cursor: "pointer", fontWeight: 700, fontSize: 13.5 }}>{pending.confirmLabel}</button>
+          </div>
+        </div>
+      </div>
+    </ModalPortal>
+  ) : null;
+  return [askConfirm, ConfirmUI];
+}
+
+// 📄 ===== ระบบแบ่งหน้า (Pagination) ใช้ร่วมกันได้ทุกลิสต์ที่อาจมีรายการเยอะ =====
+function usePagination(items, pageSize = 10) {
+  const [page, setPage] = useState(0);
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  useEffect(() => { if (page > totalPages - 1) setPage(0); }, [items.length, totalPages]); // รายการหดจนหน้าปัจจุบันเกินขอบ -> กลับไปหน้าแรก กันจอว่างเปล่า
+  const pageItems = items.slice(page * pageSize, page * pageSize + pageSize);
+  return { pageItems, page, setPage, totalPages, pageSize };
+}
+function PaginationBar({ t, page, setPage, totalPages }) {
+  if (totalPages <= 1) return null;
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 14, marginTop: 14, marginBottom: 4 }}>
+      <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0} style={{ width: 32, height: 32, borderRadius: 16, border: `1px solid ${t.border}`, background: t.inputBg, display: "grid", placeItems: "center", cursor: page === 0 ? "default" : "pointer", opacity: page === 0 ? 0.4 : 1 }}><ChevronLeft size={15} color={t.text} /></button>
+      <span style={{ fontSize: 12, fontWeight: 700, color: t.sub }}>หน้า {page + 1} / {totalPages}</span>
+      <button onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))} disabled={page === totalPages - 1} style={{ width: 32, height: 32, borderRadius: 16, border: `1px solid ${t.border}`, background: t.inputBg, display: "grid", placeItems: "center", cursor: page === totalPages - 1 ? "default" : "pointer", opacity: page === totalPages - 1 ? 0.4 : 1 }}><ChevronRight size={15} color={t.text} /></button>
+    </div>
+  );
+}
 
 // ---------------- Mentors ----------------
 const MENTORS = {
@@ -736,6 +787,8 @@ export default function RefHub() {
   const [billPayments, setBillPayments] = useState([]); // แต่ละ "รอบ" ที่ต้องจ่าย [{id, billId, periodKey, dueDate, amount, paid, paidAt, lastNotifiedDate}]
   const [reminders, setReminders] = useState([]); // ระบบเตือนกลาง [{id, targetType, targetId, label, recurrence, time, specificDate, dayOfWeek, dayOfMonth, active, lastFiredKey}]
   const [reminderTarget, setReminderTarget] = useState(null); // { targetType, targetId, label, existing } — เปิด ReminderModal เมื่อไม่เป็น null
+  const [hintDefs, setHintDefs] = useState([]); // [{key, locationLabel, body, active}] — คำแนะนำที่แอดมินตั้งค่าไว้ (ทุกอัน active หรือไม่ก็ตาม เผื่อหน้าแอดมินต้องเห็นครบ)
+  const [seenHintKeys, setSeenHintKeys] = useState(new Set()); // key ของคำแนะนำที่ผู้ใช้คนนี้เคยดูไปแล้ว
   const [profile, setProfile] = useState({ name: "", avatar: "" });
   const [autoNight, setAutoNight] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
@@ -946,6 +999,14 @@ export default function RefHub() {
         else if (dbReminders) {
           setReminders(dbReminders.map((r) => ({ id: r.id, targetType: r.target_type, targetId: r.target_id, label: r.label, recurrence: r.recurrence, time: r.time, specificDate: r.specific_date, dayOfWeek: r.day_of_week, dayOfMonth: r.day_of_month, active: r.active, lastFiredKey: r.last_fired_key })));
         }
+
+        // 3f. ดึงคำแนะนำการใช้งาน (hint_definitions) ที่แอดมินตั้งค่าไว้ + เช็คว่าผู้ใช้คนนี้เคยดูอันไหนไปแล้วบ้าง
+        const { data: dbHintDefs, error: hintDefErr } = await supabase.from("hint_definitions").select("*");
+        if (hintDefErr) console.error("โหลดคำแนะนำการใช้งานไม่สำเร็จ (ไม่แตะข้อมูลเดิม):", hintDefErr.message);
+        else setHintDefs((dbHintDefs || []).map((h) => ({ key: h.key, locationLabel: h.location_label, body: h.body, active: h.active })));
+        const { data: dbHintSeen, error: hintSeenErr } = await supabase.from("hint_seen").select("hint_key").eq("user_id", userId);
+        if (hintSeenErr) console.error("โหลดสถานะคำแนะนำที่เคยดูไม่สำเร็จ:", hintSeenErr.message);
+        else setSeenHintKeys(new Set((dbHintSeen || []).map((h) => h.hint_key)));
 
         // 4. ดึงสมุดโน้ต (Notes)
         const { data: dbNotes, error: notesErr } = await supabase
@@ -1424,6 +1485,11 @@ export default function RefHub() {
     const existing = reminders.find((r) => r.targetType === targetType && r.targetId === (targetId != null ? String(targetId) : null));
     setReminderTarget({ targetType, targetId, label, existing: existing || null });
   };
+  // 💡 บันทึกว่า "ดูคำแนะนำนี้แล้ว" ลง DB จริง (ไม่ใช่ localStorage) เพื่อให้แอดมินเช็คได้จากหน้าแอดมินว่าใครดูไปแล้วบ้าง
+  const dismissHint = (key) => {
+    setSeenHintKeys((s) => new Set(s).add(key));
+    if (userId) supabase.from("hint_seen").upsert({ user_id: userId, hint_key: key, seen_at: new Date().toISOString() }, { onConflict: "user_id,hint_key" }).then(() => {}, () => {});
+  };
   // เช็คทุกครั้งที่เปิดแอป/ข้อมูลเปลี่ยน ว่ามีการเตือนไหนถึงเวลาแล้วบ้าง (เช็คแค่ตอนเปิดแอป ไม่มี cron พื้นหลังจริง เหมือนระบบเตือนบิล)
   useEffect(() => {
     if (!userId || !session?.access_token || reminders.length === 0) return;
@@ -1587,7 +1653,7 @@ export default function RefHub() {
           {page === "note" && <NotePage {...{ t, notes, setNotes, isNight, userId, session, authProfile, reminders, openReminder }} />}
           {page === "ideas" && <IdeasPage t={t} M={M} userId={userId} session={session} authProfile={authProfile} setAuthProfile={setAuthProfile} setNotes={setNotes} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} />}
           {page === "trade" && <TradePage t={t} />}
-          {page === "news" && <NewsPage t={t} userId={userId} authProfile={authProfile} setAuthProfile={setAuthProfile} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} />}
+          {page === "news" && <NewsPage t={t} userId={userId} authProfile={authProfile} setAuthProfile={setAuthProfile} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} hintDefs={hintDefs} seenHintKeys={seenHintKeys} dismissHint={dismissHint} />}
           {page === "lang" && <LangPage t={t} />}
           {page === "goalsReport" && <GoalsReportPage t={t} goals={goals} setGoals={setGoals} userId={userId} />}
           {page === "admin" && <AdminPage t={t} session={session} userId={userId} adminAlerts={adminAlerts} setAdminAlerts={setAdminAlerts} authProfile={authProfile} setAuthProfile={setAuthProfile} />}
@@ -2225,6 +2291,7 @@ const PLATFORM_META = {
 };
 
 function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, toggleFavorite, volume, setVolume, userId, setModalYtSlot, close }) {
+  const [askConfirm, ConfirmUI] = useConfirm(t);
   const [ytUrl, setYtUrl] = useState("");
   const fileRef = useRef(null);
   const [saved, setSaved] = useState(false);
@@ -2429,14 +2496,14 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
             items={shown}
             getId={(tr) => tr.id}
             onReorder={reorderShown}
-            renderItem={(tr, i, { handleProps }) => (
+            renderItem={(tr, i, { handleProps, priming }) => (
               <div style={{ marginBottom: 8 }}>
                 <TrackRow t={t} M={M} track={tr} active={curId === tr.id} playing={playing && curId === tr.id}
-                  folders={folders} dragHandleProps={handleProps}
+                  folders={folders} dragHandleProps={handleProps} dragPriming={priming}
                   onPlay={() => (tr.kind === "link" ? setViewingMedia(tr) : playTrack(tr))} onToggle={togglePlay}
                   onDel={() => {
-                    if (tab === "all") { setPlaylist((p) => p.filter((x) => x.id !== tr.id)); if (userId) supabase.from("playlists").delete().eq("id", tr.id).then(() => {}, () => {}); } // แท็บทั้งหมด -> ลบจริง
-                    else if (tab === "fav") toggleFavorite(tr.id);                                   // แท็บโปรด -> แค่เอาออกจากโปรด
+                    if (tab === "all") askConfirm(`ลบ "${tr.name}" ออกจากสื่อทั้งหมดเลยไหม?`, () => { setPlaylist((p) => p.filter((x) => x.id !== tr.id)); if (userId) supabase.from("playlists").delete().eq("id", tr.id).then(() => {}, () => {}); }); // แท็บทั้งหมด -> ลบจริง (ถามยืนยันก่อน)
+                    else if (tab === "fav") toggleFavorite(tr.id);                                   // แท็บโปรด -> แค่เอาออกจากโปรด ไม่ต้องยืนยัน (ย้อนกลับง่าย)
                     else setTrackFolder(tr.id, null);                                                 // แท็บหมวดหมู่ -> แค่เอาออกจากหมวด ไม่ลบต้นฉบับ
                   }}
                   onFav={() => toggleFavorite(tr.id)}
@@ -2450,6 +2517,7 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
           เพลง YouTube เล่นได้ทั้งจากหน้า Home (ใต้เป้าหมายวันนี้) และหน้าสื่อนี้เลย (ตาม YouTube ToS ต้องมองเห็นได้ตอนเล่น) — ถ้าออกจากทั้ง 2 หน้านี้ วิดีโออาจหยุดเล่นตามพฤติกรรมเบราว์เซอร์ · ไฟล์เพลงเล่นต่อได้ทุกหน้าเหมือนเดิม · ไฟล์ใหญ่กว่า 1.5MB เล่นเฉพาะรอบนี้ · ดาวน์โหลดได้เฉพาะไฟล์ที่แนบเอง (YouTube ดาวน์โหลดไม่ได้ตามกติกา)
         </div>
       </div>
+      {ConfirmUI}
     </div>
   );
 }
@@ -2536,7 +2604,7 @@ function SocialEmbedModal({ t, item, close }) {
   );
 }
 
-function TrackRow({ t, M, track, active, playing, folders, dragHandleProps, onPlay, onToggle, onDel, onFav, onFolder, onRename, onPinHome }) {
+function TrackRow({ t, M, track, active, playing, folders, dragHandleProps, dragPriming, onPlay, onToggle, onDel, onFav, onFolder, onRename, onPinHome }) {
   const isLink = track.kind === "link";
   const platMeta = PLATFORM_META[track.platform] || PLATFORM_META.other;
   const icon = isLink ? <Link2 size={16} color={platMeta.color} /> : track.kind === "yt" ? <Music size={16} color="#E0507B" /> : track.kind === "file" ? <Music size={16} color="#3DA5D9" /> : <Sparkles size={16} color={t.accent} />;
@@ -2546,7 +2614,7 @@ function TrackRow({ t, M, track, active, playing, folders, dragHandleProps, onPl
   return (
     <div style={{ ...card(t), padding: "10px 12px", border: `1px solid ${active ? t.accent : t.border}` }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <span {...dragHandleProps} style={{ ...dragHandleProps?.style, flexShrink: 0 }}><GripVertical size={16} color={t.faint} /></span>
+        <span {...dragHandleProps} style={{ ...dragHandleProps?.style, flexShrink: 0 }}><GripVertical size={16} color={dragPriming ? t.accent : t.faint} /></span>
         <button onClick={isLink ? onPlay : (active ? onToggle : onPlay)} style={{ width: 34, height: 34, borderRadius: 17, border: "none", cursor: "pointer", background: active ? t.accent : `${t.accent}22`, color: active ? t.onAccent : t.accent, display: "grid", placeItems: "center", flexShrink: 0 }}>
           {isLink ? <ChevronRight size={15} /> : active && playing ? <Pause size={15} /> : <Play size={15} />}
         </button>
@@ -2774,6 +2842,7 @@ function ShareGoalModal({ t, userId, authProfile, weekPoints, bestStreak, badge,
 }
 
 function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, allGoals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder }) {
+  const [askConfirm, ConfirmUI] = useConfirm(t);
   const [viewingPinned, setViewingPinned] = useState(null);
   const [commentingId, setCommentingId] = useState(null);
   const pinnedMedia = (playlist || []).filter((p) => p.kind === "link" && p.pinnedHome);
@@ -2966,7 +3035,7 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
                 </button>
                 <button onClick={() => setCommentingId(commentingId === g.id ? null : g.id)} style={ghost} title="เพิ่มคอมเมนต์/สถานะ"><MessageCircle size={14} color={g.comment ? t.accent : t.faint} /></button>
                 <button onClick={() => openReminder("goal", g.id, g.text)} style={ghost} title="ตั้งเตือนเป้าหมายนี้"><Bell size={14} color={reminders.some((r) => r.targetType === "goal" && r.targetId === g.id) ? t.accent : t.faint} fill={reminders.some((r) => r.targetType === "goal" && r.targetId === g.id) ? t.accent : "none"} /></button>
-                <button onClick={() => { setGoals((gs) => gs.filter((x) => x.id !== g.id)); if (userId) { supabase.from("goals").delete().eq("id", g.id).then(() => {}, () => {}); logAudit(userId, "goals", "delete", "ลบเป้าหมาย"); } }} style={ghost}><Trash2 size={15} color={t.faint} /></button>
+                <button onClick={() => askConfirm(`ลบเป้าหมาย "${g.text}" เลยไหม?`, () => { setGoals((gs) => gs.filter((x) => x.id !== g.id)); if (userId) { supabase.from("goals").delete().eq("id", g.id).then(() => {}, () => {}); logAudit(userId, "goals", "delete", "ลบเป้าหมาย"); } })} style={ghost}><Trash2 size={15} color={t.faint} /></button>
               </div>
               {commentingId === g.id && (
                 <div style={{ display: "flex", gap: 6, marginTop: 6, marginLeft: 32 }}>
@@ -3027,12 +3096,14 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
         </div>
       )}
       {viewingPinned && <SocialEmbedModal t={t} item={viewingPinned} close={() => setViewingPinned(null)} />}
+      {ConfirmUI}
     </>
   );
 }
 
 // ---------------- Finance (full) ----------------
 function FinancePage({ t, tx, setTx, categories, openAdd, openExport, userId, billReminders, billPayments, markBillPaid, setBillManagerOpen }) {
+  const [askConfirm, ConfirmUI] = useConfirm(t);
   const [editingTx, setEditingTx] = useState(null);
   const [viewReceipt, setViewReceipt] = useState(null); // signed url ของรูปสลิป/ใบเสร็จที่กำลังดู
   const openReceipt = async (path) => {
@@ -3244,7 +3315,7 @@ function FinancePage({ t, tx, setTx, categories, openAdd, openExport, userId, bi
                   <div style={{ fontSize: 14.5, fontWeight: 800, color: x.type === "in" ? "#2E9E6B" : t.text }}>{x.type === "in" ? "+" : "−"}{x.amount.toLocaleString()}</div>
                   {x.receipt_path && <button onClick={() => openReceipt(x.receipt_path)} style={ghost} title="ดูรูปสลิป/ใบเสร็จ"><Receipt size={15} color={t.accent} /></button>}
                   <button onClick={() => setEditingTx(x)} style={ghost} title="แก้ไข"><Pencil size={15} color={t.faint} /></button>
-                  <button onClick={() => { setTx((l) => l.filter((y) => y.id !== x.id)); if (userId) { supabase.from("transactions").delete().eq("id", x.id).then(() => {}, () => {}); logAudit(userId, "finance", "delete", "ลบรายการการเงิน"); } }} style={ghost}><Trash2 size={15} color={t.faint} /></button>
+                  <button onClick={() => askConfirm(`ลบรายการ "${x.note || (x.type === "in" ? "รายรับ" : "รายจ่าย")}" ฿${x.amount.toLocaleString()} เลยไหม?`, () => { setTx((l) => l.filter((y) => y.id !== x.id)); if (userId) { supabase.from("transactions").delete().eq("id", x.id).then(() => {}, () => {}); logAudit(userId, "finance", "delete", "ลบรายการการเงิน"); } })} style={ghost}><Trash2 size={15} color={t.faint} /></button>
                 </div>
               </div>
             ); })}
@@ -3253,20 +3324,22 @@ function FinancePage({ t, tx, setTx, categories, openAdd, openExport, userId, bi
       ))}
       {editingTx && <EditTxModal t={t} x={editingTx} categories={categories} userId={userId} setTx={setTx} close={() => setEditingTx(null)} />}
       {viewReceipt && <ImageLightbox src={viewReceipt} onClose={() => setViewReceipt(null)} />}
+      {ConfirmUI}
     </>
   );
 }
 
 // 💳 จัดการบิลที่ต้องจ่ายประจำ — เพิ่ม/ลบ/ดูสถานะรอบปัจจุบัน + กดจ่ายแล้ว/ย้อนกลับได้
 function BillManagerModal({ t, billReminders, billPayments, addBillReminder, deleteBillReminder, markBillPaid, unmarkBillPaid, close }) {
+  const [askConfirm, ConfirmUI] = useConfirm(t);
   const [adding, setAdding] = useState(false);
   const [label, setLabel] = useState("");
   const [amount, setAmount] = useState("");
   const [recurring, setRecurring] = useState(true);
   const [dueDay, setDueDay] = useState(5);
   const [dueDate, setDueDate] = useState(todayStr());
-  const [confirmDel, setConfirmDel] = useState(null);
   const [busy, setBusy] = useState(false);
+  const billPagination = usePagination(billReminders, 10); // 📄 แบ่งหน้าถ้าตั้งบิลไว้เกิน 10 รายการ
 
   const submitNew = async () => {
     if (!label.trim() || busy) return;
@@ -3292,7 +3365,7 @@ function BillManagerModal({ t, billReminders, billPayments, addBillReminder, del
 
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
           {billReminders.length === 0 && <Empty t={t} text="ยังไม่มีบิลที่ตั้งไว้" />}
-          {billReminders.map((b) => {
+          {billPagination.pageItems.map((b) => {
             const latest = latestPaymentOf(b.id);
             return (
               <div key={b.id} style={{ ...card(t), padding: "10px 12px" }}>
@@ -3302,11 +3375,7 @@ function BillManagerModal({ t, billReminders, billPayments, addBillReminder, del
                     <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{b.label}</div>
                     <div style={{ fontSize: 11, color: t.faint }}>{b.recurring ? `ทุกเดือน วันที่ ${b.dueDay}` : `ครั้งเดียว ${b.dueDate}`} · ฿{b.amount.toLocaleString()}</div>
                   </div>
-                  {confirmDel === b.id ? (
-                    <button onClick={() => { deleteBillReminder(b.id); setConfirmDel(null); }} style={{ ...ghost, color: "#D9534F", fontSize: 11, fontWeight: 700 }}>ยืนยันลบ?</button>
-                  ) : (
-                    <button onClick={() => setConfirmDel(b.id)} style={ghost}><Trash2 size={15} color={t.faint} /></button>
-                  )}
+                  <button onClick={() => askConfirm(`ลบบิล "${b.label}" เลยไหม?`, () => deleteBillReminder(b.id))} style={ghost}><Trash2 size={15} color={t.faint} /></button>
                 </div>
                 {latest && (
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8, paddingLeft: 44 }}>
@@ -3321,6 +3390,7 @@ function BillManagerModal({ t, billReminders, billPayments, addBillReminder, del
               </div>
             );
           })}
+          <PaginationBar t={t} page={billPagination.page} setPage={billPagination.setPage} totalPages={billPagination.totalPages} />
         </div>
 
         {!adding ? (
@@ -3352,6 +3422,7 @@ function BillManagerModal({ t, billReminders, billPayments, addBillReminder, del
           </div>
         )}
       </div>
+      {ConfirmUI}
     </div>
   );
 }
@@ -3798,6 +3869,76 @@ function AdminNewsPanel({ t }) {
   );
 }
 
+// 💡 หน้าแอดมิน "คำแนะนำการใช้งาน" — แก้ข้อความ/เปิดปิดคำแนะนำแต่ละจุดที่เดฟผูกไว้ในโค้ดแล้ว + ดูว่าสมาชิกกี่คนเคยเห็นแล้ว
+// หมายเหตุ: แอดมินแก้ได้แค่ "ข้อความ" กับ "เปิด/ปิด" ของจุดที่มีอยู่แล้ว ไม่ได้เพิ่มจุดคำแนะนำใหม่เองได้ เพราะแต่ละจุดต้องผูกกับโค้ดตำแหน่งนั้นจริงๆ ก่อน (ต้องให้เดฟเพิ่มโค้ดก่อน)
+function AdminHintsPanel({ t, totalMembers }) {
+  const [hints, setHints] = useState([]); // [{key, locationLabel, body, active, editBody}]
+  const [seenCounts, setSeenCounts] = useState({}); // { [key]: จำนวนคนที่เคยดู }
+  const [loading, setLoading] = useState(true);
+  const [savingKey, setSavingKey] = useState(null);
+
+  const load = async () => {
+    setLoading(true);
+    const { data: defs } = await supabase.from("hint_definitions").select("*").order("key");
+    const { data: seenRows } = await supabase.from("hint_seen").select("hint_key");
+    const counts = {};
+    (seenRows || []).forEach((r) => { counts[r.hint_key] = (counts[r.hint_key] || 0) + 1; });
+    setSeenCounts(counts);
+    setHints((defs || []).map((h) => ({ key: h.key, locationLabel: h.location_label, body: h.body, active: h.active, editBody: h.body })));
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
+
+  const save = async (key) => {
+    const h = hints.find((x) => x.key === key);
+    if (!h) return;
+    setSavingKey(key);
+    const { error } = await supabase.from("hint_definitions").update({ body: h.editBody }).eq("key", key);
+    if (error) alert("บันทึกไม่สำเร็จ: " + error.message);
+    else setHints((list) => list.map((x) => (x.key === key ? { ...x, body: x.editBody } : x)));
+    setSavingKey(null);
+  };
+  const toggleActive = async (key, active) => {
+    setHints((list) => list.map((x) => (x.key === key ? { ...x, active } : x)));
+    await supabase.from("hint_definitions").update({ active }).eq("key", key);
+  };
+
+  if (loading) return <Empty t={t} text="กำลังโหลด..." />;
+
+  return (
+    <div>
+      <div style={{ fontSize: 12, color: t.sub, marginBottom: 14, lineHeight: 1.6 }}>
+        แก้ข้อความและเปิด/ปิดคำแนะนำ (coachmark) แต่ละจุดที่มีอยู่แล้วในแอปได้ที่นี่ — จุดใหม่ต้องให้เดฟเพิ่มโค้ดผูกตำแหน่งก่อน ถึงจะมาแก้ข้อความที่นี่ได้ ตัวเลข "เห็นแล้ว" นับจากสมาชิกที่อนุมัติแล้วทั้งหมด ({totalMembers} คน)
+      </div>
+      {hints.length === 0 && <Empty t={t} text="ยังไม่มีคำแนะนำที่ตั้งไว้ในระบบ" />}
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {hints.map((h) => {
+          const seen = seenCounts[h.key] || 0;
+          const dirty = h.editBody !== h.body;
+          return (
+            <div key={h.key} style={{ ...card(t), padding: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 800, color: t.text }}>{h.locationLabel}</div>
+                <button onClick={() => toggleActive(h.key, !h.active)} style={{ display: "flex", alignItems: "center", gap: 5, background: "none", border: "none", cursor: "pointer" }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: h.active ? "#2E9E6B" : t.faint }}>{h.active ? "เปิดอยู่" : "ปิดอยู่"}</span>
+                  <div style={{ width: 34, height: 19, borderRadius: 10, background: h.active ? "#2E9E6B" : t.border, position: "relative", transition: "background .15s" }}>
+                    <div style={{ position: "absolute", top: 2, left: h.active ? 17 : 2, width: 15, height: 15, borderRadius: 8, background: "#fff", transition: "left .15s" }} />
+                  </div>
+                </button>
+              </div>
+              <textarea value={h.editBody} onChange={(e) => setHints((list) => list.map((x) => (x.key === h.key ? { ...x, editBody: e.target.value } : x)))} rows={2} style={{ ...input(t), resize: "vertical", marginBottom: 8, fontFamily: "inherit" }} />
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 11, color: t.faint }}>เห็นแล้ว {seen} / {totalMembers} คน</span>
+                {dirty && <button onClick={() => save(h.key)} disabled={savingKey === h.key} style={{ ...primaryBtn(t), padding: "6px 16px", fontSize: 12 }}>{savingKey === h.key ? "กำลังบันทึก..." : "บันทึก"}</button>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts, authProfile, setAuthProfile }) {
   const [tab, setTab] = useState("overview"); // overview | members | add
   const [members, setMembers] = useState([]);
@@ -3877,7 +4018,7 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts, authProfil
 
       <div style={{ position: "relative", marginBottom: 14 }}>
         <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2 }}>
-          {[["overview", "ภาพรวม"], ["members", "สมาชิก"], ["activity", "กิจกรรม"], ["announce", "ประกาศ"], ["news", "ข่าวสาร"], ["add", "เพิ่มสมาชิก"]].map(([v, lb]) => (
+          {[["overview", "ภาพรวม"], ["members", "สมาชิก"], ["activity", "กิจกรรม"], ["announce", "ประกาศ"], ["news", "ข่าวสาร"], ["hints", "คำแนะนำ"], ["add", "เพิ่มสมาชิก"]].map(([v, lb]) => (
             <button key={v} onClick={() => setTab(v)} style={{ flexShrink: 0, padding: "9px 16px", borderRadius: 12, cursor: "pointer", border: `1.5px solid ${tab === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 12.5, background: tab === v ? t.accent : "transparent", color: tab === v ? t.onAccent : t.sub, whiteSpace: "nowrap" }}>{lb}</button>
           ))}
         </div>
@@ -3981,6 +4122,7 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts, authProfil
       {tab === "activity" && <AdminActivityPanel t={t} members={members} />}
       {tab === "announce" && <AnnouncementsAdmin t={t} userId={userId} />}
       {tab === "news" && <AdminNewsPanel t={t} />}
+      {tab === "hints" && <AdminHintsPanel t={t} totalMembers={members.filter((m) => m.approved).length} />}
       {tab === "add" && <AdminAddPinMember t={t} session={session} onCreated={loadMembers} />}
 
       {detailMember && (
@@ -4928,6 +5070,7 @@ function CommunityBookmarks({ t, userId, onOpenProfile }) {
 
 // ⚙️ ตั้งค่าชุมชน
 function CommunitySettings({ t, userId, close }) {
+  const [askConfirm, ConfirmUI] = useConfirm(t);
   const [cats, setCats] = useState([]);
   const [prefs, setPrefs] = useState(null); // { community_notify_like, ..., community_private }
   const [hidden, setHidden] = useState([]);
@@ -5004,7 +5147,7 @@ function CommunitySettings({ t, userId, close }) {
                 : cats.map((c) => (
                   <div key={c.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 0", borderBottom: `1px solid ${t.border}` }}>
                     <span style={{ fontSize: 13, fontWeight: 700, color: t.text }}>📁 {c.name}</span>
-                    <button onClick={() => delCat(c.id)} style={{ background: "none", border: "none", cursor: "pointer" }}><Trash2 size={15} color="#D9534F" /></button>
+                    <button onClick={() => askConfirm(`ลบหมวดหมู่ "${c.name}" เลยไหม?`, () => delCat(c.id))} style={{ background: "none", border: "none", cursor: "pointer" }}><Trash2 size={15} color="#D9534F" /></button>
                   </div>
                 ))}
               <div style={{ fontSize: 11.5, color: t.faint, marginTop: 8 }}>ลบหมวดแล้วโพสต์ที่บันทึกไว้จะกลับไปอยู่ "ทั่วไป" ไม่หายไป</div>
@@ -5012,6 +5155,7 @@ function CommunitySettings({ t, userId, close }) {
           )}
         </div>
       </div>
+      {ConfirmUI}
     </ModalPortal>
   );
 }
@@ -6649,7 +6793,7 @@ function CategoryManagerModal({ t, categories, reorderCategoriesForKind, deleteC
   const [newLabel, setNewLabel] = useState("");
   const [newIcon, setNewIcon] = useState(ICON_KEYS[0]);
   const [newColor, setNewColor] = useState(CAT_COLORS[0]);
-  const [confirmDel, setConfirmDel] = useState(null); // id ที่กำลังถามยืนยันลบ (กดสองครั้ง กันลบพลาด)
+  const [askConfirm, ConfirmUI] = useConfirm(t);
 
   const list = catList(categories, kind);
   const submitNew = () => {
@@ -6675,22 +6819,19 @@ function CategoryManagerModal({ t, categories, reorderCategoriesForKind, deleteC
             items={list}
             getId={(c) => c.id}
             onReorder={(newList) => reorderCategoriesForKind(kind, newList)}
-            renderItem={(c, i, { handleProps }) => {
+            renderItem={(c, i, { handleProps, priming }) => {
               const Ic = ICONS[c.iconKey] || Wallet;
               return (
                 <div style={{ ...card(t), padding: "9px 12px", display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                  <span {...handleProps}><GripVertical size={16} color={t.faint} /></span>
+                  <span {...handleProps}><GripVertical size={16} color={priming ? t.accent : t.faint} /></span>
                   <span style={{ width: 34, height: 34, borderRadius: 11, background: `${c.color}22`, display: "grid", placeItems: "center", flexShrink: 0 }}><Ic size={16} color={c.color} /></span>
                   <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: t.text }}>{c.label}</span>
-                  {confirmDel === c.id ? (
-                    <button onClick={() => { deleteCategory(c.id); setConfirmDel(null); }} style={{ ...ghost, color: "#D9534F", fontSize: 11, fontWeight: 700 }}>ยืนยันลบ?</button>
-                  ) : (
-                    <button onClick={() => setConfirmDel(c.id)} style={ghost}><Trash2 size={15} color={t.faint} /></button>
-                  )}
+                  <button onClick={() => askConfirm(`ลบหมวดหมู่ "${c.label}" เลยไหม?`, () => deleteCategory(c.id))} style={ghost}><Trash2 size={15} color={t.faint} /></button>
                 </div>
               );
             }}
           />
+          {ConfirmUI}
           {list.length === 0 && <Empty t={t} text="ยังไม่มีหมวดหมู่ในฝั่งนี้" />}
         </div>
 
@@ -6895,11 +7036,11 @@ function NoteEditor({ content, onChange, theme, userId, t }) {
                 items={orderedKeys}
                 getId={(k) => k}
                 onReorder={(newOrder) => setToolOrder(newOrder)}
-                renderItem={(key, i, { handleProps }) => {
+                renderItem={(key, i, { handleProps, priming }) => {
                   const qt = allTools[key];
                   return (
                     <div style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "9px 10px", borderRadius: 10, background: t?.inputBg || "#f5f5f5", marginBottom: 4 }}>
-                      <span {...handleProps}><GripVertical size={16} color={t?.faint || "#999"} /></span>
+                      <span {...handleProps}><GripVertical size={16} color={priming ? (t?.accent || "#333") : (t?.faint || "#999")} /></span>
                       <qt.Icon size={15} color={t?.sub || "#666"} style={{ flexShrink: 0 }} />
                       <span style={{ fontSize: 12.5, color: t?.text || "#333", flex: 1 }}>{qt.label}{i < 4 ? <span style={{ fontSize: 10, color: t?.faint || "#999", marginLeft: 6 }}>(แถวหลัก)</span> : null}</span>
                     </div>
@@ -6991,7 +7132,7 @@ function NotionSetupModal({ t, userId, close }) {
 }
 
 function NotePage({ t, notes, setNotes, isNight, userId, session, authProfile, reminders, openReminder }) {
-
+  const [askConfirm, ConfirmUI] = useConfirm(t);
   const [title, setTitle] = useState(""); const [body, setBody] = useState(null); const [tagsInput, setTagsInput] = useState("");
   const [draftKey, setDraftKey] = useState(0); // เปลี่ยนค่านี้เพื่อบังคับให้ NoteEditor ตัวเพิ่มโน้ตใหม่รีเซ็ตเนื้อหาว่าง
   const [editingId, setEditingId] = useState(null);
@@ -7095,6 +7236,7 @@ function NotePage({ t, notes, setNotes, isNight, userId, session, authProfile, r
   const shown = [...notes]
     .filter((n) => !tagFilter || (n.tags || []).includes(tagFilter))
     .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+  const notesPagination = usePagination(shown, 10); // 📄 แบ่งหน้าถ้าโน้ตเกิน 10 อัน
 
   const editorTheme = isNight ? "dark" : "light";
 
@@ -7140,7 +7282,7 @@ function NotePage({ t, notes, setNotes, isNight, userId, session, authProfile, r
 
       <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
         {shown.length === 0 && <Empty t={t} text="ยังไม่มีโน้ต เริ่มจดอันแรก" />}
-        {shown.map((n) => (
+        {notesPagination.pageItems.map((n) => (
           <div key={n.id} style={{ ...card(t), padding: 14, border: `1px solid ${n.pinned ? t.accent : t.border}` }}>
             {editingId === n.id ? (
               <>
@@ -7166,7 +7308,7 @@ function NotePage({ t, notes, setNotes, isNight, userId, session, authProfile, r
                     <button onClick={() => togglePin(n.id)} style={ghost} title={n.pinned ? "ปักหมุดแล้ว" : "ปักหมุด"}><Pin size={15} color={n.pinned ? t.accent : t.faint} fill={n.pinned ? t.accent : "none"} /></button>
                     <button onClick={() => openReminder("note", n.id, n.title || "โน้ตไม่มีหัวข้อ")} style={ghost} title="ตั้งเตือนโน้ตนี้"><Bell size={15} color={reminders.some((r) => r.targetType === "note" && r.targetId === n.id) ? t.accent : t.faint} fill={reminders.some((r) => r.targetType === "note" && r.targetId === n.id) ? t.accent : "none"} /></button>
                     <button onClick={() => startEdit(n)} style={ghost} title="แก้ไข"><Pencil size={15} color={t.faint} /></button>
-                    <button onClick={() => { setNotes((x) => x.filter((y) => y.id !== n.id)); if (userId) { supabase.from("notes").delete().eq("id", n.id).then(() => {}, () => {}); logAudit(userId, "notes", "delete", "ลบโน้ต"); } }} style={ghost} title="ลบ"><Trash2 size={15} color={t.faint} /></button>
+                    <button onClick={() => askConfirm(`ลบโน้ต "${n.title || "(ไม่มีหัวข้อ)"}" เลยไหม?`, () => { setNotes((x) => x.filter((y) => y.id !== n.id)); if (userId) { supabase.from("notes").delete().eq("id", n.id).then(() => {}, () => {}); logAudit(userId, "notes", "delete", "ลบโน้ต"); } })} style={ghost} title="ลบ"><Trash2 size={15} color={t.faint} /></button>
                   </div>
                 </div>
                 {viewingId === n.id ? (
@@ -7187,6 +7329,8 @@ function NotePage({ t, notes, setNotes, isNight, userId, session, authProfile, r
           </div>
         ))}
       </div>
+      <PaginationBar t={t} page={notesPagination.page} setPage={notesPagination.setPage} totalPages={notesPagination.totalPages} />
+      {ConfirmUI}
     </>
   );
 }
@@ -7499,15 +7643,16 @@ const NEWS_CATEGORY_GROUPS = [
   { id: "lifestyle", label: "🎨 ไลฟ์สไตล์", catIds: ["tech", "life"] },
 ];
 
-function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskAiTopic }) {
+function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskAiTopic, hintDefs, seenHintKeys, dismissHint }) {
   const [category, setCategory] = useState(authProfile?.news_category || "tech");
-  const [showArrowHint, dismissArrowHint] = useFirstTimeHint("news_category_arrows"); // 💡 แนะนำครั้งแรกว่าปัด/กดลูกศรเปลี่ยนหมวดได้
+  const [showArrowHint, arrowHintText, dismissArrowHint] = useHint("news_category_arrows", hintDefs, seenHintKeys, dismissHint); // 💡 แนะนำครั้งแรกว่าปัด/กดลูกศรเปลี่ยนหมวดได้ (ข้อความแก้ได้จากหน้าแอดมิน)
   const [menuOpen, setMenuOpen] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState(() => new Set(
     NEWS_CATEGORY_GROUPS.filter((g) => g.catIds.includes(category)).map((g) => g.id)
   ));
   const toggleGroup = (id) => setExpandedGroups((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const [items, setItems] = useState([]);
+  const [lastFetchedAt, setLastFetchedAt] = useState(null); // ⏱️ เวลาที่ดึงข่าวจริงครั้งล่าสุด (โชว์ให้เห็นว่ารีเฟรชสำเร็จจริง)
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [savedLinks, setSavedLinks] = useState(new Set());
@@ -7624,11 +7769,11 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
     const customCat = customCategories.find((c) => c.id === cat);
     const qParam = customCat ? `&q=${encodeURIComponent(customCat.query || customCat.label)}` : "";
     const limitParam = `&limit=${categoryLimits[cat] || 10}`;
-    fetch(`/api/content?type=news&category=${cat}${qParam}${limitParam}${force ? "&force=1" : ""}`)
+    fetch(`/api/content?type=news&category=${cat}${qParam}${limitParam}${force ? "&force=1" : ""}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((data) => {
         if (data.error) { setError(data.error); setItems([]); }
-        else { const list = data.items || []; setItems(list); loadStats(list); }
+        else { const list = data.items || []; setItems(list); loadStats(list); setLastFetchedAt(data.fetchedAt || null); }
       })
       .catch(() => setError("โหลดข่าวไม่สำเร็จ ลองใหม่อีกครั้ง"))
       .finally(() => setLoading(false));
@@ -7703,6 +7848,7 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
   const combinedGroups = [...NEWS_CATEGORY_GROUPS, ...customGroups.map((g) => ({ id: g.id, label: g.label, catIds: [] }))];
   const currentCat = combinedCategories.find((c) => c.id === category);
   const visibleItems = category === "saved" ? items : items.filter((x) => !blockedSources.has(x.source) && !globalBlockedSources.has(x.source));
+  const newsPagination = usePagination(visibleItems, 10); // 📄 แบ่งหน้าถ้าข่าวในหมวดนี้เกิน 10 เรื่อง
   const visibleCategories = combinedCategories.filter((c) => c.id === "saved" || !disabledCats.includes(c.id));
   // groupId ของ custom category อาจชี้ไปกลุ่ม hardcode หรือกลุ่ม custom ก็ได้ — รวม catIds ให้ครบทุกกลุ่ม
   const groupsWithCats = combinedGroups.map((g) => ({
@@ -7798,36 +7944,41 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
         </div>
       </ModalPortal>
     )}
-    <PageHead t={t} title="ข่าวสาร" sub="อัปเดตสถานการณ์โลก" icon={<Newspaper size={20} color={t.accent} />} />
+    <PageHead t={t} title="ข่าวสาร" sub="อัปเดตสถานการณ์โลก" icon={<Newspaper size={20} color={t.accent} />} right={
+      <div style={{ position: "relative", display: "flex", gap: 4, flexShrink: 0 }}>
+        <button onClick={() => { const idx = visibleCategories.findIndex((c) => c.id === category); if (idx > 0) selectCategory(visibleCategories[idx - 1].id); dismissArrowHint(); }} style={{ width: 34, height: 34, borderRadius: 10, border: `1px solid ${t.border}`, background: t.inputBg, display: "grid", placeItems: "center", cursor: "pointer" }} title="หมวดก่อนหน้า">
+          <ChevronLeft size={16} color={t.text} />
+        </button>
+        <button onClick={() => { const idx = visibleCategories.findIndex((c) => c.id === category); if (idx < visibleCategories.length - 1) selectCategory(visibleCategories[idx + 1].id); dismissArrowHint(); }} style={{ width: 34, height: 34, borderRadius: 10, border: `1px solid ${t.border}`, background: t.inputBg, display: "grid", placeItems: "center", cursor: "pointer" }} title="หมวดถัดไป">
+          <ChevronRight size={16} color={t.text} />
+        </button>
+        <Coachmark t={t} show={showArrowHint} onDismiss={dismissArrowHint} align="right" text={arrowHintText} />
+      </div>
+    } />
     <style>{`@keyframes rh-news-spin { to { transform: rotate(360deg); } } .rh-news-spin { animation: rh-news-spin 0.8s linear infinite; }`}</style>
     <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, marginBottom: 4 }}>
       <button onClick={() => setMenuOpen(true)} style={{ flexShrink: 0, width: 38, height: 38, borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, display: "grid", placeItems: "center", cursor: "pointer" }} title="เลือกหมวดหมู่">
         <Menu size={18} color={t.text} />
       </button>
-      <button onClick={() => setMenuOpen(true)} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 8, padding: "9px 14px", borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, cursor: "pointer", textAlign: "left" }}>
+      <button onClick={() => setMenuOpen(true)} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "9px 14px", borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, cursor: "pointer", textAlign: "center" }}>
         <span style={{ fontSize: 14, fontWeight: 800, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{currentCat?.label}</span>
       </button>
-      {/* ⬅➡ เปลี่ยนหมวดข่าวก่อนหน้า/ถัดไป (เหมือนปัดซ้าย-ขวา แค่มีปุ่มให้กดด้วยเผื่อไม่รู้ว่าปัดได้) + คำแนะนำครั้งแรก */}
-      <div style={{ position: "relative", display: "flex", gap: 4, flexShrink: 0 }}>
-        <button onClick={() => { const idx = visibleCategories.findIndex((c) => c.id === category); if (idx > 0) selectCategory(visibleCategories[idx - 1].id); dismissArrowHint(); }} style={{ width: 34, height: 38, borderRadius: 10, border: `1px solid ${t.border}`, background: t.inputBg, display: "grid", placeItems: "center", cursor: "pointer" }} title="หมวดก่อนหน้า">
-          <ChevronLeft size={16} color={t.text} />
-        </button>
-        <button onClick={() => { const idx = visibleCategories.findIndex((c) => c.id === category); if (idx < visibleCategories.length - 1) selectCategory(visibleCategories[idx + 1].id); dismissArrowHint(); }} style={{ width: 34, height: 38, borderRadius: 10, border: `1px solid ${t.border}`, background: t.inputBg, display: "grid", placeItems: "center", cursor: "pointer" }} title="หมวดถัดไป">
-          <ChevronRight size={16} color={t.text} />
-        </button>
-        <Coachmark t={t} show={showArrowHint} onDismiss={dismissArrowHint} align="right" text="ปัดซ้าย-ขวาบนข่าว หรือกดลูกศรนี้ ก็เปลี่ยนหมวดข่าวได้เหมือนกันครับ" />
-      </div>
       {category !== "saved" && (
         <button onClick={() => load(category, true)} disabled={loading} style={{ flexShrink: 0, width: 38, height: 38, borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, display: "grid", placeItems: "center", cursor: "pointer" }} title="รีเฟรชข่าวล่าสุด">
           <RefreshCw size={15} color={t.text} className={loading ? "rh-news-spin" : ""} />
         </button>
       )}
     </div>
+    {category !== "saved" && lastFetchedAt && (
+      <div style={{ fontSize: 10.5, color: t.faint, textAlign: "center", marginBottom: 8 }}>
+        อัปเดตล่าสุด {new Date(lastFetchedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.
+      </div>
+    )}
     <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8 }}>
       {loading && <Empty t={t} text="กำลังโหลด..." />}
       {!loading && error && <Empty t={t} text={`⚠️ ${error}`} />}
       {!loading && !error && visibleItems.length === 0 && <Empty t={t} text={category === "saved" ? "ยังไม่มีข่าวที่บันทึกไว้" : "ยังไม่มีข่าวในหมวดนี้"} />}
-      {!loading && !error && visibleItems.map((x, i) => {
+      {!loading && !error && newsPagination.pageItems.map((x, i) => {
         const st = stats[x.link] || { views: 0, likeCount: 0, likedByMe: false };
         return (
         <div key={x.link || i} style={{ ...card(t), padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
@@ -7874,6 +8025,7 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
           </div>
         </div>
         ); })}
+      <PaginationBar t={t} page={newsPagination.page} setPage={newsPagination.setPage} totalPages={newsPagination.totalPages} />
     </div>
   </>);
 }
@@ -8532,7 +8684,7 @@ function CatCard({ t, k, icon, label, children, onClick }) {
   </div>);
 }
 const catIcBg = (k) => ({ green: "#7FB894", amber: "#E0B24A", coral: "#E07B57", violet: "#7B6CB0" }[k]);
-function PageHead({ t, title, sub, icon }) { return (<div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}><div style={{ width: 44, height: 44, borderRadius: 14, background: `${t.accent}1A`, display: "grid", placeItems: "center", flexShrink: 0 }}>{icon}</div><div><div style={{ fontSize: 21, fontWeight: 800, color: t.text }}>{title}</div><div style={{ fontSize: 12.5, color: t.sub }}>{sub}</div></div></div>); }
+function PageHead({ t, title, sub, icon, right }) { return (<div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}><div style={{ width: 44, height: 44, borderRadius: 14, background: `${t.accent}1A`, display: "grid", placeItems: "center", flexShrink: 0 }}>{icon}</div><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 21, fontWeight: 800, color: t.text }}>{title}</div><div style={{ fontSize: 12.5, color: t.sub }}>{sub}</div></div>{right}</div>); }
 function MockBanner({ t, text }) { return (<div style={{ display: "flex", alignItems: "center", gap: 8, background: `${t.accent}14`, border: `1px dashed ${t.accent}66`, borderRadius: 12, padding: "9px 12px", fontSize: 11.5, color: t.accent, fontWeight: 600 }}><Clock size={14} /> {text}</div>); }
 function Empty({ t, text }) { return <div style={{ textAlign: "center", color: t.sub, fontSize: 13, padding: "26px 0" }}>{text}</div>; }
 function IconBtn({ t, onClick, children, active, accent }) { return <button onClick={onClick} style={{ width: 38, height: 38, borderRadius: 19, background: active ? `${accent}1A` : t.surface, border: `1px solid ${active ? accent + "55" : t.border}`, cursor: "pointer", display: "grid", placeItems: "center", boxShadow: t.star ? "none" : "0 3px 10px rgba(40,50,70,.08)" }}>{children}</button>; }
