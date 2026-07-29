@@ -2341,6 +2341,16 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
 
         {/* 🎬 ผู้เล่น YouTube ย้ายมาเล่นตรงนี้ได้เลย (เดิมบอกแค่ว่าไปเล่นอยู่หน้า Home ตอนนี้เล่น+คุมได้จากตรงนี้ทันที) */}
         {cur && cur.kind === "yt" && <div ref={(node) => setModalYtSlot(node)} style={{ marginBottom: 14 }} />}
+        {/* 📎 IG/X/TikTok/Facebook — โชว์ด้านบนแบบเดียวกับ YouTube เลย ไม่ต้องเปิด modal ซ้อนอีกต่อไป */}
+        {viewingMedia && (
+          <div style={{ ...card(t), padding: 14, marginBottom: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{viewingMedia.name}</div>
+              <button onClick={() => setViewingMedia(null)} style={ghost} title="ปิด"><X size={18} color={t.faint} /></button>
+            </div>
+            <SocialEmbedBody t={t} item={viewingMedia} />
+          </div>
+        )}
 
         {/* add controls */}
         <div style={{ ...card(t), padding: 14, marginBottom: 12 }}>
@@ -2366,12 +2376,14 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
         </div>
         {saved && <div style={{ textAlign: "center", fontSize: 12, fontWeight: 700, color: "#2E9E6B", marginBottom: 10 }}>✓ บันทึกลงเพลย์ลิสต์แล้ว</div>}
 
-        {/* volume */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-          <VolumeX size={16} color={t.faint} />
-          <input type="range" min="0" max="100" value={volume} onChange={(e) => setVolume(+e.target.value)} style={{ flex: 1, accentColor: t.accent }} />
-          <Volume2 size={16} color={t.faint} />
-        </div>
+        {/* volume — โชว์แค่ตอนมีอะไรเล่นอยู่จริง (ไม่ใช่ YouTube เพราะการ์ด "กำลังเล่น" ด้านบนมีปุ่มเสียงของตัวเองอยู่แล้ว กันซ้ำ) */}
+        {cur && cur.kind !== "yt" && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+            <VolumeX size={16} color={t.faint} />
+            <input type="range" min="0" max="100" value={volume} onChange={(e) => setVolume(+e.target.value)} style={{ flex: 1, accentColor: t.accent }} />
+            <Volume2 size={16} color={t.faint} />
+          </div>
+        )}
 
         {/* แท็บหมวดหมู่ — ใช้ pattern เดียวกับ quick toolbar โน้ต: โชว์ "ทั้งหมด/โปรด" เสมอ + "เพิ่มเติม" ขยายเป็นลิสต์แนวตั้งสำหรับหมวดที่สร้างเอง (ไม่เลื่อนแนวนอนแล้ว) */}
         <div style={{ marginBottom: 10 }}>
@@ -2434,7 +2446,6 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
             )}
           />
         </div>
-        {viewingMedia && <SocialEmbedModal t={t} item={viewingMedia} close={() => setViewingMedia(null)} />}
         <div style={{ fontSize: 10.5, color: t.faint, textAlign: "center", marginTop: 14 }}>
           เพลง YouTube เล่นได้ทั้งจากหน้า Home (ใต้เป้าหมายวันนี้) และหน้าสื่อนี้เลย (ตาม YouTube ToS ต้องมองเห็นได้ตอนเล่น) — ถ้าออกจากทั้ง 2 หน้านี้ วิดีโออาจหยุดเล่นตามพฤติกรรมเบราว์เซอร์ · ไฟล์เพลงเล่นต่อได้ทุกหน้าเหมือนเดิม · ไฟล์ใหญ่กว่า 1.5MB เล่นเฉพาะรอบนี้ · ดาวน์โหลดได้เฉพาะไฟล์ที่แนบเอง (YouTube ดาวน์โหลดไม่ได้ตามกติกา)
         </div>
@@ -2444,20 +2455,18 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
 }
 
 // 📎 แสดงสื่อจากแพลตฟอร์มโซเชียลต่างๆ (โหลด embed script ของแต่ละเจ้าแบบไดนามิก)
-// แยกรหัสวิดีโอ TikTok จากลิงก์ (เช่น https://www.tiktok.com/@user/video/1234567890123456789)
-function tiktokExtract(url) {
-  const m = url.match(/\/video\/(\d+)/);
-  return m ? m[1] : null;
-}
 // แยก shortcode ของ Instagram จากลิงก์ (เช่น https://www.instagram.com/p/ABC123xyz/ หรือ /reel/ABC123xyz/)
 function instagramEmbedUrl(url) {
   const m = url.match(/instagram\.com\/(p|reel|tv)\/([A-Za-z0-9_-]+)/);
   return m ? `https://www.instagram.com/${m[1]}/${m[2]}/embed` : null;
 }
 
-function SocialEmbedModal({ t, item, close }) {
+// 📎 เนื้อหา embed จริง (ไม่รวม modal chrome) — ใช้ซ้ำได้ทั้งใน SocialEmbedModal (แบบเต็มจอ) และแบบฝังในหน้าสื่อ (inline บนสุด เหมือน YouTube)
+function SocialEmbedBody({ t, item }) {
   const containerRef = useRef(null);
   const [twitterReady, setTwitterReady] = useState(!!window.twttr?.widgets);
+  const [tiktokEmbedHtml, setTiktokEmbedHtml] = useState(null);
+  const [tiktokFailed, setTiktokFailed] = useState(false);
 
   useEffect(() => {
     if (item.platform !== "twitter") return;
@@ -2468,19 +2477,50 @@ function SocialEmbedModal({ t, item, close }) {
     document.body.appendChild(s);
   }, [item.url]);
 
-  // 🎵 TikTok — ใช้วิธีทางการของ TikTok เอง (blockquote class="tiktok-embed" + สคริปต์ embed.js ที่จะมาแปลงเป็น iframe เล่นได้จริงให้)
-  // เดิมเดา URL เอง (tiktok.com/embed/v2/{id}) ซึ่งไม่ใช่วิธีที่ TikTok รับรองอย่างเป็นทางการ เลยเล่นไม่ขึ้นบ่อยๆ — วิธีนี้เสถียรกว่าเพราะเป็น method เดียวกับที่ TikTok เอกสารแนะนำให้ใช้จริง (เหมือน pattern เดียวกับที่ X/Twitter ใช้ข้างบนนี้เป๊ะ)
+  // 🎵 TikTok — ดึง HTML embed อย่างเป็นทางการตรงจาก TikTok oEmbed API (เหมือนที่แอปเรียกอยู่แล้วตอน "เพิ่มสื่อ" เพื่อดึงชื่อ) แทนการเดา blockquote/video-id เอง
+  // เดิมเดา URL iframe เอง แล้วก็เดา blockquote เอง ยังเล่นไม่ขึ้น — วิธีนี้ได้ HTML ที่ TikTok สร้างให้ตรงๆ เชื่อถือได้กว่ามาก
   useEffect(() => {
     if (item.platform !== "tiktok") return;
+    setTiktokEmbedHtml(null); setTiktokFailed(false);
+    fetch(`https://www.tiktok.com/oembed?url=${encodeURIComponent(item.url)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data?.html) setTiktokEmbedHtml(data.html); else setTiktokFailed(true); })
+      .catch(() => setTiktokFailed(true));
+  }, [item.url]);
+  useEffect(() => {
+    if (item.platform !== "tiktok" || !tiktokEmbedHtml) return;
     const s = document.createElement("script");
     s.src = "https://www.tiktok.com/embed.js"; s.async = true;
     document.body.appendChild(s);
     return () => { try { document.body.removeChild(s); } catch (e) {} };
-  }, [item.url]);
+  }, [tiktokEmbedHtml]);
 
-  const tiktokId = item.platform === "tiktok" ? tiktokExtract(item.url) : null;
   const igEmbed = item.platform === "instagram" ? instagramEmbedUrl(item.url) : null;
 
+  return (
+    <>
+      <div ref={containerRef} style={{ display: "flex", justifyContent: "center" }}>
+        {item.platform === "tiktok" && (
+          tiktokEmbedHtml
+            ? <div dangerouslySetInnerHTML={{ __html: tiktokEmbedHtml }} style={{ width: "100%", display: "flex", justifyContent: "center" }} />
+            : <div style={{ fontSize: 12, color: t.sub, padding: 20, textAlign: "center" }}>{tiktokFailed ? "อ่านลิงก์นี้ไม่ได้ ลองกดเปิดต้นฉบับด้านล่างแทน" : "กำลังโหลด..."}</div>
+        )}
+        {item.platform === "twitter" && <blockquote className="twitter-tweet"><a href={item.url}>เปิดโพสต์ X</a></blockquote>}
+        {item.platform === "instagram" && (
+          igEmbed
+            ? <iframe src={igEmbed} style={{ width: "100%", maxWidth: 400, height: 480, border: "none", borderRadius: 12 }} title="instagram" />
+            : <div style={{ fontSize: 12, color: t.sub, padding: 20, textAlign: "center" }}>อ่านลิงก์นี้ไม่ได้ ลองกดเปิดต้นฉบับด้านล่างแทน</div>
+        )}
+        {item.platform === "facebook" && (
+          <iframe src={`https://www.facebook.com/plugins/post.php?href=${encodeURIComponent(item.url)}&show_text=true&width=400`} style={{ width: "100%", maxWidth: 400, height: 480, border: "none", borderRadius: 12 }} title="facebook" />
+        )}
+      </div>
+      <a href={item.url} target="_blank" rel="noreferrer" style={{ display: "block", textAlign: "center", marginTop: 14, fontSize: 12.5, color: t.accent, fontWeight: 700, textDecoration: "none" }}>เปิดต้นฉบับในแอป {PLATFORM_META[item.platform]?.label} →</a>
+    </>
+  );
+}
+
+function SocialEmbedModal({ t, item, close }) {
   return (
     <ModalPortal>
       <div style={overlay} onClick={close}>
@@ -2489,23 +2529,7 @@ function SocialEmbedModal({ t, item, close }) {
             <div style={{ fontSize: 14, fontWeight: 800, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
             <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
           </div>
-          <div ref={containerRef} style={{ display: "flex", justifyContent: "center" }}>
-            {item.platform === "tiktok" && (
-              tiktokId
-                ? <blockquote className="tiktok-embed" cite={item.url} data-video-id={tiktokId} style={{ maxWidth: 325, minWidth: 325, margin: 0 }}><section /></blockquote>
-                : <div style={{ fontSize: 12, color: t.sub, padding: 20, textAlign: "center" }}>อ่านลิงก์นี้ไม่ได้ ลองกดเปิดต้นฉบับด้านล่างแทน</div>
-            )}
-            {item.platform === "twitter" && <blockquote className="twitter-tweet"><a href={item.url}>เปิดโพสต์ X</a></blockquote>}
-            {item.platform === "instagram" && (
-              igEmbed
-                ? <iframe src={igEmbed} style={{ width: "100%", maxWidth: 400, height: 480, border: "none", borderRadius: 12 }} title="instagram" />
-                : <div style={{ fontSize: 12, color: t.sub, padding: 20, textAlign: "center" }}>อ่านลิงก์นี้ไม่ได้ ลองกดเปิดต้นฉบับด้านล่างแทน</div>
-            )}
-            {item.platform === "facebook" && (
-              <iframe src={`https://www.facebook.com/plugins/post.php?href=${encodeURIComponent(item.url)}&show_text=true&width=400`} style={{ width: "100%", maxWidth: 400, height: 480, border: "none", borderRadius: 12 }} title="facebook" />
-            )}
-          </div>
-          <a href={item.url} target="_blank" rel="noreferrer" style={{ display: "block", textAlign: "center", marginTop: 14, fontSize: 12.5, color: t.accent, fontWeight: 700, textDecoration: "none" }}>เปิดต้นฉบับในแอป {PLATFORM_META[item.platform]?.label} →</a>
+          <SocialEmbedBody t={t} item={item} />
         </div>
       </div>
     </ModalPortal>
