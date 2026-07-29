@@ -6521,6 +6521,27 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [savedLinks, setSavedLinks] = useState(new Set());
+  const [blockedSources, setBlockedSources] = useState(new Set());
+
+  const loadBlockedSources = () => {
+    if (!userId) return;
+    supabase.from("blocked_news_sources").select("source").eq("user_id", userId).then(({ data }) => {
+      setBlockedSources(new Set((data || []).map((x) => x.source)));
+    });
+  };
+
+  const blockSource = async (source) => {
+    if (!userId || !source) return;
+    setBlockedSources((s) => new Set(s).add(source)); // ซ่อนออกจากจอทันที ไม่ต้องรอ
+    setItems((list) => list.filter((x) => x.source !== source));
+    await supabase.from("blocked_news_sources").upsert({ user_id: userId, source });
+  };
+
+  const unblockSource = async (source) => {
+    if (!userId) return;
+    setBlockedSources((s) => { const n = new Set(s); n.delete(source); return n; });
+    await supabase.from("blocked_news_sources").delete().eq("user_id", userId).eq("source", source);
+  };
   const [stats, setStats] = useState({}); // { [link]: { views, likeCount, likedByMe } }
 
   const loadStats = async (list) => {
@@ -6590,7 +6611,7 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { loadSavedLinks(); }, [userId]);
+  useEffect(() => { loadSavedLinks(); loadBlockedSources(); }, [userId]);
   useEffect(() => { load(category); }, [category]);
 
   const selectCategory = async (cat) => {
@@ -6651,6 +6672,7 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
   };
 
   const currentCat = NEWS_CATEGORIES.find((c) => c.id === category);
+  const visibleItems = category === "saved" ? items : items.filter((x) => !blockedSources.has(x.source));
 
   return (<>
     <style>{`@keyframes rh-drawer-in { from { transform: translateX(-100%); } to { transform: translateX(0); } } @keyframes rh-drawer-backdrop { from { opacity: 0; } to { opacity: 1; } }`}</style>
@@ -6686,6 +6708,19 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
                 </button>
               ))}
             </div>
+            {blockedSources.size > 0 && (
+              <div style={{ padding: "10px 14px 18px", borderTop: `1px solid ${t.border}`, marginTop: 6 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: t.faint, marginBottom: 8 }}>แหล่งข่าวที่บล็อกไว้ (เฉพาะบัญชีคุณ)</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {[...blockedSources].map((s) => (
+                    <div key={s} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 10px", borderRadius: 10, background: t.inputBg }}>
+                      <span style={{ fontSize: 12, color: t.sub }}>{s}</span>
+                      <button onClick={() => unblockSource(s)} style={{ fontSize: 11, fontWeight: 700, color: t.accent, background: "none", border: "none", cursor: "pointer" }}>เลิกบล็อก</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </ModalPortal>
@@ -6708,16 +6743,23 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
     <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8 }}>
       {loading && <Empty t={t} text="กำลังโหลด..." />}
       {!loading && error && <Empty t={t} text={`⚠️ ${error}`} />}
-      {!loading && !error && items.length === 0 && <Empty t={t} text={category === "saved" ? "ยังไม่มีข่าวที่บันทึกไว้" : "ยังไม่มีข่าวในหมวดนี้"} />}
-      {!loading && !error && items.map((x, i) => {
+      {!loading && !error && visibleItems.length === 0 && <Empty t={t} text={category === "saved" ? "ยังไม่มีข่าวที่บันทึกไว้" : "ยังไม่มีข่าวในหมวดนี้"} />}
+      {!loading && !error && visibleItems.map((x, i) => {
         const st = stats[x.link] || { views: 0, likeCount: 0, likedByMe: false };
         return (
         <div key={x.link || i} style={{ ...card(t), padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
           <div onClick={() => openNews(x)} style={{ display: "flex", gap: 12, cursor: "pointer" }}>
             {x.image && <img src={x.image} alt="" style={{ width: 72, height: 72, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} />}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, gap: 8 }}>
-                <span style={{ fontSize: 10.5, fontWeight: 800, color: t.accent }}>{x.source}</span>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4, gap: 8 }}>
+                <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 800, color: t.accent }}>{x.source}</span>
+                  {category !== "saved" && (
+                    <button onClick={(e) => { e.stopPropagation(); blockSource(x.source); }} title={`ไม่รับข่าวจาก ${x.source} อีก`} style={{ background: "none", border: "none", cursor: "pointer", padding: 2, display: "grid", placeItems: "center" }}>
+                      <X size={11} color={t.faint} />
+                    </button>
+                  )}
+                </span>
                 {x.time && <span style={{ fontSize: 10.5, color: t.faint, flexShrink: 0 }}>{x.time}</span>}
               </div>
               <div style={{ fontSize: 13.5, fontWeight: 700, color: t.text, lineHeight: 1.4, marginBottom: 4 }}>{x.title}</div>
