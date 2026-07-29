@@ -2295,6 +2295,7 @@ const PLATFORM_META = {
 function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, toggleFavorite, volume, setVolume, userId, setModalYtSlot, close }) {
   const [askConfirm, ConfirmUI] = useConfirm(t);
   const modalYtSlotRef = useCallback((node) => setModalYtSlot(node), [setModalYtSlot]); // 🐛 เสถียร กัน portal target สั่นทุก render (ดูคอมเมนต์เดียวกันที่ homeYtSlotRef)
+  const scrollRef = useRef(null); // 📜 เลื่อนขึ้นบนสุดอัตโนมัติตอนกดเล่น (ผู้เล่น/การ์ด embed อยู่บนสุดเสมอ)
   const [ytUrl, setYtUrl] = useState("");
   const fileRef = useRef(null);
   const [saved, setSaved] = useState(false);
@@ -2407,7 +2408,7 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
 
   return (
     <div style={overlay} onClick={close}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: "20px 20px 28px", maxHeight: "90vh", overflowY: "auto" }}>
+      <div ref={scrollRef} onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: "20px 20px 28px", maxHeight: "90vh", overflowY: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
           <div style={{ fontSize: 17, fontWeight: 800, color: t.text }}>สื่อของฉัน 📎</div>
           <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
@@ -2508,7 +2509,7 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
               <div style={{ marginBottom: 8 }}>
                 <TrackRow t={t} M={M} track={tr} active={curId === tr.id} playing={playing && curId === tr.id}
                   folders={folders} dragHandleProps={handleProps} dragPriming={priming}
-                  onPlay={() => (tr.kind === "link" ? setViewingMedia(tr) : playTrack(tr))} onToggle={togglePlay}
+                  onPlay={() => { (tr.kind === "link" ? setViewingMedia(tr) : playTrack(tr)); requestAnimationFrame(() => scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" })); }} onToggle={togglePlay}
                   onDel={() => {
                     if (tab === "all") askConfirm(`ลบ "${tr.name}" ออกจากสื่อทั้งหมดเลยไหม?`, () => { setPlaylist((p) => p.filter((x) => x.id !== tr.id)); if (userId) supabase.from("playlists").delete().eq("id", tr.id).then(() => {}, () => {}); }); // แท็บทั้งหมด -> ลบจริง (ถามยืนยันก่อน)
                     else if (tab === "fav") toggleFavorite(tr.id);                                   // แท็บโปรด -> แค่เอาออกจากโปรด ไม่ต้องยืนยัน (ย้อนกลับง่าย)
@@ -2534,11 +2535,6 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
 }
 
 // 📎 แสดงสื่อจากแพลตฟอร์มโซเชียลต่างๆ (โหลด embed script ของแต่ละเจ้าแบบไดนามิก)
-// แยก shortcode ของ Instagram จากลิงก์ (เช่น https://www.instagram.com/p/ABC123xyz/ หรือ /reel/ABC123xyz/)
-function instagramEmbedUrl(url) {
-  const m = url.match(/instagram\.com\/(p|reel|tv)\/([A-Za-z0-9_-]+)/);
-  return m ? `https://www.instagram.com/${m[1]}/${m[2]}/embed` : null;
-}
 
 // 📎 เนื้อหา embed จริง (ไม่รวม modal chrome) — ใช้ซ้ำได้ทั้งใน SocialEmbedModal (แบบเต็มจอ) และแบบฝังในหน้าสื่อ (inline บนสุด เหมือน YouTube)
 function SocialEmbedBody({ t, item }) {
@@ -2574,7 +2570,16 @@ function SocialEmbedBody({ t, item }) {
     return () => { try { document.body.removeChild(s); } catch (e) {} };
   }, [tiktokEmbedHtml]);
 
-  const igEmbed = item.platform === "instagram" ? instagramEmbedUrl(item.url) : null;
+  // 📸 Instagram — เดิมใช้ iframe ตรงๆ (instagram.com/p/{id}/embed) ซึ่งเป็นแค่การ์ดพรีวิวนิ่งๆ ของ IG เอง กดแล้วมักเด้งออกแอป
+  // เปลี่ยนเป็นวิธีทางการของ IG (blockquote class="instagram-media" + สคริปต์ embed.js) แบบเดียวกับ TikTok/X ด้านบน ได้การ์ดที่เล่นวิดีโอในหน้าได้จริงมากขึ้น (ยังมีลิงก์ "ดูเพิ่มเติมใน Instagram" ติดมาด้วยเสมอ เป็นกติกาการฝังของ IG เอง ไม่ใช่บั๊ก)
+  useEffect(() => {
+    if (item.platform !== "instagram") return;
+    if (window.instgrm?.Embeds) { window.instgrm.Embeds.process(); return; }
+    const s = document.createElement("script");
+    s.src = "https://www.instagram.com/embed.js"; s.async = true;
+    document.body.appendChild(s);
+    return () => { try { document.body.removeChild(s); } catch (e) {} };
+  }, [item.url]);
 
   return (
     <>
@@ -2586,9 +2591,7 @@ function SocialEmbedBody({ t, item }) {
         )}
         {item.platform === "twitter" && <blockquote className="twitter-tweet"><a href={item.url}>เปิดโพสต์ X</a></blockquote>}
         {item.platform === "instagram" && (
-          igEmbed
-            ? <iframe src={igEmbed} style={{ width: "100%", maxWidth: 400, height: 480, border: "none", borderRadius: 12 }} title="instagram" />
-            : <div style={{ fontSize: 12, color: t.sub, padding: 20, textAlign: "center" }}>อ่านลิงก์นี้ไม่ได้ ลองกดเปิดต้นฉบับด้านล่างแทน</div>
+          <blockquote className="instagram-media" data-instgrm-permalink={item.url} data-instgrm-version="14" style={{ width: "100%", maxWidth: 400, margin: "0 auto" }} />
         )}
         {item.platform === "facebook" && (
           <iframe src={`https://www.facebook.com/plugins/post.php?href=${encodeURIComponent(item.url)}&show_text=true&width=400`} style={{ width: "100%", maxWidth: 400, height: 480, border: "none", borderRadius: 12 }} title="facebook" />
