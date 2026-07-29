@@ -1335,7 +1335,7 @@ export default function RefHub() {
         } else {
           ytPlayerRef.current = new window.YT.Player("yt-mini-player", {
             height: "100%", width: "100%", videoId: cur.ytId,
-            host: "https://www.youtube-nocookie.com", // 🔒 โหมด privacy-enhanced ของ YouTube เอง — ไม่ตั้ง cookie ติดตามแบบเดียวกับ youtube.com ธรรมดา ช่วยไม่ให้ฟีเจอร์กัน tracking ของเบราว์เซอร์ (เช่น Edge Tracking Prevention, Safari ITP) บล็อกจนเล่นไม่ขึ้น
+            // 🐛 ลองใช้ host: youtube-nocookie.com ไปรอบก่อน แต่ทำให้เกิด postMessage origin mismatch error จริง (เห็นชัดใน console ที่พี่ส่งมา) — ถอยกลับมาใช้ youtube.com ปกติ เก็บแค่ origin ไว้ ซึ่งเป็น best practice ที่ไม่มีผลข้างเคียง
             playerVars: { autoplay: 1, rel: 0, playsinline: 1, origin: window.location.origin },
             events: {
               onReady: (e) => { e.target.setVolume(volume); e.target.playVideo(); },
@@ -2281,6 +2281,7 @@ function detectPlatform(url) {
   if (/tiktok\.com/.test(u)) return "tiktok";
   if (/twitter\.com|x\.com/.test(u)) return "twitter";
   if (/instagram\.com/.test(u)) return "instagram";
+  if (/threads\.net|threads\.com/.test(u)) return "threads";
   if (/facebook\.com|fb\.watch/.test(u)) return "facebook";
   return "other";
 }
@@ -2289,6 +2290,7 @@ const PLATFORM_META = {
   tiktok: { label: "TikTok", color: "#000000" },
   twitter: { label: "X (Twitter)", color: "#1DA1F2" },
   instagram: { label: "Instagram", color: "#C13584" },
+  threads: { label: "Threads", color: "#000000" },
   facebook: { label: "Facebook", color: "#1877F2" },
   other: { label: "ลิงก์", color: "#8A93A8" },
 };
@@ -2541,22 +2543,29 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
 
 // 📎 เนื้อหา embed จริง (ไม่รวม modal chrome) — ใช้ซ้ำได้ทั้งใน SocialEmbedModal (แบบเต็มจอ) และแบบฝังในหน้าสื่อ (inline บนสุด เหมือน YouTube)
 function SocialEmbedBody({ t, item }) {
-  const containerRef = useRef(null);
-  const [twitterReady, setTwitterReady] = useState(!!window.twttr?.widgets);
+  const twitterRef = useRef(null);
+  const tiktokRef = useRef(null);
+  const instaRef = useRef(null);
   const [tiktokEmbedHtml, setTiktokEmbedHtml] = useState(null);
   const [tiktokFailed, setTiktokFailed] = useState(false);
 
+  // 🐛 ทั้ง 3 แพลตฟอร์มด้านล่าง (X/TikTok/Instagram) ใช้สคริปต์ของเจ้าของแพลตฟอร์มเองมาแทนที่ DOM ที่เรา render ไว้ (blockquote -> iframe จริง)
+  // ถ้าปล่อยให้ React เป็นคน render เนื้อหานั้น (ผ่าน JSX ตรงๆ หรือ dangerouslySetInnerHTML) React จะงงว่า DOM หายไปไหน พอ re-render/unmount
+  // จะพังด้วย "Uncaught NotFoundError: Failed to execute removeChild" (เจอจริงใน console ที่พี่ส่งมา) — แก้โดยใส่ HTML ผ่าน ref ด้วยมือแทน
+  // ให้ React เห็นแค่ <div ref={...} /> ว่างๆ ไม่ยุ่งกับลูกข้างในเลย ปลอดภัยไม่ว่าสคริปต์ข้างนอกจะมาสลับ DOM ยังไงก็ตาม
+
   useEffect(() => {
-    if (item.platform !== "twitter") return;
-    if (window.twttr?.widgets) { window.twttr.widgets.load(containerRef.current); setTwitterReady(true); return; }
+    if (item.platform !== "twitter" || !twitterRef.current) return;
+    twitterRef.current.innerHTML = `<blockquote class="twitter-tweet"><a href="${item.url}"></a></blockquote>`;
+    const process = () => window.twttr?.widgets?.load(twitterRef.current);
+    if (window.twttr?.widgets) { process(); return; }
     const s = document.createElement("script");
     s.src = "https://platform.twitter.com/widgets.js"; s.async = true;
-    s.onload = () => { setTwitterReady(true); window.twttr?.widgets?.load(containerRef.current); };
+    s.onload = process;
     document.body.appendChild(s);
   }, [item.url]);
 
   // 🎵 TikTok — ดึง HTML embed อย่างเป็นทางการตรงจาก TikTok oEmbed API (เหมือนที่แอปเรียกอยู่แล้วตอน "เพิ่มสื่อ" เพื่อดึงชื่อ) แทนการเดา blockquote/video-id เอง
-  // เดิมเดา URL iframe เอง แล้วก็เดา blockquote เอง ยังเล่นไม่ขึ้น — วิธีนี้ได้ HTML ที่ TikTok สร้างให้ตรงๆ เชื่อถือได้กว่ามาก
   useEffect(() => {
     if (item.platform !== "tiktok") return;
     setTiktokEmbedHtml(null); setTiktokFailed(false);
@@ -2566,18 +2575,20 @@ function SocialEmbedBody({ t, item }) {
       .catch(() => setTiktokFailed(true));
   }, [item.url]);
   useEffect(() => {
-    if (item.platform !== "tiktok" || !tiktokEmbedHtml) return;
+    if (item.platform !== "tiktok" || !tiktokEmbedHtml || !tiktokRef.current) return;
+    tiktokRef.current.innerHTML = tiktokEmbedHtml;
     const s = document.createElement("script");
     s.src = "https://www.tiktok.com/embed.js"; s.async = true;
     document.body.appendChild(s);
     return () => { try { document.body.removeChild(s); } catch (e) {} };
   }, [tiktokEmbedHtml]);
 
-  // 📸 Instagram — เดิมใช้ iframe ตรงๆ (instagram.com/p/{id}/embed) ซึ่งเป็นแค่การ์ดพรีวิวนิ่งๆ ของ IG เอง กดแล้วมักเด้งออกแอป
-  // เปลี่ยนเป็นวิธีทางการของ IG (blockquote class="instagram-media" + สคริปต์ embed.js) แบบเดียวกับ TikTok/X ด้านบน ได้การ์ดที่เล่นวิดีโอในหน้าได้จริงมากขึ้น (ยังมีลิงก์ "ดูเพิ่มเติมใน Instagram" ติดมาด้วยเสมอ เป็นกติกาการฝังของ IG เอง ไม่ใช่บั๊ก)
+  // 📸 Instagram — วิธีทางการของ IG (blockquote + embed.js) ได้การ์ดที่เล่นวิดีโอในหน้าได้จริงมากขึ้น (ยังมีลิงก์ "ดูเพิ่มเติมใน Instagram" ติดมาด้วยเสมอ เป็นกติกาการฝังของ IG เอง ไม่ใช่บั๊ก)
   useEffect(() => {
-    if (item.platform !== "instagram") return;
-    if (window.instgrm?.Embeds) { window.instgrm.Embeds.process(); return; }
+    if (item.platform !== "instagram" || !instaRef.current) return;
+    instaRef.current.innerHTML = `<blockquote class="instagram-media" data-instgrm-permalink="${item.url}" data-instgrm-version="14" style="width:100%;max-width:400px;margin:0 auto"></blockquote>`;
+    const process = () => window.instgrm?.Embeds?.process();
+    if (window.instgrm?.Embeds) { process(); return; }
     const s = document.createElement("script");
     s.src = "https://www.instagram.com/embed.js"; s.async = true;
     document.body.appendChild(s);
@@ -2586,18 +2597,19 @@ function SocialEmbedBody({ t, item }) {
 
   return (
     <>
-      <div ref={containerRef} style={{ display: "flex", justifyContent: "center" }}>
+      <div style={{ display: "flex", justifyContent: "center" }}>
         {item.platform === "tiktok" && (
           tiktokEmbedHtml
-            ? <div dangerouslySetInnerHTML={{ __html: tiktokEmbedHtml }} style={{ width: "100%", display: "flex", justifyContent: "center" }} />
+            ? <div ref={tiktokRef} style={{ width: "100%", display: "flex", justifyContent: "center" }} />
             : <div style={{ fontSize: 12, color: t.sub, padding: 20, textAlign: "center" }}>{tiktokFailed ? "อ่านลิงก์นี้ไม่ได้ ลองกดเปิดต้นฉบับด้านล่างแทน" : "กำลังโหลด..."}</div>
         )}
-        {item.platform === "twitter" && <blockquote className="twitter-tweet"><a href={item.url}>เปิดโพสต์ X</a></blockquote>}
-        {item.platform === "instagram" && (
-          <blockquote className="instagram-media" data-instgrm-permalink={item.url} data-instgrm-version="14" style={{ width: "100%", maxWidth: 400, margin: "0 auto" }} />
+        {item.platform === "twitter" && <div ref={twitterRef} style={{ width: "100%" }} />}
+        {item.platform === "instagram" && <div ref={instaRef} style={{ width: "100%" }} />}
+        {item.platform === "threads" && (
+          <div style={{ fontSize: 12, color: t.sub, padding: 20, textAlign: "center", lineHeight: 1.6 }}>Threads ยังฝังดูตรงในแอปไม่ได้ครับ (ต้องลงทะเบียน Meta Developer App + access token ก่อนถึงจะขอ embed ได้ ต่างจาก TikTok/X ที่เปิดให้ใช้ฟรีไม่ต้องลงทะเบียน) — กดเปิดต้นฉบับด้านล่างแทนได้เลย</div>
         )}
         {item.platform === "facebook" && (
-          <iframe src={`https://www.facebook.com/plugins/post.php?href=${encodeURIComponent(item.url)}&show_text=true&width=400`} style={{ width: "100%", maxWidth: 400, height: 480, border: "none", borderRadius: 12 }} title="facebook" />
+          <div style={{ fontSize: 12, color: t.sub, padding: 20, textAlign: "center", lineHeight: 1.6 }}>Facebook มักฝังดูตรงในแอปไม่ได้ครับ (ปลั๊กอินของ Facebook เองมักบล็อกโพสต์ที่ไม่ได้มาจากเพจสาธารณะ หรือต้องลงทะเบียน Meta App ก่อนถึงจะแสดงได้เต็มรูปแบบ) — กดเปิดต้นฉบับด้านล่างแทนได้เลย</div>
         )}
       </div>
       <a href={item.url} target="_blank" rel="noreferrer" style={{ display: "block", textAlign: "center", marginTop: 14, fontSize: 12.5, color: t.accent, fontWeight: 700, textDecoration: "none" }}>เปิดต้นฉบับในแอป {PLATFORM_META[item.platform]?.label} →</a>
