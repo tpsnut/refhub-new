@@ -164,8 +164,13 @@ async function fetchNews(category, force) {
   const perSourceLists = []; // เก็บตามลำดับที่นิยามไว้ใน FEED_SOURCES (ไทยรัฐมาก่อนเสมอ)
   const failures = [];
   results.forEach((r, i) => {
-    if (r.status === "fulfilled") perSourceLists.push(r.value);
-    else failures.push(`${sources[i].label}: ${r.reason.message}`);
+    if (r.status === "fulfilled") {
+      // เรียงข่าวใหม่สุดขึ้นก่อนเสมอ ภายในแหล่งเดียวกัน (กันฟีดต้นทางเรียงมาไม่ตรงลำดับเวลาจริง)
+      const sorted = [...r.value].sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
+      perSourceLists.push(sorted);
+    } else {
+      failures.push(`${sources[i].label}: ${r.reason.message}`);
+    }
   });
 
   // ถ้าทุกแหล่งพังหมด ถึงจะ error ให้เห็น — ถ้ามีอย่างน้อย 1 แหล่งสำเร็จ ใช้ของที่ได้ต่อไปเงียบๆ
