@@ -709,6 +709,8 @@ export default function RefHub() {
   const [tx, setTx] = useState([]);
   const [billReminders, setBillReminders] = useState([]); // แม่แบบบิลที่ต้องจ่าย [{id, label, amount, recurring, dueDay, dueDate, categoryId, active}]
   const [billPayments, setBillPayments] = useState([]); // แต่ละ "รอบ" ที่ต้องจ่าย [{id, billId, periodKey, dueDate, amount, paid, paidAt, lastNotifiedDate}]
+  const [reminders, setReminders] = useState([]); // ระบบเตือนกลาง [{id, targetType, targetId, label, recurrence, time, specificDate, dayOfWeek, dayOfMonth, active, lastFiredKey}]
+  const [reminderTarget, setReminderTarget] = useState(null); // { targetType, targetId, label, existing } — เปิด ReminderModal เมื่อไม่เป็น null
   const [profile, setProfile] = useState({ name: "", avatar: "" });
   const [autoNight, setAutoNight] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
@@ -906,6 +908,13 @@ export default function RefHub() {
             else existingPayments.push(...toCreate);
           }
           setBillPayments(existingPayments.map((p) => ({ id: p.id, billId: p.bill_id, periodKey: p.period_key, dueDate: p.due_date, amount: Number(p.amount) || 0, paid: p.paid, paidAt: p.paid_at, lastNotifiedDate: p.last_notified_date })));
+        }
+
+        // 3e. ดึงระบบเตือนกลาง (reminders) — ใช้ร่วมกันได้ทั้งเป้าหมายและโน้ต รองรับครั้งเดียว/รายวัน/รายสัปดาห์/รายเดือน
+        const { data: dbReminders, error: remErr } = await supabase.from("reminders").select("*").eq("user_id", userId).eq("active", true);
+        if (remErr) console.error("โหลดรายการเตือนไม่สำเร็จ (ไม่แตะข้อมูลเดิม):", remErr.message);
+        else if (dbReminders) {
+          setReminders(dbReminders.map((r) => ({ id: r.id, targetType: r.target_type, targetId: r.target_id, label: r.label, recurrence: r.recurrence, time: r.time, specificDate: r.specific_date, dayOfWeek: r.day_of_week, dayOfMonth: r.day_of_month, active: r.active, lastFiredKey: r.last_fired_key })));
         }
 
         // 4. ดึงสมุดโน้ต (Notes)
@@ -1354,6 +1363,77 @@ export default function RefHub() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [billPayments.length, userId]);
 
+  // 🔔 ===== ระบบเตือนกลาง (ใช้ร่วมกันได้ทั้งเป้าหมายและโน้ต) =====
+  // targetType: 'note' | 'goal' | 'goal_summary' (goal_summary = เตือนภาพรวม "มีเป้าหมายที่ยังไม่ทำวันนี้" ไม่ผูกกับเป้าหมายไหนเป็นพิเศษ)
+  const upsertReminder = async ({ id, targetType, targetId, label, recurrence, time, specificDate, dayOfWeek, dayOfMonth }) => {
+    if (!userId) return;
+    const row = {
+      user_id: userId, target_type: targetType, target_id: targetId != null ? String(targetId) : null, label, recurrence, time,
+      specific_date: recurrence === "once" ? specificDate : null,
+      day_of_week: recurrence === "weekly" ? dayOfWeek : null,
+      day_of_month: recurrence === "monthly" ? dayOfMonth : null,
+      active: true,
+    };
+    if (id) {
+      const { error } = await supabase.from("reminders").update(row).eq("id", id).eq("user_id", userId);
+      if (error) { alert("บันทึกการเตือนไม่สำเร็จ: " + error.message); return; }
+      setReminders((list) => list.map((r) => (r.id === id ? { ...r, targetType, targetId: row.target_id, label, recurrence, time, specificDate: row.specific_date, dayOfWeek: row.day_of_week, dayOfMonth: row.day_of_month, active: true, lastFiredKey: null } : r)));
+    } else {
+      const newId = uid();
+      const { error } = await supabase.from("reminders").insert({ id: newId, ...row });
+      if (error) { alert("ตั้งเตือนไม่สำเร็จ: " + error.message + " (เช็คว่ารัน SQL สร้างตาราง reminders แล้วหรือยัง)"); return; }
+      setReminders((list) => [...list, { id: newId, targetType, targetId: row.target_id, label, recurrence, time, specificDate: row.specific_date, dayOfWeek: row.day_of_week, dayOfMonth: row.day_of_month, active: true, lastFiredKey: null }]);
+    }
+  };
+  const deleteReminder = (id) => {
+    setReminders((list) => list.filter((r) => r.id !== id));
+    if (userId) supabase.from("reminders").delete().eq("user_id", userId).eq("id", id).then(() => {}, () => {});
+  };
+  // เปิด ReminderModal สำหรับ target หนึ่งๆ — หาการเตือนเดิมที่เคยตั้งไว้ให้ target นี้มาแสดง (แก้ไข/ลบได้) ถ้ายังไม่มีจะเป็นตั้งใหม่
+  const openReminder = (targetType, targetId, label) => {
+    const existing = reminders.find((r) => r.targetType === targetType && r.targetId === (targetId != null ? String(targetId) : null));
+    setReminderTarget({ targetType, targetId, label, existing: existing || null });
+  };
+  // เช็คทุกครั้งที่เปิดแอป/ข้อมูลเปลี่ยน ว่ามีการเตือนไหนถึงเวลาแล้วบ้าง (เช็คแค่ตอนเปิดแอป ไม่มี cron พื้นหลังจริง เหมือนระบบเตือนบิล)
+  useEffect(() => {
+    if (!userId || !session?.access_token || reminders.length === 0) return;
+    const now = new Date();
+    const todayKey = todayStr();
+    const nowHM = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    const curDow = (now.getDay() + 6) % 7; // จันทร์=0 ... อาทิตย์=6
+    const curDom = now.getDate();
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+    const periodKeyFor = (r) => (r.recurrence === "once" ? r.specificDate : r.recurrence === "monthly" ? monthKey : todayKey);
+    const isDueNow = (r) => {
+      if (!r.time || r.time > nowHM) return false; // ยังไม่ถึงเวลาที่ตั้งไว้วันนี้
+      if (r.recurrence === "once") return r.specificDate === todayKey;
+      if (r.recurrence === "daily") return true;
+      if (r.recurrence === "weekly") return r.dayOfWeek === curDow;
+      if (r.recurrence === "monthly") return Math.min(r.dayOfMonth || 1, daysInMonth) === curDom;
+      return false;
+    };
+
+    const due = reminders.filter((r) => r.active && isDueNow(r) && r.lastFiredKey !== periodKeyFor(r));
+    if (due.length === 0) return;
+
+    due.forEach((r) => {
+      let shouldNotify = true;
+      if (r.targetType === "goal_summary") shouldNotify = goals.some((g) => (g.date || todayKey) === todayKey && !g.done); // ไม่ต้องเตือนถ้าทำครบหมดแล้ว
+      else if (r.targetType === "goal") { const g = goals.find((x) => x.id === r.targetId); shouldNotify = !!g && !g.done; } // เป้าหมายทำเสร็จแล้วไม่ต้องเตือนซ้ำ
+      if (shouldNotify) {
+        const icon = r.targetType === "note" ? "📝" : "🎯";
+        notifyPush([userId], `${icon} ${r.label}`, "ถึงเวลาที่ตั้งเตือนไว้แล้ว", session.access_token);
+      }
+      const patch = { last_fired_key: periodKeyFor(r) };
+      if (r.recurrence === "once") patch.active = false; // เตือนครั้งเดียวจบแล้วปิดอัตโนมัติ ไม่ต้องเช็คซ้ำอีก
+      supabase.from("reminders").update(patch).eq("id", r.id).then(() => {}, () => {});
+    });
+    setReminders((list) => list.map((r) => (due.some((d) => d.id === r.id) ? { ...r, lastFiredKey: periodKeyFor(r), active: r.recurrence === "once" ? false : r.active } : r)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reminders.length, userId, goals.length]);
+
 
   const todayGoals = goals.filter((g) => (g.date || todayStr()) === todayStr());
   const goalDone = todayGoals.filter((g) => g.done).length;
@@ -1472,9 +1552,9 @@ export default function RefHub() {
 
         {/* CONTENT — ความสูงหารด้วยสเกลชดเชย transform:scale ข้างบน กันตอนขยายฟอนต์แล้วท้ายเนื้อหาจมใต้ Dock */}
         <div style={{ position: "relative", zIndex: 2, padding: `16px 18px ${page === "chat" || page === "chatRoom" ? 16 : 120}px`, height: `calc(${(10000 / fontScale).toFixed(2)}vh - 76px)`, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
-          {page === "home" && <ErrorCatcher t={t}><HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, allGoals: goals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, userId, authProfile, playlist, setCommunityOpen }} /></ErrorCatcher>}
+          {page === "home" && <ErrorCatcher t={t}><HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, allGoals: goals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder }} /></ErrorCatcher>}
           {page === "ledger" && <FinancePage {...{ t, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt), userId, billReminders, billPayments, markBillPaid, setBillManagerOpen }} />}
-          {page === "note" && <NotePage {...{ t, notes, setNotes, isNight, userId, session, authProfile }} />}
+          {page === "note" && <NotePage {...{ t, notes, setNotes, isNight, userId, session, authProfile, reminders, openReminder }} />}
           {page === "ideas" && <IdeasPage t={t} M={M} userId={userId} session={session} authProfile={authProfile} setAuthProfile={setAuthProfile} setNotes={setNotes} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} />}
           {page === "trade" && <TradePage t={t} />}
           {page === "news" && <NewsPage t={t} userId={userId} authProfile={authProfile} setAuthProfile={setAuthProfile} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} />}
@@ -1589,6 +1669,7 @@ export default function RefHub() {
         {musicOpen && <MusicModal {...{ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, toggleFavorite, volume, setVolume, userId, close: () => setMusicOpen(false) }} />}
         {addOpen && <AddTxModal t={t} tx={tx} setTx={setTx} categories={categories} reorderCategoriesForKind={reorderCategoriesForKind} deleteCategory={deleteCategory} addCategory={addCategory} userId={userId} session={session} close={() => setAddOpen(false)} />}
         {billManagerOpen && <BillManagerModal t={t} billReminders={billReminders} billPayments={billPayments} addBillReminder={addBillReminder} deleteBillReminder={deleteBillReminder} markBillPaid={markBillPaid} unmarkBillPaid={unmarkBillPaid} close={() => setBillManagerOpen(false)} />}
+        {reminderTarget && <ReminderModal t={t} targetType={reminderTarget.targetType} targetId={reminderTarget.targetId} label={reminderTarget.label} existing={reminderTarget.existing} upsertReminder={upsertReminder} deleteReminder={deleteReminder} close={() => setReminderTarget(null)} />}
         {exportText != null && <ExportModal t={t} text={exportText} close={() => setExportText(null)} />}
 
         {/* hidden audio player for file tracks */}
@@ -2609,7 +2690,7 @@ function ShareGoalModal({ t, userId, authProfile, weekPoints, bestStreak, badge,
   );
 }
 
-function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, allGoals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, userId, authProfile, playlist, setCommunityOpen }) {
+function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, allGoals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder }) {
   const [viewingPinned, setViewingPinned] = useState(null);
   const [commentingId, setCommentingId] = useState(null);
   const pinnedMedia = (playlist || []).filter((p) => p.kind === "link" && p.pinnedHome);
@@ -2780,6 +2861,9 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
             <div style={{ fontSize: 10.5, color: t.sub }}>สัปดาห์นี้ · เดือนนี้ {monthPoints} · สะสม {allTimePoints}{bestStreak > 0 ? ` · ต่อเนื่อง ${bestStreak} วัน` : ""}</div>
           </div>
           <button onClick={() => setLeaderboardOpen(true)} style={{ display: "flex", alignItems: "center", gap: 4, padding: "7px 11px", borderRadius: 10, border: "none", background: t.accent, color: t.onAccent, cursor: "pointer", fontSize: 11.5, fontWeight: 700 }}>🏆 กระดาน</button>
+          <button onClick={() => openReminder("goal_summary", null, "เป้าหมายที่ยังไม่ทำวันนี้")} style={{ display: "flex", alignItems: "center", padding: "7px 9px", borderRadius: 10, border: `1px solid ${reminders.some((r) => r.targetType === "goal_summary") ? t.accent : t.border}`, background: "none", cursor: "pointer" }} title="ตั้งเตือนเป้าหมายที่ยังไม่ทำ">
+            <Bell size={14} color={reminders.some((r) => r.targetType === "goal_summary") ? t.accent : t.sub} fill={reminders.some((r) => r.targetType === "goal_summary") ? t.accent : "none"} />
+          </button>
           {badge && <button onClick={() => setShareGoalOpen(true)} style={{ display: "flex", alignItems: "center", padding: "7px 9px", borderRadius: 10, border: `1px solid ${t.border}`, background: "none", cursor: "pointer" }} title="แชร์ไปหน้าชุมชน"><Share2 size={14} color={t.sub} /></button>}
         </div>
 
@@ -2798,6 +2882,7 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
                   {g.comment && <div style={{ fontSize: 10.5, color: t.faint, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>💬 {g.comment}</div>}
                 </button>
                 <button onClick={() => setCommentingId(commentingId === g.id ? null : g.id)} style={ghost} title="เพิ่มคอมเมนต์/สถานะ"><MessageCircle size={14} color={g.comment ? t.accent : t.faint} /></button>
+                <button onClick={() => openReminder("goal", g.id, g.text)} style={ghost} title="ตั้งเตือนเป้าหมายนี้"><Bell size={14} color={reminders.some((r) => r.targetType === "goal" && r.targetId === g.id) ? t.accent : t.faint} fill={reminders.some((r) => r.targetType === "goal" && r.targetId === g.id) ? t.accent : "none"} /></button>
                 <button onClick={() => { setGoals((gs) => gs.filter((x) => x.id !== g.id)); if (userId) { supabase.from("goals").delete().eq("id", g.id).then(() => {}, () => {}); logAudit(userId, "goals", "delete", "ลบเป้าหมาย"); } }} style={ghost}><Trash2 size={15} color={t.faint} /></button>
               </div>
               {commentingId === g.id && (
@@ -3188,7 +3273,76 @@ function BillManagerModal({ t, billReminders, billPayments, addBillReminder, del
   );
 }
 
-// 📊 หน้ากิจกรรมของแอดมิน — เห็นแค่สรุป (ไม่มียอดเงิน/เนื้อหาโน้ต/ข้อความแชท) + ข้อเสนอแนะจากผู้ใช้
+// 🔔 ตั้งเตือนกลาง — ใช้ร่วมกันได้ทั้งโน้ตและเป้าหมาย (targetType/targetId ถูกส่งมาจากจุดที่เรียกใช้)
+function ReminderModal({ t, targetType, targetId, label, existing, upsertReminder, deleteReminder, close }) {
+  const [recurrence, setRecurrence] = useState(existing?.recurrence || "once");
+  const [time, setTime] = useState(existing?.time || "09:00");
+  const [specificDate, setSpecificDate] = useState(existing?.specificDate || todayStr());
+  const [dayOfWeek, setDayOfWeek] = useState(existing?.dayOfWeek ?? 0);
+  const [dayOfMonth, setDayOfMonth] = useState(existing?.dayOfMonth ?? 1);
+  const [busy, setBusy] = useState(false);
+  const dowLabels = ["จ", "อ", "พ", "พฤ", "ศ", "ส", "อา"];
+
+  const save = async () => {
+    setBusy(true);
+    await upsertReminder({ id: existing?.id, targetType, targetId, label, recurrence, time, specificDate, dayOfWeek, dayOfMonth });
+    setBusy(false);
+    close();
+  };
+  const remove = () => { if (existing?.id) deleteReminder(existing.id); close(); };
+
+  return (
+    <div style={overlay} onClick={close}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: "20px 20px 28px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+          <div style={{ fontSize: 17, fontWeight: 800, color: t.text }}>🔔 ตั้งเตือน</div>
+          <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+        </div>
+        <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 14 }}>{label}</div>
+
+        <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
+          {[["once", "ครั้งเดียว"], ["daily", "รายวัน"], ["weekly", "รายสัปดาห์"], ["monthly", "รายเดือน"]].map(([v, lb]) => (
+            <button key={v} onClick={() => setRecurrence(v)} style={{ flex: "1 0 45%", padding: "9px 0", borderRadius: 12, cursor: "pointer", border: `1.5px solid ${recurrence === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 12.5, background: recurrence === v ? t.accent : "transparent", color: recurrence === v ? t.onAccent : t.sub }}>{lb}</button>
+          ))}
+        </div>
+
+        {recurrence === "once" && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: t.sub, marginBottom: 6 }}>วันที่</div>
+            <input type="date" value={specificDate} onChange={(e) => setSpecificDate(e.target.value)} style={input(t)} />
+          </div>
+        )}
+        {recurrence === "weekly" && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: t.sub, marginBottom: 6 }}>ทุกวัน</div>
+            <div style={{ display: "flex", gap: 6 }}>
+              {dowLabels.map((d, i) => (
+                <button key={i} onClick={() => setDayOfWeek(i)} style={{ flex: 1, padding: "8px 0", borderRadius: 10, cursor: "pointer", border: `1.5px solid ${dayOfWeek === i ? t.accent : t.border}`, fontWeight: 700, fontSize: 12, background: dayOfWeek === i ? t.accent : "transparent", color: dayOfWeek === i ? t.onAccent : t.sub }}>{d}</button>
+              ))}
+            </div>
+          </div>
+        )}
+        {recurrence === "monthly" && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: t.sub, marginBottom: 6 }}>ทุกวันที่ (1-31)</div>
+            <input type="number" min={1} max={31} value={dayOfMonth} onChange={(e) => setDayOfMonth(Math.min(31, Math.max(1, Number(e.target.value) || 1)))} style={input(t)} />
+          </div>
+        )}
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: t.sub, marginBottom: 6 }}>เวลา</div>
+          <input type="time" value={time} onChange={(e) => setTime(e.target.value)} style={input(t)} />
+        </div>
+
+        <div style={{ display: "flex", gap: 8 }}>
+          {existing && <button onClick={remove} style={{ flex: 1, textAlign: "center", border: `1px solid #D9534F55`, borderRadius: 10, padding: "9px 0", background: "none", cursor: "pointer", color: "#D9534F", fontWeight: 700, fontSize: 13 }}>ลบการเตือน</button>}
+          <button onClick={save} disabled={busy} style={{ ...primaryBtn(t), flex: 2, padding: "11px 0" }}>{busy ? "กำลังบันทึก..." : "บันทึก"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 function AdminActivityPanel({ t, members }) {
   const [logs, setLogs] = useState([]);
   const [feedback, setFeedback] = useState([]);
@@ -6753,7 +6907,7 @@ function NotionSetupModal({ t, userId, close }) {
   );
 }
 
-function NotePage({ t, notes, setNotes, isNight, userId, session, authProfile }) {
+function NotePage({ t, notes, setNotes, isNight, userId, session, authProfile, reminders, openReminder }) {
 
   const [title, setTitle] = useState(""); const [body, setBody] = useState(null); const [tagsInput, setTagsInput] = useState("");
   const [draftKey, setDraftKey] = useState(0); // เปลี่ยนค่านี้เพื่อบังคับให้ NoteEditor ตัวเพิ่มโน้ตใหม่รีเซ็ตเนื้อหาว่าง
@@ -6927,6 +7081,7 @@ function NotePage({ t, notes, setNotes, isNight, userId, session, authProfile })
                     {n.notionId && <span title="sync ขึ้น Notion แล้ว" style={{ display: "grid", placeItems: "center", padding: 4 }}><Check size={14} color="#2E9E6B" /></span>}
                     <button onClick={() => exportOneMd(n)} style={ghost} title="Export เป็น Markdown"><Download size={15} color={t.faint} /></button>
                     <button onClick={() => togglePin(n.id)} style={ghost} title={n.pinned ? "ปักหมุดแล้ว" : "ปักหมุด"}><Pin size={15} color={n.pinned ? t.accent : t.faint} fill={n.pinned ? t.accent : "none"} /></button>
+                    <button onClick={() => openReminder("note", n.id, n.title || "โน้ตไม่มีหัวข้อ")} style={ghost} title="ตั้งเตือนโน้ตนี้"><Bell size={15} color={reminders.some((r) => r.targetType === "note" && r.targetId === n.id) ? t.accent : t.faint} fill={reminders.some((r) => r.targetType === "note" && r.targetId === n.id) ? t.accent : "none"} /></button>
                     <button onClick={() => startEdit(n)} style={ghost} title="แก้ไข"><Pencil size={15} color={t.faint} /></button>
                     <button onClick={() => { setNotes((x) => x.filter((y) => y.id !== n.id)); if (userId) { supabase.from("notes").delete().eq("id", n.id).then(() => {}, () => {}); logAudit(userId, "notes", "delete", "ลบโน้ต"); } }} style={ghost} title="ลบ"><Trash2 size={15} color={t.faint} /></button>
                   </div>
