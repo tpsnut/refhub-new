@@ -39,7 +39,8 @@ function SortableRow({ id, children, disabled }) {
     onPointerUp: (e) => { cancelPriming(); listeners.onPointerUp?.(e); },
     onPointerLeave: (e) => { cancelPriming(); listeners.onPointerLeave?.(e); },
     onPointerCancel: (e) => { cancelPriming(); listeners.onPointerCancel?.(e); },
-    style: { touchAction: "none", cursor: disabled ? "default" : "grab" },
+    style: { touchAction: "none", cursor: disabled ? "default" : "grab", userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" },
+    onContextMenu: (e) => e.preventDefault(), // กันเมนู copy/select ของเบราว์เซอร์ขึ้นตอนกดค้าง (long-press) ที่ handle
   };
   return <div ref={setNodeRef} style={style}>{children({ handleProps, priming: priming || isDragging })}</div>;
 }
@@ -2383,10 +2384,15 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
     if (tab === "fav") return !!tr.favorite;
     return tr.folderId === tab;
   });
-  // 🔀 จัดเรียงเฉพาะรายการที่กำลังโชว์อยู่ใน tab ปัจจุบัน (ทั้งหมด/โปรด/หมวดหมู่) — ไม่ไปยุ่งตำแหน่งของสื่ออื่นนอก tab
+  // 📄 "โหลดเพิ่ม" แทน pagination แบบเลขหน้า — เพราะลิสต์นี้ลากจัดเรียงได้ ถ้าตัดเป็นหน้าๆ จะลากข้ามหน้าไม่ได้ งงแน่ๆ
+  // โชว์ทีละ 10 ก่อน กด "โหลดเพิ่ม" ค่อยเพิ่มทีละ 10 — ยังลากจัดเรียงได้ปกติภายในส่วนที่โหลดมาแล้ว
+  const [visibleCount, setVisibleCount] = useState(10);
+  useEffect(() => { setVisibleCount(10); }, [tab]); // เปลี่ยนแท็บ -> เริ่มนับใหม่
+  const visibleShown = shown.slice(0, visibleCount);
+  // 🔀 จัดเรียงเฉพาะรายการที่กำลังโชว์อยู่ใน tab ปัจจุบัน (เฉพาะส่วนที่โหลดมาแล้ว) — ไม่ไปยุ่งตำแหน่งของสื่ออื่นนอก tab/นอกส่วนที่โหลด
   // เอาผลลัพธ์ไปแทนที่ตำแหน่งเดิมของรายการที่โชว์ใน playlist รวม แล้ว sync sort_order ใหม่ทั้งชุดขึ้น Supabase (คอลัมน์ sort_order ต้องรัน SQL เพิ่มก่อน ไม่งั้นจะจำลำดับได้แค่ในเซสชันนี้ ไม่ค้างข้ามรอบเปิดแอป)
   const reorderShown = (newOrderShown) => {
-    const shownIds = new Set(shown.map((x) => x.id));
+    const shownIds = new Set(visibleShown.map((x) => x.id));
     setPlaylist((p) => {
       const idxs = p.map((x, i) => (shownIds.has(x.id) ? i : -1)).filter((i) => i !== -1);
       if (idxs.length !== newOrderShown.length) return p;
@@ -2493,7 +2499,7 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {shown.length === 0 && <div style={{ textAlign: "center", color: t.sub, fontSize: 13, padding: "20px 0" }}>ยังไม่มีสื่อในหมวดนี้</div>}
           <DragReorderList
-            items={shown}
+            items={visibleShown}
             getId={(tr) => tr.id}
             onReorder={reorderShown}
             renderItem={(tr, i, { handleProps, priming }) => (
@@ -2512,6 +2518,9 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
               </div>
             )}
           />
+          {shown.length > visibleCount && (
+            <button onClick={() => setVisibleCount((v) => v + 10)} style={{ ...card(t), width: "100%", padding: "10px 0", border: `1px solid ${t.border}`, cursor: "pointer", color: t.sub, fontWeight: 700, fontSize: 12.5 }}>โหลดเพิ่ม ({shown.length - visibleCount} รายการที่เหลือ)</button>
+          )}
         </div>
         <div style={{ fontSize: 10.5, color: t.faint, textAlign: "center", marginTop: 14 }}>
           เพลง YouTube เล่นได้ทั้งจากหน้า Home (ใต้เป้าหมายวันนี้) และหน้าสื่อนี้เลย (ตาม YouTube ToS ต้องมองเห็นได้ตอนเล่น) — ถ้าออกจากทั้ง 2 หน้านี้ วิดีโออาจหยุดเล่นตามพฤติกรรมเบราว์เซอร์ · ไฟล์เพลงเล่นต่อได้ทุกหน้าเหมือนเดิม · ไฟล์ใหญ่กว่า 1.5MB เล่นเฉพาะรอบนี้ · ดาวน์โหลดได้เฉพาะไฟล์ที่แนบเอง (YouTube ดาวน์โหลดไม่ได้ตามกติกา)
