@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
-  Home, Lightbulb, TrendingUp, Plus, Newspaper, Languages, StickyNote, Eye, Menu,
+  Home, Lightbulb, TrendingUp, Plus, Newspaper, Languages, StickyNote, Eye, Menu, Image, CheckSquare, Heading2, List,
   Sun, Moon, Send, Check, Trash2, X, Wallet, Target, BookOpen, ChevronRight,
   Sparkles, Clock, Search, Volume2, VolumeX, Pencil, Download, ArrowLeft, Users, Camera, Phone, Mic, MicOff, PhoneOff, RefreshCw,
   Utensils, Car, ShoppingBag, Receipt, Gamepad2, HeartPulse, Briefcase, Gift, Coffee, Music,
@@ -6229,7 +6229,7 @@ const dateLabel = (d) => { const today = todayStr(); const y = new Date(Date.now
 
 // ---------------- Note ----------------
 // 📝 ตัว editor แบบ Notion — mount ใหม่ทุกครั้งที่ note เปลี่ยน (ใช้ key จากภายนอกคุมการรีเซ็ต)
-function NoteEditor({ content, onChange, theme, userId }) {
+function NoteEditor({ content, onChange, theme, userId, t }) {
   const editor = useCreateBlockNote({
     initialContent: migrateBody(content),
     uploadFile: async (file) => {
@@ -6245,7 +6245,50 @@ function NoteEditor({ content, onChange, theme, userId }) {
       }
     },
   });
-  return <BlockNoteView editor={editor} theme={theme} onChange={() => onChange(editor.document)} />;
+
+  const fileInputRef = useRef(null);
+
+  // แทรกบล็อกใหม่ต่อจากตำแหน่งเคอร์เซอร์ปัจจุบันทันที ไม่ต้องพิมพ์ "/" แล้วเลือกเองทีละขั้น
+  const insertAtCursor = (block) => {
+    const cursor = editor.getTextCursorPosition();
+    editor.insertBlocks([block], cursor.block, "after");
+    onChange(editor.document);
+  };
+
+  const handleImagePick = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // เคลียร์ค่า เผื่อเลือกไฟล์เดิมซ้ำครั้งหน้ายังทำงานได้
+    if (!file) return;
+    try {
+      const url = await editor.uploadFile(file);
+      insertAtCursor({ type: "image", props: { url: typeof url === "string" ? url : url?.url } });
+    } catch (e) { /* uploadFile แจ้ง alert ไปแล้ว */ }
+  };
+
+  const quickTools = [
+    { Icon: Image, label: "แนบรูป", onClick: () => fileInputRef.current?.click() },
+    { Icon: CheckSquare, label: "เช็คลิสต์", onClick: () => insertAtCursor({ type: "checkListItem", content: "" }) },
+    { Icon: Heading2, label: "หัวข้อ", onClick: () => insertAtCursor({ type: "heading", props: { level: 2 }, content: "" }) },
+    { Icon: List, label: "บูลเล็ต", onClick: () => insertAtCursor({ type: "bulletListItem", content: "" }) },
+  ];
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 6, padding: "6px 8px", borderBottom: `1px solid ${t?.border || "#e5e5e5"}`, overflowX: "auto" }}>
+        {quickTools.map((qt) => (
+          <button key={qt.label} onClick={qt.onClick} style={{
+            flexShrink: 0, display: "flex", alignItems: "center", gap: 5, padding: "6px 10px", borderRadius: 999,
+            border: `1px solid ${t?.border || "#e5e5e5"}`, background: t?.inputBg || "#f5f5f5", cursor: "pointer",
+          }}>
+            <qt.Icon size={13} color={t?.sub || "#666"} />
+            <span style={{ fontSize: 11, fontWeight: 700, color: t?.sub || "#666", whiteSpace: "nowrap" }}>{qt.label}</span>
+          </button>
+        ))}
+      </div>
+      <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleImagePick} />
+      <BlockNoteView editor={editor} theme={theme} onChange={() => onChange(editor.document)} />
+    </div>
+  );
 }
 
 function NotionSetupModal({ t, userId, close }) {
@@ -6428,7 +6471,7 @@ function NotePage({ t, notes, setNotes, isNight, userId, session, authProfile })
       <div style={{ ...card(t), padding: 16 }}>
         <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="หัวข้อ" style={{ ...input(t), marginBottom: 8, fontWeight: 700 }} />
         <div style={{ border: `1px solid ${t.border}`, borderRadius: 12, marginBottom: 8, minHeight: 140, overflow: "hidden" }}>
-          <NoteEditor key={`new-${draftKey}`} content={null} onChange={setBody} theme={editorTheme} userId={userId} />
+          <NoteEditor key={`new-${draftKey}`} content={null} onChange={setBody} theme={editorTheme} userId={userId} t={t} />
         </div>
         <input value={tagsInput} onChange={(e) => setTagsInput(e.target.value)} placeholder="แท็ก (คั่นด้วยจุลภาค เช่น งาน, ไอเดีย)" style={{ ...input(t), marginBottom: 12, fontSize: 12.5 }} />
         <button onClick={add} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "11px 0" }}>บันทึกโน้ต</button>
@@ -6455,7 +6498,7 @@ function NotePage({ t, notes, setNotes, isNight, userId, session, authProfile })
               <>
                 <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={{ ...input(t), marginBottom: 8, fontWeight: 700 }} />
                 <div style={{ border: `1px solid ${t.border}`, borderRadius: 12, marginBottom: 8, minHeight: 140, overflow: "hidden" }}>
-                  <NoteEditor key={`edit-${n.id}`} content={editBody} onChange={setEditBody} theme={editorTheme} userId={userId} />
+                  <NoteEditor key={`edit-${n.id}`} content={editBody} onChange={setEditBody} theme={editorTheme} userId={userId} t={t} />
                 </div>
                 <input value={editTags} onChange={(e) => setEditTags(e.target.value)} placeholder="แท็ก (คั่นด้วยจุลภาค)" style={{ ...input(t), marginBottom: 10, fontSize: 12.5 }} />
                 <div style={{ display: "flex", gap: 8 }}>
@@ -6729,7 +6772,7 @@ function IdeasPage({ t, M, userId, session, authProfile, setAuthProfile, setNote
                   <button onClick={() => speak(a.id, `${a.title}. ${(a.bullets || []).join(". ")}`)} style={ghost} title="อ่านออกเสียง">
                     {speakingId === a.id ? <Pause size={16} color={t.accent} /> : <Volume2 size={16} color={t.faint} />}
                   </button>
-                  <button onClick={() => toggleStar(a)} style={ghost}><Sparkles size={17} color={a.starred ? "#E0B24A" : t.faint} fill={a.starred ? "#E0B24A" : "none"} /></button>
+                  <button onClick={() => toggleStar(a)} style={ghost} title={a.starred ? "บันทึกแล้ว" : "บันทึก"}><Bookmark size={17} color={a.starred ? t.accent : t.faint} fill={a.starred ? t.accent : "none"} /></button>
                 </div>
               </div>
               <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginTop: 10, lineHeight: 1.4 }}>{a.title}</div>
@@ -6747,7 +6790,7 @@ function IdeasPage({ t, M, userId, session, authProfile, setAuthProfile, setNote
 
       {!loading && tab === "saved" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {saved.length === 0 && <Empty t={t} text="ยังไม่มีบทความที่บันทึกไว้ กดดาว ⭐ ที่บทความวันนี้ได้เลย" />}
+          {saved.length === 0 && <Empty t={t} text="ยังไม่มีบทความที่บันทึกไว้ กดไอคอน 🔖 ที่บทความวันนี้ได้เลย" />}
           {saved.map((a) => (
             <div key={a.id} style={{ ...card(t), padding: 14 }}>
               <button onClick={() => setExpanded((e) => ({ ...e, [a.id]: !e[a.id] }))} style={{ width: "100%", background: "none", border: "none", cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
@@ -6765,7 +6808,7 @@ function IdeasPage({ t, M, userId, session, authProfile, setAuthProfile, setNote
                     <button onClick={() => speak(a.id, `${a.title}. ${(a.bullets || []).join(". ")}`)} style={ghost} title="อ่านออกเสียง">
                       {speakingId === a.id ? <Pause size={16} color={t.accent} /> : <Volume2 size={16} color={t.faint} />}
                     </button>
-                    <button onClick={() => toggleStar(a)} style={ghost}><Sparkles size={17} color="#E0B24A" fill="#E0B24A" /></button>
+                    <button onClick={() => toggleStar(a)} style={ghost} title="บันทึกแล้ว"><Bookmark size={17} color={t.accent} fill={t.accent} /></button>
                   </div>
                 </>
               )}
