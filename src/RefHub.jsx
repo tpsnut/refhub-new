@@ -1473,7 +1473,7 @@ export default function RefHub() {
         {/* CONTENT — ความสูงหารด้วยสเกลชดเชย transform:scale ข้างบน กันตอนขยายฟอนต์แล้วท้ายเนื้อหาจมใต้ Dock */}
         <div style={{ position: "relative", zIndex: 2, padding: `16px 18px ${page === "chat" || page === "chatRoom" ? 16 : 120}px`, height: `calc(${(10000 / fontScale).toFixed(2)}vh - 76px)`, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
           {page === "home" && <ErrorCatcher t={t}><HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, allGoals: goals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, userId, authProfile, playlist, setCommunityOpen }} /></ErrorCatcher>}
-          {page === "ledger" && <FinancePage {...{ t, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt), userId, billReminders, billPayments, markBillPaid, unmarkBillPaid, billManagerOpen, setBillManagerOpen, addBillReminder, deleteBillReminder }} />}
+          {page === "ledger" && <FinancePage {...{ t, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt), userId, billReminders, billPayments, markBillPaid, setBillManagerOpen }} />}
           {page === "note" && <NotePage {...{ t, notes, setNotes, isNight, userId, session, authProfile }} />}
           {page === "ideas" && <IdeasPage t={t} M={M} userId={userId} session={session} authProfile={authProfile} setAuthProfile={setAuthProfile} setNotes={setNotes} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} />}
           {page === "trade" && <TradePage t={t} />}
@@ -1588,6 +1588,7 @@ export default function RefHub() {
         {searchOpen && <SearchOverlay t={t} notes={notes} goals={goals} tx={tx} categories={categories} setPage={setPage} close={() => setSearchOpen(false)} />}
         {musicOpen && <MusicModal {...{ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, toggleFavorite, volume, setVolume, userId, close: () => setMusicOpen(false) }} />}
         {addOpen && <AddTxModal t={t} tx={tx} setTx={setTx} categories={categories} reorderCategoriesForKind={reorderCategoriesForKind} deleteCategory={deleteCategory} addCategory={addCategory} userId={userId} session={session} close={() => setAddOpen(false)} />}
+        {billManagerOpen && <BillManagerModal t={t} billReminders={billReminders} billPayments={billPayments} addBillReminder={addBillReminder} deleteBillReminder={deleteBillReminder} markBillPaid={markBillPaid} unmarkBillPaid={unmarkBillPaid} close={() => setBillManagerOpen(false)} />}
         {exportText != null && <ExportModal t={t} text={exportText} close={() => setExportText(null)} />}
 
         {/* hidden audio player for file tracks */}
@@ -2863,7 +2864,7 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
 }
 
 // ---------------- Finance (full) ----------------
-function FinancePage({ t, tx, setTx, categories, openAdd, openExport, userId, billReminders, billPayments, markBillPaid, unmarkBillPaid, billManagerOpen, setBillManagerOpen, addBillReminder, deleteBillReminder }) {
+function FinancePage({ t, tx, setTx, categories, openAdd, openExport, userId, billReminders, billPayments, markBillPaid, setBillManagerOpen }) {
   const [editingTx, setEditingTx] = useState(null);
   const [viewReceipt, setViewReceipt] = useState(null); // signed url ของรูปสลิป/ใบเสร็จที่กำลังดู
   const openReceipt = async (path) => {
@@ -3084,7 +3085,6 @@ function FinancePage({ t, tx, setTx, categories, openAdd, openExport, userId, bi
       ))}
       {editingTx && <EditTxModal t={t} x={editingTx} categories={categories} userId={userId} setTx={setTx} close={() => setEditingTx(null)} />}
       {viewReceipt && <ImageLightbox src={viewReceipt} onClose={() => setViewReceipt(null)} />}
-      {billManagerOpen && <BillManagerModal t={t} billReminders={billReminders} billPayments={billPayments} addBillReminder={addBillReminder} deleteBillReminder={deleteBillReminder} markBillPaid={markBillPaid} unmarkBillPaid={unmarkBillPaid} close={() => setBillManagerOpen(false)} />}
     </>
   );
 }
