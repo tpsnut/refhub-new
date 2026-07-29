@@ -2501,7 +2501,7 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
             <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${t.border}` }}>
               <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 2 }}>
                 <button onClick={() => setManagingFolders((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "2px 4px" }}>
-                  <Settings size={12} color={managingFolders ? t.accent : t.faint} />
+                  {managingFolders ? <Check size={12} color={t.accent} /> : <Settings size={12} color={t.faint} />}
                   <span style={{ fontSize: 10.5, fontWeight: 700, color: managingFolders ? t.accent : t.faint }}>{managingFolders ? "เสร็จแล้ว" : "จัดการหมวดหมู่"}</span>
                 </button>
               </div>
@@ -7106,7 +7106,7 @@ function NoteEditor({ content, onChange, theme, userId, t }) {
                 </button>
               )}
               <button onClick={() => setReorderMode((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "2px 4px" }}>
-                <Settings size={12} color={reorderMode ? (t?.accent || "#333") : (t?.faint || "#999")} />
+                {reorderMode ? <Check size={12} color={t?.accent || "#333"} /> : <Settings size={12} color={t?.faint || "#999"} />}
                 <span style={{ fontSize: 10.5, fontWeight: 700, color: reorderMode ? (t?.accent || "#333") : (t?.faint || "#999") }}>{reorderMode ? "เสร็จแล้ว" : "จัดเรียง"}</span>
               </button>
             </div>
