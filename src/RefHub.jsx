@@ -6,9 +6,13 @@ import {
   Sparkles, Clock, Search, Volume2, VolumeX, Pencil, Download, ArrowLeft, Users, Camera, Phone, Mic, MicOff, PhoneOff, RefreshCw,
   Utensils, Car, ShoppingBag, Receipt, Gamepad2, HeartPulse, Briefcase, Gift, Coffee, Music,
   Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi, MessageCircle, MoreVertical, KeyRound, MapPin, Copy, LockKeyhole, LogOut, LayoutGrid, Maximize2, Volume1, Settings, Bookmark, Share2, Repeat2, Heart, User, Pin,
-  Heading1, Heading3, ListOrdered, ListTree, Quote, Code2, Minus, Table2, Video, Smile, ArrowUp, ArrowDown, RotateCcw
+  Heading1, Heading3, ListOrdered, ListTree, Quote, Code2, Minus, Table2, Video, Smile, RotateCcw, GripVertical
 } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, LineChart, Line } from "recharts";
+// 🔀 dnd-kit — ใช้ทำ "ลากวางจัดเรียงจริง" (drag & drop) ทั่วแอป แทนปุ่มขึ้น/ลง — รองรับ touch บนมือถือมาให้เลย
+import { DndContext, PointerSensor, useSensor, useSensors, closestCenter } from "@dnd-kit/core";
+import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
+import { CSS as DndCSS } from "@dnd-kit/utilities";
 // 📝 BlockNote — editor แบบ Notion (toggle, checklist, หัวข้อ, แนบรูป/ไฟล์) สำหรับหน้าโน้ตฉบับเต็ม
 import { useCreateBlockNote } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
@@ -17,6 +21,39 @@ import "@blocknote/mantine/style.css";
 // 🌐 ต่อท่อระบบฐานข้อมูล Cloud
 import { supabase } from "./supabaseClient";
 // userId ตอนนี้มาจาก Supabase Auth session แล้ว (ดูใน RefHub component ด้านล่าง) ไม่ใช่ค่าคงที่จาก .env อีกต่อไป
+
+// 🔀 ===== ระบบลากวางจัดเรียง (Drag & Drop reorder) ใช้ร่วมกันได้ทั้งแอป =====
+// ใช้ dnd-kit — ดักการลากที่ "drag handle" (ไอคอน ⋮⋮) เท่านั้น ไม่ใช่ทั้งแถว กันชนกับปุ่มอื่นในแถวเดียวกัน (แก้ไข/ลบ ฯลฯ)
+// และกันชนกับการเลื่อนดู list ปกติบนมือถือ (ถ้าดักทั้งแถวจะปนกับ scroll)
+function SortableRow({ id, children, disabled }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled });
+  const style = { transform: DndCSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1, position: "relative", zIndex: isDragging ? 10 : "auto" };
+  return <div ref={setNodeRef} style={style}>{children({ handleProps: { ...attributes, ...listeners, style: { touchAction: "none", cursor: disabled ? "default" : "grab" } } })}</div>;
+}
+// items: array ของ object ใดๆ / getId: (item) => string ไอดีที่ไม่ซ้ำ / onReorder: (newItemsArray) => void / renderItem: (item, index, {handleProps}) => JSX
+function DragReorderList({ items, getId, onReorder, renderItem, disabled }) {
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } })); // ต้องขยับ 6px ก่อนเริ่มลากจริง กันมือสั่นตอนแตะ/แค่กดเฉยๆ
+  const handleDragEnd = (event) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = items.findIndex((it) => getId(it) === active.id);
+    const newIndex = items.findIndex((it) => getId(it) === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    onReorder(arrayMove(items, oldIndex, newIndex));
+  };
+  return (
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <SortableContext items={items.map(getId)} strategy={verticalListSortingStrategy}>
+        {items.map((item, i) => (
+          <SortableRow key={getId(item)} id={getId(item)} disabled={disabled}>
+            {({ handleProps }) => renderItem(item, i, { handleProps })}
+          </SortableRow>
+        ))}
+      </SortableContext>
+    </DndContext>
+  );
+}
+
 
 // ---------------- Mentors ----------------
 const MENTORS = {
@@ -1213,19 +1250,15 @@ export default function RefHub() {
     if (userId) supabase.from("playlists").update({ name }).eq("id", id).then(() => {}, () => {});
   };
 
-  // 💰 จัดการหมวดหมู่การเงิน (เพิ่ม/ลบ/สลับลำดับ) — ใช้ได้ทั้งฝั่งรับเข้าและจ่ายออก
+  // 💰 จัดการหมวดหมู่การเงิน (เพิ่ม/ลบ/จัดเรียง) — ใช้ได้ทั้งฝั่งรับเข้าและจ่ายออก
   // เดิมแก้แค่ state ในเครื่อง ไม่เคยบันทึกลงฐานข้อมูลเลย ทำให้หมวดหมู่ที่สร้าง/สลับ/ลบ หายไปทุกครั้งที่เปิดแอปใหม่ — แก้ให้ sync กับ Supabase จริงทุกจุด
-  const moveCategory = (id, dir) => {
+  // 🔀 รับลิสต์ใหม่ทั้งชุดของ "หมวดเดียว" (kindVal) หลังลากวางจัดเรียงเสร็จ — เอาไปแทนที่ตำแหน่งเดิมของหมวดนั้นๆ ใน categories รวม (ไม่แตะหมวดอีกฝั่ง) แล้ว sync sort_order ใหม่ทั้งชุดขึ้น DB
+  const reorderCategoriesForKind = (kindVal, newOrderForKind) => {
     setCategories((cats) => {
-      const kind = cats.find((c) => c.id === id)?.kind;
-      if (!kind) return cats;
-      const sameKindIdx = cats.map((c, i) => (c.kind === kind ? i : -1)).filter((i) => i !== -1);
-      const pos = sameKindIdx.findIndex((i) => cats[i].id === id);
-      const newPos = pos + dir;
-      if (newPos < 0 || newPos >= sameKindIdx.length) return cats;
+      const sameKindIdx = cats.map((c, i) => (c.kind === kindVal ? i : -1)).filter((i) => i !== -1);
+      if (sameKindIdx.length !== newOrderForKind.length) return cats; // กันเผื่อข้อมูลไม่ตรงกัน ไม่เสี่ยงทำพัง
       const arr = [...cats];
-      const ia = sameKindIdx[pos], ib = sameKindIdx[newPos];
-      [arr[ia], arr[ib]] = [arr[ib], arr[ia]];
+      sameKindIdx.forEach((posInArr, j) => { arr[posInArr] = newOrderForKind[j]; });
       if (userId) {
         arr.forEach((c, i) => { supabase.from("categories").update({ sort_order: i }).eq("user_id", userId).eq("id", c.id).then(() => {}, () => {}); });
       }
@@ -1478,7 +1511,7 @@ export default function RefHub() {
         {profileLightbox && profile.avatar && <ImageLightbox src={profile.avatar} onClose={() => setProfileLightbox(false)} />}
         {searchOpen && <SearchOverlay t={t} notes={notes} goals={goals} tx={tx} categories={categories} setPage={setPage} close={() => setSearchOpen(false)} />}
         {musicOpen && <MusicModal {...{ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, moveTrack, toggleFavorite, volume, setVolume, userId, close: () => setMusicOpen(false) }} />}
-        {addOpen && <AddTxModal t={t} tx={tx} setTx={setTx} categories={categories} moveCategory={moveCategory} deleteCategory={deleteCategory} addCategory={addCategory} userId={userId} session={session} close={() => setAddOpen(false)} />}
+        {addOpen && <AddTxModal t={t} tx={tx} setTx={setTx} categories={categories} reorderCategoriesForKind={reorderCategoriesForKind} deleteCategory={deleteCategory} addCategory={addCategory} userId={userId} session={session} close={() => setAddOpen(false)} />}
         {exportText != null && <ExportModal t={t} text={exportText} close={() => setExportText(null)} />}
 
         {/* hidden audio player for file tracks */}
@@ -5971,7 +6004,7 @@ function EditTxModal({ t, x, categories, userId, setTx, close }) {
 }
 
 
-function AddTxModal({ t, tx, setTx, categories, moveCategory, deleteCategory, addCategory, userId, session, close }) {
+function AddTxModal({ t, tx, setTx, categories, reorderCategoriesForKind, deleteCategory, addCategory, userId, session, close }) {
   const [type, setType] = useState("out");
   const [cat, setCat] = useState(null); // ไม่ default หมวดหมู่ไว้แล้ว ต้องให้ผู้ใช้เลือกเอง
   const [catError, setCatError] = useState(false);
@@ -6149,13 +6182,13 @@ function AddTxModal({ t, tx, setTx, categories, moveCategory, deleteCategory, ad
         <input value={date} onChange={(e) => setDate(e.target.value)} type="date" style={{ ...input(t), marginBottom: 16 }} />
         <button onClick={add} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "13px 0", fontSize: 15 }}>บันทึก</button>
       </div>
-      {manageOpen && <CategoryManagerModal t={t} categories={categories} moveCategory={moveCategory} deleteCategory={deleteCategory} addCategory={addCategory} close={() => setManageOpen(false)} />}
+      {manageOpen && <CategoryManagerModal t={t} categories={categories} reorderCategoriesForKind={reorderCategoriesForKind} deleteCategory={deleteCategory} addCategory={addCategory} close={() => setManageOpen(false)} />}
       {receiptZoom && pendingReceipt && <ImageLightbox src={pendingReceipt.dataUrl} onClose={() => setReceiptZoom(false)} />}
     </div>
   );
 }
 
-function CategoryManagerModal({ t, categories, moveCategory, deleteCategory, addCategory, close }) {
+function CategoryManagerModal({ t, categories, reorderCategoriesForKind, deleteCategory, addCategory, close }) {
   const [kind, setKind] = useState("out");
   const [adding, setAdding] = useState(false);
   const [newLabel, setNewLabel] = useState("");
@@ -6183,19 +6216,26 @@ function CategoryManagerModal({ t, categories, moveCategory, deleteCategory, add
           ))}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
-          {list.map((c, i) => { const Ic = ICONS[c.iconKey] || Wallet; return (
-            <div key={c.id} style={{ ...card(t), padding: "9px 12px", display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ width: 34, height: 34, borderRadius: 11, background: `${c.color}22`, display: "grid", placeItems: "center", flexShrink: 0 }}><Ic size={16} color={c.color} /></span>
-              <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: t.text }}>{c.label}</span>
-              <button onClick={() => moveCategory(c.id, -1)} disabled={i === 0} style={{ ...ghost, opacity: i === 0 ? 0.3 : 1 }}>▲</button>
-              <button onClick={() => moveCategory(c.id, 1)} disabled={i === list.length - 1} style={{ ...ghost, opacity: i === list.length - 1 ? 0.3 : 1 }}>▼</button>
-              {confirmDel === c.id ? (
-                <button onClick={() => { deleteCategory(c.id); setConfirmDel(null); }} style={{ ...ghost, color: "#D9534F", fontSize: 11, fontWeight: 700 }}>ยืนยันลบ?</button>
-              ) : (
-                <button onClick={() => setConfirmDel(c.id)} style={ghost}><Trash2 size={15} color={t.faint} /></button>
-              )}
-            </div>
-          ); })}
+          <DragReorderList
+            items={list}
+            getId={(c) => c.id}
+            onReorder={(newList) => reorderCategoriesForKind(kind, newList)}
+            renderItem={(c, i, { handleProps }) => {
+              const Ic = ICONS[c.iconKey] || Wallet;
+              return (
+                <div style={{ ...card(t), padding: "9px 12px", display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                  <span {...handleProps}><GripVertical size={16} color={t.faint} /></span>
+                  <span style={{ width: 34, height: 34, borderRadius: 11, background: `${c.color}22`, display: "grid", placeItems: "center", flexShrink: 0 }}><Ic size={16} color={c.color} /></span>
+                  <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: t.text }}>{c.label}</span>
+                  {confirmDel === c.id ? (
+                    <button onClick={() => { deleteCategory(c.id); setConfirmDel(null); }} style={{ ...ghost, color: "#D9534F", fontSize: 11, fontWeight: 700 }}>ยืนยันลบ?</button>
+                  ) : (
+                    <button onClick={() => setConfirmDel(c.id)} style={ghost}><Trash2 size={15} color={t.faint} /></button>
+                  )}
+                </div>
+              );
+            }}
+          />
           {list.length === 0 && <Empty t={t} text="ยังไม่มีหมวดหมู่ในฝั่งนี้" />}
         </div>
 
@@ -6293,16 +6333,6 @@ function NoteEditor({ content, onChange, theme, userId, t }) {
     return DEFAULT_NOTE_TOOL_ORDER;
   });
   useEffect(() => { try { localStorage.setItem("refhub:noteToolOrder", JSON.stringify(toolOrder)); } catch (e) {} }, [toolOrder]);
-  const moveTool = (key, dir) => {
-    setToolOrder((list) => {
-      const idx = list.indexOf(key);
-      const next2 = idx + dir;
-      if (idx === -1 || next2 < 0 || next2 >= list.length) return list;
-      const copy = [...list];
-      [copy[idx], copy[next2]] = [copy[next2], copy[idx]];
-      return copy;
-    });
-  };
 
   // แทรกบล็อกใหม่ต่อจากตำแหน่งเคอร์เซอร์ปัจจุบันทันที ไม่ต้องพิมพ์ "/" แล้วเลือกเองทีละขั้น
   const insertAtCursor = (block) => {
@@ -6405,25 +6435,33 @@ function NoteEditor({ content, onChange, theme, userId, t }) {
                 <span style={{ fontSize: 10.5, fontWeight: 700, color: reorderMode ? (t?.accent || "#333") : (t?.faint || "#999") }}>{reorderMode ? "เสร็จแล้ว" : "จัดเรียง"}</span>
               </button>
             </div>
-            {(reorderMode ? orderedKeys : moreKeys).map((key, i, arr) => {
-              const qt = allTools[key];
-              return (
-                <div key={key} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "9px 10px", borderRadius: 10 }}>
-                  <qt.Icon size={15} color={t?.sub || "#666"} style={{ flexShrink: 0 }} />
-                  {reorderMode ? (
-                    <>
+            {reorderMode ? (
+              <DragReorderList
+                items={orderedKeys}
+                getId={(k) => k}
+                onReorder={(newOrder) => setToolOrder(newOrder)}
+                renderItem={(key, i, { handleProps }) => {
+                  const qt = allTools[key];
+                  return (
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "9px 10px", borderRadius: 10, background: t?.inputBg || "#f5f5f5", marginBottom: 4 }}>
+                      <span {...handleProps}><GripVertical size={16} color={t?.faint || "#999"} /></span>
+                      <qt.Icon size={15} color={t?.sub || "#666"} style={{ flexShrink: 0 }} />
                       <span style={{ fontSize: 12.5, color: t?.text || "#333", flex: 1 }}>{qt.label}{i < 4 ? <span style={{ fontSize: 10, color: t?.faint || "#999", marginLeft: 6 }}>(แถวหลัก)</span> : null}</span>
-                      <button onClick={() => moveTool(key, -1)} disabled={i === 0} style={{ background: "none", border: "none", cursor: i === 0 ? "default" : "pointer", opacity: i === 0 ? 0.3 : 1, padding: 4 }}><ArrowUp size={15} color={t?.sub || "#666"} /></button>
-                      <button onClick={() => moveTool(key, 1)} disabled={i === arr.length - 1} style={{ background: "none", border: "none", cursor: i === arr.length - 1 ? "default" : "pointer", opacity: i === arr.length - 1 ? 0.3 : 1, padding: 4 }}><ArrowDown size={15} color={t?.sub || "#666"} /></button>
-                    </>
-                  ) : (
-                    <button onClick={qt.onClick} style={{ background: "none", border: "none", cursor: "pointer", textAlign: "left", flex: 1, padding: 0 }}>
-                      <span style={{ fontSize: 12.5, color: t?.text || "#333" }}>{qt.label}</span>
-                    </button>
-                  )}
-                </div>
-              );
-            })}
+                    </div>
+                  );
+                }}
+              />
+            ) : (
+              moreKeys.map((key) => {
+                const qt = allTools[key];
+                return (
+                  <button key={key} onClick={qt.onClick} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "9px 10px", borderRadius: 10, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
+                    <qt.Icon size={15} color={t?.sub || "#666"} />
+                    <span style={{ fontSize: 12.5, color: t?.text || "#333" }}>{qt.label}</span>
+                  </button>
+                );
+              })
+            )}
           </div>
         )}
       </div>
