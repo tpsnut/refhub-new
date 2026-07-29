@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
   Home, Lightbulb, TrendingUp, Plus, Newspaper, Languages, StickyNote, Eye, Menu, Image, CheckSquare, Heading2, List, Paperclip,
@@ -815,12 +815,6 @@ export default function RefHub() {
   const [billManagerOpen, setBillManagerOpen] = useState(false);
   const [exportText, setExportText] = useState(null);
   const [musicOpen, setMusicOpen] = useState(false);
-  // 🎬 ผู้เล่น YouTube ตัวเดียวกัน ย้ายไปโชว์ได้ทั้งที่หน้า Home และในหน้า "สื่อของฉัน" (MusicModal) โดยไม่สร้าง iframe ซ้ำ/ไม่หยุดเล่น
-  // ใช้ createPortal ย้าย DOM node เดิม (div#yt-mini-player) ไปแปะในตำแหน่งที่ต้องการ แทนที่จะ mount ใหม่ (กันวิดีโอรีสตาร์ท/เสีย state)
-  const [homeYtSlot, setHomeYtSlot] = useState(null);
-  const [modalYtSlot, setModalYtSlot] = useState(null);
-  const offscreenYtSlotRef = useRef(null); // ที่พักถาวรตอนไม่ได้อยู่หน้า Home และไม่ได้เปิดหน้าสื่อ (เพลงยังเล่นต่อ แค่มองไม่เห็น)
-  const homeYtSlotRef = useCallback((node) => setHomeYtSlot(node), []); // 🐛 ต้องใช้ useCallback กัน ref callback ถูกสร้างใหม่ทุก render (เดิม inline arrow function ทำให้ portal target สั่นทุกครั้งที่ re-render จน YouTube/สื่ออื่นเล่นไม่ขึ้น)
   const [playlist, setPlaylist] = useState([]);
   const [folders, setFolders] = useState([]); // หมวดหมู่เพลงที่ผู้ใช้สร้างเอง เช่น {id, name}
   const [categories, setCategories] = useState(DEFAULT_CATEGORIES); // หมวดหมู่การเงิน (แก้ไข/เพิ่ม/ลบ/สลับได้)
@@ -1665,47 +1659,42 @@ export default function RefHub() {
           {page === "chat" && <ChatEntryPage t={t} M={M} userId={userId} authProfile={authProfile} session={session} openThread={(id, name, isGroup, avatarUrl, createdBy) => { setActiveThread({ id, name, isGroup: !!isGroup, avatarUrl: avatarUrl || null, createdBy: createdBy || null }); setPage("chatRoom"); }} />}
           {page === "chatRoom" && activeThread && <ChatRoomPage t={t} userId={userId} thread={activeThread} profile={profile} session={session} onLeave={() => { setActiveThread(null); setPage("chat"); }} onBack={() => { setActiveThread(null); setPage("chat"); }} activeCall={activeCall} setActiveCall={setActiveCall} setCallMinimized={setCallMinimized} />}
 
-          {/* 🎵 การ์ด "กำลังเล่น" — ย้ายไปโชว์ในหน้าสื่อ (MusicModal) ได้แล้วผ่าน portal ไม่ต้องกลับมาหน้า Home อีกต่อไป
-              div#yt-mini-player mount ค้างตลอด ไม่เคย unmount เลย กันปัญหา React ชนกับ DOM ที่ YouTube API แก้เอง */}
-          <div ref={homeYtSlotRef} style={{ marginTop: page === "home" && cur && cur.kind === "yt" && !musicOpen ? 16 : 0 }} />
+          {/* 🎵 การ์ด "กำลังเล่น" ต่อท้ายเนื้อหาหน้า Home (ใต้เป้าหมาย) — div#yt-mini-player mount ค้างตลอด
+              ไม่เคย unmount เลย (ซ่อนด้วย display:none เท่านั้น) กันปัญหา React ชนกับ DOM ที่ YouTube API แก้เอง
+              🐛 เคยลองทำ portal ย้ายไปโชว์ในหน้าสื่อด้วย แต่พิสูจน์แล้วว่าไม่เสถียร (ref thrashing/DOM timing หลายรอบ) ถอยกลับมาเล่นได้แค่หน้า Home แบบเดิมที่เชื่อถือได้แน่นอนกว่า */}
+          <div style={{ display: page === "home" && cur && cur.kind === "yt" ? "block" : "none", marginTop: 16 }}>
+            <div style={{ ...card(t), padding: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 6 }}><Music size={15} color={t.accent} /> กำลังเล่น</div>
+                <button onClick={() => { stopAll(); setCurId(null); }} style={ghost} title="ปิด"><X size={18} color={t.faint} /></button>
+              </div>
+              <div style={{ borderRadius: 14, overflow: "hidden", border: `1px solid ${t.border}`, background: "#000" }}>
+                <div id="yt-mini-player" style={{ width: "100%", height: 180 }} />
+              </div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 14, marginTop: 12 }}>
+                <button onClick={prevTrack} style={ghost} title="ย้อนกลับ"><SkipBack size={19} color={t.text} fill={t.text} /></button>
+                <button onClick={togglePlay} style={{ width: 42, height: 42, borderRadius: 21, border: "none", cursor: "pointer", background: t.accent, color: t.onAccent, display: "grid", placeItems: "center", flexShrink: 0 }}>
+                  {playing ? <Pause size={19} /> : <Play size={19} />}
+                </button>
+                <button onClick={nextTrack} style={ghost} title="เพลงถัดไป"><SkipForward size={19} color={t.text} fill={t.text} /></button>
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: t.text, textAlign: "center", marginTop: 8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{cur ? cur.name : ""}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+                <button onClick={() => setVolume((v) => Math.max(0, v - 10))} style={ghost} title="ลดเสียง"><VolumeX size={16} color={t.faint} /></button>
+                <input type="range" min="0" max="100" value={volume} onChange={(e) => setVolume(+e.target.value)} style={{ flex: 1, accentColor: t.accent }} />
+                <button onClick={() => setVolume((v) => Math.min(100, v + 10))} style={ghost} title="เพิ่มเสียง"><Volume2 size={16} color={t.faint} /></button>
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <button onClick={() => setMusicOpen(true)} style={{ ...ghost, flex: 1, textAlign: "center", border: `1px solid ${t.border}`, borderRadius: 10, fontSize: 11.5, color: t.sub, padding: "7px 0" }}>ดูเพลย์ลิสต์ทั้งหมด <ChevronRight size={13} style={{ verticalAlign: "middle" }} /></button>
+                {cur.ytId && <a href={`https://www.youtube.com/watch?v=${cur.ytId}`} target="_blank" rel="noreferrer" style={{ ...ghost, flex: 1, textAlign: "center", border: `1px solid ${t.border}`, borderRadius: 10, fontSize: 11.5, color: t.sub, padding: "7px 0", textDecoration: "none", display: "block" }}>เปิดใน YouTube ↗</a>}
+              </div>
+            </div>
+          </div>
         </div>
 
         </div>
 
         {page !== "chat" && page !== "chatRoom" && <Dock t={t} page={page} setPage={setPage} onQuickAdd={() => setAddOpen(true)} />}
-
-        {/* 🎬 ที่พักถาวรของผู้เล่น YouTube ตอนไม่ได้อยู่หน้า Home และไม่ได้เปิดหน้าสื่อ (เพลงเล่นต่อ แค่มองไม่เห็น) */}
-        <div ref={offscreenYtSlotRef} style={{ position: "fixed", left: -9999, top: -9999, width: 1, height: 1, overflow: "hidden" }} />
-        {cur && cur.kind === "yt" && (musicOpen && modalYtSlot ? modalYtSlot : page === "home" && homeYtSlot ? homeYtSlot : offscreenYtSlotRef.current) && createPortal(
-          <div style={{ ...card(t), padding: 14 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-              <div style={{ fontSize: 13, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 6 }}><Music size={15} color={t.accent} /> กำลังเล่น</div>
-              <button onClick={() => { stopAll(); setCurId(null); }} style={ghost} title="ปิด"><X size={18} color={t.faint} /></button>
-            </div>
-            <div style={{ borderRadius: 14, overflow: "hidden", border: `1px solid ${t.border}`, background: "#000" }}>
-              <div id="yt-mini-player" style={{ width: "100%", height: 180 }} />
-            </div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 14, marginTop: 12 }}>
-              <button onClick={prevTrack} style={ghost} title="ย้อนกลับ"><SkipBack size={19} color={t.text} fill={t.text} /></button>
-              <button onClick={togglePlay} style={{ width: 42, height: 42, borderRadius: 21, border: "none", cursor: "pointer", background: t.accent, color: t.onAccent, display: "grid", placeItems: "center", flexShrink: 0 }}>
-                {playing ? <Pause size={19} /> : <Play size={19} />}
-              </button>
-              <button onClick={nextTrack} style={ghost} title="เพลงถัดไป"><SkipForward size={19} color={t.text} fill={t.text} /></button>
-            </div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: t.text, textAlign: "center", marginTop: 8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{cur ? cur.name : ""}</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
-              <button onClick={() => setVolume((v) => Math.max(0, v - 10))} style={ghost} title="ลดเสียง"><VolumeX size={16} color={t.faint} /></button>
-              <input type="range" min="0" max="100" value={volume} onChange={(e) => setVolume(+e.target.value)} style={{ flex: 1, accentColor: t.accent }} />
-              <button onClick={() => setVolume((v) => Math.min(100, v + 10))} style={ghost} title="เพิ่มเสียง"><Volume2 size={16} color={t.faint} /></button>
-            </div>
-            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-              {!musicOpen && <button onClick={() => setMusicOpen(true)} style={{ ...ghost, flex: 1, textAlign: "center", border: `1px solid ${t.border}`, borderRadius: 10, fontSize: 11.5, color: t.sub, padding: "7px 0" }}>ดูเพลย์ลิสต์ทั้งหมด <ChevronRight size={13} style={{ verticalAlign: "middle" }} /></button>}
-              {cur.ytId && <a href={`https://www.youtube.com/watch?v=${cur.ytId}`} target="_blank" rel="noreferrer" style={{ ...ghost, flex: 1, textAlign: "center", border: `1px solid ${t.border}`, borderRadius: 10, fontSize: 11.5, color: t.sub, padding: "7px 0", textDecoration: "none", display: "block" }}>เปิดใน YouTube ↗</a>}
-            </div>
-          </div>,
-          musicOpen && modalYtSlot ? modalYtSlot : page === "home" && homeYtSlot ? homeYtSlot : offscreenYtSlotRef.current
-        )}
-
 
         {mentorPick && <MentorPicker t={t} mentor={mentor} setMentor={setMentor} authProfile={authProfile} setAuthProfile={setAuthProfile} userId={userId} customMentors={customMentors} setCustomMentors={setCustomMentors} close={() => setMentorPick(false)} />}
         {themePick && <ThemePicker t={t} theme={theme} setTheme={setTheme} mode={mode} close={() => setThemePick(false)} />}
@@ -1776,7 +1765,7 @@ export default function RefHub() {
         {editProfile && <EditProfile t={t} M={M} profile={profile} setProfile={setProfile} userId={userId} authProfile={authProfile} setAuthProfile={setAuthProfile} close={() => setEditProfile(false)} />}
         {profileLightbox && profile.avatar && <ImageLightbox src={profile.avatar} onClose={() => setProfileLightbox(false)} />}
         {searchOpen && <SearchOverlay t={t} notes={notes} goals={goals} tx={tx} categories={categories} setPage={setPage} close={() => setSearchOpen(false)} />}
-        {musicOpen && <MusicModal {...{ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, toggleFavorite, volume, setVolume, userId, setModalYtSlot, close: () => setMusicOpen(false) }} />}
+        {musicOpen && <MusicModal {...{ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, toggleFavorite, volume, setVolume, userId, close: () => setMusicOpen(false) }} />}
         {addOpen && <AddTxModal t={t} tx={tx} setTx={setTx} categories={categories} reorderCategoriesForKind={reorderCategoriesForKind} deleteCategory={deleteCategory} addCategory={addCategory} userId={userId} session={session} close={() => setAddOpen(false)} />}
         {billManagerOpen && <BillManagerModal t={t} billReminders={billReminders} billPayments={billPayments} addBillReminder={addBillReminder} deleteBillReminder={deleteBillReminder} markBillPaid={markBillPaid} unmarkBillPaid={unmarkBillPaid} close={() => setBillManagerOpen(false)} />}
         {reminderTarget && <ReminderModal t={t} targetType={reminderTarget.targetType} targetId={reminderTarget.targetId} label={reminderTarget.label} existing={reminderTarget.existing} upsertReminder={upsertReminder} deleteReminder={deleteReminder} close={() => setReminderTarget(null)} />}
@@ -2296,9 +2285,8 @@ const PLATFORM_META = {
   other: { label: "ลิงก์", color: "#8A93A8" },
 };
 
-function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, toggleFavorite, volume, setVolume, userId, setModalYtSlot, close }) {
+function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, toggleFavorite, volume, setVolume, userId, close }) {
   const [askConfirm, ConfirmUI] = useConfirm(t);
-  const modalYtSlotRef = useCallback((node) => setModalYtSlot(node), [setModalYtSlot]); // 🐛 เสถียร กัน portal target สั่นทุก render (ดูคอมเมนต์เดียวกันที่ homeYtSlotRef)
   const scrollRef = useRef(null); // 📜 เลื่อนขึ้นบนสุดอัตโนมัติตอนกดเล่น (ผู้เล่น/การ์ด embed อยู่บนสุดเสมอ)
   const [ytUrl, setYtUrl] = useState("");
   const fileRef = useRef(null);
@@ -2419,7 +2407,12 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
         <div style={{ fontSize: 12, color: t.sub, marginBottom: 14 }}>เก็บสื่อจาก YouTube, TikTok, X, Instagram, Facebook ไว้ดูย้อนหลัง · เพิ่มแล้วบันทึกอัตโนมัติ</div>
 
         {/* 🎬 ผู้เล่น YouTube ย้ายมาเล่นตรงนี้ได้เลย (เดิมบอกแค่ว่าไปเล่นอยู่หน้า Home ตอนนี้เล่น+คุมได้จากตรงนี้ทันที) */}
-        {cur && cur.kind === "yt" && <div ref={modalYtSlotRef} style={{ marginBottom: 14 }} />}
+        {/* ตอนนี้เพลง YouTube เล่นอยู่ที่การ์ด "กำลังเล่น" หน้า Home เท่านั้น (ลองทำให้เล่นในหน้าสื่อได้ด้วยไปแล้ว แต่ไม่เสถียรพอ เลยถอยกลับมาแบบนี้ที่เชื่อถือได้แน่นอนกว่า) */}
+        {cur && cur.kind === "yt" && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, background: `${t.accent}18`, border: `1px dashed ${t.accent}66`, borderRadius: 12, padding: "9px 12px", fontSize: 11.5, color: t.accent, fontWeight: 600, marginBottom: 14 }}>
+            <Music size={14} /> กำลังเล่น "{cur.name}" อยู่ที่หน้า Home
+          </div>
+        )}
         {/* 📎 IG/X/TikTok/Facebook — โชว์ด้านบนแบบเดียวกับ YouTube เลย ไม่ต้องเปิด modal ซ้อนอีกต่อไป */}
         {viewingMedia && (
           <div style={{ ...card(t), padding: 14, marginBottom: 14 }}>
@@ -2532,7 +2525,7 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
           )}
         </div>
         <div style={{ fontSize: 10.5, color: t.faint, textAlign: "center", marginTop: 14 }}>
-          เพลง YouTube เล่นได้ทั้งจากหน้า Home (ใต้เป้าหมายวันนี้) และหน้าสื่อนี้เลย (ตาม YouTube ToS ต้องมองเห็นได้ตอนเล่น) — ถ้าออกจากทั้ง 2 หน้านี้ วิดีโออาจหยุดเล่นตามพฤติกรรมเบราว์เซอร์ · ไฟล์เพลงเล่นต่อได้ทุกหน้าเหมือนเดิม · ไฟล์ใหญ่กว่า 1.5MB เล่นเฉพาะรอบนี้ · ดาวน์โหลดได้เฉพาะไฟล์ที่แนบเอง (YouTube ดาวน์โหลดไม่ได้ตามกติกา)
+          เพลง YouTube แสดงเป็นการ์ด "กำลังเล่น" ที่หน้า Home ใต้เป้าหมายวันนี้ (ตาม YouTube ToS ต้องมองเห็นได้ตอนเล่น) — ถ้าออกจากหน้า Home วิดีโออาจหยุดเล่นตามพฤติกรรมเบราว์เซอร์ · ไฟล์เพลงเล่นต่อได้ทุกหน้าเหมือนเดิม · ไฟล์ใหญ่กว่า 1.5MB เล่นเฉพาะรอบนี้ · ดาวน์โหลดได้เฉพาะไฟล์ที่แนบเอง (YouTube ดาวน์โหลดไม่ได้ตามกติกา)
         </div>
       </div>
       {ConfirmUI}
@@ -2541,7 +2534,11 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
 }
 
 // 📎 แสดงสื่อจากแพลตฟอร์มโซเชียลต่างๆ (โหลด embed script ของแต่ละเจ้าแบบไดนามิก)
-
+// แยก shortcode ของ Instagram จากลิงก์ (เช่น https://www.instagram.com/p/ABC123xyz/ หรือ /reel/ABC123xyz/)
+function instagramEmbedUrl(url) {
+  const m = url.match(/instagram\.com\/(p|reel|tv)\/([A-Za-z0-9_-]+)/);
+  return m ? `https://www.instagram.com/${m[1]}/${m[2]}/embed` : null;
+}
 // 📎 เนื้อหา embed จริง (ไม่รวม modal chrome) — ใช้ซ้ำได้ทั้งใน SocialEmbedModal (แบบเต็มจอ) และแบบฝังในหน้าสื่อ (inline บนสุด เหมือน YouTube)
 function SocialEmbedBody({ t, item }) {
   const twitterRef = useRef(null);
@@ -2585,6 +2582,9 @@ function SocialEmbedBody({ t, item }) {
 
   // 📸 Instagram — ลองใช้วิธีทางการ (blockquote + embed.js) ไปแล้วแต่ยังไม่เสถียร (Meta น่าจะจำกัดสิทธิ์ embed แบบเดียวกับ Facebook/Threads) เปลี่ยนเป็นบอกตรงๆ แทนพยายามฝังแล้วพัง/เด้งออกแอปแบบสุ่ม
 
+  // 📸 Instagram — คืนกลับมาใช้ iframe ธรรมดาแบบเดิม (instagram.com/p/{id}/embed) เพราะพี่ยืนยันว่าเวอร์ชันนี้ดูผ่านแอปได้จริง
+  const igEmbed = item.platform === "instagram" ? instagramEmbedUrl(item.url) : null;
+
   return (
     <>
       <div style={{ display: "flex", justifyContent: "center" }}>
@@ -2595,7 +2595,9 @@ function SocialEmbedBody({ t, item }) {
         )}
         {item.platform === "twitter" && <div ref={twitterRef} style={{ width: "100%" }} />}
         {item.platform === "instagram" && (
-          <div style={{ fontSize: 12, color: t.sub, padding: 20, textAlign: "center", lineHeight: 1.6 }}>Instagram ฝังดูตรงในแอปได้ไม่เสถียรครับ (Meta จำกัดสิทธิ์คล้าย Facebook/Threads) — กดเปิดต้นฉบับด้านล่างแทนได้เลย</div>
+          igEmbed
+            ? <iframe src={igEmbed} style={{ width: "100%", maxWidth: 400, height: 480, border: "none", borderRadius: 12 }} title="instagram" />
+            : <div style={{ fontSize: 12, color: t.sub, padding: 20, textAlign: "center" }}>อ่านลิงก์นี้ไม่ได้ ลองกดเปิดต้นฉบับด้านล่างแทน</div>
         )}
         {item.platform === "threads" && (
           <div style={{ fontSize: 12, color: t.sub, padding: 20, textAlign: "center", lineHeight: 1.6 }}>Threads ยังฝังดูตรงในแอปไม่ได้ครับ (ต้องลงทะเบียน Meta Developer App + access token ก่อนถึงจะขอ embed ได้ ต่างจาก TikTok/X ที่เปิดให้ใช้ฟรีไม่ต้องลงทะเบียน) — กดเปิดต้นฉบับด้านล่างแทนได้เลย</div>
