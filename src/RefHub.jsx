@@ -6,7 +6,7 @@ import {
   Sparkles, Clock, Search, Volume2, VolumeX, Pencil, Download, ArrowLeft, Users, Camera, Phone, Mic, MicOff, PhoneOff, RefreshCw,
   Utensils, Car, ShoppingBag, Receipt, Gamepad2, HeartPulse, Briefcase, Gift, Coffee, Music,
   Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi, MessageCircle, MoreVertical, KeyRound, MapPin, Copy, LockKeyhole, LogOut, LayoutGrid, Maximize2, Volume1, Settings, Bookmark, Share2, Repeat2, Heart, User, Pin,
-  Heading1, Heading3, ListOrdered, ListTree, Quote, Code2, Minus, Table2, Video, Smile, RotateCcw, GripVertical
+  Heading1, Heading3, ListOrdered, ListTree, Quote, Code2, Minus, Table2, Video, Smile, RotateCcw, GripVertical, ChevronLeft
 } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, LineChart, Line } from "recharts";
 // 🔀 dnd-kit — ใช้ทำ "ลากวางจัดเรียงจริง" (drag & drop) ทั่วแอป แทนปุ่มขึ้น/ลง — รองรับ touch บนมือถือมาให้เลย
@@ -51,6 +51,31 @@ function DragReorderList({ items, getId, onReorder, renderItem, disabled }) {
         ))}
       </SortableContext>
     </DndContext>
+  );
+}
+
+// 💡 ===== ระบบคำแนะนำการใช้งานครั้งแรก (Coachmark) ใช้ร่วมกันได้ทุกหน้า =====
+// เก็บสถานะ "เคยเห็นแล้ว" ไว้ที่เครื่อง (localStorage) — พอเพราะเป็นแค่คำแนะนำ ไม่ใช่ข้อมูลสำคัญ ถ้า browser ล้าง storage แล้วขึ้นซ้ำก็ไม่เสียหายอะไร
+// ถ้าอยากให้คำแนะนำ "ขึ้นใหม่ให้ทุกคนอีกครั้ง" (เช่น หลังปรับ UI จุดนั้นใหม่) แค่เปลี่ยนเลข HINT_VERSION ด้านล่างตอน deploy รอบถัดไป ไม่ต้องทำหน้าแอดมินแยกต่างหาก
+const HINT_VERSION = "v1";
+function useFirstTimeHint(key) {
+  const storageKey = `refhub:hint:${HINT_VERSION}:${key}`;
+  const [seen, setSeen] = useState(() => { try { return localStorage.getItem(storageKey) === "1"; } catch (e) { return true; } });
+  const dismiss = () => { try { localStorage.setItem(storageKey, "1"); } catch (e) {} setSeen(true); };
+  return [!seen, dismiss]; // [show, dismiss]
+}
+// ⚠️ ตัว anchor (ปุ่ม/องค์ประกอบที่ชี้ถึง) ต้องห่อด้วย position:"relative" เอง แล้ววาง <Coachmark> เป็น sibling ถัดจาก anchor นั้น
+function Coachmark({ t, show, text, onDismiss, placement = "bottom", align = "left" }) {
+  if (!show) return null;
+  const vertical = placement === "bottom" ? { top: "calc(100% + 10px)" } : { bottom: "calc(100% + 10px)" };
+  const horizontal = align === "right" ? { right: 0 } : { left: 0 };
+  const arrowSide = align === "right" ? { right: 18 } : { left: 18 };
+  return (
+    <div style={{ position: "absolute", ...vertical, ...horizontal, zIndex: 40, background: t.accent, color: t.onAccent, borderRadius: 12, padding: "10px 12px", maxWidth: 230, boxShadow: "0 8px 20px rgba(0,0,0,.22)", fontSize: 12, lineHeight: 1.4 }}>
+      <div style={{ position: "absolute", [placement === "bottom" ? "top" : "bottom"]: -5, ...arrowSide, width: 11, height: 11, background: t.accent, transform: "rotate(45deg)" }} />
+      <div style={{ marginBottom: 8 }}>{text}</div>
+      <button onClick={onDismiss} style={{ background: "rgba(255,255,255,.25)", border: "none", borderRadius: 8, padding: "4px 10px", color: t.onAccent, fontWeight: 700, fontSize: 11, cursor: "pointer" }}>เข้าใจแล้ว</button>
+    </div>
   );
 }
 
@@ -7452,6 +7477,7 @@ const NEWS_CATEGORY_GROUPS = [
 
 function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskAiTopic }) {
   const [category, setCategory] = useState(authProfile?.news_category || "tech");
+  const [showArrowHint, dismissArrowHint] = useFirstTimeHint("news_category_arrows"); // 💡 แนะนำครั้งแรกว่าปัด/กดลูกศรเปลี่ยนหมวดได้
   const [menuOpen, setMenuOpen] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState(() => new Set(
     NEWS_CATEGORY_GROUPS.filter((g) => g.catIds.includes(category)).map((g) => g.id)
@@ -7757,6 +7783,16 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
       <button onClick={() => setMenuOpen(true)} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 8, padding: "9px 14px", borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, cursor: "pointer", textAlign: "left" }}>
         <span style={{ fontSize: 14, fontWeight: 800, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{currentCat?.label}</span>
       </button>
+      {/* ⬅➡ เปลี่ยนหมวดข่าวก่อนหน้า/ถัดไป (เหมือนปัดซ้าย-ขวา แค่มีปุ่มให้กดด้วยเผื่อไม่รู้ว่าปัดได้) + คำแนะนำครั้งแรก */}
+      <div style={{ position: "relative", display: "flex", gap: 4, flexShrink: 0 }}>
+        <button onClick={() => { const idx = visibleCategories.findIndex((c) => c.id === category); if (idx > 0) selectCategory(visibleCategories[idx - 1].id); dismissArrowHint(); }} style={{ width: 34, height: 38, borderRadius: 10, border: `1px solid ${t.border}`, background: t.inputBg, display: "grid", placeItems: "center", cursor: "pointer" }} title="หมวดก่อนหน้า">
+          <ChevronLeft size={16} color={t.text} />
+        </button>
+        <button onClick={() => { const idx = visibleCategories.findIndex((c) => c.id === category); if (idx < visibleCategories.length - 1) selectCategory(visibleCategories[idx + 1].id); dismissArrowHint(); }} style={{ width: 34, height: 38, borderRadius: 10, border: `1px solid ${t.border}`, background: t.inputBg, display: "grid", placeItems: "center", cursor: "pointer" }} title="หมวดถัดไป">
+          <ChevronRight size={16} color={t.text} />
+        </button>
+        <Coachmark t={t} show={showArrowHint} onDismiss={dismissArrowHint} align="right" text="ปัดซ้าย-ขวาบนข่าว หรือกดลูกศรนี้ ก็เปลี่ยนหมวดข่าวได้เหมือนกันครับ" />
+      </div>
       {category !== "saved" && (
         <button onClick={() => load(category, true)} disabled={loading} style={{ flexShrink: 0, width: 38, height: 38, borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, display: "grid", placeItems: "center", cursor: "pointer" }} title="รีเฟรชข่าวล่าสุด">
           <RefreshCw size={15} color={t.text} className={loading ? "rh-news-spin" : ""} />
