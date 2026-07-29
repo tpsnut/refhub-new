@@ -5,7 +5,7 @@ import {
   Sun, Moon, Send, Check, Trash2, X, Wallet, Target, BookOpen, ChevronRight,
   Sparkles, Clock, Search, Volume2, VolumeX, Pencil, Download, ArrowLeft, Users, Camera, Phone, Mic, MicOff, PhoneOff, RefreshCw,
   Utensils, Car, ShoppingBag, Receipt, Gamepad2, HeartPulse, Briefcase, Gift, Coffee, Music,
-  Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi, MessageCircle, MoreVertical, KeyRound, MapPin, Copy, LockKeyhole, LogOut, LayoutGrid, Maximize2, Volume1, Settings, Bookmark, Share2, Repeat2, Heart, User
+  Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi, MessageCircle, MoreVertical, KeyRound, MapPin, Copy, LockKeyhole, LogOut, LayoutGrid, Maximize2, Volume1, Settings, Bookmark, Share2, Repeat2, Heart, User, Pin
 } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, LineChart, Line } from "recharts";
 // 📝 BlockNote — editor แบบ Notion (toggle, checklist, หัวข้อ, แนบรูป/ไฟล์) สำหรับหน้าโน้ตฉบับเต็ม
@@ -6601,12 +6601,12 @@ function NotePage({ t, notes, setNotes, isNight, userId, session, authProfile })
               <>
                 <div onClick={() => setViewingId(viewingId === n.id ? null : n.id)} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, cursor: "pointer" }}>
                   <div style={{ fontSize: 14.5, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 6 }}>
-                    {n.pinned && <Bookmark size={13} color={t.accent} fill={t.accent} />}{n.title || "(ไม่มีหัวข้อ)"}
+                    {n.pinned && <Pin size={13} color={t.accent} fill={t.accent} />}{n.title || "(ไม่มีหัวข้อ)"}
                   </div>
                   <div style={{ display: "flex", gap: 2, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
                     {n.notionId && <span title="sync ขึ้น Notion แล้ว" style={{ display: "grid", placeItems: "center", padding: 4 }}><Check size={14} color="#2E9E6B" /></span>}
                     <button onClick={() => exportOneMd(n)} style={ghost} title="Export เป็น Markdown"><Download size={15} color={t.faint} /></button>
-                    <button onClick={() => togglePin(n.id)} style={ghost} title={n.pinned ? "บันทึกแล้ว" : "บันทึก"}><Bookmark size={15} color={n.pinned ? t.accent : t.faint} fill={n.pinned ? t.accent : "none"} /></button>
+                    <button onClick={() => togglePin(n.id)} style={ghost} title={n.pinned ? "ปักหมุดแล้ว" : "ปักหมุด"}><Pin size={15} color={n.pinned ? t.accent : t.faint} fill={n.pinned ? t.accent : "none"} /></button>
                     <button onClick={() => startEdit(n)} style={ghost} title="แก้ไข"><Pencil size={15} color={t.faint} /></button>
                     <button onClick={() => { setNotes((x) => x.filter((y) => y.id !== n.id)); if (userId) { supabase.from("notes").delete().eq("id", n.id).then(() => {}, () => {}); logAudit(userId, "notes", "delete", "ลบโน้ต"); } }} style={ghost} title="ลบ"><Trash2 size={15} color={t.faint} /></button>
                   </div>
