@@ -2292,7 +2292,8 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
   const fileRef = useRef(null);
   const [saved, setSaved] = useState(false);
   const [tab, setTab] = useState("all"); // "all" | "fav" | folder.id
-  const [showMoreFolders, setShowMoreFolders] = useState(false); // 🔽 โหมด "เพิ่มเติม" ของแท็บหมวดหมู่ (แทนการเลื่อนแนวนอน)
+  const [showMoreFolders, setShowMoreFolders] = useState(false); // 🔽 "เพิ่มเติม" ของแท็บหมวดหมู่ - ไว้เจอ/เลือกหมวดที่เหลือ (browse)
+  const [managingFolders, setManagingFolders] = useState(false); // ⚙️ "จัดการหมวดหมู่" แยกต่างหาก - ไว้ลบ/เพิ่มหมวดใหม่ (manage)
   const flashSaved = () => { setSaved(true); setTimeout(() => setSaved(false), 1800); };
   const [pendingYt, setPendingYt] = useState(null); // { id, url, name, platform } รอยืนยัน/แก้ชื่อก่อนบันทึกจริง
   const [ytLoading, setYtLoading] = useState(false);
@@ -2457,17 +2458,34 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
           </div>
         )}
 
-        {/* แท็บหมวดหมู่ — โชว์ "ทั้งหมด/โปรด" + หมวดที่สร้างเองทั้งหมดในแถวเดียวกันเลย (wrap ขึ้นบรรทัดใหม่ได้ถ้าไม่พอ ไม่ต้องเลื่อน) ไม่ต้องกด "เพิ่มเติม" ถึงจะเห็นหมวดที่มีอยู่แล้ว — "เพิ่มเติม" เหลือไว้แค่จัดการ (ลบ/เพิ่มหมวดใหม่) เท่านั้น */}
+        {/* แท็บหมวดหมู่ — เหมือน pattern โน้ตเป๊ะๆ: โชว์หลัก 4 ช่อง (ทั้งหมด/โปรด + หมวดที่สร้างเอง 2 อันแรก) + "เพิ่มเติม" ไว้เจอหมวดที่เหลือ (กดเลือกได้เลย) + ข้างในนั้นมีปุ่ม "จัดการหมวดหมู่" แยกต่างหากสำหรับลบ/เพิ่มใหม่ */}
         <div style={{ marginBottom: 10 }}>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-            {[{ id: "all", name: "ทั้งหมด" }, { id: "fav", name: "❤ โปรด" }, ...folders].map((f) => (
+            {[{ id: "all", name: "ทั้งหมด" }, { id: "fav", name: "❤ โปรด" }, ...folders].slice(0, 4).map((f) => (
               <button key={f.id} onClick={() => setTab(f.id)} style={{ padding: "7px 13px", borderRadius: 16, cursor: "pointer", border: `1.5px solid ${tab === f.id ? t.accent : t.border}`, fontWeight: 700, fontSize: 12, background: tab === f.id ? t.accent : "transparent", color: tab === f.id ? t.onAccent : t.sub }}>{f.name}</button>
             ))}
-            <button onClick={() => setShowMoreFolders((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 4, padding: "7px 13px", borderRadius: 16, cursor: "pointer", border: `1.5px solid ${showMoreFolders ? t.accent : t.border}`, fontWeight: 700, fontSize: 12, background: "none", color: t.sub }}>
-              <MoreVertical size={13} color={t.sub} /> จัดการหมวดหมู่ <ChevronRight size={12} color={t.sub} style={{ transform: showMoreFolders ? "rotate(90deg)" : "none", transition: "transform .15s" }} />
-            </button>
+            {folders.length > 2 && (
+              <button onClick={() => setShowMoreFolders((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 4, padding: "7px 13px", borderRadius: 16, cursor: "pointer", border: `1.5px solid ${showMoreFolders ? t.accent : t.border}`, fontWeight: 700, fontSize: 12, background: "none", color: t.sub }}>
+                <MoreVertical size={13} color={t.sub} /> เพิ่มเติม <ChevronRight size={12} color={t.sub} style={{ transform: showMoreFolders ? "rotate(90deg)" : "none", transition: "transform .15s" }} />
+              </button>
+            )}
           </div>
           {showMoreFolders && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${t.border}` }}>
+              {folders.slice(2).map((f) => (
+                <button key={f.id} onClick={() => { setTab(f.id); setShowMoreFolders(false); }} style={{ display: "flex", alignItems: "center", width: "100%", padding: "9px 10px", borderRadius: 10, border: "none", background: tab === f.id ? `${t.accent}18` : "none", cursor: "pointer", textAlign: "left" }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: tab === f.id ? t.accent : t.text }}>{f.name}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        {/* จัดการหมวดหมู่ — แยกต่างหากจาก "เพิ่มเติม" ด้านบน ไว้สำหรับลบ/เพิ่มหมวดใหม่โดยเฉพาะ */}
+        <div style={{ marginBottom: 10 }}>
+          <button onClick={() => setManagingFolders((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 13px", borderRadius: 16, cursor: "pointer", border: `1.5px solid ${managingFolders ? t.accent : t.border}`, fontWeight: 700, fontSize: 12, background: "none", color: t.sub }}>
+            <Settings size={13} color={t.sub} /> จัดการหมวดหมู่ <ChevronRight size={12} color={t.sub} style={{ transform: managingFolders ? "rotate(90deg)" : "none", transition: "transform .15s" }} />
+          </button>
+          {managingFolders && (
             <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${t.border}` }}>
               {folders.map((f) => (
                 <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 10px", borderRadius: 10, background: tab === f.id ? `${t.accent}18` : "transparent" }}>
@@ -2476,7 +2494,7 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
                 </div>
               ))}
               {folders.length === 0 && <div style={{ fontSize: 11.5, color: t.faint, padding: "4px 10px" }}>ยังไม่มีหมวดหมู่ที่สร้างเอง</div>}
-              <button onClick={() => { setAddingFolder((v) => !v); setShowMoreFolders(false); }} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "9px 10px", borderRadius: 10, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
+              <button onClick={() => { setAddingFolder((v) => !v); setManagingFolders(false); }} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "9px 10px", borderRadius: 10, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
                 <Plus size={15} color={t.sub} /><span style={{ fontSize: 12.5, color: t.sub, fontWeight: 700 }}>เพิ่มหมวดหมู่ใหม่</span>
               </button>
             </div>
