@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import {
   Home, Lightbulb, TrendingUp, Plus, Newspaper, Languages, StickyNote, Eye, Menu, Image, CheckSquare, Heading2, List, Paperclip,
@@ -820,6 +820,7 @@ export default function RefHub() {
   const [homeYtSlot, setHomeYtSlot] = useState(null);
   const [modalYtSlot, setModalYtSlot] = useState(null);
   const offscreenYtSlotRef = useRef(null); // ที่พักถาวรตอนไม่ได้อยู่หน้า Home และไม่ได้เปิดหน้าสื่อ (เพลงยังเล่นต่อ แค่มองไม่เห็น)
+  const homeYtSlotRef = useCallback((node) => setHomeYtSlot(node), []); // 🐛 ต้องใช้ useCallback กัน ref callback ถูกสร้างใหม่ทุก render (เดิม inline arrow function ทำให้ portal target สั่นทุกครั้งที่ re-render จน YouTube/สื่ออื่นเล่นไม่ขึ้น)
   const [playlist, setPlaylist] = useState([]);
   const [folders, setFolders] = useState([]); // หมวดหมู่เพลงที่ผู้ใช้สร้างเอง เช่น {id, name}
   const [categories, setCategories] = useState(DEFAULT_CATEGORIES); // หมวดหมู่การเงิน (แก้ไข/เพิ่ม/ลบ/สลับได้)
@@ -1664,7 +1665,7 @@ export default function RefHub() {
 
           {/* 🎵 การ์ด "กำลังเล่น" — ย้ายไปโชว์ในหน้าสื่อ (MusicModal) ได้แล้วผ่าน portal ไม่ต้องกลับมาหน้า Home อีกต่อไป
               div#yt-mini-player mount ค้างตลอด ไม่เคย unmount เลย กันปัญหา React ชนกับ DOM ที่ YouTube API แก้เอง */}
-          <div ref={(node) => setHomeYtSlot(node)} style={{ marginTop: page === "home" && cur && cur.kind === "yt" && !musicOpen ? 16 : 0 }} />
+          <div ref={homeYtSlotRef} style={{ marginTop: page === "home" && cur && cur.kind === "yt" && !musicOpen ? 16 : 0 }} />
         </div>
 
         </div>
@@ -2293,6 +2294,7 @@ const PLATFORM_META = {
 
 function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, toggleFavorite, volume, setVolume, userId, setModalYtSlot, close }) {
   const [askConfirm, ConfirmUI] = useConfirm(t);
+  const modalYtSlotRef = useCallback((node) => setModalYtSlot(node), [setModalYtSlot]); // 🐛 เสถียร กัน portal target สั่นทุก render (ดูคอมเมนต์เดียวกันที่ homeYtSlotRef)
   const [ytUrl, setYtUrl] = useState("");
   const fileRef = useRef(null);
   const [saved, setSaved] = useState(false);
@@ -2413,7 +2415,7 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
         <div style={{ fontSize: 12, color: t.sub, marginBottom: 14 }}>เก็บสื่อจาก YouTube, TikTok, X, Instagram, Facebook ไว้ดูย้อนหลัง · เพิ่มแล้วบันทึกอัตโนมัติ</div>
 
         {/* 🎬 ผู้เล่น YouTube ย้ายมาเล่นตรงนี้ได้เลย (เดิมบอกแค่ว่าไปเล่นอยู่หน้า Home ตอนนี้เล่น+คุมได้จากตรงนี้ทันที) */}
-        {cur && cur.kind === "yt" && <div ref={(node) => setModalYtSlot(node)} style={{ marginBottom: 14 }} />}
+        {cur && cur.kind === "yt" && <div ref={modalYtSlotRef} style={{ marginBottom: 14 }} />}
         {/* 📎 IG/X/TikTok/Facebook — โชว์ด้านบนแบบเดียวกับ YouTube เลย ไม่ต้องเปิด modal ซ้อนอีกต่อไป */}
         {viewingMedia && (
           <div style={{ ...card(t), padding: 14, marginBottom: 14 }}>
