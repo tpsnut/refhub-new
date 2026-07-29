@@ -20,11 +20,13 @@ const FEED_SOURCES = {
   biz: [
     { url: "https://news.google.com/rss/search?q=เศรษฐกิจ+ธุรกิจ+when:2d&hl=th&gl=TH&ceid=TH:th", label: "Google News", isGoogleNews: true },
   ],
+  car: [
+    { url: "https://news.google.com/rss/search?q=รถยนต์+when:2d&hl=th&gl=TH&ceid=TH:th", label: "Google News", isGoogleNews: true },
+  ],
   game: [
     { url: "https://news.google.com/rss/search?q=เกม+when:2d&hl=th&gl=TH&ceid=TH:th", label: "Google News", isGoogleNews: true },
   ],
   life: [
-    { url: "https://www.thairath.co.th/rss/lifestyle", label: "Thairath" },
     { url: "https://news.google.com/rss/search?q=ไลฟ์สไตล์+when:2d&hl=th&gl=TH&ceid=TH:th", label: "Google News", isGoogleNews: true },
   ],
   entertainment: [
@@ -183,7 +185,7 @@ export default async function handler(req, res) {
   try {
     if (type === "news") {
       if (!category || !FEED_SOURCES[category]) {
-        return res.status(400).json({ error: "ระบุ category ไม่ถูกต้อง (tech/biz/game/life/entertainment/world)" });
+        return res.status(400).json({ error: "ระบุ category ไม่ถูกต้อง (tech/biz/car/game/life/entertainment/world)" });
       }
       const items = await fetchNews(category, force === "1" || force === "true");
       return res.status(200).json({ items });

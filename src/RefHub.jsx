@@ -6506,6 +6506,7 @@ function TradePage({ t }) {
 const NEWS_CATEGORIES = [
   { id: "tech", label: "💻 เทคโนโลยี" },
   { id: "biz", label: "💼 ธุรกิจ" },
+  { id: "car", label: "🚗 รถยนต์" },
   { id: "game", label: "🎮 เกม" },
   { id: "life", label: "🌱 ไลฟ์สไตล์" },
   { id: "entertainment", label: "🎬 บันเทิง" },
