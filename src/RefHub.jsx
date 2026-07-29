@@ -3015,12 +3015,18 @@ function AdminNewsPanel({ t }) {
   const [pickedSource, setPickedSource] = useState("");
   const [topViews, setTopViews] = useState([]);
   const [topLikes, setTopLikes] = useState([]);
+  const [customCategories, setCustomCategories] = useState([]);
+  const [customGroups, setCustomGroups] = useState([]);
+  const [newCatLabel, setNewCatLabel] = useState("");
+  const [newCatQuery, setNewCatQuery] = useState("");
+  const [newCatGroup, setNewCatGroup] = useState("");
+  const [newGroupLabel, setNewGroupLabel] = useState("");
   const [loading, setLoading] = useState(true);
 
   const load = async () => {
     setLoading(true);
     const [{ data: settings }, { data: blocked }, { data: statsData }, { data: likesData }, { data: allSources }] = await Promise.all([
-      supabase.from("app_settings").select("*").in("key", ["news_disabled_categories", "news_default_category"]),
+      supabase.from("app_settings").select("*").in("key", ["news_disabled_categories", "news_default_category", "news_custom_categories", "news_custom_groups"]),
       supabase.from("blocked_news_sources_global").select("source").order("created_at", { ascending: false }),
       supabase.from("news_stats").select("*").order("views", { ascending: false }).limit(8),
       supabase.from("news_likes").select("link, title"),
@@ -3028,8 +3034,12 @@ function AdminNewsPanel({ t }) {
     ]);
     const disabledRow = (settings || []).find((s) => s.key === "news_disabled_categories");
     const defaultRow = (settings || []).find((s) => s.key === "news_default_category");
+    const customCatsRow = (settings || []).find((s) => s.key === "news_custom_categories");
+    const customGroupsRow = (settings || []).find((s) => s.key === "news_custom_groups");
     setDisabledCats(disabledRow?.value || []);
     setDefaultCat(defaultRow?.value || "tech");
+    setCustomCategories(customCatsRow?.value || []);
+    setCustomGroups(customGroupsRow?.value || []);
     const blockedList = (blocked || []).map((x) => x.source);
     setGlobalBlocked(blockedList);
     // รวมชื่อแหล่งข่าวที่เคยเห็นจริงทั้งหมด (ไม่ซ้ำ) ตัดอันที่บล็อกไปแล้วออก เอาไว้ทำ dropdown เลือก
@@ -3058,6 +3068,43 @@ function AdminNewsPanel({ t }) {
     await supabase.from("app_settings").upsert({ key: "news_default_category", value: id });
   };
 
+  const addCustomCategory = async () => {
+    const label = newCatLabel.trim();
+    const query = newCatQuery.trim() || label.replace(/^\S+\s/, "").trim() || label; // ถ้าไม่กรอกคำค้นหา ใช้ label (ตัด emoji นำหน้าออก) แทน
+    if (!label) return;
+    const id = "c_" + label.replace(/[^a-zA-Z0-9ก-๙]/g, "").slice(0, 20) + "_" + Math.random().toString(36).slice(2, 6);
+    const next = [...customCategories, { id, label, query, groupId: newCatGroup || null }];
+    setCustomCategories(next);
+    setNewCatLabel(""); setNewCatQuery(""); setNewCatGroup("");
+    await supabase.from("app_settings").upsert({ key: "news_custom_categories", value: next });
+  };
+  const removeCustomCategory = async (id) => {
+    const next = customCategories.filter((c) => c.id !== id);
+    setCustomCategories(next);
+    await supabase.from("app_settings").upsert({ key: "news_custom_categories", value: next });
+  };
+
+  const addCustomGroup = async () => {
+    const label = newGroupLabel.trim();
+    if (!label) return;
+    const id = "g_" + label.replace(/[^a-zA-Z0-9ก-๙]/g, "").slice(0, 20) + "_" + Math.random().toString(36).slice(2, 6);
+    const next = [...customGroups, { id, label }];
+    setCustomGroups(next);
+    setNewGroupLabel("");
+    await supabase.from("app_settings").upsert({ key: "news_custom_groups", value: next });
+  };
+  const removeCustomGroup = async (id) => {
+    // ลบกลุ่มแล้ว ต้องเอาหมวดที่เคยอยู่ในกลุ่มนี้ออกมาเป็นเดี่ยว (ไม่ลบตัวหมวดหมู่ทิ้ง)
+    const nextCats = customCategories.map((c) => (c.groupId === id ? { ...c, groupId: null } : c));
+    const nextGroups = customGroups.filter((g) => g.id !== id);
+    setCustomCategories(nextCats);
+    setCustomGroups(nextGroups);
+    await Promise.all([
+      supabase.from("app_settings").upsert({ key: "news_custom_categories", value: nextCats }),
+      supabase.from("app_settings").upsert({ key: "news_custom_groups", value: nextGroups }),
+    ]);
+  };
+
   const addGlobalBlock = async () => {
     const source = pickedSource;
     if (!source || globalBlocked.includes(source)) return;
@@ -3074,13 +3121,59 @@ function AdminNewsPanel({ t }) {
 
   if (loading) return <Empty t={t} text="กำลังโหลด..." />;
 
+  const allCatsForAdmin = [...NEWS_CATEGORIES.filter((c) => c.id !== "saved"), ...customCategories.map((c) => ({ id: c.id, label: c.label }))];
+  const allGroupsForAdmin = [...NEWS_CATEGORY_GROUPS, ...customGroups];
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ ...card(t), padding: 16 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text, marginBottom: 4 }}>➕ เพิ่มหมวดหมู่ข่าวใหม่</div>
+        <div style={{ fontSize: 11, color: t.sub, marginBottom: 12 }}>ระบบจะดึงข่าวจาก Google News อัตโนมัติด้วยคำค้นหาที่ตั้งไว้ ไม่ต้องหา URL RSS เอง</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
+          <input value={newCatLabel} onChange={(e) => setNewCatLabel(e.target.value)} placeholder="ชื่อหมวด เช่น ⚽ กีฬา" style={input(t)} />
+          <input value={newCatQuery} onChange={(e) => setNewCatQuery(e.target.value)} placeholder="คำค้นหา (ไม่กรอกจะใช้ชื่อหมวดแทน) เช่น กีฬา ฟุตบอล" style={input(t)} />
+          <select value={newCatGroup} onChange={(e) => setNewCatGroup(e.target.value)} style={{ ...input(t), appearance: "auto" }}>
+            <option value="">ไม่อยู่ในกลุ่มไหน (แสดงเป็นปุ่มเดี่ยว)</option>
+            {allGroupsForAdmin.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
+          </select>
+        </div>
+        <button onClick={addCustomCategory} disabled={!newCatLabel.trim()} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), padding: "10px 16px", width: "100%", opacity: newCatLabel.trim() ? 1 : .5 }}>เพิ่มหมวดหมู่</button>
+        {customCategories.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 12 }}>
+            {customCategories.map((c) => (
+              <div key={c.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 10px", borderRadius: 10, background: t.inputBg }}>
+                <span style={{ fontSize: 12.5, color: t.text }}>{c.label} <span style={{ color: t.faint, fontSize: 10.5 }}>({c.query})</span></span>
+                <button onClick={() => removeCustomCategory(c.id)} style={{ fontSize: 11, fontWeight: 700, color: "#D9534F", background: "none", border: "none", cursor: "pointer" }}>ลบ</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={{ ...card(t), padding: 16 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text, marginBottom: 4 }}>📁 เพิ่มกลุ่มหมวดหมู่ (accordion)</div>
+        <div style={{ fontSize: 11, color: t.sub, marginBottom: 12 }}>เอาไว้จัดหลายหมวดให้พับเก็บอยู่ด้วยกันในเมนู เหมือน "ข่าว" / "ไลฟ์สไตล์"</div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+          <input value={newGroupLabel} onChange={(e) => setNewGroupLabel(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addCustomGroup()} placeholder="ชื่อกลุ่ม เช่น 🎓 การศึกษา" style={input(t)} />
+          <button onClick={addCustomGroup} disabled={!newGroupLabel.trim()} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), padding: "0 16px", opacity: newGroupLabel.trim() ? 1 : .5 }}>เพิ่ม</button>
+        </div>
+        {customGroups.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {customGroups.map((g) => (
+              <div key={g.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 10px", borderRadius: 10, background: t.inputBg }}>
+                <span style={{ fontSize: 12.5, color: t.text }}>{g.label}</span>
+                <button onClick={() => removeCustomGroup(g.id)} style={{ fontSize: 11, fontWeight: 700, color: "#D9534F", background: "none", border: "none", cursor: "pointer" }}>ลบกลุ่ม (หมวดในนั้นไม่หาย)</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div style={{ ...card(t), padding: 16 }}>
         <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text, marginBottom: 4 }}>📑 เปิด/ปิดหมวดข่าว</div>
         <div style={{ fontSize: 11, color: t.sub, marginBottom: 12 }}>หมวดที่ปิดจะไม่แสดงให้ทุกคนในบ้านเห็นเลย (ยกเว้น "บันทึกไว้" ที่เป็นของส่วนตัว)</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {NEWS_CATEGORIES.filter((c) => c.id !== "saved").map((c) => {
+          {allCatsForAdmin.map((c) => {
             const isOff = disabledCats.includes(c.id);
             return (
               <div key={c.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 10px", borderRadius: 10, background: t.inputBg }}>
@@ -3101,7 +3194,7 @@ function AdminNewsPanel({ t }) {
         <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text, marginBottom: 4 }}>🏁 หมวดเริ่มต้นสำหรับสมาชิกใหม่</div>
         <div style={{ fontSize: 11, color: t.sub, marginBottom: 12 }}>สมาชิกที่เพิ่งเข้ามาครั้งแรกจะเห็นหมวดนี้เป็นค่าเริ่มต้น</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          {NEWS_CATEGORIES.filter((c) => c.id !== "saved").map((c) => (
+          {allCatsForAdmin.map((c) => (
             <button key={c.id} onClick={() => saveDefaultCat(c.id)} style={{
               padding: "8px 14px", borderRadius: 999, fontSize: 12, fontWeight: 700, cursor: "pointer",
               border: `1px solid ${defaultCat === c.id ? "transparent" : t.border}`,
@@ -6699,16 +6792,22 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
   const [blockedSources, setBlockedSources] = useState(new Set());
   const [globalBlockedSources, setGlobalBlockedSources] = useState(new Set());
   const [disabledCats, setDisabledCats] = useState([]);
+  const [customCategories, setCustomCategories] = useState([]); // [{id,label,query,groupId}]
+  const [customGroups, setCustomGroups] = useState([]); // [{id,label}]
 
   const loadAppSettings = async () => {
     const [{ data: settings }, { data: blocked }] = await Promise.all([
-      supabase.from("app_settings").select("*").in("key", ["news_disabled_categories", "news_default_category"]),
+      supabase.from("app_settings").select("*").in("key", ["news_disabled_categories", "news_default_category", "news_custom_categories", "news_custom_groups"]),
       supabase.from("blocked_news_sources_global").select("source"),
     ]);
     const disabledRow = (settings || []).find((s) => s.key === "news_disabled_categories");
     const defaultRow = (settings || []).find((s) => s.key === "news_default_category");
+    const customCatsRow = (settings || []).find((s) => s.key === "news_custom_categories");
+    const customGroupsRow = (settings || []).find((s) => s.key === "news_custom_groups");
     const disabled = disabledRow?.value || [];
     setDisabledCats(disabled);
+    setCustomCategories(customCatsRow?.value || []);
+    setCustomGroups(customGroupsRow?.value || []);
     setGlobalBlockedSources(new Set((blocked || []).map((x) => x.source)));
     // ถ้ายังไม่เคยเลือกหมวดมาก่อน (ไม่มีค่าใน authProfile) ให้ใช้หมวดเริ่มต้นที่ admin ตั้งไว้แทน "tech"
     if (!authProfile?.news_category && defaultRow?.value) { setCategory(defaultRow.value); return; }
@@ -6797,7 +6896,9 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
     if (cat === "saved") { loadSavedList(); return; }
     setLoading(true);
     setError("");
-    fetch(`/api/content?type=news&category=${cat}${force ? "&force=1" : ""}`)
+    const customCat = customCategories.find((c) => c.id === cat);
+    const qParam = customCat ? `&q=${encodeURIComponent(customCat.query || customCat.label)}` : "";
+    fetch(`/api/content?type=news&category=${cat}${qParam}${force ? "&force=1" : ""}`)
       .then((r) => r.json())
       .then((data) => {
         if (data.error) { setError(data.error); setItems([]); }
@@ -6808,7 +6909,7 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
   };
 
   useEffect(() => { loadSavedLinks(); loadBlockedSources(); loadAppSettings(); }, [userId]);
-  useEffect(() => { load(category); }, [category]);
+  useEffect(() => { load(category); }, [category, customCategories]);
 
   const selectCategory = async (cat) => {
     setCategory(cat);
@@ -6867,9 +6968,21 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
     else if (dx > 0 && idx > 0) selectCategory(visibleCategories[idx - 1].id); // ปัดขวา -> หมวดก่อนหน้า
   };
 
-  const currentCat = NEWS_CATEGORIES.find((c) => c.id === category);
+  // รวมหมวดมาตรฐาน + หมวด custom ที่ admin เพิ่มเอง (แทรกก่อน "บันทึกไว้" เสมอ)
+  const combinedCategories = [
+    ...NEWS_CATEGORIES.filter((c) => c.id !== "saved"),
+    ...customCategories.map((c) => ({ id: c.id, label: c.label })),
+    NEWS_CATEGORIES.find((c) => c.id === "saved"),
+  ];
+  const combinedGroups = [...NEWS_CATEGORY_GROUPS, ...customGroups.map((g) => ({ id: g.id, label: g.label, catIds: [] }))];
+  const currentCat = combinedCategories.find((c) => c.id === category);
   const visibleItems = category === "saved" ? items : items.filter((x) => !blockedSources.has(x.source) && !globalBlockedSources.has(x.source));
-  const visibleCategories = NEWS_CATEGORIES.filter((c) => c.id === "saved" || !disabledCats.includes(c.id));
+  const visibleCategories = combinedCategories.filter((c) => c.id === "saved" || !disabledCats.includes(c.id));
+  // groupId ของ custom category อาจชี้ไปกลุ่ม hardcode หรือกลุ่ม custom ก็ได้ — รวม catIds ให้ครบทุกกลุ่ม
+  const groupsWithCats = combinedGroups.map((g) => ({
+    ...g,
+    catIds: [...g.catIds, ...customCategories.filter((c) => c.groupId === g.id).map((c) => c.id)],
+  }));
 
   return (<>
     <style>{`@keyframes rh-drawer-in { from { transform: translateX(-100%); } to { transform: translateX(0); } } @keyframes rh-drawer-backdrop { from { opacity: 0; } to { opacity: 1; } }`}</style>
@@ -6891,7 +7004,7 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
               </button>
             </div>
             <div style={{ padding: 10, display: "flex", flexDirection: "column", gap: 3 }}>
-              {NEWS_CATEGORY_GROUPS.map((g) => {
+              {groupsWithCats.map((g) => {
                 const catsInGroup = visibleCategories.filter((c) => g.catIds.includes(c.id));
                 if (catsInGroup.length === 0) return null; // ทุกตัวในกลุ่มถูกปิดหมด ไม่ต้องโชว์กลุ่ม
                 const isOpen = expandedGroups.has(g.id);
@@ -6928,7 +7041,7 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
                 );
               })}
               {/* หมวดที่ไม่ได้อยู่ในกลุ่มไหน แสดงเป็นปุ่มเดี่ยวตามปกติ */}
-              {visibleCategories.filter((c) => !NEWS_CATEGORY_GROUPS.some((g) => g.catIds.includes(c.id))).map((c) => (
+              {visibleCategories.filter((c) => !groupsWithCats.some((g) => g.catIds.includes(c.id))).map((c) => (
                 <button key={c.id} onClick={() => { selectCategory(c.id); setMenuOpen(false); }} style={{
                   display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "13px 14px", borderRadius: 12,
                   border: "none", cursor: "pointer", textAlign: "left", fontSize: 13.5, fontWeight: 700,

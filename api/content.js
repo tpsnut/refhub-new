@@ -157,11 +157,8 @@ function interleaveBlocks(arraysInOrder, blockSize, maxTotal) {
   return result;
 }
 
-async function fetchNews(category, force) {
-  const sources = FEED_SOURCES[category];
-  if (!sources) throw new Error("หมวดหมู่ไม่ถูกต้อง");
-
-  const cached = cache[category];
+async function fetchNews(cacheKey, sources, force) {
+  const cached = cache[cacheKey];
   if (!force && cached && Date.now() - cached.ts < CACHE_TTL_MS) return cached.data;
 
   const results = await Promise.allSettled(sources.map(fetchOneSource));
@@ -184,19 +181,34 @@ async function fetchNews(category, force) {
 
   const items = interleaveBlocks(perSourceLists, 5, 20);
 
-  cache[category] = { data: items, ts: Date.now() };
+  cache[cacheKey] = { data: items, ts: Date.now() };
   return items;
 }
 
+// สร้างแหล่งข่าว Google News จากคำค้นหาที่ admin พิมพ์เอง (สำหรับหมวดที่ admin เพิ่มเองผ่านหน้า admin)
+function googleNewsSourceFromQuery(q) {
+  return { url: `https://news.google.com/rss/search?q=${encodeURIComponent(q)}+when:2d&hl=th&gl=TH&ceid=TH:th`, label: "Google News", isGoogleNews: true };
+}
+
 export default async function handler(req, res) {
-  const { type, category, force } = req.query || {};
+  const { type, category, force, q } = req.query || {};
 
   try {
     if (type === "news") {
-      if (!category || !FEED_SOURCES[category]) {
-        return res.status(400).json({ error: "ระบุ category ไม่ถูกต้อง (tech/biz/car/game/life/entertainment/world)" });
+      let sources;
+      let cacheKey;
+      if (category && FEED_SOURCES[category]) {
+        // หมวดมาตรฐานที่มีอยู่แล้ว (เทค/ธุรกิจ/รถยนต์ ฯลฯ)
+        sources = FEED_SOURCES[category];
+        cacheKey = category;
+      } else if (q) {
+        // หมวด custom ที่ admin เพิ่มเองจากหน้า admin — ใช้ Google News ค้นหาด้วยคำที่ตั้งไว้
+        sources = [googleNewsSourceFromQuery(q)];
+        cacheKey = `custom:${q}`;
+      } else {
+        return res.status(400).json({ error: "ระบุ category หรือ q (คำค้นหาสำหรับหมวด custom) มาด้วย" });
       }
-      const items = await fetchNews(category, force === "1" || force === "true");
+      const items = await fetchNews(cacheKey, sources, force === "1" || force === "true");
       return res.status(200).json({ items });
     }
 
