@@ -21,6 +21,7 @@ const FEED_SOURCES = {
     { url: "https://news.google.com/rss/search?q=เศรษฐกิจ+ธุรกิจ+when:2d&hl=th&gl=TH&ceid=TH:th", label: "Google News", isGoogleNews: true },
   ],
   car: [
+    { url: "https://www.thairath.co.th/rss/news", label: "Thairath", filterLinkContains: "/news/auto/" },
     { url: "https://news.google.com/rss/search?q=รถยนต์+when:2d&hl=th&gl=TH&ceid=TH:th", label: "Google News", isGoogleNews: true },
   ],
   game: [
