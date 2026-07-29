@@ -15,6 +15,7 @@
 // ถ้าแหล่งไหน fetch ไม่สำเร็จ (URL ผิด/โดนบล็อก) จะข้ามเงียบๆ ไม่ทำให้ทั้งหมวดพัง ตราบใดที่ยังมีอย่างน้อย 1 แหล่งที่ใช้ได้
 const FEED_SOURCES = {
   tech: [
+    { url: "https://www.blognone.com/atom.xml", label: "Blognone" },
     { url: "https://news.google.com/rss/search?q=เทคโนโลยี+when:2d&hl=th&gl=TH&ceid=TH:th", label: "Google News", isGoogleNews: true },
   ],
   biz: [
@@ -89,11 +90,24 @@ function timeAgo(dateStr) {
   return `${days} วันที่แล้ว`;
 }
 
+function extractLink(blockXml) {
+  // RSS: <link>https://...</link>  |  Atom: <link rel="alternate" href="https://..."/>
+  const hrefMatch = blockXml.match(/<link[^>]*href=["']([^"']+)["']/i);
+  if (hrefMatch) return hrefMatch[1];
+  return tagContent(blockXml, "link");
+}
+function extractDate(blockXml) {
+  return tagContent(blockXml, "pubDate") || tagContent(blockXml, "updated") || tagContent(blockXml, "published");
+}
+function extractDescription(blockXml) {
+  return tagContent(blockXml, "description") || tagContent(blockXml, "summary") || tagContent(blockXml, "content");
+}
+
 async function fetchOneSource(source) {
   const r = await fetch(source.url, {
     headers: {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-      "Accept": "application/rss+xml, application/xml, text/xml, */*",
+      "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, */*",
       "Accept-Language": "th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7",
       "Referer": "https://www.google.com/",
     },
@@ -101,22 +115,25 @@ async function fetchOneSource(source) {
   if (!r.ok) throw new Error(`ดึง RSS ไม่สำเร็จ (${r.status}) จาก ${source.label}`);
   const xml = await r.text();
 
-  // เช็คว่าสิ่งที่ได้กลับมาเป็น RSS จริงไหม — ถ้าไม่ใช่ มักเป็นเพราะโดน Cloudflare หรือระบบป้องกันบอทของปลายทางเสิร์ฟหน้า challenge กลับมาแทน (ตอบ 200 OK ปกติ แต่เนื้อหาไม่ใช่ XML)
-  if (!/<rss|<feed/i.test(xml)) {
-    throw new Error(`${source.label} อาจบล็อกการเข้าถึงจากเซิร์ฟเวอร์ (ไม่ใช่ RSS จริงที่ได้กลับมา)`);
+  // เช็คว่าสิ่งที่ได้กลับมาเป็น RSS/Atom จริงไหม — ถ้าไม่ใช่ มักเป็นเพราะโดน Cloudflare หรือระบบป้องกันบอทของปลายทางเสิร์ฟหน้า challenge กลับมาแทน (ตอบ 200 OK ปกติ แต่เนื้อหาไม่ใช่ XML)
+  const isAtom = /<feed[\s>]/i.test(xml);
+  if (!isAtom && !/<rss/i.test(xml)) {
+    throw new Error(`${source.label} อาจบล็อกการเข้าถึงจากเซิร์ฟเวอร์ (ไม่ใช่ RSS/Atom จริงที่ได้กลับมา)`);
   }
 
+  // ฟีดส่วนใหญ่เป็น RSS 2.0 (<item>) แต่บางเจ้า เช่น Blognone ใช้ Atom (<entry>) — รองรับทั้งคู่
+  const blockTag = isAtom ? "entry" : "item";
   const rawLimit = source.filterLinkContains ? 60 : 20;
-  const itemMatches = xml.match(/<item>[\s\S]*?<\/item>/g) || [];
+  const itemMatches = xml.match(new RegExp(`<${blockTag}[\\s>][\\s\\S]*?<\\/${blockTag}>`, "g")) || [];
   let candidates = itemMatches.slice(0, rawLimit);
   if (source.filterLinkContains) {
     candidates = candidates.filter((itemXml) => itemXml.includes(source.filterLinkContains));
   }
   return candidates.slice(0, 20).map((itemXml) => {
     let title = decodeEntities(stripCdata(tagContent(itemXml, "title")));
-    const link = decodeEntities(stripCdata(tagContent(itemXml, "link")));
-    const pubDate = stripCdata(tagContent(itemXml, "pubDate"));
-    const rawDesc = decodeEntities(stripCdata(tagContent(itemXml, "description")));
+    const link = decodeEntities(stripCdata(extractLink(itemXml)));
+    const pubDate = stripCdata(extractDate(itemXml));
+    const rawDesc = decodeEntities(stripCdata(extractDescription(itemXml)));
     const summary = stripHtmlTags(rawDesc).slice(0, 160);
     const image = firstImageUrl(itemXml);
 
