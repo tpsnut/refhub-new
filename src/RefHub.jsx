@@ -898,10 +898,11 @@ export default function RefHub() {
         if (plErr) console.error("โหลดเพลย์ลิสต์ไม่สำเร็จ (ไม่แตะข้อมูลเดิม):", plErr.message);
         if (dbPlaylist) {
           // แปลงชื่อฟิลด์ yt_id จากฐานข้อมูลกลับมาใช้ในแอป
+          // 🔀 เรียงตาม sort_order ถ้ามีคอลัมน์นี้แล้ว (ต้องรัน SQL เพิ่มคอลัมน์ก่อน) — ใช้ ?? กันพัง เผื่อคอลัมน์ยังไม่มี/ยังไม่เคยตั้งค่า จะ fallback เรียงแบบเดิม ไม่มีผลกระทบถ้ายังไม่ได้รัน SQL
           const mappedPlaylist = dbPlaylist.map(p => ({
             id: p.id, kind: p.kind, name: p.name, url: p.url, ytId: p.yt_id, persist: p.persist,
-            platform: p.platform || "youtube", pinnedHome: !!p.pinned_home,
-          }));
+            platform: p.platform || "youtube", pinnedHome: !!p.pinned_home, sortOrder: p.sort_order,
+          })).sort((a, b) => (a.sortOrder ?? 9999) - (b.sortOrder ?? 9999));
           setPlaylist(mappedPlaylist);
         }
 
@@ -1237,13 +1238,6 @@ export default function RefHub() {
   };
   const nextTrack = () => { if (!playlist.length) return; const i = playlist.findIndex((x) => x.id === curId); const nx = playlist[(i + 1) % playlist.length]; if (nx) playTrack(nx); };
   const prevTrack = () => { if (!playlist.length) return; const i = playlist.findIndex((x) => x.id === curId); const pv = playlist[(i - 1 + playlist.length) % playlist.length]; if (pv) playTrack(pv); };
-  const moveTrack = (id, dir) => {
-    setPlaylist((p) => {
-      const i = p.findIndex((x) => x.id === id); const j = i + dir;
-      if (i < 0 || j < 0 || j >= p.length) return p;
-      const arr = [...p]; [arr[i], arr[j]] = [arr[j], arr[i]]; return arr;
-    });
-  };
   const toggleFavorite = (id) => setPlaylist((p) => p.map((x) => (x.id === id ? { ...x, favorite: !x.favorite } : x)));
   const renameTrack = (id, name) => {
     setPlaylist((p) => p.map((x) => (x.id === id ? { ...x, name } : x)));
@@ -1510,7 +1504,7 @@ export default function RefHub() {
         {editProfile && <EditProfile t={t} M={M} profile={profile} setProfile={setProfile} userId={userId} authProfile={authProfile} setAuthProfile={setAuthProfile} close={() => setEditProfile(false)} />}
         {profileLightbox && profile.avatar && <ImageLightbox src={profile.avatar} onClose={() => setProfileLightbox(false)} />}
         {searchOpen && <SearchOverlay t={t} notes={notes} goals={goals} tx={tx} categories={categories} setPage={setPage} close={() => setSearchOpen(false)} />}
-        {musicOpen && <MusicModal {...{ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, moveTrack, toggleFavorite, volume, setVolume, userId, close: () => setMusicOpen(false) }} />}
+        {musicOpen && <MusicModal {...{ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, toggleFavorite, volume, setVolume, userId, close: () => setMusicOpen(false) }} />}
         {addOpen && <AddTxModal t={t} tx={tx} setTx={setTx} categories={categories} reorderCategoriesForKind={reorderCategoriesForKind} deleteCategory={deleteCategory} addCategory={addCategory} userId={userId} session={session} close={() => setAddOpen(false)} />}
         {exportText != null && <ExportModal t={t} text={exportText} close={() => setExportText(null)} />}
 
@@ -2026,7 +2020,7 @@ const PLATFORM_META = {
   other: { label: "ลิงก์", color: "#8A93A8" },
 };
 
-function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, moveTrack, toggleFavorite, volume, setVolume, userId, close }) {
+function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, toggleFavorite, volume, setVolume, userId, close }) {
   const [ytUrl, setYtUrl] = useState("");
   const fileRef = useRef(null);
   const [saved, setSaved] = useState(false);
@@ -2117,6 +2111,19 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
     if (tab === "fav") return !!tr.favorite;
     return tr.folderId === tab;
   });
+  // 🔀 จัดเรียงเฉพาะรายการที่กำลังโชว์อยู่ใน tab ปัจจุบัน (ทั้งหมด/โปรด/หมวดหมู่) — ไม่ไปยุ่งตำแหน่งของสื่ออื่นนอก tab
+  // เอาผลลัพธ์ไปแทนที่ตำแหน่งเดิมของรายการที่โชว์ใน playlist รวม แล้ว sync sort_order ใหม่ทั้งชุดขึ้น Supabase (คอลัมน์ sort_order ต้องรัน SQL เพิ่มก่อน ไม่งั้นจะจำลำดับได้แค่ในเซสชันนี้ ไม่ค้างข้ามรอบเปิดแอป)
+  const reorderShown = (newOrderShown) => {
+    const shownIds = new Set(shown.map((x) => x.id));
+    setPlaylist((p) => {
+      const idxs = p.map((x, i) => (shownIds.has(x.id) ? i : -1)).filter((i) => i !== -1);
+      if (idxs.length !== newOrderShown.length) return p;
+      const arr = [...p];
+      idxs.forEach((posInArr, j) => { arr[posInArr] = newOrderShown[j]; });
+      if (userId) arr.forEach((tr, i) => { supabase.from("playlists").update({ sort_order: i }).eq("id", tr.id).then(() => {}, () => {}); });
+      return arr;
+    });
+  };
 
   return (
     <div style={overlay} onClick={close}>
@@ -2193,20 +2200,26 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
         <div style={{ fontSize: 12.5, fontWeight: 800, color: t.sub, marginBottom: 8 }}>สื่อที่เก็บไว้ ({shown.length})</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {shown.length === 0 && <div style={{ textAlign: "center", color: t.sub, fontSize: 13, padding: "20px 0" }}>ยังไม่มีสื่อในหมวดนี้</div>}
-          {shown.map((tr, i) => (
-            <TrackRow key={tr.id} t={t} M={M} track={tr} active={curId === tr.id} playing={playing && curId === tr.id}
-              folders={folders} isFirst={i === 0} isLast={i === shown.length - 1}
-              onPlay={() => (tr.kind === "link" ? setViewingMedia(tr) : playTrack(tr))} onToggle={togglePlay}
-              onDel={() => {
-                if (tab === "all") { setPlaylist((p) => p.filter((x) => x.id !== tr.id)); if (userId) supabase.from("playlists").delete().eq("id", tr.id).then(() => {}, () => {}); } // แท็บทั้งหมด -> ลบจริง
-                else if (tab === "fav") toggleFavorite(tr.id);                                   // แท็บโปรด -> แค่เอาออกจากโปรด
-                else setTrackFolder(tr.id, null);                                                 // แท็บหมวดหมู่ -> แค่เอาออกจากหมวด ไม่ลบต้นฉบับ
-              }}
-              onFav={() => toggleFavorite(tr.id)}
-              onMoveUp={() => moveTrack(tr.id, -1)} onMoveDown={() => moveTrack(tr.id, 1)}
-              onFolder={(fid) => setTrackFolder(tr.id, fid)} onRename={(name) => renameTrack(tr.id, name)}
-              onPinHome={() => togglePinHome(tr.id)} />
-          ))}
+          <DragReorderList
+            items={shown}
+            getId={(tr) => tr.id}
+            onReorder={reorderShown}
+            renderItem={(tr, i, { handleProps }) => (
+              <div style={{ marginBottom: 8 }}>
+                <TrackRow t={t} M={M} track={tr} active={curId === tr.id} playing={playing && curId === tr.id}
+                  folders={folders} dragHandleProps={handleProps}
+                  onPlay={() => (tr.kind === "link" ? setViewingMedia(tr) : playTrack(tr))} onToggle={togglePlay}
+                  onDel={() => {
+                    if (tab === "all") { setPlaylist((p) => p.filter((x) => x.id !== tr.id)); if (userId) supabase.from("playlists").delete().eq("id", tr.id).then(() => {}, () => {}); } // แท็บทั้งหมด -> ลบจริง
+                    else if (tab === "fav") toggleFavorite(tr.id);                                   // แท็บโปรด -> แค่เอาออกจากโปรด
+                    else setTrackFolder(tr.id, null);                                                 // แท็บหมวดหมู่ -> แค่เอาออกจากหมวด ไม่ลบต้นฉบับ
+                  }}
+                  onFav={() => toggleFavorite(tr.id)}
+                  onFolder={(fid) => setTrackFolder(tr.id, fid)} onRename={(name) => renameTrack(tr.id, name)}
+                  onPinHome={() => togglePinHome(tr.id)} />
+              </div>
+            )}
+          />
         </div>
         {viewingMedia && <SocialEmbedModal t={t} item={viewingMedia} close={() => setViewingMedia(null)} />}
         <div style={{ fontSize: 10.5, color: t.faint, textAlign: "center", marginTop: 14 }}>
@@ -2276,7 +2289,7 @@ function SocialEmbedModal({ t, item, close }) {
   );
 }
 
-function TrackRow({ t, M, track, active, playing, folders, isFirst, isLast, onPlay, onToggle, onDel, onFav, onMoveUp, onMoveDown, onFolder, onRename, onPinHome }) {
+function TrackRow({ t, M, track, active, playing, folders, dragHandleProps, onPlay, onToggle, onDel, onFav, onFolder, onRename, onPinHome }) {
   const isLink = track.kind === "link";
   const platMeta = PLATFORM_META[track.platform] || PLATFORM_META.other;
   const icon = isLink ? <Link2 size={16} color={platMeta.color} /> : track.kind === "yt" ? <Music size={16} color="#E0507B" /> : track.kind === "file" ? <Music size={16} color="#3DA5D9" /> : <Sparkles size={16} color={t.accent} />;
@@ -2286,6 +2299,7 @@ function TrackRow({ t, M, track, active, playing, folders, isFirst, isLast, onPl
   return (
     <div style={{ ...card(t), padding: "10px 12px", border: `1px solid ${active ? t.accent : t.border}` }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <span {...dragHandleProps} style={{ ...dragHandleProps?.style, flexShrink: 0 }}><GripVertical size={16} color={t.faint} /></span>
         <button onClick={isLink ? onPlay : (active ? onToggle : onPlay)} style={{ width: 34, height: 34, borderRadius: 17, border: "none", cursor: "pointer", background: active ? t.accent : `${t.accent}22`, color: active ? t.onAccent : t.accent, display: "grid", placeItems: "center", flexShrink: 0 }}>
           {isLink ? <ChevronRight size={15} /> : active && playing ? <Pause size={15} /> : <Play size={15} />}
         </button>
@@ -2305,16 +2319,14 @@ function TrackRow({ t, M, track, active, playing, folders, isFirst, isLast, onPl
         {onDel && <button onClick={onDel} style={ghost}><Trash2 size={15} color={t.faint} /></button>}
       </div>
       {isLink && <div style={{ fontSize: 10, color: platMeta.color, fontWeight: 700, marginTop: 6, paddingLeft: 44 }}>{platMeta.label}</div>}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, paddingLeft: 44 }}>
-        <button onClick={onMoveUp} disabled={isFirst} style={{ ...ghost, opacity: isFirst ? 0.3 : 1 }} title="ย้ายขึ้น">▲</button>
-        <button onClick={onMoveDown} disabled={isLast} style={{ ...ghost, opacity: isLast ? 0.3 : 1 }} title="ย้ายลง">▼</button>
-        {folders && folders.length > 0 && (
+      {folders && folders.length > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, paddingLeft: 44 }}>
           <select value={track.folderId || ""} onChange={(e) => onFolder(e.target.value || null)} style={{ fontSize: 11, border: `1px solid ${t.border}`, borderRadius: 8, background: t.inputBg, color: t.sub, padding: "3px 6px" }}>
             <option value="">ไม่มีหมวดหมู่</option>
             {folders.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
           </select>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
