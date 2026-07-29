@@ -1350,7 +1350,7 @@ export default function RefHub() {
           {page === "note" && <NotePage {...{ t, notes, setNotes, isNight, userId, session, authProfile }} />}
           {page === "ideas" && <IdeasPage t={t} M={M} userId={userId} session={session} authProfile={authProfile} setAuthProfile={setAuthProfile} setNotes={setNotes} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} />}
           {page === "trade" && <TradePage t={t} />}
-          {page === "news" && <NewsPage t={t} userId={userId} authProfile={authProfile} setAuthProfile={setAuthProfile} />}
+          {page === "news" && <NewsPage t={t} userId={userId} authProfile={authProfile} setAuthProfile={setAuthProfile} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} />}
           {page === "lang" && <LangPage t={t} />}
           {page === "goalsReport" && <GoalsReportPage t={t} goals={goals} setGoals={setGoals} userId={userId} />}
           {page === "admin" && <AdminPage t={t} session={session} userId={userId} adminAlerts={adminAlerts} setAdminAlerts={setAdminAlerts} authProfile={authProfile} setAuthProfile={setAuthProfile} />}
@@ -6513,7 +6513,7 @@ const NEWS_CATEGORIES = [
   { id: "saved", label: "⭐ บันทึกไว้" },
 ];
 
-function NewsPage({ t, userId, authProfile, setAuthProfile }) {
+function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskAiTopic }) {
   const [category, setCategory] = useState(authProfile?.news_category || "tech");
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -6626,6 +6626,11 @@ function NewsPage({ t, userId, authProfile, setAuthProfile }) {
     }
   };
 
+  const askAi = (x) => {
+    setAskAiTopic?.({ title: x.title });
+    setChatOpen?.(true);
+  };
+
   // ปัดซ้าย/ขวาบนพื้นที่ข่าว เปลี่ยนหมวดหมู่ถัดไป/ก่อนหน้า (ต้องปัดแนวนอนชัดเจน กันชนกับการเลื่อนดูข่าวขึ้นลง)
   const touchStartRef = useRef(null);
   const handleTouchStart = (e) => {
@@ -6692,22 +6697,26 @@ function NewsPage({ t, userId, authProfile, setAuthProfile }) {
               {x.summary && <div style={{ fontSize: 11.5, color: t.sub, lineHeight: 1.4 }}>{x.summary}</div>}
             </div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end", borderTop: `1px solid ${t.border}`, paddingTop: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end", borderTop: `1px solid ${t.border}`, paddingTop: 8 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 4, marginRight: "auto", color: t.faint }}>
               <Eye size={13} color={t.faint} />
               <span style={{ fontSize: 11 }}>{st.views}</span>
             </div>
-            <button onClick={() => toggleLike(x.link)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 8px" }}>
+            <button onClick={() => sendNewsToNote(x)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px" }}>
+              <StickyNote size={15} color={t.faint} />
+              <span style={{ fontSize: 11, color: t.faint, fontWeight: 700 }}>ส่งเข้าโน้ต</span>
+            </button>
+            <button onClick={() => askAi(x)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px" }}>
+              <MessageCircle size={15} color={t.faint} />
+              <span style={{ fontSize: 11, color: t.faint, fontWeight: 700 }}>ถาม AI ต่อ</span>
+            </button>
+            <button onClick={() => toggleLike(x.link)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px" }}>
               <Heart size={15} color={st.likedByMe ? "#E0245E" : t.faint} fill={st.likedByMe ? "#E0245E" : "none"} />
               <span style={{ fontSize: 11, color: st.likedByMe ? "#E0245E" : t.faint, fontWeight: 700 }}>{st.likeCount > 0 ? st.likeCount : "ไลค์"}</span>
             </button>
-            <button onClick={() => toggleSave(x)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 8px" }}>
+            <button onClick={() => toggleSave(x)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px" }}>
               <Bookmark size={15} color={savedLinks.has(x.link) ? t.accent : t.faint} fill={savedLinks.has(x.link) ? t.accent : "none"} />
               <span style={{ fontSize: 11, color: savedLinks.has(x.link) ? t.accent : t.faint, fontWeight: 700 }}>{savedLinks.has(x.link) ? "บันทึกแล้ว" : "บันทึก"}</span>
-            </button>
-            <button onClick={() => sendNewsToNote(x)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 8px" }}>
-              <StickyNote size={15} color={t.faint} />
-              <span style={{ fontSize: 11, color: t.faint, fontWeight: 700 }}>ส่งเข้าโน้ต</span>
             </button>
           </div>
         </div>
