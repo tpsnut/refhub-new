@@ -3007,6 +3007,157 @@ function AdminActivityPanel({ t, members }) {
   );
 }
 
+function AdminNewsPanel({ t }) {
+  const [disabledCats, setDisabledCats] = useState([]);
+  const [defaultCat, setDefaultCat] = useState("tech");
+  const [globalBlocked, setGlobalBlocked] = useState([]);
+  const [newBlockInput, setNewBlockInput] = useState("");
+  const [topViews, setTopViews] = useState([]);
+  const [topLikes, setTopLikes] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = async () => {
+    setLoading(true);
+    const [{ data: settings }, { data: blocked }, { data: statsData }, { data: likesData }] = await Promise.all([
+      supabase.from("app_settings").select("*").in("key", ["news_disabled_categories", "news_default_category"]),
+      supabase.from("blocked_news_sources_global").select("source").order("created_at", { ascending: false }),
+      supabase.from("news_stats").select("*").order("views", { ascending: false }).limit(8),
+      supabase.from("news_likes").select("link, title"),
+    ]);
+    const disabledRow = (settings || []).find((s) => s.key === "news_disabled_categories");
+    const defaultRow = (settings || []).find((s) => s.key === "news_default_category");
+    setDisabledCats(disabledRow?.value || []);
+    setDefaultCat(defaultRow?.value || "tech");
+    setGlobalBlocked((blocked || []).map((x) => x.source));
+    setTopViews(statsData || []);
+    // นับไลค์รวมต่อข่าวเอง (Supabase client ไม่มี GROUP BY ตรงๆ)
+    const likeCounts = {};
+    (likesData || []).forEach((x) => {
+      if (!likeCounts[x.link]) likeCounts[x.link] = { link: x.link, title: x.title, count: 0 };
+      likeCounts[x.link].count++;
+    });
+    setTopLikes(Object.values(likeCounts).sort((a, b) => b.count - a.count).slice(0, 8));
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
+
+  const toggleCatDisabled = async (id) => {
+    const next = disabledCats.includes(id) ? disabledCats.filter((x) => x !== id) : [...disabledCats, id];
+    setDisabledCats(next);
+    await supabase.from("app_settings").upsert({ key: "news_disabled_categories", value: next });
+  };
+
+  const saveDefaultCat = async (id) => {
+    setDefaultCat(id);
+    await supabase.from("app_settings").upsert({ key: "news_default_category", value: id });
+  };
+
+  const addGlobalBlock = async () => {
+    const source = newBlockInput.trim();
+    if (!source || globalBlocked.includes(source)) return;
+    setGlobalBlocked((s) => [source, ...s]);
+    setNewBlockInput("");
+    await supabase.from("blocked_news_sources_global").insert({ source });
+  };
+  const removeGlobalBlock = async (source) => {
+    setGlobalBlocked((s) => s.filter((x) => x !== source));
+    await supabase.from("blocked_news_sources_global").delete().eq("source", source);
+  };
+
+  if (loading) return <Empty t={t} text="กำลังโหลด..." />;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ ...card(t), padding: 16 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text, marginBottom: 4 }}>📑 เปิด/ปิดหมวดข่าว</div>
+        <div style={{ fontSize: 11, color: t.sub, marginBottom: 12 }}>หมวดที่ปิดจะไม่แสดงให้ทุกคนในบ้านเห็นเลย (ยกเว้น "บันทึกไว้" ที่เป็นของส่วนตัว)</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {NEWS_CATEGORIES.filter((c) => c.id !== "saved").map((c) => {
+            const isOff = disabledCats.includes(c.id);
+            return (
+              <div key={c.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 10px", borderRadius: 10, background: t.inputBg }}>
+                <span style={{ fontSize: 13, color: t.text }}>{c.label}</span>
+                <button onClick={() => toggleCatDisabled(c.id)} style={{
+                  width: 42, height: 24, borderRadius: 999, border: "none", cursor: "pointer", position: "relative",
+                  background: isOff ? t.border : t.accent, transition: "background .15s",
+                }}>
+                  <span style={{ position: "absolute", top: 2, left: isOff ? 2 : 20, width: 20, height: 20, borderRadius: 999, background: "#fff", transition: "left .15s" }} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div style={{ ...card(t), padding: 16 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text, marginBottom: 4 }}>🏁 หมวดเริ่มต้นสำหรับสมาชิกใหม่</div>
+        <div style={{ fontSize: 11, color: t.sub, marginBottom: 12 }}>สมาชิกที่เพิ่งเข้ามาครั้งแรกจะเห็นหมวดนี้เป็นค่าเริ่มต้น</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {NEWS_CATEGORIES.filter((c) => c.id !== "saved").map((c) => (
+            <button key={c.id} onClick={() => saveDefaultCat(c.id)} style={{
+              padding: "8px 14px", borderRadius: 999, fontSize: 12, fontWeight: 700, cursor: "pointer",
+              border: `1px solid ${defaultCat === c.id ? "transparent" : t.border}`,
+              background: defaultCat === c.id ? t.accent : "transparent",
+              color: defaultCat === c.id ? t.onAccent : t.sub,
+            }}>{c.label}</button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ ...card(t), padding: 16 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text, marginBottom: 4 }}>🚫 บล็อกแหล่งข่าวทั้งบ้าน</div>
+        <div style={{ fontSize: 11, color: t.sub, marginBottom: 12 }}>ต่างจากบล็อกส่วนตัว — อันนี้ทุกคนในบ้านจะไม่เห็นข่าวจากแหล่งนี้เลย</div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+          <input value={newBlockInput} onChange={(e) => setNewBlockInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addGlobalBlock()} placeholder="พิมพ์ชื่อแหล่งข่าว เช่น Thairath" style={input(t)} />
+          <button onClick={addGlobalBlock} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), padding: "0 16px" }}>บล็อก</button>
+        </div>
+        {globalBlocked.length === 0 ? (
+          <div style={{ fontSize: 11.5, color: t.faint }}>ยังไม่มีแหล่งข่าวที่บล็อกไว้</div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {globalBlocked.map((s) => (
+              <div key={s} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 10px", borderRadius: 10, background: t.inputBg }}>
+                <span style={{ fontSize: 12, color: t.text }}>{s}</span>
+                <button onClick={() => removeGlobalBlock(s)} style={{ fontSize: 11, fontWeight: 700, color: t.accent, background: "none", border: "none", cursor: "pointer" }}>เลิกบล็อก</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={{ ...card(t), padding: 16 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text, marginBottom: 10 }}>📈 ข่าวยอดวิวสูงสุด (ทั้งบ้าน)</div>
+        {topViews.length === 0 ? <div style={{ fontSize: 11.5, color: t.faint }}>ยังไม่มีข้อมูล</div> : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {topViews.map((x, i) => (
+              <a key={x.link} href={x.link} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}>
+                <span style={{ fontSize: 11, fontWeight: 800, color: t.faint, width: 16 }}>{i + 1}</span>
+                <span style={{ flex: 1, fontSize: 12.5, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.title || x.link}</span>
+                <span style={{ fontSize: 11, color: t.accent, fontWeight: 700, flexShrink: 0 }}>{x.views} วิว</span>
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={{ ...card(t), padding: 16 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text, marginBottom: 10 }}>❤️ ข่าวยอดไลค์สูงสุด (ทั้งบ้าน)</div>
+        {topLikes.length === 0 ? <div style={{ fontSize: 11.5, color: t.faint }}>ยังไม่มีข้อมูล</div> : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {topLikes.map((x, i) => (
+              <a key={x.link} href={x.link} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}>
+                <span style={{ fontSize: 11, fontWeight: 800, color: t.faint, width: 16 }}>{i + 1}</span>
+                <span style={{ flex: 1, fontSize: 12.5, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.title || x.link}</span>
+                <span style={{ fontSize: 11, color: "#E0245E", fontWeight: 700, flexShrink: 0 }}>{x.count} ไลค์</span>
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts, authProfile, setAuthProfile }) {
   const [tab, setTab] = useState("overview"); // overview | members | add
   const [members, setMembers] = useState([]);
@@ -3086,7 +3237,7 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts, authProfil
 
       <div style={{ position: "relative", marginBottom: 14 }}>
         <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2 }}>
-          {[["overview", "ภาพรวม"], ["members", "สมาชิก"], ["activity", "กิจกรรม"], ["announce", "ประกาศ"], ["add", "เพิ่มสมาชิก"]].map(([v, lb]) => (
+          {[["overview", "ภาพรวม"], ["members", "สมาชิก"], ["activity", "กิจกรรม"], ["announce", "ประกาศ"], ["news", "ข่าวสาร"], ["add", "เพิ่มสมาชิก"]].map(([v, lb]) => (
             <button key={v} onClick={() => setTab(v)} style={{ flexShrink: 0, padding: "9px 16px", borderRadius: 12, cursor: "pointer", border: `1.5px solid ${tab === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 12.5, background: tab === v ? t.accent : "transparent", color: tab === v ? t.onAccent : t.sub, whiteSpace: "nowrap" }}>{lb}</button>
           ))}
         </div>
@@ -3189,6 +3340,7 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts, authProfil
 
       {tab === "activity" && <AdminActivityPanel t={t} members={members} />}
       {tab === "announce" && <AnnouncementsAdmin t={t} userId={userId} />}
+      {tab === "news" && <AdminNewsPanel t={t} />}
       {tab === "add" && <AdminAddPinMember t={t} session={session} onCreated={loadMembers} />}
 
       {detailMember && (
@@ -6522,6 +6674,27 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
   const [error, setError] = useState("");
   const [savedLinks, setSavedLinks] = useState(new Set());
   const [blockedSources, setBlockedSources] = useState(new Set());
+  const [globalBlockedSources, setGlobalBlockedSources] = useState(new Set());
+  const [disabledCats, setDisabledCats] = useState([]);
+
+  const loadAppSettings = async () => {
+    const [{ data: settings }, { data: blocked }] = await Promise.all([
+      supabase.from("app_settings").select("*").in("key", ["news_disabled_categories", "news_default_category"]),
+      supabase.from("blocked_news_sources_global").select("source"),
+    ]);
+    const disabledRow = (settings || []).find((s) => s.key === "news_disabled_categories");
+    const defaultRow = (settings || []).find((s) => s.key === "news_default_category");
+    const disabled = disabledRow?.value || [];
+    setDisabledCats(disabled);
+    setGlobalBlockedSources(new Set((blocked || []).map((x) => x.source)));
+    // ถ้ายังไม่เคยเลือกหมวดมาก่อน (ไม่มีค่าใน authProfile) ให้ใช้หมวดเริ่มต้นที่ admin ตั้งไว้แทน "tech"
+    if (!authProfile?.news_category && defaultRow?.value) { setCategory(defaultRow.value); return; }
+    // ถ้าหมวดที่เลือกอยู่ถูก admin ปิดไปแล้ว ให้สลับไปหมวดเริ่มต้น (หรือหมวดแรกที่ยังเปิดอยู่) แทนอัตโนมัติ
+    if (category !== "saved" && disabled.includes(category)) {
+      const fallback = (defaultRow?.value && !disabled.includes(defaultRow.value)) ? defaultRow.value : NEWS_CATEGORIES.find((c) => c.id !== "saved" && !disabled.includes(c.id))?.id;
+      if (fallback) setCategory(fallback);
+    }
+  };
 
   const loadBlockedSources = () => {
     if (!userId) return;
@@ -6560,21 +6733,21 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
     setStats((prev) => ({ ...prev, ...next }));
   };
 
-  const toggleLike = async (link) => {
+  const toggleLike = async (x) => {
     if (!userId) return;
-    const cur = stats[link] || { views: 0, likeCount: 0, likedByMe: false };
+    const cur = stats[x.link] || { views: 0, likeCount: 0, likedByMe: false };
     if (cur.likedByMe) {
-      await supabase.from("news_likes").delete().eq("link", link).eq("user_id", userId);
-      setStats((s) => ({ ...s, [link]: { ...cur, likeCount: Math.max(0, cur.likeCount - 1), likedByMe: false } }));
+      await supabase.from("news_likes").delete().eq("link", x.link).eq("user_id", userId);
+      setStats((s) => ({ ...s, [x.link]: { ...cur, likeCount: Math.max(0, cur.likeCount - 1), likedByMe: false } }));
     } else {
-      await supabase.from("news_likes").insert({ link, user_id: userId });
-      setStats((s) => ({ ...s, [link]: { ...cur, likeCount: cur.likeCount + 1, likedByMe: true } }));
+      await supabase.from("news_likes").insert({ link: x.link, user_id: userId, title: x.title });
+      setStats((s) => ({ ...s, [x.link]: { ...cur, likeCount: cur.likeCount + 1, likedByMe: true } }));
     }
   };
 
   const openNews = (x) => {
     window.open(x.link, "_blank", "noopener,noreferrer");
-    supabase.rpc("increment_news_view", { p_link: x.link }).then(() => {});
+    supabase.rpc("increment_news_view", { p_link: x.link, p_title: x.title }).then(() => {});
     setStats((s) => ({ ...s, [x.link]: { ...(s[x.link] || { likeCount: 0, likedByMe: false }), views: (s[x.link]?.views || 0) + 1 } }));
   };
 
@@ -6611,7 +6784,7 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { loadSavedLinks(); loadBlockedSources(); }, [userId]);
+  useEffect(() => { loadSavedLinks(); loadBlockedSources(); loadAppSettings(); }, [userId]);
   useEffect(() => { load(category); }, [category]);
 
   const selectCategory = async (cat) => {
@@ -6666,13 +6839,14 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
     const dx = e.changedTouches[0].clientX - start.x;
     const dy = e.changedTouches[0].clientY - start.y;
     if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.3) return; // ต้องปัดแนวนอนเด่นชัด ไม่ใช่แค่เลื่อนขึ้นลง
-    const idx = NEWS_CATEGORIES.findIndex((c) => c.id === category);
-    if (dx < 0 && idx < NEWS_CATEGORIES.length - 1) selectCategory(NEWS_CATEGORIES[idx + 1].id); // ปัดซ้าย -> หมวดถัดไป
-    else if (dx > 0 && idx > 0) selectCategory(NEWS_CATEGORIES[idx - 1].id); // ปัดขวา -> หมวดก่อนหน้า
+    const idx = visibleCategories.findIndex((c) => c.id === category);
+    if (dx < 0 && idx < visibleCategories.length - 1) selectCategory(visibleCategories[idx + 1].id); // ปัดซ้าย -> หมวดถัดไป
+    else if (dx > 0 && idx > 0) selectCategory(visibleCategories[idx - 1].id); // ปัดขวา -> หมวดก่อนหน้า
   };
 
   const currentCat = NEWS_CATEGORIES.find((c) => c.id === category);
-  const visibleItems = category === "saved" ? items : items.filter((x) => !blockedSources.has(x.source));
+  const visibleItems = category === "saved" ? items : items.filter((x) => !blockedSources.has(x.source) && !globalBlockedSources.has(x.source));
+  const visibleCategories = NEWS_CATEGORIES.filter((c) => c.id === "saved" || !disabledCats.includes(c.id));
 
   return (<>
     <style>{`@keyframes rh-drawer-in { from { transform: translateX(-100%); } to { transform: translateX(0); } } @keyframes rh-drawer-backdrop { from { opacity: 0; } to { opacity: 1; } }`}</style>
@@ -6694,7 +6868,7 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
               </button>
             </div>
             <div style={{ padding: 10, display: "flex", flexDirection: "column", gap: 3 }}>
-              {NEWS_CATEGORIES.map((c) => (
+              {visibleCategories.map((c) => (
                 <button key={c.id} onClick={() => { selectCategory(c.id); setMenuOpen(false); }} style={{
                   display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "13px 14px", borderRadius: 12,
                   border: "none", cursor: "pointer", textAlign: "left", fontSize: 13.5, fontWeight: 700,
@@ -6779,7 +6953,7 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
               <MessageCircle size={15} color={t.faint} />
               <span style={{ fontSize: 11, color: t.faint, fontWeight: 700 }}>ถาม AI ต่อ</span>
             </button>
-            <button onClick={() => toggleLike(x.link)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px" }}>
+            <button onClick={() => toggleLike(x)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px" }}>
               <Heart size={15} color={st.likedByMe ? "#E0245E" : t.faint} fill={st.likedByMe ? "#E0245E" : "none"} />
               <span style={{ fontSize: 11, color: st.likedByMe ? "#E0245E" : t.faint, fontWeight: 700 }}>{st.likeCount > 0 ? st.likeCount : "ไลค์"}</span>
             </button>
