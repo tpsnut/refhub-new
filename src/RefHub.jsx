@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
-  Home, Lightbulb, TrendingUp, Plus, Newspaper, Languages, StickyNote, Eye, Menu, Image, CheckSquare, Heading2, List,
+  Home, Lightbulb, TrendingUp, Plus, Newspaper, Languages, StickyNote, Eye, Menu, Image, CheckSquare, Heading2, List, Paperclip,
   Sun, Moon, Send, Check, Trash2, X, Wallet, Target, BookOpen, ChevronRight,
   Sparkles, Clock, Search, Volume2, VolumeX, Pencil, Download, ArrowLeft, Users, Camera, Phone, Mic, MicOff, PhoneOff, RefreshCw,
   Utensils, Car, ShoppingBag, Receipt, Gamepad2, HeartPulse, Briefcase, Gift, Coffee, Music,
@@ -6246,7 +6246,10 @@ function NoteEditor({ content, onChange, theme, userId, t }) {
     },
   });
 
+  const imageInputRef = useRef(null);
   const fileInputRef = useRef(null);
+  const mdInputRef = useRef(null);
+  const [showColors, setShowColors] = useState(false);
 
   // แทรกบล็อกใหม่ต่อจากตำแหน่งเคอร์เซอร์ปัจจุบันทันที ไม่ต้องพิมพ์ "/" แล้วเลือกเองทีละขั้น
   const insertAtCursor = (block) => {
@@ -6265,8 +6268,49 @@ function NoteEditor({ content, onChange, theme, userId, t }) {
     } catch (e) { /* uploadFile แจ้ง alert ไปแล้ว */ }
   };
 
+  const handleFilePick = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const url = await editor.uploadFile(file);
+      insertAtCursor({ type: "file", props: { url: typeof url === "string" ? url : url?.url, name: file.name } });
+    } catch (e) { /* uploadFile แจ้ง alert ไปแล้ว */ }
+  };
+
+  // นำเข้าไฟล์ .md (เช่น export มาจาก Claude/AI) แปลงเป็นเนื้อหาโน้ตจริงเลย (หัวข้อ/ลิสต์/ตัวหนา กลายเป็น block แก้ไขได้)
+  // แทนที่จะแค่แนบไฟล์ดิบๆ ไว้กดเปิด เพราะอ่านง่ายกว่า ค้นหาได้ แก้ไขต่อได้ในตัว
+  const handleMdPick = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const blocks = await editor.tryParseMarkdownToBlocks(text);
+      const cursor = editor.getTextCursorPosition();
+      editor.insertBlocks(blocks, cursor.block, "after");
+      onChange(editor.document);
+    } catch (err) {
+      alert("นำเข้าไฟล์ .md ไม่สำเร็จ: " + err.message);
+    }
+  };
+
+  const COLOR_SWATCHES = [
+    { key: "gray", hex: "#9b9a97" }, { key: "brown", hex: "#64473a" }, { key: "red", hex: "#e03e3e" },
+    { key: "orange", hex: "#d9730d" }, { key: "yellow", hex: "#dfab01" }, { key: "green", hex: "#4d6461" },
+    { key: "blue", hex: "#0b6e99" }, { key: "purple", hex: "#6940a5" }, { key: "pink", hex: "#ad1a72" },
+  ];
+  const applyColor = (colorKey) => {
+    editor.addStyles({ textColor: colorKey }); // ใช้กับข้อความที่ไฮไลต์/เลือกไว้อยู่
+    setShowColors(false);
+    onChange(editor.document);
+  };
+
   const quickTools = [
-    { Icon: Image, label: "แนบรูป", onClick: () => fileInputRef.current?.click() },
+    { Icon: Plus, label: "เพิ่มบล็อก", onClick: () => insertAtCursor({ type: "paragraph", content: "" }) },
+    { Icon: Image, label: "แนบรูป", onClick: () => imageInputRef.current?.click() },
+    { Icon: Paperclip, label: "แนบไฟล์", onClick: () => fileInputRef.current?.click() },
+    { Icon: FileText, label: "นำเข้า .md", onClick: () => mdInputRef.current?.click() },
     { Icon: CheckSquare, label: "เช็คลิสต์", onClick: () => insertAtCursor({ type: "checkListItem", content: "" }) },
     { Icon: Heading2, label: "หัวข้อ", onClick: () => insertAtCursor({ type: "heading", props: { level: 2 }, content: "" }) },
     { Icon: List, label: "บูลเล็ต", onClick: () => insertAtCursor({ type: "bulletListItem", content: "" }) },
@@ -6284,8 +6328,25 @@ function NoteEditor({ content, onChange, theme, userId, t }) {
             <span style={{ fontSize: 11, fontWeight: 700, color: t?.sub || "#666", whiteSpace: "nowrap" }}>{qt.label}</span>
           </button>
         ))}
+        <button onClick={() => setShowColors((v) => !v)} style={{
+          flexShrink: 0, display: "flex", alignItems: "center", gap: 5, padding: "6px 10px", borderRadius: 999,
+          border: `1px solid ${showColors ? (t?.accent || "#333") : (t?.border || "#e5e5e5")}`, background: t?.inputBg || "#f5f5f5", cursor: "pointer",
+        }}>
+          <Palette size={13} color={t?.sub || "#666"} />
+          <span style={{ fontSize: 11, fontWeight: 700, color: t?.sub || "#666", whiteSpace: "nowrap" }}>สี</span>
+        </button>
       </div>
-      <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleImagePick} />
+      {showColors && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "8px 10px", borderBottom: `1px solid ${t?.border || "#e5e5e5"}` }}>
+          <div style={{ width: "100%", fontSize: 10, color: t?.faint || "#999", marginBottom: 2 }}>เลือกข้อความไว้ก่อน แล้วกดสีที่ต้องการ</div>
+          {COLOR_SWATCHES.map((c) => (
+            <button key={c.key} onClick={() => applyColor(c.key)} title={c.key} style={{ width: 24, height: 24, borderRadius: 999, background: c.hex, border: "none", cursor: "pointer" }} />
+          ))}
+        </div>
+      )}
+      <input ref={imageInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleImagePick} />
+      <input ref={fileInputRef} type="file" style={{ display: "none" }} onChange={handleFilePick} />
+      <input ref={mdInputRef} type="file" accept=".md,text/markdown" style={{ display: "none" }} onChange={handleMdPick} />
       <BlockNoteView editor={editor} theme={theme} onChange={() => onChange(editor.document)} />
     </div>
   );
@@ -6510,12 +6571,12 @@ function NotePage({ t, notes, setNotes, isNight, userId, session, authProfile })
               <>
                 <div onClick={() => setViewingId(viewingId === n.id ? null : n.id)} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, cursor: "pointer" }}>
                   <div style={{ fontSize: 14.5, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 6 }}>
-                    {n.pinned && <Sparkles size={13} color={t.accent} />}{n.title || "(ไม่มีหัวข้อ)"}
+                    {n.pinned && <Bookmark size={13} color={t.accent} fill={t.accent} />}{n.title || "(ไม่มีหัวข้อ)"}
                   </div>
                   <div style={{ display: "flex", gap: 2, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
                     {n.notionId && <span title="sync ขึ้น Notion แล้ว" style={{ display: "grid", placeItems: "center", padding: 4 }}><Check size={14} color="#2E9E6B" /></span>}
                     <button onClick={() => exportOneMd(n)} style={ghost} title="Export เป็น Markdown"><Download size={15} color={t.faint} /></button>
-                    <button onClick={() => togglePin(n.id)} style={ghost} title="ปักหมุด"><Target size={15} color={n.pinned ? t.accent : t.faint} /></button>
+                    <button onClick={() => togglePin(n.id)} style={ghost} title={n.pinned ? "บันทึกแล้ว" : "บันทึก"}><Bookmark size={15} color={n.pinned ? t.accent : t.faint} fill={n.pinned ? t.accent : "none"} /></button>
                     <button onClick={() => startEdit(n)} style={ghost} title="แก้ไข"><Pencil size={15} color={t.faint} /></button>
                     <button onClick={() => { setNotes((x) => x.filter((y) => y.id !== n.id)); if (userId) { supabase.from("notes").delete().eq("id", n.id).then(() => {}, () => {}); logAudit(userId, "notes", "delete", "ลบโน้ต"); } }} style={ghost} title="ลบ"><Trash2 size={15} color={t.faint} /></button>
                   </div>
