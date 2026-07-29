@@ -3159,6 +3159,7 @@ function FinancePage({ t, tx, setTx, categories, openAdd, openExport, userId, bi
   const bars = months.map((ym) => ({ m: thMonth(ym).split(" ")[0], รับ: tx.filter((x) => monthOf(x.date) === ym && x.type === "in").reduce((s, x) => s + x.amount, 0), จ่าย: tx.filter((x) => monthOf(x.date) === ym && x.type === "out").reduce((s, x) => s + x.amount, 0) }));
 
   const groups = {}; periodTx.forEach((x) => { (groups[x.date] = groups[x.date] || []).push(x); });
+  const txPagination = usePagination(Object.keys(groups), 10); // 📄 แบ่งหน้าตามกลุ่มวันที่ (ไม่ตัดรายการของวันเดียวกันข้ามหน้า)
 
   const csvText = () => {
     const head = "date,type,category,amount,note\n";
@@ -3301,7 +3302,7 @@ function FinancePage({ t, tx, setTx, categories, openAdd, openExport, userId, bi
       {/* log */}
       <div style={{ fontSize: 13, fontWeight: 800, color: t.sub, margin: "20px 0 10px" }}>รายการย้อนหลัง</div>
       {periodTx.length === 0 && <Empty t={t} text="ช่วงนี้ยังไม่มีรายการ" />}
-      {Object.keys(groups).map((d) => (
+      {txPagination.pageItems.map((d) => (
         <div key={d} style={{ marginBottom: 14 }}>
           <div style={{ fontSize: 11.5, fontWeight: 700, color: t.faint, marginBottom: 6 }}>{dateLabel(d)}</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -3322,6 +3323,7 @@ function FinancePage({ t, tx, setTx, categories, openAdd, openExport, userId, bi
           </div>
         </div>
       ))}
+      <PaginationBar t={t} page={txPagination.page} setPage={txPagination.setPage} totalPages={txPagination.totalPages} />
       {editingTx && <EditTxModal t={t} x={editingTx} categories={categories} userId={userId} setTx={setTx} close={() => setEditingTx(null)} />}
       {viewReceipt && <ImageLightbox src={viewReceipt} onClose={() => setViewReceipt(null)} />}
       {ConfirmUI}
