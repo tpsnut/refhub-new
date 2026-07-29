@@ -1335,7 +1335,8 @@ export default function RefHub() {
         } else {
           ytPlayerRef.current = new window.YT.Player("yt-mini-player", {
             height: "100%", width: "100%", videoId: cur.ytId,
-            playerVars: { autoplay: 1, rel: 0, playsinline: 1 },
+            host: "https://www.youtube-nocookie.com", // 🔒 โหมด privacy-enhanced ของ YouTube เอง — ไม่ตั้ง cookie ติดตามแบบเดียวกับ youtube.com ธรรมดา ช่วยไม่ให้ฟีเจอร์กัน tracking ของเบราว์เซอร์ (เช่น Edge Tracking Prevention, Safari ITP) บล็อกจนเล่นไม่ขึ้น
+            playerVars: { autoplay: 1, rel: 0, playsinline: 1, origin: window.location.origin },
             events: {
               onReady: (e) => { e.target.setVolume(volume); e.target.playVideo(); },
               onStateChange: (e) => {
