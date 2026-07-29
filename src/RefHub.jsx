@@ -1765,7 +1765,7 @@ export default function RefHub() {
         {editProfile && <EditProfile t={t} M={M} profile={profile} setProfile={setProfile} userId={userId} authProfile={authProfile} setAuthProfile={setAuthProfile} close={() => setEditProfile(false)} />}
         {profileLightbox && profile.avatar && <ImageLightbox src={profile.avatar} onClose={() => setProfileLightbox(false)} />}
         {searchOpen && <SearchOverlay t={t} notes={notes} goals={goals} tx={tx} categories={categories} setPage={setPage} close={() => setSearchOpen(false)} />}
-        {musicOpen && <MusicModal {...{ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, toggleFavorite, volume, setVolume, userId, close: () => setMusicOpen(false) }} />}
+        {musicOpen && <MusicModal {...{ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, toggleFavorite, volume, setVolume, userId, setPage, close: () => setMusicOpen(false) }} />}
         {addOpen && <AddTxModal t={t} tx={tx} setTx={setTx} categories={categories} reorderCategoriesForKind={reorderCategoriesForKind} deleteCategory={deleteCategory} addCategory={addCategory} userId={userId} session={session} close={() => setAddOpen(false)} />}
         {billManagerOpen && <BillManagerModal t={t} billReminders={billReminders} billPayments={billPayments} addBillReminder={addBillReminder} deleteBillReminder={deleteBillReminder} markBillPaid={markBillPaid} unmarkBillPaid={unmarkBillPaid} close={() => setBillManagerOpen(false)} />}
         {reminderTarget && <ReminderModal t={t} targetType={reminderTarget.targetType} targetId={reminderTarget.targetId} label={reminderTarget.label} existing={reminderTarget.existing} upsertReminder={upsertReminder} deleteReminder={deleteReminder} close={() => setReminderTarget(null)} />}
@@ -2285,7 +2285,7 @@ const PLATFORM_META = {
   other: { label: "ลิงก์", color: "#8A93A8" },
 };
 
-function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, toggleFavorite, volume, setVolume, userId, close }) {
+function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, toggleFavorite, volume, setVolume, userId, setPage, close }) {
   const [askConfirm, ConfirmUI] = useConfirm(t);
   const scrollRef = useRef(null); // 📜 เลื่อนขึ้นบนสุดอัตโนมัติตอนกดเล่น (ผู้เล่น/การ์ด embed อยู่บนสุดเสมอ)
   const [ytUrl, setYtUrl] = useState("");
@@ -2505,7 +2505,11 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
               <div style={{ marginBottom: 8 }}>
                 <TrackRow t={t} M={M} track={tr} active={curId === tr.id} playing={playing && curId === tr.id}
                   folders={folders} dragHandleProps={handleProps} dragPriming={priming}
-                  onPlay={() => { (tr.kind === "link" ? setViewingMedia(tr) : playTrack(tr)); requestAnimationFrame(() => scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" })); }} onToggle={togglePlay}
+                  onPlay={() => {
+                    if (tr.kind === "link") { setViewingMedia(tr); requestAnimationFrame(() => scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" })); }
+                    else if (tr.kind === "yt") { playTrack(tr); setPage("home"); close(); } // 🎬 YouTube เล่นได้แน่นอนแค่ที่หน้า Home เท่านั้น กดเล่นแล้วเด้งไปหน้า Home ให้เลย ไม่ต้องกดเองอีกที
+                    else { playTrack(tr); requestAnimationFrame(() => scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" })); }
+                  }} onToggle={togglePlay}
                   onDel={() => {
                     if (tab === "all") askConfirm(`ลบ "${tr.name}" ออกจากสื่อทั้งหมดเลยไหม?`, () => { setPlaylist((p) => p.filter((x) => x.id !== tr.id)); if (userId) supabase.from("playlists").delete().eq("id", tr.id).then(() => {}, () => {}); }); // แท็บทั้งหมด -> ลบจริง (ถามยืนยันก่อน)
                     else if (tab === "fav") toggleFavorite(tr.id);                                   // แท็บโปรด -> แค่เอาออกจากโปรด ไม่ต้องยืนยัน (ย้อนกลับง่าย)
@@ -2525,7 +2529,7 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
           )}
         </div>
         <div style={{ fontSize: 10.5, color: t.faint, textAlign: "center", marginTop: 14 }}>
-          เพลง YouTube แสดงเป็นการ์ด "กำลังเล่น" ที่หน้า Home ใต้เป้าหมายวันนี้ (ตาม YouTube ToS ต้องมองเห็นได้ตอนเล่น) — ถ้าออกจากหน้า Home วิดีโออาจหยุดเล่นตามพฤติกรรมเบราว์เซอร์ · ไฟล์เพลงเล่นต่อได้ทุกหน้าเหมือนเดิม · ไฟล์ใหญ่กว่า 1.5MB เล่นเฉพาะรอบนี้ · ดาวน์โหลดได้เฉพาะไฟล์ที่แนบเอง (YouTube ดาวน์โหลดไม่ได้ตามกติกา)
+          เพลง YouTube เล่นได้แน่นอนแค่ที่การ์ด "กำลังเล่น" หน้า Home (ตาม YouTube ToS ต้องมองเห็นได้ตอนเล่น) — กดเล่นจากหน้าสื่อนี้แล้วเด้งไปหน้า Home ให้เองเลย ไม่ต้องกดเองอีกที · ถ้าออกจากหน้า Home วิดีโออาจหยุดเล่นตามพฤติกรรมเบราว์เซอร์ · ไฟล์เพลงเล่นต่อได้ทุกหน้าเหมือนเดิม · ไฟล์ใหญ่กว่า 1.5MB เล่นเฉพาะรอบนี้ · ดาวน์โหลดได้เฉพาะไฟล์ที่แนบเอง (YouTube ดาวน์โหลดไม่ได้ตามกติกา)
         </div>
       </div>
       {ConfirmUI}
