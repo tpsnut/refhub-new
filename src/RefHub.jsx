@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
-  Home, Lightbulb, TrendingUp, Plus, Newspaper, Languages, StickyNote, Eye, Menu, Image, CheckSquare, Heading2, List, Paperclip,
+  Home, Lightbulb, TrendingUp, Plus, Newspaper, Languages, StickyNote, Eye, Menu, Image as ImageIcon, CheckSquare, Heading2, List, Paperclip,
   Sun, Moon, Send, Check, Trash2, X, Wallet, Target, BookOpen, ChevronRight,
   Sparkles, Clock, Search, Volume2, VolumeX, Pencil, Download, ArrowLeft, Users, Camera, Phone, Mic, MicOff, PhoneOff, RefreshCw,
   Utensils, Car, ShoppingBag, Receipt, Gamepad2, HeartPulse, Briefcase, Gift, Coffee, Music,
@@ -7057,7 +7057,7 @@ function NoteEditor({ content, onChange, theme, userId, t }) {
 
   // 📋 เครื่องมือทั้งหมด — ครบเท่ากับปุ่ม "+" (slash menu) ของ BlockNote เอง ยกเว้นอีโมจิที่ยังพิมพ์ ":" เรียกได้ตามปกติในตัวเนื้อหาอยู่แล้ว
   const allTools = {
-    image: { Icon: Image, label: "แนบรูป", onClick: () => imageInputRef.current?.click() },
+    image: { Icon: ImageIcon, label: "แนบรูป", onClick: () => imageInputRef.current?.click() },
     checklist: { Icon: CheckSquare, label: "เช็คลิสต์", onClick: () => insertAtCursor({ type: "checkListItem", content: "" }) },
     heading1: { Icon: Heading1, label: "หัวข้อใหญ่ (H1)", onClick: () => insertAtCursor({ type: "heading", props: { level: 1 }, content: "" }) },
     heading2: { Icon: Heading2, label: "หัวข้อ (H2)", onClick: () => insertAtCursor({ type: "heading", props: { level: 2 }, content: "" }) },
