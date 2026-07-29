@@ -1686,7 +1686,7 @@ export default function RefHub() {
               </div>
               <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                 <button onClick={() => setMusicOpen(true)} style={{ ...ghost, flex: 1, textAlign: "center", border: `1px solid ${t.border}`, borderRadius: 10, fontSize: 11.5, color: t.sub, padding: "7px 0" }}>ดูเพลย์ลิสต์ทั้งหมด <ChevronRight size={13} style={{ verticalAlign: "middle" }} /></button>
-                {cur.ytId && <a href={`https://www.youtube.com/watch?v=${cur.ytId}`} target="_blank" rel="noreferrer" style={{ ...ghost, flex: 1, textAlign: "center", border: `1px solid ${t.border}`, borderRadius: 10, fontSize: 11.5, color: t.sub, padding: "7px 0", textDecoration: "none", display: "block" }}>เปิดใน YouTube ↗</a>}
+                {cur?.ytId && <a href={`https://www.youtube.com/watch?v=${cur.ytId}`} target="_blank" rel="noreferrer" style={{ ...ghost, flex: 1, textAlign: "center", border: `1px solid ${t.border}`, borderRadius: 10, fontSize: 11.5, color: t.sub, padding: "7px 0", textDecoration: "none", display: "block" }}>เปิดใน YouTube ↗</a>}
               </div>
             </div>
           </div>
