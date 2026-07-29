@@ -1042,7 +1042,8 @@ export default function RefHub() {
           .order("created_at", { ascending: true });
         if (folderErr) console.error("โหลดหมวดหมู่สื่อไม่สำเร็จ (ไม่แตะข้อมูลเดิม):", folderErr.message);
         else if (dbFolders && dbFolders.length > 0) {
-          setFolders(dbFolders.map((f) => ({ id: f.id, name: f.name })));
+          const sorted = [...dbFolders].sort((a, b) => (a.sort_order ?? 9999) - (b.sort_order ?? 9999));
+          setFolders(sorted.map((f) => ({ id: f.id, name: f.name })));
         } else {
           // ยังไม่เคยมีในฐานข้อมูลเลย เผื่อมีของเก่าจาก localStorage (ก่อนแก้บั๊กนี้) ย้ายเข้าฐานข้อมูลให้ครั้งเดียว กันข้อมูลหาย
           try {
@@ -2285,6 +2286,24 @@ const PLATFORM_META = {
   other: { label: "ลิงก์", color: "#8A93A8" },
 };
 
+// 📁 แถวจัดการหมวดหมู่สื่อ 1 อัน — แก้ไขชื่อได้ (กดที่ชื่อ), ลบได้, ลากจัดเรียงได้ (ผ่าน handleProps ที่ส่งมาจาก DragReorderList)
+function FolderManageRow({ t, folder, handleProps, priming, onRename, onDelete }) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(folder.name);
+  const save = () => { if (name.trim()) onRename(name.trim()); setEditing(false); };
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 10px", borderRadius: 10, background: t.inputBg, marginBottom: 4 }}>
+      <span {...handleProps}><GripVertical size={16} color={priming ? t.accent : t.faint} /></span>
+      {editing ? (
+        <input value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && save()} onBlur={save} autoFocus style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 700, border: `1px solid ${t.accent}`, borderRadius: 8, padding: "3px 6px", background: t.page, color: t.text }} />
+      ) : (
+        <button onClick={() => { setName(folder.name); setEditing(true); }} style={{ flex: 1, textAlign: "left", background: "none", border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 700, color: t.text }} title="กดเพื่อแก้ไขชื่อ">{folder.name}</button>
+      )}
+      <button onClick={onDelete} style={ghost} title="ลบหมวดหมู่นี้"><Trash2 size={14} color={t.faint} /></button>
+    </div>
+  );
+}
+
 function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, toggleFavorite, volume, setVolume, userId, setPage, close }) {
   const [askConfirm, ConfirmUI] = useConfirm(t);
   const scrollRef = useRef(null); // 📜 เลื่อนขึ้นบนสุดอัตโนมัติตอนกดเล่น (ผู้เล่น/การ์ด embed อยู่บนสุดเสมอ)
@@ -2373,6 +2392,16 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
     setPlaylist((p) => p.map((x) => (x.folderId === folderId ? { ...x, folderId: null } : x)));
     setTab((cur) => (cur === folderId ? "all" : cur));
   };
+  const renameFolder = (folderId, newName) => {
+    const nm = newName.trim();
+    if (!nm) return;
+    setFolders((fs) => fs.map((f) => (f.id === folderId ? { ...f, name: nm } : f)));
+    if (userId) supabase.from("media_folders").update({ name: nm }).eq("user_id", userId).eq("id", folderId).then(() => {}, () => {});
+  };
+  const reorderFolders = (newOrder) => {
+    setFolders(newOrder);
+    if (userId) newOrder.forEach((f, i) => { supabase.from("media_folders").update({ sort_order: i }).eq("user_id", userId).eq("id", f.id).then(() => {}, () => {}); });
+  };
 
   const cur = playlist.find((p) => p.id === curId) || null;
   const shown = playlist.filter((tr) => {
@@ -2458,45 +2487,46 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
           </div>
         )}
 
-        {/* แท็บหมวดหมู่ — เหมือน pattern โน้ตเป๊ะๆ: โชว์หลัก 4 ช่อง (ทั้งหมด/โปรด + หมวดที่สร้างเอง 2 อันแรก) + "เพิ่มเติม" ไว้เจอหมวดที่เหลือ (กดเลือกได้เลย) + ข้างในนั้นมีปุ่ม "จัดการหมวดหมู่" แยกต่างหากสำหรับลบ/เพิ่มใหม่ */}
+        {/* แท็บหมวดหมู่ — เหมือน pattern โน้ตเป๊ะๆ: โชว์หลัก 4 ช่อง (ทั้งหมด/โปรด + หมวดที่สร้างเอง 2 อันแรก) + "เพิ่มเติม" ไว้เจอหมวดที่เหลือ (กดเลือกได้เลย) + มุมขวาบนของพาแนลนั้นมีปุ่ม "จัดการหมวดหมู่" สลับเป็นโหมดแก้ไขชื่อ/ลากจัดเรียง/ลบ/เพิ่มใหม่ */}
         <div style={{ marginBottom: 10 }}>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
             {[{ id: "all", name: "ทั้งหมด" }, { id: "fav", name: "❤ โปรด" }, ...folders].slice(0, 4).map((f) => (
               <button key={f.id} onClick={() => setTab(f.id)} style={{ padding: "7px 13px", borderRadius: 16, cursor: "pointer", border: `1.5px solid ${tab === f.id ? t.accent : t.border}`, fontWeight: 700, fontSize: 12, background: tab === f.id ? t.accent : "transparent", color: tab === f.id ? t.onAccent : t.sub }}>{f.name}</button>
             ))}
-            {folders.length > 2 && (
-              <button onClick={() => setShowMoreFolders((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 4, padding: "7px 13px", borderRadius: 16, cursor: "pointer", border: `1.5px solid ${showMoreFolders ? t.accent : t.border}`, fontWeight: 700, fontSize: 12, background: "none", color: t.sub }}>
-                <MoreVertical size={13} color={t.sub} /> เพิ่มเติม <ChevronRight size={12} color={t.sub} style={{ transform: showMoreFolders ? "rotate(90deg)" : "none", transition: "transform .15s" }} />
-              </button>
-            )}
+            <button onClick={() => setShowMoreFolders((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 4, padding: "7px 13px", borderRadius: 16, cursor: "pointer", border: `1.5px solid ${showMoreFolders ? t.accent : t.border}`, fontWeight: 700, fontSize: 12, background: "none", color: t.sub }}>
+              <MoreVertical size={13} color={t.sub} /> เพิ่มเติม <ChevronRight size={12} color={t.sub} style={{ transform: showMoreFolders ? "rotate(90deg)" : "none", transition: "transform .15s" }} />
+            </button>
           </div>
           {showMoreFolders && (
             <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${t.border}` }}>
-              {folders.slice(2).map((f) => (
-                <button key={f.id} onClick={() => { setTab(f.id); setShowMoreFolders(false); }} style={{ display: "flex", alignItems: "center", width: "100%", padding: "9px 10px", borderRadius: 10, border: "none", background: tab === f.id ? `${t.accent}18` : "none", cursor: "pointer", textAlign: "left" }}>
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: tab === f.id ? t.accent : t.text }}>{f.name}</span>
+              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 2 }}>
+                <button onClick={() => setManagingFolders((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "2px 4px" }}>
+                  <Settings size={12} color={managingFolders ? t.accent : t.faint} />
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: managingFolders ? t.accent : t.faint }}>{managingFolders ? "เสร็จแล้ว" : "จัดการหมวดหมู่"}</span>
                 </button>
-              ))}
-            </div>
-          )}
-        </div>
-        {/* จัดการหมวดหมู่ — แยกต่างหากจาก "เพิ่มเติม" ด้านบน ไว้สำหรับลบ/เพิ่มหมวดใหม่โดยเฉพาะ */}
-        <div style={{ marginBottom: 10 }}>
-          <button onClick={() => setManagingFolders((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 13px", borderRadius: 16, cursor: "pointer", border: `1.5px solid ${managingFolders ? t.accent : t.border}`, fontWeight: 700, fontSize: 12, background: "none", color: t.sub }}>
-            <Settings size={13} color={t.sub} /> จัดการหมวดหมู่ <ChevronRight size={12} color={t.sub} style={{ transform: managingFolders ? "rotate(90deg)" : "none", transition: "transform .15s" }} />
-          </button>
-          {managingFolders && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${t.border}` }}>
-              {folders.map((f) => (
-                <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 10px", borderRadius: 10, background: tab === f.id ? `${t.accent}18` : "transparent" }}>
-                  <span style={{ flex: 1, fontSize: 12.5, fontWeight: 700, color: tab === f.id ? t.accent : t.text }}>{f.name}</span>
-                  <button onClick={() => askConfirm(`ลบหมวดหมู่ "${f.name}" เลยไหม?`, () => deleteFolder(f.id))} style={ghost} title="ลบหมวดหมู่นี้"><X size={14} color={t.faint} /></button>
-                </div>
-              ))}
-              {folders.length === 0 && <div style={{ fontSize: 11.5, color: t.faint, padding: "4px 10px" }}>ยังไม่มีหมวดหมู่ที่สร้างเอง</div>}
-              <button onClick={() => { setAddingFolder((v) => !v); setManagingFolders(false); }} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "9px 10px", borderRadius: 10, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
-                <Plus size={15} color={t.sub} /><span style={{ fontSize: 12.5, color: t.sub, fontWeight: 700 }}>เพิ่มหมวดหมู่ใหม่</span>
-              </button>
+              </div>
+              {managingFolders ? (
+                <>
+                  <DragReorderList
+                    items={folders}
+                    getId={(f) => f.id}
+                    onReorder={reorderFolders}
+                    renderItem={(f, i, { handleProps, priming }) => (
+                      <FolderManageRow t={t} folder={f} handleProps={handleProps} priming={priming} onRename={(nm) => renameFolder(f.id, nm)} onDelete={() => askConfirm(`ลบหมวดหมู่ "${f.name}" เลยไหม?`, () => deleteFolder(f.id))} />
+                    )}
+                  />
+                  {folders.length === 0 && <div style={{ fontSize: 11.5, color: t.faint, padding: "4px 10px" }}>ยังไม่มีหมวดหมู่ที่สร้างเอง</div>}
+                  <button onClick={() => setAddingFolder((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "9px 10px", borderRadius: 10, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
+                    <Plus size={15} color={t.sub} /><span style={{ fontSize: 12.5, color: t.sub, fontWeight: 700 }}>เพิ่มหมวดหมู่ใหม่</span>
+                  </button>
+                </>
+              ) : (
+                folders.slice(2).map((f) => (
+                  <button key={f.id} onClick={() => { setTab(f.id); setShowMoreFolders(false); }} style={{ display: "flex", alignItems: "center", width: "100%", padding: "9px 10px", borderRadius: 10, border: "none", background: tab === f.id ? `${t.accent}18` : "none", cursor: "pointer", textAlign: "left" }}>
+                    <span style={{ fontSize: 12.5, fontWeight: 700, color: tab === f.id ? t.accent : t.text }}>{f.name}</span>
+                  </button>
+                ))
+              )}
             </div>
           )}
         </div>
@@ -2510,6 +2540,9 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
 
         {/* playlist */}
         <div style={{ fontSize: 12.5, fontWeight: 800, color: t.sub, marginBottom: 8 }}>สื่อที่เก็บไว้ ({shown.length})</div>
+        {shown.length > mediaPagination.pageSize && (
+          <PaginationBar t={t} page={mediaPagination.page} setPage={mediaPagination.setPage} totalPages={mediaPagination.totalPages} />
+        )}
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {shown.length === 0 && <div style={{ textAlign: "center", color: t.sub, fontSize: 13, padding: "20px 0" }}>ยังไม่มีสื่อในหมวดนี้</div>}
           <DragReorderList
@@ -3343,6 +3376,7 @@ function FinancePage({ t, tx, setTx, categories, openAdd, openExport, userId, bi
 
       {/* log */}
       <div style={{ fontSize: 13, fontWeight: 800, color: t.sub, margin: "20px 0 10px" }}>รายการย้อนหลัง</div>
+      <PaginationBar t={t} page={txPagination.page} setPage={txPagination.setPage} totalPages={txPagination.totalPages} />
       {periodTx.length === 0 && <Empty t={t} text="ช่วงนี้ยังไม่มีรายการ" />}
       {txPagination.pageItems.map((d) => (
         <div key={d} style={{ marginBottom: 14 }}>
@@ -3408,6 +3442,7 @@ function BillManagerModal({ t, billReminders, billPayments, addBillReminder, del
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
+          <PaginationBar t={t} page={billPagination.page} setPage={billPagination.setPage} totalPages={billPagination.totalPages} />
           {billReminders.length === 0 && <Empty t={t} text="ยังไม่มีบิลที่ตั้งไว้" />}
           {billPagination.pageItems.map((b) => {
             const latest = latestPaymentOf(b.id);
@@ -7325,6 +7360,7 @@ function NotePage({ t, notes, setNotes, isNight, userId, session, authProfile, r
       )}
 
       <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+        <PaginationBar t={t} page={notesPagination.page} setPage={notesPagination.setPage} totalPages={notesPagination.totalPages} />
         {shown.length === 0 && <Empty t={t} text="ยังไม่มีโน้ต เริ่มจดอันแรก" />}
         {notesPagination.pageItems.map((n) => (
           <div key={n.id} style={{ ...card(t), padding: 14, border: `1px solid ${n.pinned ? t.accent : t.border}` }}>
@@ -8021,6 +8057,7 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
     <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8 }}>
       {loading && <Empty t={t} text="กำลังโหลด..." />}
       {!loading && error && <Empty t={t} text={`⚠️ ${error}`} />}
+      {!loading && !error && <PaginationBar t={t} page={newsPagination.page} setPage={newsPagination.setPage} totalPages={newsPagination.totalPages} />}
       {!loading && !error && visibleItems.length === 0 && <Empty t={t} text={category === "saved" ? "ยังไม่มีข่าวที่บันทึกไว้" : "ยังไม่มีข่าวในหมวดนี้"} />}
       {!loading && !error && newsPagination.pageItems.map((x, i) => {
         const st = stats[x.link] || { views: 0, likeCount: 0, likedByMe: false };
