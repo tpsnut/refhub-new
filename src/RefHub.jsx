@@ -707,6 +707,8 @@ export default function RefHub() {
   const [goals, setGoals] = useState([]);
   const [goalTemplates, setGoalTemplates] = useState([]); // แม่แบบเป้าหมายประจำสัปดาห์ [{id, text, daysOfWeek, difficulty, active}]
   const [tx, setTx] = useState([]);
+  const [billReminders, setBillReminders] = useState([]); // แม่แบบบิลที่ต้องจ่าย [{id, label, amount, recurring, dueDay, dueDate, categoryId, active}]
+  const [billPayments, setBillPayments] = useState([]); // แต่ละ "รอบ" ที่ต้องจ่าย [{id, billId, periodKey, dueDate, amount, paid, paidAt, lastNotifiedDate}]
   const [profile, setProfile] = useState({ name: "", avatar: "" });
   const [autoNight, setAutoNight] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
@@ -729,6 +731,7 @@ export default function RefHub() {
   useEffect(() => { if (page === "chatRoom" && !activeThread) setPage("chat"); }, []);
   useEffect(() => { try { if (activeThread) sessionStorage.setItem("refhub:activeThread", JSON.stringify(activeThread)); else sessionStorage.removeItem("refhub:activeThread"); } catch (e) {} }, [activeThread]);
   const [addOpen, setAddOpen] = useState(false);
+  const [billManagerOpen, setBillManagerOpen] = useState(false);
   const [exportText, setExportText] = useState(null);
   const [musicOpen, setMusicOpen] = useState(false);
   const [playlist, setPlaylist] = useState([]);
@@ -874,6 +877,35 @@ export default function RefHub() {
           const { error: seedErr } = await supabase.from("categories").insert(seedRows);
           if (seedErr) console.error("สร้างหมวดหมู่เริ่มต้นไม่สำเร็จ:", seedErr.message);
           setCategories(DEFAULT_CATEGORIES);
+        }
+
+        // 3d. ดึงบิลที่ต้องจ่ายประจำ (bill_reminders) + สร้าง "รอบของเดือนนี้" อัตโนมัติถ้ายังไม่มี (pattern เดียวกับแม่แบบเป้าหมายด้านบน — ไม่แตะรอบเก่า ไม่สร้างซ้ำ)
+        const { data: dbBills, error: billsErr } = await supabase.from("bill_reminders").select("*").eq("user_id", userId).eq("active", true);
+        if (billsErr) console.error("โหลดบิลที่ต้องจ่ายไม่สำเร็จ (ไม่แตะข้อมูลเดิม):", billsErr.message);
+        else if (dbBills) {
+          const bills = dbBills.map((b) => ({ id: b.id, label: b.label, amount: Number(b.amount) || 0, recurring: b.recurring, dueDay: b.due_day, dueDate: b.due_date, categoryId: b.category_id, active: b.active }));
+          setBillReminders(bills);
+
+          const { data: dbPayments, error: payErr } = await supabase.from("bill_payments").select("*").eq("user_id", userId);
+          if (payErr) console.error("โหลดรอบจ่ายบิลไม่สำเร็จ (ไม่แตะข้อมูลเดิม):", payErr.message);
+          const existingPayments = dbPayments || [];
+
+          // เดือนปัจจุบัน — คำนวณวันครบกำหนดของรอบนี้ (เผื่อ due_day เกินจำนวนวันในเดือน เช่น 31 แต่เดือนนี้มี 30 วัน ให้ใช้วันสุดท้ายของเดือนแทน)
+          const now = new Date();
+          const y = now.getFullYear(), m = now.getMonth(); // m = 0-based
+          const daysInThisMonth = new Date(y, m + 1, 0).getDate();
+          const thisPeriodKey = `${y}-${String(m + 1).padStart(2, "0")}`;
+          const existingByBillPeriod = new Set(existingPayments.map((p) => `${p.bill_id}:${p.period_key}`));
+          const toCreate = bills.filter((b) => b.recurring && !existingByBillPeriod.has(`${b.id}:${thisPeriodKey}`)).map((b) => {
+            const dueDay = Math.min(b.dueDay || 1, daysInThisMonth);
+            return { id: uid(), bill_id: b.id, user_id: userId, period_key: thisPeriodKey, due_date: `${y}-${String(m + 1).padStart(2, "0")}-${String(dueDay).padStart(2, "0")}`, amount: b.amount, paid: false };
+          });
+          if (toCreate.length > 0) {
+            const { error: genBillErr } = await supabase.from("bill_payments").insert(toCreate);
+            if (genBillErr) console.error("สร้างรอบจ่ายบิลเดือนนี้ไม่สำเร็จ:", genBillErr.message);
+            else existingPayments.push(...toCreate);
+          }
+          setBillPayments(existingPayments.map((p) => ({ id: p.id, billId: p.bill_id, periodKey: p.period_key, dueDate: p.due_date, amount: Number(p.amount) || 0, paid: p.paid, paidAt: p.paid_at, lastNotifiedDate: p.last_notified_date })));
         }
 
         // 4. ดึงสมุดโน้ต (Notes)
@@ -1273,6 +1305,56 @@ export default function RefHub() {
     });
   };
 
+  // 💳 ===== ระบบเตือนจ่ายบิล =====
+  // เพิ่มบิลใหม่ — recurring: true = ซ้ำทุกเดือน (ใช้ dueDay), false = ครั้งเดียว (ใช้ dueDate ตรงๆ และสร้างรอบจ่ายทันทีเลย ไม่ต้องรอ auto-generate ตอนเปิดแอปรอบหน้า)
+  const addBillReminder = async ({ label, amount, recurring, dueDay, dueDate, categoryId }) => {
+    if (!label.trim() || !userId) return;
+    const id = uid();
+    const row = { id, user_id: userId, label: label.trim(), amount: Number(amount) || 0, recurring, due_day: recurring ? dueDay : null, due_date: recurring ? null : dueDate, category_id: categoryId || null, active: true };
+    const { error } = await supabase.from("bill_reminders").insert(row);
+    if (error) { alert("เพิ่มบิลไม่สำเร็จ: " + error.message + " (เช็คว่ารัน SQL สร้างตาราง bill_reminders/bill_payments แล้วหรือยัง)"); return; }
+    setBillReminders((list) => [...list, { id, label: label.trim(), amount: Number(amount) || 0, recurring, dueDay: recurring ? dueDay : null, dueDate: recurring ? null : dueDate, categoryId: categoryId || null, active: true }]);
+    if (!recurring) {
+      // ครั้งเดียว — สร้างรอบจ่ายทันทีเลย ไม่ต้องรอรอบ auto-generate
+      const payId = uid();
+      const payRow = { id: payId, bill_id: id, user_id: userId, period_key: dueDate, due_date: dueDate, amount: Number(amount) || 0, paid: false };
+      const { error: payErr } = await supabase.from("bill_payments").insert(payRow);
+      if (!payErr) setBillPayments((list) => [...list, { id: payId, billId: id, periodKey: dueDate, dueDate, amount: Number(amount) || 0, paid: false, paidAt: null, lastNotifiedDate: null }]);
+    }
+  };
+  const deleteBillReminder = (id) => {
+    setBillReminders((list) => list.filter((b) => b.id !== id));
+    setBillPayments((list) => list.filter((p) => p.billId !== id)); // ลบรอบจ่ายที่ผูกกับบิลนี้ออกจากเครื่องด้วย (DB ลบให้อัตโนมัติผ่าน ON DELETE CASCADE)
+    if (userId) supabase.from("bill_reminders").delete().eq("user_id", userId).eq("id", id).then(() => {}, () => {});
+  };
+  // กดยืนยันว่าจ่ายแล้ว — actualAmount ใส่ยอดจริงที่จ่ายได้ ถ้าไม่ใส่ใช้ยอดประมาณการเดิม
+  const markBillPaid = (paymentId, actualAmount) => {
+    const paidAt = new Date().toISOString();
+    setBillPayments((list) => list.map((p) => (p.id === paymentId ? { ...p, paid: true, paidAt, amount: actualAmount != null ? Number(actualAmount) : p.amount } : p)));
+    const patch = { paid: true, paid_at: paidAt };
+    if (actualAmount != null) patch.amount = Number(actualAmount);
+    if (userId) supabase.from("bill_payments").update(patch).eq("user_id", userId).eq("id", paymentId).then(() => {}, () => {});
+  };
+  const unmarkBillPaid = (paymentId) => { // เผื่อกดพลาด ย้อนกลับได้
+    setBillPayments((list) => list.map((p) => (p.id === paymentId ? { ...p, paid: false, paidAt: null } : p)));
+    if (userId) supabase.from("bill_payments").update({ paid: false, paid_at: null }).eq("user_id", userId).eq("id", paymentId).then(() => {}, () => {});
+  };
+  // 🔔 เตือนบิลที่ถึงกำหนด/เลยกำหนดแล้วยังไม่จ่าย — ส่ง push จริงวันละครั้งต่อบิล (เตือนต่อเนื่องทุกวันจนกว่าจะกดจ่ายแล้ว) ทุกครั้งที่เปิดแอปในวันใหม่
+  useEffect(() => {
+    if (!userId || !session?.access_token || billPayments.length === 0) return;
+    const today = todayStr();
+    const due = billPayments.filter((p) => !p.paid && p.dueDate <= today && p.lastNotifiedDate !== today);
+    if (due.length === 0) return;
+    due.forEach((p) => {
+      const bill = billReminders.find((b) => b.id === p.billId);
+      notifyPush([userId], "💳 ถึงกำหนดจ่ายบิลแล้ว", `${bill?.label || "บิล"} • ฿${p.amount.toLocaleString()}${p.dueDate < today ? " (เลยกำหนดแล้ว)" : ""}`, session.access_token);
+      supabase.from("bill_payments").update({ last_notified_date: today }).eq("id", p.id).then(() => {}, () => {});
+    });
+    setBillPayments((list) => list.map((p) => (due.some((d) => d.id === p.id) ? { ...p, lastNotifiedDate: today } : p)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [billPayments.length, userId]);
+
+
   const todayGoals = goals.filter((g) => (g.date || todayStr()) === todayStr());
   const goalDone = todayGoals.filter((g) => g.done).length;
   const goalPct = todayGoals.length ? Math.round((goalDone / todayGoals.length) * 100) : 0;
@@ -1391,7 +1473,7 @@ export default function RefHub() {
         {/* CONTENT — ความสูงหารด้วยสเกลชดเชย transform:scale ข้างบน กันตอนขยายฟอนต์แล้วท้ายเนื้อหาจมใต้ Dock */}
         <div style={{ position: "relative", zIndex: 2, padding: `16px 18px ${page === "chat" || page === "chatRoom" ? 16 : 120}px`, height: `calc(${(10000 / fontScale).toFixed(2)}vh - 76px)`, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
           {page === "home" && <ErrorCatcher t={t}><HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, allGoals: goals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, userId, authProfile, playlist, setCommunityOpen }} /></ErrorCatcher>}
-          {page === "ledger" && <FinancePage {...{ t, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt), userId }} />}
+          {page === "ledger" && <FinancePage {...{ t, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt), userId, billReminders, billPayments, markBillPaid, unmarkBillPaid, billManagerOpen, setBillManagerOpen, addBillReminder, deleteBillReminder }} />}
           {page === "note" && <NotePage {...{ t, notes, setNotes, isNight, userId, session, authProfile }} />}
           {page === "ideas" && <IdeasPage t={t} M={M} userId={userId} session={session} authProfile={authProfile} setAuthProfile={setAuthProfile} setNotes={setNotes} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} />}
           {page === "trade" && <TradePage t={t} />}
@@ -2781,7 +2863,7 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
 }
 
 // ---------------- Finance (full) ----------------
-function FinancePage({ t, tx, setTx, categories, openAdd, openExport, userId }) {
+function FinancePage({ t, tx, setTx, categories, openAdd, openExport, userId, billReminders, billPayments, markBillPaid, unmarkBillPaid, billManagerOpen, setBillManagerOpen, addBillReminder, deleteBillReminder }) {
   const [editingTx, setEditingTx] = useState(null);
   const [viewReceipt, setViewReceipt] = useState(null); // signed url ของรูปสลิป/ใบเสร็จที่กำลังดู
   const openReceipt = async (path) => {
@@ -2872,9 +2954,33 @@ function FinancePage({ t, tx, setTx, categories, openAdd, openExport, userId }) 
     if (w) { w.document.write(html); w.document.close(); }
   };
 
+  // 💳 บิลที่ถึงกำหนด/เลยกำหนดแล้วยังไม่จ่าย เรียงตามวันครบกำหนดเก่าสุดก่อน (เร่งด่วนสุดขึ้นบน)
+  const dueBills = [...billPayments].filter((p) => !p.paid && p.dueDate <= todayStr())
+    .map((p) => ({ ...p, bill: billReminders.find((b) => b.id === p.billId) }))
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+
   return (
     <>
       <PageHead t={t} title="การเงิน" sub="รายรับ–รายจ่าย · ใช้ได้จริงทุกวัน" icon={<Wallet size={20} color={t.accent} />} />
+
+      {/* 💳 เตือนจ่ายบิล — โชว์เฉพาะบิลที่ถึงกำหนด/เลยกำหนดแล้วยังไม่กดจ่าย */}
+      {dueBills.length > 0 && (
+        <div style={{ ...card(t), padding: 14, marginBottom: 10, border: `1.5px solid #D9534F` }}>
+          <div style={{ fontSize: 12.5, fontWeight: 800, color: "#D9534F", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}><Bell size={14} color="#D9534F" /> บิลที่ต้องจ่าย ({dueBills.length})</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {dueBills.map((p) => (
+              <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 10, background: t.inputBg }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{p.bill?.label || "บิล"}</div>
+                  <div style={{ fontSize: 11, color: p.dueDate < todayStr() ? "#D9534F" : t.faint }}>{p.dueDate < todayStr() ? "เลยกำหนดแล้ว" : "ถึงกำหนดวันนี้"} · ฿{p.amount.toLocaleString()}</div>
+                </div>
+                <button onClick={() => markBillPaid(p.id)} style={{ ...primaryBtn(t), padding: "7px 14px", fontSize: 12 }}>จ่ายแล้ว</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      <button onClick={() => setBillManagerOpen(true)} style={{ ...card(t), width: "100%", padding: "10px 0", marginBottom: 10, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, cursor: "pointer", fontSize: 12.5, fontWeight: 700, color: t.sub }}><Bell size={14} color={t.sub} /> จัดการบิลที่ต้องจ่าย</button>
 
       {/* ตัวเลือกช่วงเวลา */}
       <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
@@ -2978,7 +3084,107 @@ function FinancePage({ t, tx, setTx, categories, openAdd, openExport, userId }) 
       ))}
       {editingTx && <EditTxModal t={t} x={editingTx} categories={categories} userId={userId} setTx={setTx} close={() => setEditingTx(null)} />}
       {viewReceipt && <ImageLightbox src={viewReceipt} onClose={() => setViewReceipt(null)} />}
+      {billManagerOpen && <BillManagerModal t={t} billReminders={billReminders} billPayments={billPayments} addBillReminder={addBillReminder} deleteBillReminder={deleteBillReminder} markBillPaid={markBillPaid} unmarkBillPaid={unmarkBillPaid} close={() => setBillManagerOpen(false)} />}
     </>
+  );
+}
+
+// 💳 จัดการบิลที่ต้องจ่ายประจำ — เพิ่ม/ลบ/ดูสถานะรอบปัจจุบัน + กดจ่ายแล้ว/ย้อนกลับได้
+function BillManagerModal({ t, billReminders, billPayments, addBillReminder, deleteBillReminder, markBillPaid, unmarkBillPaid, close }) {
+  const [adding, setAdding] = useState(false);
+  const [label, setLabel] = useState("");
+  const [amount, setAmount] = useState("");
+  const [recurring, setRecurring] = useState(true);
+  const [dueDay, setDueDay] = useState(5);
+  const [dueDate, setDueDate] = useState(todayStr());
+  const [confirmDel, setConfirmDel] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const submitNew = async () => {
+    if (!label.trim() || busy) return;
+    setBusy(true);
+    await addBillReminder({ label, amount: Number(amount) || 0, recurring, dueDay: Number(dueDay) || 1, dueDate, categoryId: null });
+    setBusy(false);
+    setLabel(""); setAmount(""); setAdding(false);
+  };
+
+  // หารอบล่าสุดของบิลนี้ (ที่ยังไม่ผ่านหรือรอบที่ผ่านล่าสุด) ไว้โชว์สถานะ + ปุ่มจ่ายแล้ว/ย้อนกลับ
+  const latestPaymentOf = (billId) => {
+    const rows = billPayments.filter((p) => p.billId === billId).sort((a, b) => b.dueDate.localeCompare(a.dueDate));
+    return rows[0] || null;
+  };
+
+  return (
+    <div style={{ ...overlay, zIndex: 60 }} onClick={close}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: "20px 20px 28px", maxHeight: "88vh", overflowY: "auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <div style={{ fontSize: 17, fontWeight: 800, color: t.text }}>บิลที่ต้องจ่าย</div>
+          <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
+          {billReminders.length === 0 && <Empty t={t} text="ยังไม่มีบิลที่ตั้งไว้" />}
+          {billReminders.map((b) => {
+            const latest = latestPaymentOf(b.id);
+            return (
+              <div key={b.id} style={{ ...card(t), padding: "10px 12px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ width: 34, height: 34, borderRadius: 11, background: `${t.accent}22`, display: "grid", placeItems: "center", flexShrink: 0 }}><Bell size={16} color={t.accent} /></span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{b.label}</div>
+                    <div style={{ fontSize: 11, color: t.faint }}>{b.recurring ? `ทุกเดือน วันที่ ${b.dueDay}` : `ครั้งเดียว ${b.dueDate}`} · ฿{b.amount.toLocaleString()}</div>
+                  </div>
+                  {confirmDel === b.id ? (
+                    <button onClick={() => { deleteBillReminder(b.id); setConfirmDel(null); }} style={{ ...ghost, color: "#D9534F", fontSize: 11, fontWeight: 700 }}>ยืนยันลบ?</button>
+                  ) : (
+                    <button onClick={() => setConfirmDel(b.id)} style={ghost}><Trash2 size={15} color={t.faint} /></button>
+                  )}
+                </div>
+                {latest && (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8, paddingLeft: 44 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: latest.paid ? "#2E9E6B" : "#D9534F" }}>{latest.paid ? "✓ จ่ายแล้ว" : "ยังไม่จ่าย"} (รอบ {latest.dueDate})</span>
+                    {latest.paid ? (
+                      <button onClick={() => unmarkBillPaid(latest.id)} style={{ ...ghost, fontSize: 11 }}>ย้อนกลับ</button>
+                    ) : (
+                      <button onClick={() => markBillPaid(latest.id)} style={{ ...primaryBtn(t), padding: "5px 12px", fontSize: 11 }}>จ่ายแล้ว</button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {!adding ? (
+          <button onClick={() => setAdding(true)} style={{ ...card(t), width: "100%", padding: "11px 0", border: `1.5px dashed ${t.border}`, cursor: "pointer", color: t.sub, fontWeight: 700, fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Plus size={16} /> เพิ่มบิลใหม่</button>
+        ) : (
+          <div style={{ ...card(t), padding: 14 }}>
+            <input autoFocus value={label} onChange={(e) => setLabel(e.target.value)} placeholder="ชื่อบิล เช่น บัตรเครดิตกสิกร" style={{ ...input(t), marginBottom: 10 }} />
+            <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="จำนวนเงินโดยประมาณ" style={{ ...input(t), marginBottom: 10 }} />
+            <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+              {[[true, "ซ้ำทุกเดือน"], [false, "ครั้งเดียว"]].map(([v, lb]) => (
+                <button key={String(v)} onClick={() => setRecurring(v)} style={{ flex: 1, padding: "9px 0", borderRadius: 12, cursor: "pointer", border: `1.5px solid ${recurring === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 13, background: recurring === v ? t.accent : "transparent", color: recurring === v ? t.onAccent : t.sub }}>{lb}</button>
+              ))}
+            </div>
+            {recurring ? (
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: t.sub, marginBottom: 6 }}>ครบกำหนดทุกวันที่ (1-31)</div>
+                <input type="number" min={1} max={31} value={dueDay} onChange={(e) => setDueDay(Math.min(31, Math.max(1, Number(e.target.value) || 1)))} style={input(t)} />
+              </div>
+            ) : (
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: t.sub, marginBottom: 6 }}>วันครบกำหนด</div>
+                <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} style={input(t)} />
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => setAdding(false)} style={{ ...ghost, flex: 1, textAlign: "center", border: `1px solid ${t.border}`, borderRadius: 10, padding: "9px 0" }}>ยกเลิก</button>
+              <button onClick={submitNew} disabled={busy} style={{ ...primaryBtn(t), flex: 2 }}>{busy ? "กำลังบันทึก..." : "บันทึก"}</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
