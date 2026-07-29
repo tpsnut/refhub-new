@@ -8353,7 +8353,10 @@ function MentorPicker({ t, mentor, setMentor, authProfile, setAuthProfile, userI
   const pickAvatarFile = (e) => {
     const f = e.target.files?.[0]; if (!f) return;
     e.target.value = "";
-    const rd = new FileReader(); rd.onload = () => setAvatarCropSrc(rd.result); rd.readAsDataURL(f);
+    // 🐛 เดิมใช้ FileReader.readAsDataURL() แปลงไฟล์เป็น base64 string ทันที — รูปจากกล้องมือถือ (4000-8000px, 8-50MB)
+    // กลายเป็น string มหึมาแล้ว decode เต็มความละเอียด ทำ RAM มือถือไม่พอ แอป crash เป็นหน้าดำ
+    // ใช้ URL.createObjectURL() แทน เบากว่ามาก ไม่ต้อง encode/decode เต็มไฟล์ก่อน
+    setAvatarCropSrc(URL.createObjectURL(f));
   };
   const confirmMentorAvatar = async (dataUrl) => {
     setAvatarCropSrc(null);
@@ -8512,9 +8515,8 @@ function EditProfile({ t, M, profile, setProfile, userId, authProfile, setAuthPr
   const pick = (e) => {
     const f = e.target.files?.[0]; if (!f) return;
     e.target.value = "";
-    const rd = new FileReader();
-    rd.onload = () => setCropSrc(rd.result);
-    rd.readAsDataURL(f);
+    // 🐛 เดิมใช้ FileReader.readAsDataURL() — รูปกล้องมือถือความละเอียดสูงทำ RAM ไม่พอ แอป crash เป็นหน้าดำ (บัคเดียวกับ mentor avatar)
+    setCropSrc(URL.createObjectURL(f));
   };
 
   const save = async () => {
@@ -8569,19 +8571,41 @@ function EditProfile({ t, M, profile, setProfile, userId, authProfile, setAuthPr
 function ImageCropModal({ t, src, onCancel, onConfirm }) {
   const V = 260; // ขนาดกรอบวงกลมที่โชว์ตอน crop (px)
   const OUT = 800; // ขนาดไฟล์ผลลัพธ์สุดท้าย (px) — เพิ่มจาก 320 เป็น 800 กันภาพแตก/เบลอตอนดูเต็มจอ (ไอคอนเล็กๆ ยังโชว์ได้ปกติ แค่ตอนขยายดูเต็มจอจะคมชัดขึ้นมาก)
+  const MAX_IN = 1600; // 🐛 เดิมเอารูปต้นฉบับ (กล้องมือถือ 4000-8000px) มาวาดซ้ำๆ ตอนลาก/ซูมตรงๆ เลย ทำ RAM ไม่พอ แอป crash เป็นหน้าดำ — ย่อลงเหลือไม่เกิน 1600px ก่อนเริ่ม crop เสมอ
   const imgRef = useRef(null);
-  const [imgSize, setImgSize] = useState(null); // { w, h } ขนาดจริงของรูป
+  const [imgSize, setImgSize] = useState(null); // { w, h } ขนาดของรูปที่ใช้ crop จริง (หลังย่อแล้วถ้าจำเป็น)
+  const [dispSrc, setDispSrc] = useState(null); // src จริงที่ใช้แสดง/crop (อาจเป็นรูปย่อแล้ว ไม่ใช่ src ต้นฉบับเสมอไป)
   const [zoom, setZoom] = useState(1);
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const dragRef = useRef(null);
 
   useEffect(() => {
+    let cancelled = false;
     const img = new Image();
-    img.onload = () => setImgSize({ w: img.width, h: img.height });
+    img.onload = () => {
+      if (cancelled) return;
+      const { width: w, height: h } = img;
+      if (Math.max(w, h) > MAX_IN) {
+        // รูปใหญ่เกินไป — ย่อลงผ่าน canvas ก่อน แล้วค่อยใช้รูปที่ย่อแล้วตลอดขั้นตอน crop
+        const ratio = MAX_IN / Math.max(w, h);
+        const nw = Math.round(w * ratio), nh = Math.round(h * ratio);
+        const c = document.createElement("canvas"); c.width = nw; c.height = nh;
+        c.getContext("2d").drawImage(img, 0, 0, nw, nh);
+        setDispSrc(c.toDataURL("image/jpeg", 0.9));
+        setImgSize({ w: nw, h: nh });
+      } else {
+        setDispSrc(src);
+        setImgSize({ w, h });
+      }
+    };
     img.src = src;
+    return () => {
+      cancelled = true;
+      if (src?.startsWith("blob:")) URL.revokeObjectURL(src); // เคลียร์ object URL ต้นฉบับกันหน่วยความจำรั่ว
+    };
   }, [src]);
 
-  if (!imgSize) return null;
+  if (!imgSize || !dispSrc) return null;
 
   const baseScale = V / Math.min(imgSize.w, imgSize.h);
   const totalScale = baseScale * zoom;
@@ -8621,7 +8645,7 @@ function ImageCropModal({ t, src, onCancel, onConfirm }) {
           onTouchEnd={endDrag}
         >
           <img
-            ref={imgRef} src={src} alt="" draggable={false}
+            ref={imgRef} src={dispSrc} alt="" draggable={false}
             style={{ position: "absolute", left: "50%", top: "50%", width: imgSize.w * totalScale, height: imgSize.h * totalScale, transform: `translate(calc(-50% + ${pos.x}px), calc(-50% + ${pos.y}px))`, pointerEvents: "none" }}
           />
         </div>
