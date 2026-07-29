@@ -5,7 +5,8 @@ import {
   Sun, Moon, Send, Check, Trash2, X, Wallet, Target, BookOpen, ChevronRight,
   Sparkles, Clock, Search, Volume2, VolumeX, Pencil, Download, ArrowLeft, Users, Camera, Phone, Mic, MicOff, PhoneOff, RefreshCw,
   Utensils, Car, ShoppingBag, Receipt, Gamepad2, HeartPulse, Briefcase, Gift, Coffee, Music,
-  Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi, MessageCircle, MoreVertical, KeyRound, MapPin, Copy, LockKeyhole, LogOut, LayoutGrid, Maximize2, Volume1, Settings, Bookmark, Share2, Repeat2, Heart, User, Pin
+  Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi, MessageCircle, MoreVertical, KeyRound, MapPin, Copy, LockKeyhole, LogOut, LayoutGrid, Maximize2, Volume1, Settings, Bookmark, Share2, Repeat2, Heart, User, Pin,
+  Heading1, Heading3, ListOrdered, ListTree, Quote, Code2, Minus, Table2, Video, Smile, ArrowUp, ArrowDown, RotateCcw
 } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, LineChart, Line } from "recharts";
 // 📝 BlockNote — editor แบบ Notion (toggle, checklist, หัวข้อ, แนบรูป/ไฟล์) สำหรับหน้าโน้ตฉบับเต็ม
@@ -6246,6 +6247,13 @@ const dateLabel = (d) => { const today = todayStr(); const y = new Date(Date.now
 
 // ---------------- Note ----------------
 // 📝 ตัว editor แบบ Notion — mount ใหม่ทุกครั้งที่ note เปลี่ยน (ใช้ key จากภายนอกคุมการรีเซ็ต)
+// 📝 ลำดับเครื่องมือ default ของ quick toolbar โน้ต — พี่ปรับลำดับเองได้ผ่านปุ่ม "จัดเรียง" (persist ต่อเครื่องผ่าน localStorage)
+const DEFAULT_NOTE_TOOL_ORDER = [
+  "image", "checklist", "heading2", "bulletList", // 4 ตัวแรก = โชว์เสมอ (แถวหลัก)
+  "addBlock", "attachFile", "importMd", "textColor", // ที่เหลือ = อยู่ใต้ "เพิ่มเติม"
+  "heading1", "heading3", "numberedList", "toggleList", "quote", "codeBlock", "divider", "table", "video", "audio",
+];
+
 function NoteEditor({ content, onChange, theme, userId, t }) {
   const editor = useCreateBlockNote({
     initialContent: migrateBody(content),
@@ -6266,8 +6274,35 @@ function NoteEditor({ content, onChange, theme, userId, t }) {
   const imageInputRef = useRef(null);
   const fileInputRef = useRef(null);
   const mdInputRef = useRef(null);
+  const videoInputRef = useRef(null); // 🎬 แนบวิดีโอ (เหมือนปุ่ม video ใน slash menu "+" ของ BlockNote)
+  const audioInputRef = useRef(null); // 🎵 แนบเสียง (เหมือนปุ่ม audio ใน slash menu "+" ของ BlockNote)
   const [showColors, setShowColors] = useState(false);
   const [showMore, setShowMore] = useState(false);
+  const [reorderMode, setReorderMode] = useState(false); // 🔀 โหมดจัดเรียงลำดับเครื่องมือ (ขึ้น/ลง)
+
+  // 🔀 ลำดับเครื่องมือที่พี่จัดไว้ — เก็บต่อเครื่องผ่าน localStorage เผื่อมีเครื่องมือใหม่เพิ่มมาทีหลัง (อัปเดตแอป) ที่ยังไม่เคยบันทึกไว้ จะต่อท้ายให้ครบอัตโนมัติ ไม่หายไปจากรายการ
+  const [toolOrder, setToolOrder] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("refhub:noteToolOrder") || "null");
+      if (Array.isArray(saved) && saved.length) {
+        const known = saved.filter((k) => DEFAULT_NOTE_TOOL_ORDER.includes(k));
+        const missing = DEFAULT_NOTE_TOOL_ORDER.filter((k) => !known.includes(k));
+        return [...known, ...missing];
+      }
+    } catch (e) {}
+    return DEFAULT_NOTE_TOOL_ORDER;
+  });
+  useEffect(() => { try { localStorage.setItem("refhub:noteToolOrder", JSON.stringify(toolOrder)); } catch (e) {} }, [toolOrder]);
+  const moveTool = (key, dir) => {
+    setToolOrder((list) => {
+      const idx = list.indexOf(key);
+      const next2 = idx + dir;
+      if (idx === -1 || next2 < 0 || next2 >= list.length) return list;
+      const copy = [...list];
+      [copy[idx], copy[next2]] = [copy[next2], copy[idx]];
+      return copy;
+    });
+  };
 
   // แทรกบล็อกใหม่ต่อจากตำแหน่งเคอร์เซอร์ปัจจุบันทันที ไม่ต้องพิมพ์ "/" แล้วเลือกเองทีละขั้น
   const insertAtCursor = (block) => {
@@ -6276,25 +6311,16 @@ function NoteEditor({ content, onChange, theme, userId, t }) {
     onChange(editor.document);
   };
 
-  const handleImagePick = async (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = ""; // เคลียร์ค่า เผื่อเลือกไฟล์เดิมซ้ำครั้งหน้ายังทำงานได้
-    if (!file) return;
+  const uploadAndInsert = async (file, type) => {
     try {
       const url = await editor.uploadFile(file);
-      insertAtCursor({ type: "image", props: { url: typeof url === "string" ? url : url?.url } });
+      insertAtCursor({ type, props: { url: typeof url === "string" ? url : url?.url, name: file.name } });
     } catch (e) { /* uploadFile แจ้ง alert ไปแล้ว */ }
   };
-
-  const handleFilePick = async (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    try {
-      const url = await editor.uploadFile(file);
-      insertAtCursor({ type: "file", props: { url: typeof url === "string" ? url : url?.url, name: file.name } });
-    } catch (e) { /* uploadFile แจ้ง alert ไปแล้ว */ }
-  };
+  const handleImagePick = async (e) => { const file = e.target.files?.[0]; e.target.value = ""; if (file) await uploadAndInsert(file, "image"); };
+  const handleFilePick = async (e) => { const file = e.target.files?.[0]; e.target.value = ""; if (file) await uploadAndInsert(file, "file"); };
+  const handleVideoPick = async (e) => { const file = e.target.files?.[0]; e.target.value = ""; if (file) await uploadAndInsert(file, "video"); };
+  const handleAudioPick = async (e) => { const file = e.target.files?.[0]; e.target.value = ""; if (file) await uploadAndInsert(file, "audio"); };
 
   // นำเข้าไฟล์ .md (เช่น export มาจาก Claude/AI) แปลงเป็นเนื้อหาโน้ตจริงเลย (หัวข้อ/ลิสต์/ตัวหนา กลายเป็น block แก้ไขได้)
   // แทนที่จะแค่แนบไฟล์ดิบๆ ไว้กดเปิด เพราะอ่านง่ายกว่า ค้นหาได้ แก้ไขต่อได้ในตัว
@@ -6324,31 +6350,42 @@ function NoteEditor({ content, onChange, theme, userId, t }) {
     onChange(editor.document);
   };
 
-  // เครื่องมือหลักที่ใช้บ่อยสุด โชว์เสมอ ไม่ต้องเลื่อน / เครื่องมือรอง ซ่อนไว้หลังปุ่ม "เพิ่มเติม"
-  const primaryTools = [
-    { Icon: Image, label: "แนบรูป", onClick: () => imageInputRef.current?.click() },
-    { Icon: CheckSquare, label: "เช็คลิสต์", onClick: () => insertAtCursor({ type: "checkListItem", content: "" }) },
-    { Icon: Heading2, label: "หัวข้อ", onClick: () => insertAtCursor({ type: "heading", props: { level: 2 }, content: "" }) },
-    { Icon: List, label: "บูลเล็ต", onClick: () => insertAtCursor({ type: "bulletListItem", content: "" }) },
-  ];
-  const moreTools = [
-    { Icon: Plus, label: "เพิ่มบล็อกเปล่า", onClick: () => insertAtCursor({ type: "paragraph", content: "" }) },
-    { Icon: Paperclip, label: "แนบไฟล์ทั่วไป", onClick: () => fileInputRef.current?.click() },
-    { Icon: FileText, label: "นำเข้าไฟล์ .md", onClick: () => mdInputRef.current?.click() },
-    { Icon: Palette, label: "เลือกสีข้อความ", onClick: () => setShowColors((v) => !v) },
-  ];
+  // 📋 เครื่องมือทั้งหมด — ครบเท่ากับปุ่ม "+" (slash menu) ของ BlockNote เอง ยกเว้นอีโมจิที่ยังพิมพ์ ":" เรียกได้ตามปกติในตัวเนื้อหาอยู่แล้ว
+  const allTools = {
+    image: { Icon: Image, label: "แนบรูป", onClick: () => imageInputRef.current?.click() },
+    checklist: { Icon: CheckSquare, label: "เช็คลิสต์", onClick: () => insertAtCursor({ type: "checkListItem", content: "" }) },
+    heading1: { Icon: Heading1, label: "หัวข้อใหญ่ (H1)", onClick: () => insertAtCursor({ type: "heading", props: { level: 1 }, content: "" }) },
+    heading2: { Icon: Heading2, label: "หัวข้อ (H2)", onClick: () => insertAtCursor({ type: "heading", props: { level: 2 }, content: "" }) },
+    heading3: { Icon: Heading3, label: "หัวข้อย่อย (H3)", onClick: () => insertAtCursor({ type: "heading", props: { level: 3 }, content: "" }) },
+    bulletList: { Icon: List, label: "บูลเล็ต", onClick: () => insertAtCursor({ type: "bulletListItem", content: "" }) },
+    numberedList: { Icon: ListOrdered, label: "ลิสต์ตัวเลข", onClick: () => insertAtCursor({ type: "numberedListItem", content: "" }) },
+    toggleList: { Icon: ListTree, label: "ลิสต์พับได้ (toggle)", onClick: () => insertAtCursor({ type: "toggleListItem", content: "" }) },
+    quote: { Icon: Quote, label: "คำพูดอ้างอิง", onClick: () => insertAtCursor({ type: "quote", content: "" }) },
+    codeBlock: { Icon: Code2, label: "โค้ด", onClick: () => insertAtCursor({ type: "codeBlock" }) },
+    divider: { Icon: Minus, label: "เส้นคั่น", onClick: () => insertAtCursor({ type: "divider" }) },
+    table: { Icon: Table2, label: "ตาราง", onClick: () => insertAtCursor({ type: "table", content: { type: "tableContent", rows: [{ cells: ["", "", ""] }, { cells: ["", "", ""] }] } }) },
+    video: { Icon: Video, label: "แนบวิดีโอ", onClick: () => videoInputRef.current?.click() },
+    audio: { Icon: Music, label: "แนบเสียง", onClick: () => audioInputRef.current?.click() },
+    addBlock: { Icon: Plus, label: "เพิ่มบล็อกเปล่า", onClick: () => insertAtCursor({ type: "paragraph", content: "" }) },
+    attachFile: { Icon: Paperclip, label: "แนบไฟล์ทั่วไป", onClick: () => fileInputRef.current?.click() },
+    importMd: { Icon: FileText, label: "นำเข้าไฟล์ .md", onClick: () => mdInputRef.current?.click() },
+    textColor: { Icon: Palette, label: "เลือกสีข้อความ", onClick: () => setShowColors((v) => !v) },
+  };
+  const orderedKeys = toolOrder.filter((k) => allTools[k]);
+  const primaryKeys = orderedKeys.slice(0, 4); // โชว์เสมอ ไม่ต้องเลื่อน
+  const moreKeys = orderedKeys.slice(4); // อยู่ใต้ "เพิ่มเติม"
   const toolBtnStyle = { flexShrink: 0, display: "flex", alignItems: "center", gap: 5, padding: "6px 10px", borderRadius: 999, border: `1px solid ${t?.border || "#e5e5e5"}`, background: t?.inputBg || "#f5f5f5", cursor: "pointer" };
 
   return (
     <div>
       <div style={{ padding: "6px 8px", borderBottom: `1px solid ${t?.border || "#e5e5e5"}` }}>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {primaryTools.map((qt) => (
-            <button key={qt.label} onClick={qt.onClick} style={toolBtnStyle}>
+          {primaryKeys.map((key) => { const qt = allTools[key]; return (
+            <button key={key} onClick={qt.onClick} style={toolBtnStyle}>
               <qt.Icon size={13} color={t?.sub || "#666"} />
               <span style={{ fontSize: 11, fontWeight: 700, color: t?.sub || "#666", whiteSpace: "nowrap" }}>{qt.label}</span>
             </button>
-          ))}
+          ); })}
           <button onClick={() => setShowMore((v) => !v)} style={{ ...toolBtnStyle, border: `1px solid ${showMore ? (t?.accent || "#333") : (t?.border || "#e5e5e5")}` }}>
             <MoreVertical size={13} color={t?.sub || "#666"} />
             <span style={{ fontSize: 11, fontWeight: 700, color: t?.sub || "#666", whiteSpace: "nowrap" }}>เพิ่มเติม</span>
@@ -6357,12 +6394,36 @@ function NoteEditor({ content, onChange, theme, userId, t }) {
         </div>
         {showMore && (
           <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${t?.border || "#e5e5e5"}` }}>
-            {moreTools.map((qt) => (
-              <button key={qt.label} onClick={qt.onClick} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "9px 10px", borderRadius: 10, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
-                <qt.Icon size={15} color={t?.sub || "#666"} />
-                <span style={{ fontSize: 12.5, color: t?.text || "#333" }}>{qt.label}</span>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginBottom: 2 }}>
+              {reorderMode && (
+                <button onClick={() => setToolOrder(DEFAULT_NOTE_TOOL_ORDER)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "2px 4px" }}>
+                  <RotateCcw size={12} color={t?.faint || "#999"} /><span style={{ fontSize: 10.5, color: t?.faint || "#999" }}>รีเซ็ตลำดับ</span>
+                </button>
+              )}
+              <button onClick={() => setReorderMode((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "2px 4px" }}>
+                <Settings size={12} color={reorderMode ? (t?.accent || "#333") : (t?.faint || "#999")} />
+                <span style={{ fontSize: 10.5, fontWeight: 700, color: reorderMode ? (t?.accent || "#333") : (t?.faint || "#999") }}>{reorderMode ? "เสร็จแล้ว" : "จัดเรียง"}</span>
               </button>
-            ))}
+            </div>
+            {(reorderMode ? orderedKeys : moreKeys).map((key, i, arr) => {
+              const qt = allTools[key];
+              return (
+                <div key={key} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "9px 10px", borderRadius: 10 }}>
+                  <qt.Icon size={15} color={t?.sub || "#666"} style={{ flexShrink: 0 }} />
+                  {reorderMode ? (
+                    <>
+                      <span style={{ fontSize: 12.5, color: t?.text || "#333", flex: 1 }}>{qt.label}{i < 4 ? <span style={{ fontSize: 10, color: t?.faint || "#999", marginLeft: 6 }}>(แถวหลัก)</span> : null}</span>
+                      <button onClick={() => moveTool(key, -1)} disabled={i === 0} style={{ background: "none", border: "none", cursor: i === 0 ? "default" : "pointer", opacity: i === 0 ? 0.3 : 1, padding: 4 }}><ArrowUp size={15} color={t?.sub || "#666"} /></button>
+                      <button onClick={() => moveTool(key, 1)} disabled={i === arr.length - 1} style={{ background: "none", border: "none", cursor: i === arr.length - 1 ? "default" : "pointer", opacity: i === arr.length - 1 ? 0.3 : 1, padding: 4 }}><ArrowDown size={15} color={t?.sub || "#666"} /></button>
+                    </>
+                  ) : (
+                    <button onClick={qt.onClick} style={{ background: "none", border: "none", cursor: "pointer", textAlign: "left", flex: 1, padding: 0 }}>
+                      <span style={{ fontSize: 12.5, color: t?.text || "#333" }}>{qt.label}</span>
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -6377,10 +6438,13 @@ function NoteEditor({ content, onChange, theme, userId, t }) {
       <input ref={imageInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleImagePick} />
       <input ref={fileInputRef} type="file" style={{ display: "none" }} onChange={handleFilePick} />
       <input ref={mdInputRef} type="file" accept=".md,text/markdown" style={{ display: "none" }} onChange={handleMdPick} />
+      <input ref={videoInputRef} type="file" accept="video/*" style={{ display: "none" }} onChange={handleVideoPick} />
+      <input ref={audioInputRef} type="file" accept="audio/*" style={{ display: "none" }} onChange={handleAudioPick} />
       <BlockNoteView editor={editor} theme={theme} onChange={() => onChange(editor.document)} />
     </div>
   );
 }
+
 
 function NotionSetupModal({ t, userId, close }) {
   const [tokenVal, setTokenVal] = useState("");
