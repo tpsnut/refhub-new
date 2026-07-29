@@ -3011,24 +3011,30 @@ function AdminNewsPanel({ t }) {
   const [disabledCats, setDisabledCats] = useState([]);
   const [defaultCat, setDefaultCat] = useState("tech");
   const [globalBlocked, setGlobalBlocked] = useState([]);
-  const [newBlockInput, setNewBlockInput] = useState("");
+  const [knownSources, setKnownSources] = useState([]);
+  const [pickedSource, setPickedSource] = useState("");
   const [topViews, setTopViews] = useState([]);
   const [topLikes, setTopLikes] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const load = async () => {
     setLoading(true);
-    const [{ data: settings }, { data: blocked }, { data: statsData }, { data: likesData }] = await Promise.all([
+    const [{ data: settings }, { data: blocked }, { data: statsData }, { data: likesData }, { data: allSources }] = await Promise.all([
       supabase.from("app_settings").select("*").in("key", ["news_disabled_categories", "news_default_category"]),
       supabase.from("blocked_news_sources_global").select("source").order("created_at", { ascending: false }),
       supabase.from("news_stats").select("*").order("views", { ascending: false }).limit(8),
       supabase.from("news_likes").select("link, title"),
+      supabase.from("news_stats").select("source"),
     ]);
     const disabledRow = (settings || []).find((s) => s.key === "news_disabled_categories");
     const defaultRow = (settings || []).find((s) => s.key === "news_default_category");
     setDisabledCats(disabledRow?.value || []);
     setDefaultCat(defaultRow?.value || "tech");
-    setGlobalBlocked((blocked || []).map((x) => x.source));
+    const blockedList = (blocked || []).map((x) => x.source);
+    setGlobalBlocked(blockedList);
+    // รวมชื่อแหล่งข่าวที่เคยเห็นจริงทั้งหมด (ไม่ซ้ำ) ตัดอันที่บล็อกไปแล้วออก เอาไว้ทำ dropdown เลือก
+    const distinct = [...new Set((allSources || []).map((x) => x.source).filter(Boolean))].sort();
+    setKnownSources(distinct.filter((s) => !blockedList.includes(s)));
     setTopViews(statsData || []);
     // นับไลค์รวมต่อข่าวเอง (Supabase client ไม่มี GROUP BY ตรงๆ)
     const likeCounts = {};
@@ -3053,14 +3059,16 @@ function AdminNewsPanel({ t }) {
   };
 
   const addGlobalBlock = async () => {
-    const source = newBlockInput.trim();
+    const source = pickedSource;
     if (!source || globalBlocked.includes(source)) return;
     setGlobalBlocked((s) => [source, ...s]);
-    setNewBlockInput("");
+    setKnownSources((s) => s.filter((x) => x !== source));
+    setPickedSource("");
     await supabase.from("blocked_news_sources_global").insert({ source });
   };
   const removeGlobalBlock = async (source) => {
     setGlobalBlocked((s) => s.filter((x) => x !== source));
+    setKnownSources((s) => [...s, source].sort());
     await supabase.from("blocked_news_sources_global").delete().eq("source", source);
   };
 
@@ -3108,9 +3116,13 @@ function AdminNewsPanel({ t }) {
         <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text, marginBottom: 4 }}>🚫 บล็อกแหล่งข่าวทั้งบ้าน</div>
         <div style={{ fontSize: 11, color: t.sub, marginBottom: 12 }}>ต่างจากบล็อกส่วนตัว — อันนี้ทุกคนในบ้านจะไม่เห็นข่าวจากแหล่งนี้เลย</div>
         <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-          <input value={newBlockInput} onChange={(e) => setNewBlockInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addGlobalBlock()} placeholder="พิมพ์ชื่อแหล่งข่าว เช่น Thairath" style={input(t)} />
-          <button onClick={addGlobalBlock} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), padding: "0 16px" }}>บล็อก</button>
+          <select value={pickedSource} onChange={(e) => setPickedSource(e.target.value)} style={{ ...input(t), appearance: "auto" }}>
+            <option value="">— เลือกแหล่งข่าวที่จะบล็อก —</option>
+            {knownSources.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <button onClick={addGlobalBlock} disabled={!pickedSource} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), padding: "0 16px", opacity: pickedSource ? 1 : .5 }}>บล็อก</button>
         </div>
+        {knownSources.length === 0 && <div style={{ fontSize: 10.5, color: t.faint, marginBottom: 10 }}>ยังไม่มีข้อมูลแหล่งข่าว — ต้องให้สมาชิกเปิดอ่านข่าวในแอปก่อนสักครั้ง ระบบถึงจะรู้จักชื่อแหล่งข่าว</div>}
         {globalBlocked.length === 0 ? (
           <div style={{ fontSize: 11.5, color: t.faint }}>ยังไม่มีแหล่งข่าวที่บล็อกไว้</div>
         ) : (
@@ -6666,9 +6678,20 @@ const NEWS_CATEGORIES = [
   { id: "saved", label: "⭐ บันทึกไว้" },
 ];
 
+// จัดกลุ่มหมวดหมู่แบบ accordion ในเมนู (อิงตามที่ไทยรัฐจัดจริง — ธุรกิจ/รถยนต์/ต่างประเทศ อยู่ใต้ "ข่าว",
+// เทคโนโลยี/ไลฟ์สไตล์ อยู่ใต้ "ไลฟ์สไตล์") ส่วนที่ไม่อยู่ใน group ไหนจะแสดงเป็นปุ่มเดี่ยวตามปกติ
+const NEWS_CATEGORY_GROUPS = [
+  { id: "news", label: "📰 ข่าว", catIds: ["biz", "car", "world"] },
+  { id: "lifestyle", label: "🎨 ไลฟ์สไตล์", catIds: ["tech", "life"] },
+];
+
 function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskAiTopic }) {
   const [category, setCategory] = useState(authProfile?.news_category || "tech");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState(() => new Set(
+    NEWS_CATEGORY_GROUPS.filter((g) => g.catIds.includes(category)).map((g) => g.id)
+  ));
+  const toggleGroup = (id) => setExpandedGroups((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -6747,7 +6770,7 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
 
   const openNews = (x) => {
     window.open(x.link, "_blank", "noopener,noreferrer");
-    supabase.rpc("increment_news_view", { p_link: x.link, p_title: x.title }).then(() => {});
+    supabase.rpc("increment_news_view", { p_link: x.link, p_title: x.title, p_source: x.source }).then(() => {});
     setStats((s) => ({ ...s, [x.link]: { ...(s[x.link] || { likeCount: 0, likedByMe: false }), views: (s[x.link]?.views || 0) + 1 } }));
   };
 
@@ -6868,7 +6891,44 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
               </button>
             </div>
             <div style={{ padding: 10, display: "flex", flexDirection: "column", gap: 3 }}>
-              {visibleCategories.map((c) => (
+              {NEWS_CATEGORY_GROUPS.map((g) => {
+                const catsInGroup = visibleCategories.filter((c) => g.catIds.includes(c.id));
+                if (catsInGroup.length === 0) return null; // ทุกตัวในกลุ่มถูกปิดหมด ไม่ต้องโชว์กลุ่ม
+                const isOpen = expandedGroups.has(g.id);
+                const activeInside = catsInGroup.some((c) => c.id === category);
+                return (
+                  <div key={g.id}>
+                    <button onClick={() => toggleGroup(g.id)} style={{
+                      display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "13px 14px", borderRadius: 12,
+                      border: "none", cursor: "pointer", textAlign: "left", fontSize: 13.5, fontWeight: 700,
+                      background: activeInside && !isOpen ? `${t.accent}20` : "transparent", color: t.text,
+                    }}>
+                      <span style={{ fontSize: 17 }}>{g.label.split(" ")[0]}</span>
+                      <span style={{ flex: 1 }}>{g.label.split(" ").slice(1).join(" ")}</span>
+                      <span style={{ fontSize: 15, color: t.faint, fontWeight: 800 }}>{isOpen ? "−" : "+"}</span>
+                    </button>
+                    {isOpen && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 3, paddingLeft: 20, marginBottom: 4 }}>
+                        {catsInGroup.map((c) => (
+                          <button key={c.id} onClick={() => { selectCategory(c.id); setMenuOpen(false); }} style={{
+                            display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "11px 14px", borderRadius: 12,
+                            border: "none", cursor: "pointer", textAlign: "left", fontSize: 13, fontWeight: 700,
+                            background: category === c.id ? t.accent : "transparent",
+                            color: category === c.id ? t.onAccent : t.text,
+                            transition: "background .15s",
+                          }}>
+                            <span style={{ fontSize: 15 }}>{c.label.split(" ")[0]}</span>
+                            <span>{c.label.split(" ").slice(1).join(" ")}</span>
+                            {category === c.id && <span style={{ marginLeft: "auto", width: 6, height: 6, borderRadius: 999, background: t.onAccent }} />}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {/* หมวดที่ไม่ได้อยู่ในกลุ่มไหน แสดงเป็นปุ่มเดี่ยวตามปกติ */}
+              {visibleCategories.filter((c) => !NEWS_CATEGORY_GROUPS.some((g) => g.catIds.includes(c.id))).map((c) => (
                 <button key={c.id} onClick={() => { selectCategory(c.id); setMenuOpen(false); }} style={{
                   display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "13px 14px", borderRadius: 12,
                   border: "none", cursor: "pointer", textAlign: "left", fontSize: 13.5, fontWeight: 700,
@@ -6926,11 +6986,12 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
             {x.image && <img src={x.image} alt="" style={{ width: 72, height: 72, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} />}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4, gap: 8 }}>
-                <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                  <span style={{ fontSize: 10.5, fontWeight: 800, color: t.accent }}>{x.source}</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 800, color: t.accent, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.source}</span>
                   {category !== "saved" && (
-                    <button onClick={(e) => { e.stopPropagation(); blockSource(x.source); }} title={`ไม่รับข่าวจาก ${x.source} อีก`} style={{ background: "none", border: "none", cursor: "pointer", padding: 2, display: "grid", placeItems: "center" }}>
-                      <X size={11} color={t.faint} />
+                    <button onClick={(e) => { e.stopPropagation(); blockSource(x.source); }} title={`ไม่รับข่าวจาก ${x.source} อีก`} style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 2, background: t.inputBg, border: `1px solid ${t.border}`, borderRadius: 999, padding: "2px 6px", cursor: "pointer" }}>
+                      <X size={9} color={t.faint} />
+                      <span style={{ fontSize: 9.5, color: t.faint, fontWeight: 700, whiteSpace: "nowrap" }}>บล็อก</span>
                     </button>
                   )}
                 </span>
@@ -6940,26 +7001,26 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
               {x.summary && <div style={{ fontSize: 11.5, color: t.sub, lineHeight: 1.4 }}>{x.summary}</div>}
             </div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end", borderTop: `1px solid ${t.border}`, paddingTop: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", rowGap: 6, columnGap: 4, justifyContent: "flex-end", borderTop: `1px solid ${t.border}`, paddingTop: 8 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 4, marginRight: "auto", color: t.faint }}>
               <Eye size={13} color={t.faint} />
               <span style={{ fontSize: 11 }}>{st.views}</span>
             </div>
             <button onClick={() => sendNewsToNote(x)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px" }}>
               <StickyNote size={15} color={t.faint} />
-              <span style={{ fontSize: 11, color: t.faint, fontWeight: 700 }}>ส่งเข้าโน้ต</span>
+              <span style={{ fontSize: 11, color: t.faint, fontWeight: 700, whiteSpace: "nowrap" }}>ส่งเข้าโน้ต</span>
             </button>
             <button onClick={() => askAi(x)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px" }}>
               <MessageCircle size={15} color={t.faint} />
-              <span style={{ fontSize: 11, color: t.faint, fontWeight: 700 }}>ถาม AI ต่อ</span>
+              <span style={{ fontSize: 11, color: t.faint, fontWeight: 700, whiteSpace: "nowrap" }}>ถาม AI ต่อ</span>
             </button>
             <button onClick={() => toggleLike(x)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px" }}>
               <Heart size={15} color={st.likedByMe ? "#E0245E" : t.faint} fill={st.likedByMe ? "#E0245E" : "none"} />
-              <span style={{ fontSize: 11, color: st.likedByMe ? "#E0245E" : t.faint, fontWeight: 700 }}>{st.likeCount > 0 ? st.likeCount : "ไลค์"}</span>
+              <span style={{ fontSize: 11, color: st.likedByMe ? "#E0245E" : t.faint, fontWeight: 700, whiteSpace: "nowrap" }}>{st.likeCount > 0 ? st.likeCount : "ไลค์"}</span>
             </button>
             <button onClick={() => toggleSave(x)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px" }}>
               <Bookmark size={15} color={savedLinks.has(x.link) ? t.accent : t.faint} fill={savedLinks.has(x.link) ? t.accent : "none"} />
-              <span style={{ fontSize: 11, color: savedLinks.has(x.link) ? t.accent : t.faint, fontWeight: 700 }}>{savedLinks.has(x.link) ? "บันทึกแล้ว" : "บันทึก"}</span>
+              <span style={{ fontSize: 11, color: savedLinks.has(x.link) ? t.accent : t.faint, fontWeight: 700, whiteSpace: "nowrap" }}>{savedLinks.has(x.link) ? "บันทึกแล้ว" : "บันทึก"}</span>
             </button>
           </div>
         </div>

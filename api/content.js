@@ -50,11 +50,14 @@ function stripCdata(s) {
 }
 function decodeEntities(s) {
   return (s || "")
+    .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
-    .replace(/&#0*39;/g, "'");
+    .replace(/&#0*39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 function stripHtmlTags(s) {
   return (s || "").replace(/<[^>]*>/g, "").trim();
