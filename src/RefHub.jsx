@@ -6250,6 +6250,7 @@ function NoteEditor({ content, onChange, theme, userId, t }) {
   const fileInputRef = useRef(null);
   const mdInputRef = useRef(null);
   const [showColors, setShowColors] = useState(false);
+  const [showMore, setShowMore] = useState(false);
 
   // แทรกบล็อกใหม่ต่อจากตำแหน่งเคอร์เซอร์ปัจจุบันทันที ไม่ต้องพิมพ์ "/" แล้วเลือกเองทีละขั้น
   const insertAtCursor = (block) => {
@@ -6306,35 +6307,47 @@ function NoteEditor({ content, onChange, theme, userId, t }) {
     onChange(editor.document);
   };
 
-  const quickTools = [
-    { Icon: Plus, label: "เพิ่มบล็อก", onClick: () => insertAtCursor({ type: "paragraph", content: "" }) },
+  // เครื่องมือหลักที่ใช้บ่อยสุด โชว์เสมอ ไม่ต้องเลื่อน / เครื่องมือรอง ซ่อนไว้หลังปุ่ม "เพิ่มเติม"
+  const primaryTools = [
     { Icon: Image, label: "แนบรูป", onClick: () => imageInputRef.current?.click() },
-    { Icon: Paperclip, label: "แนบไฟล์", onClick: () => fileInputRef.current?.click() },
-    { Icon: FileText, label: "นำเข้า .md", onClick: () => mdInputRef.current?.click() },
     { Icon: CheckSquare, label: "เช็คลิสต์", onClick: () => insertAtCursor({ type: "checkListItem", content: "" }) },
     { Icon: Heading2, label: "หัวข้อ", onClick: () => insertAtCursor({ type: "heading", props: { level: 2 }, content: "" }) },
     { Icon: List, label: "บูลเล็ต", onClick: () => insertAtCursor({ type: "bulletListItem", content: "" }) },
   ];
+  const moreTools = [
+    { Icon: Plus, label: "เพิ่มบล็อกเปล่า", onClick: () => insertAtCursor({ type: "paragraph", content: "" }) },
+    { Icon: Paperclip, label: "แนบไฟล์ทั่วไป", onClick: () => fileInputRef.current?.click() },
+    { Icon: FileText, label: "นำเข้าไฟล์ .md", onClick: () => mdInputRef.current?.click() },
+    { Icon: Palette, label: "เลือกสีข้อความ", onClick: () => setShowColors((v) => !v) },
+  ];
+  const toolBtnStyle = { flexShrink: 0, display: "flex", alignItems: "center", gap: 5, padding: "6px 10px", borderRadius: 999, border: `1px solid ${t?.border || "#e5e5e5"}`, background: t?.inputBg || "#f5f5f5", cursor: "pointer" };
 
   return (
     <div>
-      <div style={{ display: "flex", gap: 6, padding: "6px 8px", borderBottom: `1px solid ${t?.border || "#e5e5e5"}`, overflowX: "auto" }}>
-        {quickTools.map((qt) => (
-          <button key={qt.label} onClick={qt.onClick} style={{
-            flexShrink: 0, display: "flex", alignItems: "center", gap: 5, padding: "6px 10px", borderRadius: 999,
-            border: `1px solid ${t?.border || "#e5e5e5"}`, background: t?.inputBg || "#f5f5f5", cursor: "pointer",
-          }}>
-            <qt.Icon size={13} color={t?.sub || "#666"} />
-            <span style={{ fontSize: 11, fontWeight: 700, color: t?.sub || "#666", whiteSpace: "nowrap" }}>{qt.label}</span>
+      <div style={{ padding: "6px 8px", borderBottom: `1px solid ${t?.border || "#e5e5e5"}` }}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {primaryTools.map((qt) => (
+            <button key={qt.label} onClick={qt.onClick} style={toolBtnStyle}>
+              <qt.Icon size={13} color={t?.sub || "#666"} />
+              <span style={{ fontSize: 11, fontWeight: 700, color: t?.sub || "#666", whiteSpace: "nowrap" }}>{qt.label}</span>
+            </button>
+          ))}
+          <button onClick={() => setShowMore((v) => !v)} style={{ ...toolBtnStyle, border: `1px solid ${showMore ? (t?.accent || "#333") : (t?.border || "#e5e5e5")}` }}>
+            <MoreVertical size={13} color={t?.sub || "#666"} />
+            <span style={{ fontSize: 11, fontWeight: 700, color: t?.sub || "#666", whiteSpace: "nowrap" }}>เพิ่มเติม</span>
+            <ChevronRight size={12} color={t?.sub || "#666"} style={{ transform: showMore ? "rotate(90deg)" : "none", transition: "transform .15s" }} />
           </button>
-        ))}
-        <button onClick={() => setShowColors((v) => !v)} style={{
-          flexShrink: 0, display: "flex", alignItems: "center", gap: 5, padding: "6px 10px", borderRadius: 999,
-          border: `1px solid ${showColors ? (t?.accent || "#333") : (t?.border || "#e5e5e5")}`, background: t?.inputBg || "#f5f5f5", cursor: "pointer",
-        }}>
-          <Palette size={13} color={t?.sub || "#666"} />
-          <span style={{ fontSize: 11, fontWeight: 700, color: t?.sub || "#666", whiteSpace: "nowrap" }}>สี</span>
-        </button>
+        </div>
+        {showMore && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${t?.border || "#e5e5e5"}` }}>
+            {moreTools.map((qt) => (
+              <button key={qt.label} onClick={qt.onClick} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "9px 10px", borderRadius: 10, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
+                <qt.Icon size={15} color={t?.sub || "#666"} />
+                <span style={{ fontSize: 12.5, color: t?.text || "#333" }}>{qt.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       {showColors && (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "8px 10px", borderBottom: `1px solid ${t?.border || "#e5e5e5"}` }}>
