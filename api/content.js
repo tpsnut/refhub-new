@@ -18,7 +18,6 @@ const FEED_SOURCES = {
     { url: "https://news.google.com/rss/search?q=เทคโนโลยี+when:2d&hl=th&gl=TH&ceid=TH:th", label: "Google News", isGoogleNews: true },
   ],
   biz: [
-    { url: "https://www.thairath.co.th/rss/business", label: "Thairath" },
     { url: "https://news.google.com/rss/search?q=เศรษฐกิจ+ธุรกิจ+when:2d&hl=th&gl=TH&ceid=TH:th", label: "Google News", isGoogleNews: true },
   ],
   game: [
