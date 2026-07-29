@@ -736,6 +736,11 @@ export default function RefHub() {
   const [billManagerOpen, setBillManagerOpen] = useState(false);
   const [exportText, setExportText] = useState(null);
   const [musicOpen, setMusicOpen] = useState(false);
+  // 🎬 ผู้เล่น YouTube ตัวเดียวกัน ย้ายไปโชว์ได้ทั้งที่หน้า Home และในหน้า "สื่อของฉัน" (MusicModal) โดยไม่สร้าง iframe ซ้ำ/ไม่หยุดเล่น
+  // ใช้ createPortal ย้าย DOM node เดิม (div#yt-mini-player) ไปแปะในตำแหน่งที่ต้องการ แทนที่จะ mount ใหม่ (กันวิดีโอรีสตาร์ท/เสีย state)
+  const [homeYtSlot, setHomeYtSlot] = useState(null);
+  const [modalYtSlot, setModalYtSlot] = useState(null);
+  const offscreenYtSlotRef = useRef(null); // ที่พักถาวรตอนไม่ได้อยู่หน้า Home และไม่ได้เปิดหน้าสื่อ (เพลงยังเล่นต่อ แค่มองไม่เห็น)
   const [playlist, setPlaylist] = useState([]);
   const [folders, setFolders] = useState([]); // หมวดหมู่เพลงที่ผู้ใช้สร้างเอง เช่น {id, name}
   const [categories, setCategories] = useState(DEFAULT_CATEGORIES); // หมวดหมู่การเงิน (แก้ไข/เพิ่ม/ลบ/สลับได้)
@@ -1565,37 +1570,47 @@ export default function RefHub() {
           {page === "chat" && <ChatEntryPage t={t} M={M} userId={userId} authProfile={authProfile} session={session} openThread={(id, name, isGroup, avatarUrl, createdBy) => { setActiveThread({ id, name, isGroup: !!isGroup, avatarUrl: avatarUrl || null, createdBy: createdBy || null }); setPage("chatRoom"); }} />}
           {page === "chatRoom" && activeThread && <ChatRoomPage t={t} userId={userId} thread={activeThread} profile={profile} session={session} onLeave={() => { setActiveThread(null); setPage("chat"); }} onBack={() => { setActiveThread(null); setPage("chat"); }} activeCall={activeCall} setActiveCall={setActiveCall} setCallMinimized={setCallMinimized} />}
 
-          {/* 🎵 การ์ด "กำลังเล่น" ต่อท้ายเนื้อหาหน้า Home (ใต้เป้าหมาย) — div#yt-mini-player mount ค้างตลอด
-              ไม่เคย unmount เลย (ซ่อนด้วย display:none เท่านั้น) กันปัญหา React ชนกับ DOM ที่ YouTube API แก้เอง */}
-          <div style={{ display: page === "home" && cur && cur.kind === "yt" ? "block" : "none", marginTop: 16 }}>
-            <div style={{ ...card(t), padding: 14 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                <div style={{ fontSize: 13, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 6 }}><Music size={15} color={t.accent} /> กำลังเล่น</div>
-                <button onClick={() => { stopAll(); setCurId(null); }} style={ghost} title="ปิด"><X size={18} color={t.faint} /></button>
-              </div>
-              <div style={{ borderRadius: 14, overflow: "hidden", border: `1px solid ${t.border}`, background: "#000" }}>
-                <div id="yt-mini-player" style={{ width: "100%", height: 180 }} />
-              </div>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 14, marginTop: 12 }}>
-                <button onClick={prevTrack} style={ghost} title="ย้อนกลับ"><SkipBack size={19} color={t.text} fill={t.text} /></button>
-                <button onClick={togglePlay} style={{ width: 42, height: 42, borderRadius: 21, border: "none", cursor: "pointer", background: t.accent, color: t.onAccent, display: "grid", placeItems: "center", flexShrink: 0 }}>
-                  {playing ? <Pause size={19} /> : <Play size={19} />}
-                </button>
-                <button onClick={nextTrack} style={ghost} title="เพลงถัดไป"><SkipForward size={19} color={t.text} fill={t.text} /></button>
-              </div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: t.text, textAlign: "center", marginTop: 8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{cur ? cur.name : ""}</div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
-                <button onClick={() => setVolume((v) => Math.max(0, v - 10))} style={ghost} title="ลดเสียง"><VolumeX size={16} color={t.faint} /></button>
-                <input type="range" min="0" max="100" value={volume} onChange={(e) => setVolume(+e.target.value)} style={{ flex: 1, accentColor: t.accent }} />
-                <button onClick={() => setVolume((v) => Math.min(100, v + 10))} style={ghost} title="เพิ่มเสียง"><Volume2 size={16} color={t.faint} /></button>
-              </div>
-              <button onClick={() => setMusicOpen(true)} style={{ ...ghost, width: "100%", textAlign: "center", marginTop: 8, fontSize: 11.5, color: t.sub }}>ดูเพลย์ลิสต์ทั้งหมด <ChevronRight size={13} style={{ verticalAlign: "middle" }} /></button>
-            </div>
-          </div>
+          {/* 🎵 การ์ด "กำลังเล่น" — ย้ายไปโชว์ในหน้าสื่อ (MusicModal) ได้แล้วผ่าน portal ไม่ต้องกลับมาหน้า Home อีกต่อไป
+              div#yt-mini-player mount ค้างตลอด ไม่เคย unmount เลย กันปัญหา React ชนกับ DOM ที่ YouTube API แก้เอง */}
+          <div ref={(node) => setHomeYtSlot(node)} style={{ marginTop: page === "home" && cur && cur.kind === "yt" && !musicOpen ? 16 : 0 }} />
         </div>
+
         </div>
 
         {page !== "chat" && page !== "chatRoom" && <Dock t={t} page={page} setPage={setPage} onQuickAdd={() => setAddOpen(true)} />}
+
+        {/* 🎬 ที่พักถาวรของผู้เล่น YouTube ตอนไม่ได้อยู่หน้า Home และไม่ได้เปิดหน้าสื่อ (เพลงเล่นต่อ แค่มองไม่เห็น) */}
+        <div ref={offscreenYtSlotRef} style={{ position: "fixed", left: -9999, top: -9999, width: 1, height: 1, overflow: "hidden" }} />
+        {cur && cur.kind === "yt" && (musicOpen && modalYtSlot ? modalYtSlot : page === "home" && homeYtSlot ? homeYtSlot : offscreenYtSlotRef.current) && createPortal(
+          <div style={{ ...card(t), padding: 14 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 6 }}><Music size={15} color={t.accent} /> กำลังเล่น</div>
+              <button onClick={() => { stopAll(); setCurId(null); }} style={ghost} title="ปิด"><X size={18} color={t.faint} /></button>
+            </div>
+            <div style={{ borderRadius: 14, overflow: "hidden", border: `1px solid ${t.border}`, background: "#000" }}>
+              <div id="yt-mini-player" style={{ width: "100%", height: 180 }} />
+            </div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 14, marginTop: 12 }}>
+              <button onClick={prevTrack} style={ghost} title="ย้อนกลับ"><SkipBack size={19} color={t.text} fill={t.text} /></button>
+              <button onClick={togglePlay} style={{ width: 42, height: 42, borderRadius: 21, border: "none", cursor: "pointer", background: t.accent, color: t.onAccent, display: "grid", placeItems: "center", flexShrink: 0 }}>
+                {playing ? <Pause size={19} /> : <Play size={19} />}
+              </button>
+              <button onClick={nextTrack} style={ghost} title="เพลงถัดไป"><SkipForward size={19} color={t.text} fill={t.text} /></button>
+            </div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: t.text, textAlign: "center", marginTop: 8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{cur ? cur.name : ""}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+              <button onClick={() => setVolume((v) => Math.max(0, v - 10))} style={ghost} title="ลดเสียง"><VolumeX size={16} color={t.faint} /></button>
+              <input type="range" min="0" max="100" value={volume} onChange={(e) => setVolume(+e.target.value)} style={{ flex: 1, accentColor: t.accent }} />
+              <button onClick={() => setVolume((v) => Math.min(100, v + 10))} style={ghost} title="เพิ่มเสียง"><Volume2 size={16} color={t.faint} /></button>
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              {!musicOpen && <button onClick={() => setMusicOpen(true)} style={{ ...ghost, flex: 1, textAlign: "center", border: `1px solid ${t.border}`, borderRadius: 10, fontSize: 11.5, color: t.sub, padding: "7px 0" }}>ดูเพลย์ลิสต์ทั้งหมด <ChevronRight size={13} style={{ verticalAlign: "middle" }} /></button>}
+              {cur.ytId && <a href={`https://www.youtube.com/watch?v=${cur.ytId}`} target="_blank" rel="noreferrer" style={{ ...ghost, flex: 1, textAlign: "center", border: `1px solid ${t.border}`, borderRadius: 10, fontSize: 11.5, color: t.sub, padding: "7px 0", textDecoration: "none", display: "block" }}>เปิดใน YouTube ↗</a>}
+            </div>
+          </div>,
+          musicOpen && modalYtSlot ? modalYtSlot : page === "home" && homeYtSlot ? homeYtSlot : offscreenYtSlotRef.current
+        )}
+
 
         {mentorPick && <MentorPicker t={t} mentor={mentor} setMentor={setMentor} authProfile={authProfile} setAuthProfile={setAuthProfile} userId={userId} customMentors={customMentors} setCustomMentors={setCustomMentors} close={() => setMentorPick(false)} />}
         {themePick && <ThemePicker t={t} theme={theme} setTheme={setTheme} mode={mode} close={() => setThemePick(false)} />}
@@ -1666,7 +1681,7 @@ export default function RefHub() {
         {editProfile && <EditProfile t={t} M={M} profile={profile} setProfile={setProfile} userId={userId} authProfile={authProfile} setAuthProfile={setAuthProfile} close={() => setEditProfile(false)} />}
         {profileLightbox && profile.avatar && <ImageLightbox src={profile.avatar} onClose={() => setProfileLightbox(false)} />}
         {searchOpen && <SearchOverlay t={t} notes={notes} goals={goals} tx={tx} categories={categories} setPage={setPage} close={() => setSearchOpen(false)} />}
-        {musicOpen && <MusicModal {...{ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, toggleFavorite, volume, setVolume, userId, close: () => setMusicOpen(false) }} />}
+        {musicOpen && <MusicModal {...{ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, toggleFavorite, volume, setVolume, userId, setModalYtSlot, close: () => setMusicOpen(false) }} />}
         {addOpen && <AddTxModal t={t} tx={tx} setTx={setTx} categories={categories} reorderCategoriesForKind={reorderCategoriesForKind} deleteCategory={deleteCategory} addCategory={addCategory} userId={userId} session={session} close={() => setAddOpen(false)} />}
         {billManagerOpen && <BillManagerModal t={t} billReminders={billReminders} billPayments={billPayments} addBillReminder={addBillReminder} deleteBillReminder={deleteBillReminder} markBillPaid={markBillPaid} unmarkBillPaid={unmarkBillPaid} close={() => setBillManagerOpen(false)} />}
         {reminderTarget && <ReminderModal t={t} targetType={reminderTarget.targetType} targetId={reminderTarget.targetId} label={reminderTarget.label} existing={reminderTarget.existing} upsertReminder={upsertReminder} deleteReminder={deleteReminder} close={() => setReminderTarget(null)} />}
@@ -2184,11 +2199,12 @@ const PLATFORM_META = {
   other: { label: "ลิงก์", color: "#8A93A8" },
 };
 
-function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, toggleFavorite, volume, setVolume, userId, close }) {
+function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, toggleFavorite, volume, setVolume, userId, setModalYtSlot, close }) {
   const [ytUrl, setYtUrl] = useState("");
   const fileRef = useRef(null);
   const [saved, setSaved] = useState(false);
   const [tab, setTab] = useState("all"); // "all" | "fav" | folder.id
+  const [showMoreFolders, setShowMoreFolders] = useState(false); // 🔽 โหมด "เพิ่มเติม" ของแท็บหมวดหมู่ (แทนการเลื่อนแนวนอน)
   const flashSaved = () => { setSaved(true); setTimeout(() => setSaved(false), 1800); };
   const [pendingYt, setPendingYt] = useState(null); // { id, url, name, platform } รอยืนยัน/แก้ชื่อก่อนบันทึกจริง
   const [ytLoading, setYtLoading] = useState(false);
@@ -2298,12 +2314,8 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
         </div>
         <div style={{ fontSize: 12, color: t.sub, marginBottom: 14 }}>เก็บสื่อจาก YouTube, TikTok, X, Instagram, Facebook ไว้ดูย้อนหลัง · เพิ่มแล้วบันทึกอัตโนมัติ</div>
 
-        {/* ตอนนี้เพลง YouTube เล่นอยู่ที่ mini player ลอยมุมจอ (ไม่ดับตอนสลับหน้าแล้ว) */}
-        {cur && cur.kind === "yt" && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, background: `${t.accent}18`, border: `1px dashed ${t.accent}66`, borderRadius: 12, padding: "9px 12px", fontSize: 11.5, color: t.accent, fontWeight: 600, marginBottom: 14 }}>
-            <Music size={14} /> กำลังเล่น "{cur.name}" อยู่ที่หน้า Home (ใต้เป้าหมายวันนี้)
-          </div>
-        )}
+        {/* 🎬 ผู้เล่น YouTube ย้ายมาเล่นตรงนี้ได้เลย (เดิมบอกแค่ว่าไปเล่นอยู่หน้า Home ตอนนี้เล่น+คุมได้จากตรงนี้ทันที) */}
+        {cur && cur.kind === "yt" && <div ref={(node) => setModalYtSlot(node)} style={{ marginBottom: 14 }} />}
 
         {/* add controls */}
         <div style={{ ...card(t), padding: 14, marginBottom: 12 }}>
@@ -2336,23 +2348,35 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
           <Volume2 size={16} color={t.faint} />
         </div>
 
-        {/* แท็บหมวดหมู่ */}
-        <div style={{ position: "relative", marginBottom: 10 }}>
-          <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6 }}>
-            {[{ id: "all", name: "ทั้งหมด" }, { id: "fav", name: "❤ โปรด" }, ...folders].map((f) => (
-              <div key={f.id} style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 2, borderRadius: 16, border: `1.5px solid ${tab === f.id ? t.accent : t.border}`, background: tab === f.id ? t.accent : "transparent", paddingRight: f.id !== "all" && f.id !== "fav" ? 4 : 0 }}>
-                <button onClick={() => setTab(f.id)} style={{ padding: "7px 13px", border: "none", background: "none", cursor: "pointer", fontSize: 12, fontWeight: 700, color: tab === f.id ? t.onAccent : t.sub }}>{f.name}</button>
-                {f.id !== "all" && f.id !== "fav" && (
-                  <button onClick={() => deleteFolder(f.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: 3, display: "grid", placeItems: "center" }} title="ลบหมวดหมู่นี้">
-                    <X size={12} color={tab === f.id ? t.onAccent : t.faint} />
-                  </button>
-                )}
-              </div>
+        {/* แท็บหมวดหมู่ — ใช้ pattern เดียวกับ quick toolbar โน้ต: โชว์ "ทั้งหมด/โปรด" เสมอ + "เพิ่มเติม" ขยายเป็นลิสต์แนวตั้งสำหรับหมวดที่สร้างเอง (ไม่เลื่อนแนวนอนแล้ว) */}
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            {[{ id: "all", name: "ทั้งหมด" }, { id: "fav", name: "❤ โปรด" }].map((f) => (
+              <button key={f.id} onClick={() => setTab(f.id)} style={{ padding: "7px 13px", borderRadius: 16, cursor: "pointer", border: `1.5px solid ${tab === f.id ? t.accent : t.border}`, fontWeight: 700, fontSize: 12, background: tab === f.id ? t.accent : "transparent", color: tab === f.id ? t.onAccent : t.sub }}>{f.name}</button>
             ))}
-            <button onClick={() => setAddingFolder((v) => !v)} style={{ flexShrink: 0, width: 32, height: 32, borderRadius: 16, border: `1.5px dashed ${t.border}`, background: "none", cursor: "pointer", color: t.sub, display: "grid", placeItems: "center" }}><Plus size={15} /></button>
+            {tab !== "all" && tab !== "fav" && (
+              <span style={{ padding: "7px 13px", borderRadius: 16, fontWeight: 700, fontSize: 12, background: t.accent, color: t.onAccent }}>{folders.find((f) => f.id === tab)?.name || "หมวดหมู่"}</span>
+            )}
+            <button onClick={() => setShowMoreFolders((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 4, padding: "7px 13px", borderRadius: 16, cursor: "pointer", border: `1.5px solid ${showMoreFolders ? t.accent : t.border}`, fontWeight: 700, fontSize: 12, background: "none", color: t.sub }}>
+              <MoreVertical size={13} color={t.sub} /> เพิ่มเติม <ChevronRight size={12} color={t.sub} style={{ transform: showMoreFolders ? "rotate(90deg)" : "none", transition: "transform .15s" }} />
+            </button>
           </div>
-          <div style={{ position: "absolute", right: 0, top: 0, bottom: 6, width: 28, pointerEvents: "none", background: `linear-gradient(to right, transparent, ${t.bg})` }} />
+          {showMoreFolders && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${t.border}` }}>
+              {folders.map((f) => (
+                <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 10px", borderRadius: 10, background: tab === f.id ? `${t.accent}18` : "transparent" }}>
+                  <button onClick={() => { setTab(f.id); setShowMoreFolders(false); }} style={{ flex: 1, textAlign: "left", background: "none", border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 700, color: tab === f.id ? t.accent : t.text }}>{f.name}</button>
+                  <button onClick={() => deleteFolder(f.id)} style={ghost} title="ลบหมวดหมู่นี้"><X size={14} color={t.faint} /></button>
+                </div>
+              ))}
+              {folders.length === 0 && <div style={{ fontSize: 11.5, color: t.faint, padding: "4px 10px" }}>ยังไม่มีหมวดหมู่ที่สร้างเอง</div>}
+              <button onClick={() => { setAddingFolder((v) => !v); setShowMoreFolders(false); }} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "9px 10px", borderRadius: 10, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
+                <Plus size={15} color={t.sub} /><span style={{ fontSize: 12.5, color: t.sub, fontWeight: 700 }}>เพิ่มหมวดหมู่ใหม่</span>
+              </button>
+            </div>
+          )}
         </div>
+
         {addingFolder && (
           <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
             <input autoFocus value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addFolder()} placeholder="ตั้งชื่อหมวดหมู่ เช่น ชิลล์ๆ, ออกกำลังกาย" style={input(t)} />
@@ -2387,7 +2411,7 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
         </div>
         {viewingMedia && <SocialEmbedModal t={t} item={viewingMedia} close={() => setViewingMedia(null)} />}
         <div style={{ fontSize: 10.5, color: t.faint, textAlign: "center", marginTop: 14 }}>
-          เพลง YouTube แสดงเป็นการ์ด "กำลังเล่น" ที่หน้า Home ใต้เป้าหมายวันนี้ (ตาม YouTube ToS ต้องมองเห็นได้ตอนเล่น) — ถ้าออกจากหน้า Home วิดีโออาจหยุดเล่นตามพฤติกรรมเบราว์เซอร์ · ไฟล์เพลงเล่นต่อได้ทุกหน้าเหมือนเดิม · ไฟล์ใหญ่กว่า 1.5MB เล่นเฉพาะรอบนี้ · ดาวน์โหลดได้เฉพาะไฟล์ที่แนบเอง (YouTube ดาวน์โหลดไม่ได้ตามกติกา)
+          เพลง YouTube เล่นได้ทั้งจากหน้า Home (ใต้เป้าหมายวันนี้) และหน้าสื่อนี้เลย (ตาม YouTube ToS ต้องมองเห็นได้ตอนเล่น) — ถ้าออกจากทั้ง 2 หน้านี้ วิดีโออาจหยุดเล่นตามพฤติกรรมเบราว์เซอร์ · ไฟล์เพลงเล่นต่อได้ทุกหน้าเหมือนเดิม · ไฟล์ใหญ่กว่า 1.5MB เล่นเฉพาะรอบนี้ · ดาวน์โหลดได้เฉพาะไฟล์ที่แนบเอง (YouTube ดาวน์โหลดไม่ได้ตามกติกา)
         </div>
       </div>
     </div>
@@ -2419,6 +2443,16 @@ function SocialEmbedModal({ t, item, close }) {
     document.body.appendChild(s);
   }, [item.url]);
 
+  // 🎵 TikTok — ใช้วิธีทางการของ TikTok เอง (blockquote class="tiktok-embed" + สคริปต์ embed.js ที่จะมาแปลงเป็น iframe เล่นได้จริงให้)
+  // เดิมเดา URL เอง (tiktok.com/embed/v2/{id}) ซึ่งไม่ใช่วิธีที่ TikTok รับรองอย่างเป็นทางการ เลยเล่นไม่ขึ้นบ่อยๆ — วิธีนี้เสถียรกว่าเพราะเป็น method เดียวกับที่ TikTok เอกสารแนะนำให้ใช้จริง (เหมือน pattern เดียวกับที่ X/Twitter ใช้ข้างบนนี้เป๊ะ)
+  useEffect(() => {
+    if (item.platform !== "tiktok") return;
+    const s = document.createElement("script");
+    s.src = "https://www.tiktok.com/embed.js"; s.async = true;
+    document.body.appendChild(s);
+    return () => { try { document.body.removeChild(s); } catch (e) {} };
+  }, [item.url]);
+
   const tiktokId = item.platform === "tiktok" ? tiktokExtract(item.url) : null;
   const igEmbed = item.platform === "instagram" ? instagramEmbedUrl(item.url) : null;
 
@@ -2433,7 +2467,7 @@ function SocialEmbedModal({ t, item, close }) {
           <div ref={containerRef} style={{ display: "flex", justifyContent: "center" }}>
             {item.platform === "tiktok" && (
               tiktokId
-                ? <iframe src={`https://www.tiktok.com/embed/v2/${tiktokId}`} style={{ width: "100%", maxWidth: 325, height: 580, border: "none", borderRadius: 12 }} allow="encrypted-media" title="tiktok" />
+                ? <blockquote className="tiktok-embed" cite={item.url} data-video-id={tiktokId} style={{ maxWidth: 325, minWidth: 325, margin: 0 }}><section /></blockquote>
                 : <div style={{ fontSize: 12, color: t.sub, padding: 20, textAlign: "center" }}>อ่านลิงก์นี้ไม่ได้ ลองกดเปิดต้นฉบับด้านล่างแทน</div>
             )}
             {item.platform === "twitter" && <blockquote className="twitter-tweet"><a href={item.url}>เปิดโพสต์ X</a></blockquote>}
