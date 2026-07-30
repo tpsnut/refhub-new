@@ -6,7 +6,7 @@ import {
   Sparkles, Clock, Search, Volume2, VolumeX, Pencil, Download, ArrowLeft, Users, Camera, Phone, Mic, MicOff, PhoneOff, RefreshCw,
   Utensils, Car, ShoppingBag, Receipt, Gamepad2, HeartPulse, Briefcase, Gift, Coffee, Music,
   Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi, MessageCircle, MoreVertical, KeyRound, MapPin, Copy, LockKeyhole, LogOut, LayoutGrid, Maximize2, Volume1, Settings, Bookmark, Share2, Repeat2, Heart, User, Pin,
-  Heading1, Heading3, ListOrdered, ListTree, Quote, Code2, Minus, Table2, Video, Smile, RotateCcw, GripVertical, ChevronLeft
+  Heading1, Heading3, ListOrdered, ListTree, Quote, Code2, Minus, Table2, Video, Smile, RotateCcw, GripVertical, ChevronLeft, ChevronUp, ChevronDown
 } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, ResponsiveContainer, Tooltip } from "recharts";
 // 🔀 dnd-kit — ใช้ทำ "ลากวางจัดเรียงจริง" (drag & drop) ทั่วแอป แทนปุ่มขึ้น/ลง — รองรับ touch บนมือถือมาให้เลย
@@ -821,6 +821,9 @@ export default function RefHub() {
   });
   const dbFontScaleHydratedRef = useRef(false); // 🔒 กันบั๊ก: ค่าจาก DB (font_scale) เคยไปทับค่าที่เพิ่งเลือกไว้ในเครื่องนี้ทุกครั้งที่ authProfile โหลดใหม่ — ให้ดึงจาก DB มาทับได้แค่ "ครั้งแรก" ตอน hydrate เท่านั้น และเฉพาะตอนที่เครื่องนี้ไม่มีค่าอยู่ในเครื่องอยู่แล้ว (เครื่องใหม่/ล้าง storage)
   const [page, setPage] = useState(() => { try { return sessionStorage.getItem("refhub:page") || "home"; } catch (e) { return "home"; } });
+  const contentScrollRef = useRef(null); // 📜 container หลักที่ scroll ของทุกหน้า — ใช้เด้งกลับขึ้นบนตอนเปลี่ยนหน้า + ปุ่มเลื่อนขึ้น/ลง
+  const [atTop, setAtTop] = useState(true); // true = อยู่บนสุด (ปุ่มลอยจะเป็นลูกศรลง), false = เลื่อนลงมาแล้ว (ปุ่มลอยเป็นลูกศรขึ้น)
+  useEffect(() => { contentScrollRef.current?.scrollTo({ top: 0, behavior: "auto" }); setAtTop(true); }, [page]); // 🐛 เปลี่ยนหน้าแล้วเนื้อหาค้างตำแหน่ง scroll เดิมของหน้าก่อน ทำให้บางทีเปิดหน้าใหม่มาแล้วเจอเนื้อหาตรงกลาง/ท้ายหน้าทันที ไม่เห็นหัวข้อ
   const [notes, setNotes] = useState([]);
   const [goals, setGoals] = useState([]);
   const [goalTemplates, setGoalTemplates] = useState([]); // แม่แบบเป้าหมายประจำสัปดาห์ [{id, text, daysOfWeek, difficulty, active}]
@@ -1687,7 +1690,7 @@ export default function RefHub() {
         </div>
 
         {/* CONTENT — ความสูงหารด้วยสเกลชดเชย transform:scale ข้างบน กันตอนขยายฟอนต์แล้วท้ายเนื้อหาจมใต้ Dock */}
-        <div style={{ position: "relative", zIndex: 2, padding: `16px 18px ${page === "chat" || page === "chatRoom" ? 16 : 120}px`, height: `calc(${(10000 / fontScale).toFixed(2)}vh - 76px)`, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
+        <div ref={contentScrollRef} onScroll={(e) => setAtTop(e.currentTarget.scrollTop < 80)} style={{ position: "relative", zIndex: 2, padding: `16px 18px ${page === "chat" || page === "chatRoom" ? 16 : 120}px`, height: `calc(${(10000 / fontScale).toFixed(2)}vh - 76px)`, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
           {page === "home" && <ErrorCatcher t={t}><HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, allGoals: goals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder }} /></ErrorCatcher>}
           {page === "ledger" && <FinancePage {...{ t, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt), userId, billReminders, billPayments, markBillPaid, setBillManagerOpen }} />}
           {page === "note" && <NotePage {...{ t, notes, setNotes, isNight, userId, session, authProfile, reminders, openReminder }} />}
@@ -1737,6 +1740,20 @@ export default function RefHub() {
         </div>
 
         {page !== "chat" && page !== "chatRoom" && <Dock t={t} page={page} setPage={setPage} onQuickAdd={() => setAddOpen(true)} />}
+
+        {page !== "chat" && page !== "chatRoom" && (
+          <button
+            onClick={() => {
+              const el = contentScrollRef.current; if (!el) return;
+              if (atTop) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+              else el.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            style={{ position: "absolute", bottom: 92, right: 16, zIndex: 20, width: 38, height: 38, borderRadius: 19, border: `1px solid ${t.dockBorder}`, background: t.dock, display: "grid", placeItems: "center", cursor: "pointer", boxShadow: "0 6px 16px rgba(20,25,45,.18)" }}
+            title={atTop ? "เลื่อนไปล่างสุด" : "เลื่อนขึ้นบนสุด"}
+          >
+            {atTop ? <ChevronDown size={18} color={t.sub} /> : <ChevronUp size={18} color={t.sub} />}
+          </button>
+        )}
 
         {mentorPick && <MentorPicker t={t} mentor={mentor} setMentor={setMentor} authProfile={authProfile} setAuthProfile={setAuthProfile} userId={userId} customMentors={customMentors} setCustomMentors={setCustomMentors} close={() => setMentorPick(false)} />}
         {themePick && <ThemePicker t={t} theme={theme} setTheme={setTheme} mode={mode} close={() => setThemePick(false)} />}
