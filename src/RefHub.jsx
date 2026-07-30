@@ -7619,10 +7619,18 @@ function IdeasPage({ t, M, userId, session, authProfile, setAuthProfile, setNote
         <PageHead t={t} title="คลังความรู้" sub={`AI คัดให้ทุกวันตามความสนใจ (${interests.map(topicLabel).join(", ")})`} icon={<Lightbulb size={20} color={t.accent} />} />
         <button onClick={openEditInterests} style={{ ...card(t), flexShrink: 0, width: 38, height: 38, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }} title="แก้ไขหมวดสนใจ"><Pencil size={15} color={t.sub} /></button>
       </div>
-      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-        {[["today", "วันนี้"], ["saved", `บันทึกไว้ (${saved.length})`]].map(([v, lb]) => (
-          <button key={v} onClick={() => setTab(v)} style={{ flex: 1, padding: "9px 0", borderRadius: 12, cursor: "pointer", border: `1.5px solid ${tab === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 12.5, background: tab === v ? t.accent : "transparent", color: tab === v ? t.onAccent : t.sub }}>{lb}</button>
-        ))}
+      <style>{`@keyframes rh-spin { to { transform: rotate(360deg); } } .rh-spin { animation: rh-spin .8s linear infinite; }`}</style>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+        <div style={{ display: "flex", gap: 4, padding: 3, borderRadius: 12, background: t.inputBg, border: `1px solid ${t.border}` }}>
+          {[["today", "วันนี้"], ["saved", `บันทึกไว้ ${saved.length}`]].map(([v, lb]) => (
+            <button key={v} onClick={() => setTab(v)} style={{ padding: "6px 12px", borderRadius: 9, cursor: "pointer", border: "none", fontWeight: 700, fontSize: 11.5, whiteSpace: "nowrap", background: tab === v ? t.accent : "transparent", color: tab === v ? t.onAccent : t.sub }}>{lb}</button>
+          ))}
+        </div>
+        {tab === "today" && (authProfile?.can_refresh_articles || authProfile?.role === "admin") && (
+          <button onClick={refreshToday} disabled={refreshing} style={{ marginLeft: "auto", flexShrink: 0, width: 32, height: 32, borderRadius: 10, border: `1px solid ${t.border}`, background: t.inputBg, display: "grid", placeItems: "center", cursor: "pointer" }} title="รีเฟรชบทความวันนี้">
+            <RefreshCw size={14} color={t.sub} className={refreshing ? "rh-spin" : ""} />
+          </button>
+        )}
       </div>
 
 
@@ -7634,14 +7642,7 @@ function IdeasPage({ t, M, userId, session, authProfile, setAuthProfile, setNote
         </div>
       )}
 
-      {!loading && tab === "today" && (authProfile?.can_refresh_articles || authProfile?.role === "admin") && (
-        <>
-          <style>{`@keyframes rh-spin { to { transform: rotate(360deg); } } .rh-spin { animation: rh-spin .8s linear infinite; }`}</style>
-          <button onClick={refreshToday} disabled={refreshing} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", padding: "9px 0", borderRadius: 10, border: `1px solid ${t.border}`, background: "none", color: t.sub, fontSize: 12, fontWeight: 700, cursor: "pointer", marginBottom: 12 }}>
-            <RefreshCw size={13} className={refreshing ? "rh-spin" : ""} /> {refreshing ? "กำลังรีเฟรช..." : "รีเฟรชบทความวันนี้"}
-          </button>
-        </>
-      )}
+
       {!loading && tab === "today" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {today.length === 0 && <Empty t={t} text="วันนี้ยังไม่มีบทความ" />}
