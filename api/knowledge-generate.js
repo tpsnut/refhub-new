@@ -1,6 +1,8 @@
-// 📚 RefHub — สร้างบทความความรู้รายวันด้วย Gemini ตามความสนใจของผู้ใช้
+// 📚 RefHub — สร้างบทความความรู้รายวันด้วย Gemini ตามความสนใจของผู้ใช้ + 🔊 อ่านออกเสียงบทความด้วย Azure Neural TTS
 // ไฟล์นี้วางไว้ที่ /api/knowledge-generate.js ที่ root ของโปรเจกต์ (ข้างๆ src/)
 // ใช้ GEMINI_API_KEY ตัวเดียวกับ /api/chat.js ไม่ต้องเพิ่ม env var ใหม่
+// 🔊 TTS ใช้ AZURE_SPEECH_KEY + AZURE_SPEECH_REGION (ฟรี 500,000 ตัวอักษร/เดือน ตลอดไป บน tier F0)
+// รวม action "tts" ไว้ในไฟล์นี้แทนที่จะแยกไฟล์ใหม่ เพราะ Vercel Hobby plan เต็มโควตา 12 functions แล้ว
 //
 // หมายเหตุการออกแบบ: ฟังก์ชันนี้ "ไม่" insert ข้อมูลลง Supabase เอง (ต่างจาก admin-create-user.js/chat-start-direct.js)
 // เพราะการ insert บทความใช้ user_id ของเจ้าของบัญชีเองอยู่แล้ว (RLS อนุญาตให้ insert แถวของตัวเองผ่านปกติ)
@@ -8,10 +10,78 @@
 
 import { createClient } from "@supabase/supabase-js";
 
+// 🔊 แปลงข้อความเป็นเสียงด้วย Azure Neural TTS — โยน error ออกไปถ้าพลาด (โควตาเกิน/ยังไม่ตั้งค่า key ฯลฯ)
+// ฝั่ง frontend จะ catch แล้ว fallback ไปเสียงเครื่อง (speechSynthesis) เองแบบเงียบๆ ไม่ต้องมาพังตรงนี้
+async function synthesizeAzureTTS(text, voice) {
+  const key = process.env.AZURE_SPEECH_KEY;
+  const region = process.env.AZURE_SPEECH_REGION;
+  if (!key || !region) throw new Error("AZURE_NOT_CONFIGURED"); // ยังไม่ได้ตั้งค่าบน Vercel — ให้ frontend fallback ไปเสียงเครื่องแทน
+
+  // 1) แลก subscription key เป็น access token ชั่วคราว (อายุ 10 นาที ต่อครั้งไม่แคชไว้ก็ได้ เพราะปริมาณการใช้งานน้อย)
+  const tokenRes = await fetch(`https://${region}.api.cognitive.microsoft.com/sts/v1.0/issueToken`, {
+    method: "POST",
+    headers: { "Ocp-Apim-Subscription-Key": key, "Content-Length": "0" },
+  });
+  if (!tokenRes.ok) {
+    if (tokenRes.status === 401 || tokenRes.status === 403) throw new Error("AZURE_KEY_INVALID");
+    throw new Error(`AZURE_TOKEN_ERROR_${tokenRes.status}`);
+  }
+  const accessToken = await tokenRes.text();
+
+  // 2) เรียก synthesize จริงด้วย SSML
+  const escaped = String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const ssml = `<speak version="1.0" xml:lang="th-TH"><voice name="${voice}">${escaped}</voice></speak>`;
+  const ttsRes = await fetch(`https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${accessToken}`,
+      "Content-Type": "application/ssml+xml",
+      "X-Microsoft-OutputFormat": "audio-16khz-64kbitrate-mono-mp3",
+      "User-Agent": "refhub-tts",
+    },
+    body: ssml,
+  });
+  if (!ttsRes.ok) {
+    // 429 = โควตาฟรีเดือนนี้เกินแล้ว — frontend เช็ค status นี้เพื่อ fallback ไปเสียงเครื่อง
+    throw new Error(`AZURE_TTS_ERROR_${ttsRes.status}`);
+  }
+  const arrayBuf = await ttsRes.arrayBuffer();
+  return Buffer.from(arrayBuf);
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { interests, count, callerToken } = req.body || {};
+  const body = req.body || {};
+
+  // 🔊 กิ่งใหม่: อ่านออกเสียงบทความ (ใช้ endpoint เดียวกับสร้างบทความ กัน Vercel function เกิน 12 อัน)
+  if (body.action === "tts") {
+    const { text, voice, callerToken } = body;
+    if (!text || typeof text !== "string") return res.status(400).json({ error: "ไม่มีข้อความให้อ่าน" });
+    if (!callerToken) return res.status(401).json({ error: "ไม่พบข้อมูลยืนยันตัวตน ลองล็อกอินใหม่" });
+
+    try {
+      // เช็คแค่ว่าล็อกอินอยู่จริง กันคนแปลกหน้ายิง API ตรงๆ มากินโควตาฟรีเล่นๆ
+      const supabaseUrl = process.env.VITE_SUPABASE_URL;
+      const anonKey = process.env.VITE_SUPABASE_ANON_KEY;
+      const authClient = createClient(supabaseUrl, anonKey);
+      const { data: userData, error: userErr } = await authClient.auth.getUser(callerToken);
+      if (userErr || !userData?.user) return res.status(401).json({ error: "ยืนยันตัวตนไม่สำเร็จ ลองล็อกอินใหม่" });
+
+      const audioBuffer = await synthesizeAzureTTS(text.slice(0, 4000), voice || "th-TH-PremwadeeNeural");
+      res.setHeader("Content-Type", "audio/mpeg");
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(200).send(audioBuffer);
+    } catch (e) {
+      const msg = e.message || "";
+      const isQuota = msg.includes("AZURE_TTS_ERROR_429");
+      // ส่ง 503 กลับไปเสมอสำหรับ error ฝั่ง Azure (ไม่ใช่ 500) ให้ frontend แยกง่ายๆ ว่า "ควร fallback" ไม่ใช่ "บั๊กจริงจัง"
+      return res.status(503).json({ error: msg, quotaExceeded: isQuota });
+    }
+  }
+
+  // ---- โค้ดเดิม: สร้างบทความความรู้รายวันด้วย Gemini ----
+  const { interests, count, callerToken } = body;
   if (!Array.isArray(interests) || interests.length === 0) return res.status(400).json({ error: "ยังไม่ได้เลือกความสนใจ" });
   if (!callerToken) return res.status(401).json({ error: "ไม่พบข้อมูลยืนยันตัวตน ลองล็อกอินใหม่" });
 

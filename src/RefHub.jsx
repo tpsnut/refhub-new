@@ -7451,32 +7451,49 @@ function IdeasPage({ t, M, userId, session, authProfile, setAuthProfile, setNote
   const [editingInterests, setEditingInterests] = useState(false);
   const [customTopic, setCustomTopic] = useState("");
 
-  // 🔊 อ่านออกเสียง (ฟรี ใช้ระบบเสียงพูดในตัวเครื่อง/เบราว์เซอร์) + เลือกเสียงได้ จำค่าที่เลือกไว้
-  const [voices, setVoices] = useState([]);
-  const [voiceURI, setVoiceURI] = useState(() => { try { return localStorage.getItem("refhub:ttsVoice") || ""; } catch (e) { return ""; } });
+  // 🔊 อ่านออกเสียง — ใช้ Azure Neural TTS เป็นหลัก (ฟรี 500,000 ตัวอักษร/เดือน เสียงธรรมชาติ)
+  // ถ้าพลาด (โควตาเดือนนี้เกิน 429 / ยังไม่ตั้งค่า key บน Vercel / เน็ตมีปัญหา) ให้ fallback ไปเสียงเครื่อง (speechSynthesis) แบบเงียบๆ อัตโนมัติ ไม่โชว์ error กวนใจผู้ใช้
   const [speakingId, setSpeakingId] = useState(null);
-  useEffect(() => {
-    if (!window.speechSynthesis) return;
-    const load = () => setVoices(window.speechSynthesis.getVoices());
-    load();
-    window.speechSynthesis.addEventListener("voiceschanged", load);
-    return () => window.speechSynthesis.removeEventListener("voiceschanged", load);
-  }, []);
-  useEffect(() => { try { localStorage.setItem("refhub:ttsVoice", voiceURI); } catch (e) {} }, [voiceURI]);
-  const thaiVoices = voices.filter((v) => v.lang?.toLowerCase().startsWith("th"));
-  const otherVoices = voices.filter((v) => !v.lang?.toLowerCase().startsWith("th"));
-  const speak = (id, text) => {
-    if (!window.speechSynthesis) { alert("เบราว์เซอร์นี้ไม่รองรับการอ่านออกเสียง"); return; }
-    if (speakingId === id) { window.speechSynthesis.cancel(); setSpeakingId(null); return; } // กดซ้ำ = หยุด
+  const speakAudioRef = useRef(null); // เก็บ <audio> ที่กำลังเล่นอยู่ (เวอร์ชัน Azure) ไว้หยุดได้ตอนกดซ้ำ
+  const speakFallbackBrowser = (id, text) => {
+    if (!window.speechSynthesis) { setSpeakingId(null); return; }
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
-    const v = voices.find((x) => x.voiceURI === voiceURI);
-    if (v) u.voice = v; else u.lang = "th-TH";
+    u.lang = "th-TH"; // ไม่มีตัวเลือกเสียงให้กดแล้ว ใช้เสียงไทยเริ่มต้นของเครื่องไปเลย
     u.onend = () => setSpeakingId(null);
     u.onerror = () => setSpeakingId(null);
-    setSpeakingId(id);
     window.speechSynthesis.speak(u);
   };
+  const speak = async (id, text) => {
+    // กดซ้ำที่กำลังเล่นอยู่ = หยุด
+    if (speakingId === id) {
+      window.speechSynthesis?.cancel();
+      speakAudioRef.current?.pause();
+      speakAudioRef.current = null;
+      setSpeakingId(null);
+      return;
+    }
+    window.speechSynthesis?.cancel();
+    speakAudioRef.current?.pause();
+    setSpeakingId(id);
+    try {
+      const r = await fetch("/api/knowledge-generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "tts", text, voice: "th-TH-PremwadeeNeural", callerToken: session?.access_token }),
+      });
+      if (!r.ok) throw new Error("azure_tts_failed"); // โควตาเกิน/ยังไม่ตั้งค่า key ฯลฯ — ไปเข้า catch แล้ว fallback
+      const blob = await r.blob();
+      const audio = new Audio(URL.createObjectURL(blob));
+      speakAudioRef.current = audio;
+      audio.onended = () => setSpeakingId(null);
+      audio.onerror = () => speakFallbackBrowser(id, text); // เล่นไฟล์เสียงพัง ก็ fallback เหมือนกัน
+      await audio.play();
+    } catch (e) {
+      speakFallbackBrowser(id, text); // Azure ใช้ไม่ได้ด้วยเหตุผลอะไรก็ตาม → ใช้เสียงเครื่องแทนแบบเงียบๆ
+    }
+  };
+
 
   const saveInterests = async () => {
     const { data } = await supabase.from("profiles").update({ interests: pickedInterests }).eq("id", userId).select().single();
@@ -7607,16 +7624,7 @@ function IdeasPage({ t, M, userId, session, authProfile, setAuthProfile, setNote
           <button key={v} onClick={() => setTab(v)} style={{ flex: 1, padding: "9px 0", borderRadius: 12, cursor: "pointer", border: `1.5px solid ${tab === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 12.5, background: tab === v ? t.accent : "transparent", color: tab === v ? t.onAccent : t.sub }}>{lb}</button>
         ))}
       </div>
-      {voices.length > 0 && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-          <Volume2 size={14} color={t.faint} />
-          <select value={voiceURI} onChange={(e) => setVoiceURI(e.target.value)} style={{ flex: 1, fontSize: 11.5, border: `1px solid ${t.border}`, borderRadius: 8, background: t.inputBg, color: t.sub, padding: "5px 8px" }}>
-            <option value="">เสียงอ่าน: ค่าเริ่มต้นของเครื่อง</option>
-            {thaiVoices.length > 0 && <optgroup label="เสียงไทย">{thaiVoices.map((v) => <option key={v.voiceURI} value={v.voiceURI}>{v.name}</option>)}</optgroup>}
-            <optgroup label="เสียงอื่นๆ">{otherVoices.map((v) => <option key={v.voiceURI} value={v.voiceURI}>{v.name} ({v.lang})</option>)}</optgroup>
-          </select>
-        </div>
-      )}
+
 
       {loading && <Empty t={t} text={genMsg || "กำลังโหลด..."} />}
       {!loading && genMsg && (
