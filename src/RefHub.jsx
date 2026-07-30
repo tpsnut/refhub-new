@@ -114,10 +114,11 @@ function useConfirm(t) {
 }
 
 // 📄 ===== ระบบแบ่งหน้า (Pagination) ใช้ร่วมกันได้ทุกลิสต์ที่อาจมีรายการเยอะ =====
-function usePagination(items, pageSize = 10) {
+function usePagination(items, pageSize = 10, resetKey) {
   const [page, setPage] = useState(0);
   const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
   useEffect(() => { if (page > totalPages - 1) setPage(0); }, [items.length, totalPages]); // รายการหดจนหน้าปัจจุบันเกินขอบ -> กลับไปหน้าแรก กันจอว่างเปล่า
+  useEffect(() => { setPage(0); }, [resetKey]); // resetKey เปลี่ยน (เช่น สลับหมวดหมู่/แท็บ) -> กลับไปหน้าแรกเสมอ ไม่ค้างหน้าเดิมของชุดข้อมูลก่อนหน้า
   const pageItems = items.slice(page * pageSize, page * pageSize + pageSize);
   return { pageItems, page, setPage, totalPages, pageSize };
 }
@@ -7478,6 +7479,7 @@ function IdeasPage({ t, M, userId, session, authProfile, setAuthProfile, setNote
   const [tab, setTab] = useState("today"); // today | saved
   const [today, setToday] = useState([]);
   const [saved, setSaved] = useState([]);
+  const savedPagination = usePagination(saved, 10, tab); // 📄 แบ่งหน้าบทความที่บันทึกไว้ ถ้าเกิน 10 เรื่อง
   const [loading, setLoading] = useState(true);
   const [genMsg, setGenMsg] = useState("");
   const [expanded, setExpanded] = useState({}); // id -> bool (พับ/กางในคลัง)
@@ -7707,7 +7709,7 @@ function IdeasPage({ t, M, userId, session, authProfile, setAuthProfile, setNote
       {!loading && tab === "saved" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {saved.length === 0 && <Empty t={t} text="ยังไม่มีบทความที่บันทึกไว้ กดไอคอน 🔖 ที่บทความวันนี้ได้เลย" />}
-          {saved.map((a) => (
+          {savedPagination.pageItems.map((a) => (
             <div key={a.id} style={{ ...card(t), padding: 14 }}>
               <button onClick={() => setExpanded((e) => ({ ...e, [a.id]: !e[a.id] }))} style={{ width: "100%", background: "none", border: "none", cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{a.title}</div>
@@ -7730,6 +7732,7 @@ function IdeasPage({ t, M, userId, session, authProfile, setAuthProfile, setNote
               )}
             </div>
           ))}
+          <PaginationBar t={t} page={savedPagination.page} setPage={savedPagination.setPage} totalPages={savedPagination.totalPages} />
         </div>
       )}
     </>
@@ -7971,7 +7974,7 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
   const combinedGroups = [...NEWS_CATEGORY_GROUPS, ...customGroups.map((g) => ({ id: g.id, label: g.label, catIds: [] }))];
   const currentCat = combinedCategories.find((c) => c.id === category);
   const visibleItems = category === "saved" ? items : items.filter((x) => !blockedSources.has(x.source) && !globalBlockedSources.has(x.source));
-  const newsPagination = usePagination(visibleItems, 10); // 📄 แบ่งหน้าถ้าข่าวในหมวดนี้เกิน 10 เรื่อง
+  const newsPagination = usePagination(visibleItems, 10, category); // 📄 แบ่งหน้าถ้าข่าวในหมวดนี้เกิน 10 เรื่อง (รีเซ็ตกลับหน้า 1 ทุกครั้งที่เปลี่ยนหมวดหมู่)
   const visibleCategories = combinedCategories.filter((c) => c.id === "saved" || !disabledCats.includes(c.id));
   // groupId ของ custom category อาจชี้ไปกลุ่ม hardcode หรือกลุ่ม custom ก็ได้ — รวม catIds ให้ครบทุกกลุ่ม
   const groupsWithCats = combinedGroups.map((g) => ({
