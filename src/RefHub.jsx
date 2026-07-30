@@ -2618,10 +2618,10 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
         )}
 
         {/* playlist */}
-        <div style={{ fontSize: 12.5, fontWeight: 800, color: t.sub, marginBottom: 8 }}>สื่อที่เก็บไว้ ({shown.length})</div>
-        {shown.length > mediaPagination.pageSize && (
-          <PaginationBar t={t} page={mediaPagination.page} setPage={mediaPagination.setPage} totalPages={mediaPagination.totalPages} />
-        )}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 800, color: t.sub }}>สื่อที่เก็บไว้ ({shown.length})</div>
+          <PageJumpChip t={t} page={mediaPagination.page} setPage={mediaPagination.setPage} totalPages={mediaPagination.totalPages} />
+        </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {shown.length === 0 && <div style={{ textAlign: "center", color: t.sub, fontSize: 13, padding: "20px 0" }}>ยังไม่มีสื่อในหมวดนี้</div>}
           <DragReorderList
