@@ -6,7 +6,7 @@ import {
   Sparkles, Clock, Search, Volume2, VolumeX, Pencil, Download, ArrowLeft, Users, Camera, Phone, Mic, MicOff, PhoneOff, RefreshCw,
   Utensils, Car, ShoppingBag, Receipt, Gamepad2, HeartPulse, Briefcase, Gift, Coffee, Music,
   Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi, MessageCircle, MoreVertical, KeyRound, MapPin, Copy, LockKeyhole, LogOut, LayoutGrid, Maximize2, Volume1, Settings, Bookmark, Share2, Repeat2, Heart, User, Pin,
-  Heading1, Heading3, ListOrdered, ListTree, Quote, Code2, Minus, Table2, Video, Smile, RotateCcw, GripVertical, ChevronLeft, ChevronUp, ChevronDown
+  Heading1, Heading3, ListOrdered, ListTree, Quote, Code2, Minus, Table2, Video, Smile, RotateCcw, GripVertical, ChevronLeft, ChevronUp, ChevronDown, Repeat, Repeat1, Shuffle
 } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, ResponsiveContainer, Tooltip } from "recharts";
 // 🔀 dnd-kit — ใช้ทำ "ลากวางจัดเรียงจริง" (drag & drop) ทั่วแอป แทนปุ่มขึ้น/ลง — รองรับ touch บนมือถือมาให้เลย
@@ -885,6 +885,8 @@ export default function RefHub() {
   const [categories, setCategories] = useState(DEFAULT_CATEGORIES); // หมวดหมู่การเงิน (แก้ไข/เพิ่ม/ลบ/สลับได้)
   const [curId, setCurId] = useState(null);
   const [playing, setPlaying] = useState(false);
+  const [repeatMode, setRepeatMode] = useState("all"); // 🔁 'off' = จบคิวแล้วหยุด, 'all' = วนทั้งคิว (ค่าเริ่มต้น ตรงกับพฤติกรรมเดิม), 'one' = วนซ้ำเพลงเดียว
+  const [shuffleOn, setShuffleOn] = useState(false); // 🔀 สุ่มเพลงถัดไป (ไม่ซ้ำเพลงปัจจุบัน) แทนการเรียงตามลำดับคิว
   const audioRef = useRef(null);
   const ytPlayerRef = useRef(null);   // เก็บ instance ของ YouTube IFrame Player
   const ytReadyRef = useRef(false);   // true เมื่อ YouTube API script โหลดเสร็จ
@@ -1433,8 +1435,27 @@ export default function RefHub() {
     if (cur.kind === "file") { if (playing) { audioRef.current?.pause(); setPlaying(false); } else { audioRef.current?.play(); setPlaying(true); } }
     else { if (playing) { ytPlayerRef.current?.pauseVideo?.(); } else { ytPlayerRef.current?.playVideo?.(); } }
   };
-  const nextTrack = () => { if (!playlist.length) return; const i = playlist.findIndex((x) => x.id === curId); const nx = playlist[(i + 1) % playlist.length]; if (nx) playTrack(nx); };
-  const prevTrack = () => { if (!playlist.length) return; const i = playlist.findIndex((x) => x.id === curId); const pv = playlist[(i - 1 + playlist.length) % playlist.length]; if (pv) playTrack(pv); };
+  // ⚠️ บั๊กเดิม: nextTrack/prevTrack เดินตาม index ของ playlist ทั้งชุด (รวมแทร็กชนิด "link" อย่าง TikTok/X/IG ที่เล่นในคิวนี้ไม่ได้ ต้องเปิดดูในหน้าสื่อเท่านั้น)
+  // พอกด "ถัดไป" แล้วดันไปตกที่แทร็ก link การ์ด "กำลังเล่น" เลยหายวับไปทันทีโดยไม่มีคำอธิบาย งงว่ามันหายไปไหน
+  // แก้ด้วยการกรองเฉพาะแทร็กที่ "เล่นในคิวได้จริง" (yt/file) มาเรียงคิวแทน ข้ามแทร็ก link ไปเลย
+  const playableQueue = () => playlist.filter((x) => x.kind === "yt" || x.kind === "file");
+  const nextTrack = () => {
+    const q = playableQueue();
+    if (q.length === 0) return;
+    if (repeatMode === "one") { const c = q.find((x) => x.id === curId) || q[0]; playTrack(c); return; } // 🔁 วนซ้ำเพลงเดียว
+    if (shuffleOn && q.length > 1) { const candidates = q.filter((x) => x.id !== curId); playTrack(candidates[Math.floor(Math.random() * candidates.length)]); return; } // 🔀 สุ่มเพลงถัดไป ไม่ซ้ำเพลงปัจจุบัน
+    const i = q.findIndex((x) => x.id === curId);
+    const nextIdx = i + 1;
+    if (nextIdx >= q.length) { if (repeatMode === "all") playTrack(q[0]); else stopAll(); return; } // จบคิว: 'all' วนกลับต้นคิว, 'off' หยุดเล่น
+    playTrack(q[nextIdx]);
+  };
+  const prevTrack = () => {
+    const q = playableQueue();
+    if (q.length === 0) return;
+    const i = q.findIndex((x) => x.id === curId);
+    const pv = q[(i - 1 + q.length) % q.length];
+    if (pv) playTrack(pv);
+  };
   const toggleFavorite = (id) => setPlaylist((p) => p.map((x) => (x.id === id ? { ...x, favorite: !x.favorite } : x)));
   const renameTrack = (id, name) => {
     setPlaylist((p) => p.map((x) => (x.id === id ? { ...x, name } : x)));
@@ -1751,12 +1772,17 @@ export default function RefHub() {
               <div style={{ borderRadius: 14, overflow: "hidden", border: `1px solid ${t.border}`, background: "#000" }}>
                 <div id="yt-mini-player" style={{ width: "100%", height: 180 }} />
               </div>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 14, marginTop: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginTop: 12 }}>
+                <button onClick={() => setShuffleOn((s) => !s)} style={ghost} title={shuffleOn ? "สุ่มเพลง: เปิดอยู่ (แตะเพื่อปิด)" : "สุ่มเพลง: ปิดอยู่ (แตะเพื่อเปิด)"}><Shuffle size={17} color={shuffleOn ? t.accent : t.faint} /></button>
                 <button onClick={prevTrack} style={ghost} title="ย้อนกลับ"><SkipBack size={19} color={t.text} fill={t.text} /></button>
                 <button onClick={togglePlay} style={{ width: 42, height: 42, borderRadius: 21, border: "none", cursor: "pointer", background: t.accent, color: t.onAccent, display: "grid", placeItems: "center", flexShrink: 0 }}>
                   {playing ? <Pause size={19} /> : <Play size={19} />}
                 </button>
                 <button onClick={nextTrack} style={ghost} title="เพลงถัดไป"><SkipForward size={19} color={t.text} fill={t.text} /></button>
+                {/* 🔁 วนต่อกัน 3 สถานะ: ปิด → วนทั้งคิว → วนเพลงเดียว → ปิด (วนกลับ) */}
+                <button onClick={() => setRepeatMode((m) => (m === "off" ? "all" : m === "all" ? "one" : "off"))} style={ghost} title={repeatMode === "off" ? "วนซ้ำ: ปิดอยู่" : repeatMode === "all" ? "วนซ้ำ: ทั้งคิว" : "วนซ้ำ: เพลงเดียว"}>
+                  {repeatMode === "one" ? <Repeat1 size={17} color={t.accent} /> : <Repeat size={17} color={repeatMode === "all" ? t.accent : t.faint} />}
+                </button>
               </div>
               <div style={{ fontSize: 13, fontWeight: 600, color: t.text, textAlign: "center", marginTop: 8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{cur ? cur.name : ""}</div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
