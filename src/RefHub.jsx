@@ -8869,7 +8869,8 @@ function Empty({ t, text }) {
       <div style={{ textAlign: "center", padding: "26px 0" }}>
         <style>{`@keyframes rh-lantern-sway { 0%,100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }`}</style>
         <div style={{ display: "inline-block", animation: "rh-lantern-sway 1.6s ease-in-out infinite", transformOrigin: "top center" }}><LanternIcon size={22} tier={1} /></div>
-        <div style={{ color: t.sub, fontSize: 13, marginTop: 6 }}>{text}</div>
+        <div style={{ marginTop: 6 }}><PKnowMark width={90} animated /></div>
+        <div style={{ color: t.sub, fontSize: 12, marginTop: 2 }}>{text}</div>
       </div>
     );
   }
