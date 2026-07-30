@@ -8,7 +8,7 @@ import {
   Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi, MessageCircle, MoreVertical, KeyRound, MapPin, Copy, LockKeyhole, LogOut, LayoutGrid, Maximize2, Volume1, Settings, Bookmark, Share2, Repeat2, Heart, User, Pin,
   Heading1, Heading3, ListOrdered, ListTree, Quote, Code2, Minus, Table2, Video, Smile, RotateCcw, GripVertical, ChevronLeft
 } from "lucide-react";
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, LineChart, Line } from "recharts";
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, ResponsiveContainer, Tooltip } from "recharts";
 // 🔀 dnd-kit — ใช้ทำ "ลากวางจัดเรียงจริง" (drag & drop) ทั่วแอป แทนปุ่มขึ้น/ลง — รองรับ touch บนมือถือมาให้เลย
 import { DndContext, PointerSensor, useSensor, useSensors, closestCenter } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
@@ -132,7 +132,47 @@ function PaginationBar({ t, page, setPage, totalPages }) {
   );
 }
 
-// ---------------- Mentors ----------------
+// 🏮 ไอคอนโคมลอยเล็กๆ แทน emoji ไฟ 🔥 ของ streak — tier 1=7วัน+, 2=30วัน+, 3=100วัน+ (ยิ่ง tier สูงยิ่งเรืองแสงกว้างขึ้น)
+function LanternIcon({ size = 14, tier = 1 }) {
+  const glow = tier >= 3 ? 1 : tier >= 2 ? 0.85 : 0.65;
+  return (
+    <svg width={size} height={size * 1.15} viewBox="0 0 20 23" style={{ flexShrink: 0 }}>
+      {tier >= 3 && <circle cx="10" cy="9" r="9" fill="#F2872E" opacity="0.18" />}
+      <ellipse cx="10" cy="9" rx="7" ry="9" fill="#F2872E" opacity={glow} />
+      <ellipse cx="10" cy="9" rx="4.5" ry="6.2" fill="#F5A050" opacity={glow} />
+      <rect x="7.5" y="18" width="5" height="2" rx="1" fill="#5C5750" />
+    </svg>
+  );
+}
+
+// ✨ กราฟ "กลุ่มดาว" แทนกราฟเส้นทั่วไป — ดาวดวงใหญ่/สว่างกว่า = สัปดาห์ที่ทำเป้าหมายสำเร็จเยอะกว่า เชื่อมเป็นเส้นเรื่องราวเดียวกัน
+function ConstellationChart({ t, data }) {
+  const w = 320, h = 110, pad = 16;
+  const n = Math.max(1, data.length);
+  const stepX = n > 1 ? (w - pad * 2) / (n - 1) : 0;
+  const points = data.map((d, i) => {
+    const pct = d["สำเร็จ%"] || 0;
+    const x = pad + i * stepX;
+    const y = pad + (100 - pct) / 100 * (h - pad * 2 - 12) + 6;
+    const r = 2.5 + (pct / 100) * 4.5;
+    return { x, y, r, pct, label: d.label };
+  });
+  const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+  return (
+    <svg width="100%" height="100%" viewBox={`0 0 ${w} ${h + 20}`}>
+      <path d={linePath} fill="none" stroke={t.accent} strokeWidth="1" opacity="0.35" />
+      {points.map((p, i) => (
+        <g key={i}>
+          <circle cx={p.x} cy={p.y} r={p.r + 3} fill={t.accent} opacity="0.12" />
+          <circle cx={p.x} cy={p.y} r={p.r} fill={p.pct >= 70 ? t.accent : (t.accent2 || t.accent)} opacity={p.pct === 0 ? 0.28 : 0.9} />
+          <text x={p.x} y={h + 14} textAnchor="middle" fontSize="8" fill={t.faint}>{p.label}</text>
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+
 const MENTORS = {
   loid: {
     name: "Loid", full: "Loid Forger", tag: "กลยุทธ์ · วางแผน · เวลา", mood: "อบอุ่น โฟกัส",
@@ -2950,6 +2990,7 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
     return best;
   })();
   const badge = bestStreak >= 100 ? "💎" : bestStreak >= 30 ? "🏆" : bestStreak >= 7 ? "🔥" : null;
+  const badgeTier = bestStreak >= 100 ? 3 : bestStreak >= 30 ? 2 : bestStreak >= 7 ? 1 : 0; // ใช้กับ LanternIcon ในหน้า UI (badge ข้างบนยังเก็บ emoji ไว้ให้ข้อความแชร์ชุมชนใช้เหมือนเดิม)
 
   // 📢 ป้ายประกาศระบบ — โหลดของที่ active อยู่ + ฟังการเปลี่ยนแปลงแบบสด + จำว่าปิดอันไหนไปแล้ว
   const [announcements, setAnnouncements] = useState([]);
@@ -3084,7 +3125,7 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
 
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, padding: "10px 12px", borderRadius: 12, background: `${t.accent}10` }}>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 17, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 4 }}>{weekPoints} แต้ม {badge && <span style={{ fontSize: 14 }}>{badge}</span>}</div>
+            <div style={{ fontSize: 17, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 4 }}>{weekPoints} แต้ม {badgeTier > 0 && <LanternIcon size={15} tier={badgeTier} />}</div>
             <div style={{ fontSize: 10.5, color: t.sub }}>สัปดาห์นี้ · เดือนนี้ {monthPoints} · สะสม {allTimePoints}{bestStreak > 0 ? ` · ต่อเนื่อง ${bestStreak} วัน` : ""}</div>
           </div>
           <button onClick={() => setLeaderboardOpen(true)} style={{ display: "flex", alignItems: "center", gap: 4, padding: "7px 11px", borderRadius: 10, border: "none", background: t.accent, color: t.onAccent, cursor: "pointer", fontSize: 11.5, fontWeight: 700 }}>🏆 กระดาน</button>
@@ -6574,14 +6615,7 @@ function GoalsReportPage({ t, goals, setGoals, userId }) {
             <div style={{ fontSize: 13, fontWeight: 800, color: t.text, marginBottom: 2 }}>พัฒนาการรายสัปดาห์</div>
             <div style={{ fontSize: 11, color: t.sub, marginBottom: 10 }}>% ความสำเร็จ ย้อนหลัง 10 สัปดาห์</div>
             <div style={{ width: "100%", height: 140 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={weeklyTrend}>
-                  <XAxis dataKey="label" tick={{ fontSize: 9, fill: t.sub }} axisLine={false} tickLine={false} />
-                  <YAxis domain={[0, 100]} tick={{ fontSize: 9, fill: t.sub }} axisLine={false} tickLine={false} width={28} />
-                  <Tooltip formatter={(v) => `${v}%`} />
-                  <Line type="monotone" dataKey="สำเร็จ%" stroke={t.accent} strokeWidth={2.5} dot={{ r: 3, fill: t.accent }} />
-                </LineChart>
-              </ResponsiveContainer>
+              <ConstellationChart t={t} data={weeklyTrend} />
             </div>
           </div>
 
@@ -6599,7 +6633,7 @@ function GoalsReportPage({ t, goals, setGoals, userId }) {
                   <button onClick={() => setExpandedGroup(isOpen ? null : g.label)} style={{ width: "100%", background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
                       <div style={{ fontSize: 13.5, fontWeight: 700, color: t.text, display: "flex", alignItems: "center", gap: 6 }}>{g.label} <ChevronRight size={13} color={t.faint} style={{ transform: isOpen ? "rotate(90deg)" : "none", transition: "transform .15s" }} /></div>
-                      {streak > 0 && <span style={{ fontSize: 10.5, fontWeight: 800, color: t.accent, background: `${t.accent}18`, padding: "2px 8px", borderRadius: 10, flexShrink: 0, whiteSpace: "nowrap" }}>🔥 {streak} วันติด</span>}
+                      {streak > 0 && <span style={{ fontSize: 10.5, fontWeight: 800, color: t.accent, background: `${t.accent}18`, padding: "2px 8px", borderRadius: 10, flexShrink: 0, whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 4 }}><LanternIcon size={11} tier={streak >= 100 ? 3 : streak >= 30 ? 2 : 1} /> {streak} วันติด</span>}
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
                       <div style={{ flex: 1, height: 7, borderRadius: 4, background: "rgba(0,0,0,.08)", overflow: "hidden" }}><div style={{ width: `${pct}%`, height: "100%", background: t.accent }} /></div>
@@ -8803,7 +8837,7 @@ function CatCard({ t, k, icon, label, children, onClick }) {
   </div>);
 }
 const catIcBg = (k) => ({ green: "#7FB894", amber: "#E0B24A", coral: "#E07B57", violet: "#7B6CB0" }[k]);
-function PageHead({ t, title, sub, icon, right }) { return (<div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}><div style={{ width: 44, height: 44, borderRadius: 14, background: `${t.accent}1A`, display: "grid", placeItems: "center", flexShrink: 0 }}>{icon}</div><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 21, fontWeight: 800, color: t.text }}>{title}</div><div style={{ fontSize: 12.5, color: t.sub }}>{sub}</div></div>{right}</div>); }
+function PageHead({ t, title, sub, icon, right }) { return (<div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}><div style={{ width: 44, height: 44, borderRadius: 14, background: `${t.accent}1A`, display: "grid", placeItems: "center", flexShrink: 0 }}>{icon}</div><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 21, fontWeight: 700, color: t.text, fontFamily: "'Kanit', sans-serif" }}>{title}</div><div style={{ fontSize: 12.5, color: t.sub }}>{sub}</div></div>{right}</div>); }
 function MockBanner({ t, text }) { return (<div style={{ display: "flex", alignItems: "center", gap: 8, background: `${t.accent}14`, border: `1px dashed ${t.accent}66`, borderRadius: 12, padding: "9px 12px", fontSize: 11.5, color: t.accent, fontWeight: 600 }}><Clock size={14} /> {text}</div>); }
 function Empty({ t, text }) { return <div style={{ textAlign: "center", color: t.sub, fontSize: 13, padding: "26px 0" }}>{text}</div>; }
 function IconBtn({ t, onClick, children, active, accent }) { return <button onClick={onClick} style={{ width: 38, height: 38, borderRadius: 19, background: active ? `${accent}1A` : t.surface, border: `1px solid ${active ? accent + "55" : t.border}`, cursor: "pointer", display: "grid", placeItems: "center", boxShadow: t.star ? "none" : "0 3px 10px rgba(40,50,70,.08)" }}>{children}</button>; }
