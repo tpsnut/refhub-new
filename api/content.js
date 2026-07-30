@@ -49,16 +49,21 @@ const CACHE_TTL_MS = 10 * 60 * 1000;
 function stripCdata(s) {
   return (s || "").replace(/<!\[CDATA\[/g, "").replace(/\]\]>/g, "").trim();
 }
-function decodeEntities(s) {
+function decodeEntitiesOnce(s) {
   return (s || "")
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
-    .replace(/&#0*39;/g, "'")
-    .replace(/\s+/g, " ")
-    .trim();
+    .replace(/&#0*39;/g, "'");
+}
+function decodeEntities(s) {
+  // ⚠️ ฟีดบางเจ้า (เช่น Google News RSS) escape ซ้อนสองชั้น: &nbsp; ตัวจริงถูก escape ซ้ำเป็น &amp;nbsp;
+  // ถ้า decode รอบเดียวและแทน &nbsp; ก่อนแทน &amp; จะเจอบั๊ก: &amp;nbsp; -> &nbsp; (จากขั้น &amp;) แต่ไม่มีโอกาสถูกแปลงเป็นช่องว่างอีก
+  // เพราะขั้นตอนแทน &nbsp; ผ่านไปแล้ว → หลุดออกมาเป็นข้อความดิบ "&nbsp;" ให้ผู้ใช้เห็น
+  // แก้ด้วยการรัน decode 2 รอบ: รอบแรกแกะชั้นนอก (เผยให้เห็น &nbsp; ที่ซ่อนอยู่), รอบสองแปลงเป็นช่องว่างจริง
+  return decodeEntitiesOnce(decodeEntitiesOnce(s)).replace(/\s+/g, " ").trim();
 }
 function stripHtmlTags(s) {
   return (s || "").replace(/<[^>]*>/g, "").trim();

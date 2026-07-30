@@ -1534,7 +1534,7 @@ export default function RefHub() {
       if (error) { alert("บันทึกการเตือนไม่สำเร็จ: " + error.message); return; }
       setReminders((list) => list.map((r) => (r.id === id ? { ...r, targetType, targetId: row.target_id, label, recurrence, time, specificDate: row.specific_date, dayOfWeek: row.day_of_week, dayOfMonth: row.day_of_month, active: true, lastFiredKey: null } : r)));
     } else {
-      const newId = uid();
+      const newId = crypto.randomUUID(); // ⚠️ ตาราง reminders ใช้คอลัมน์ id เป็น uuid จริง — ห้ามใช้ uid() (สร้าง string base36 ไม่ใช่ uuid) ต้องใช้ crypto.randomUUID()
       const { error } = await supabase.from("reminders").insert({ id: newId, ...row });
       if (error) { alert("ตั้งเตือนไม่สำเร็จ: " + error.message + " (เช็คว่ารัน SQL สร้างตาราง reminders แล้วหรือยัง)"); return; }
       setReminders((list) => [...list, { id: newId, targetType, targetId: row.target_id, label, recurrence, time, specificDate: row.specific_date, dayOfWeek: row.day_of_week, dayOfMonth: row.day_of_month, active: true, lastFiredKey: null }]);
