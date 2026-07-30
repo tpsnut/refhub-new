@@ -1690,6 +1690,8 @@ export default function RefHub() {
               <div style={{ display: "flex", gap: 8 }}>
                 <IconBtn t={t} onClick={() => setSearchOpen(true)}><Search size={17} color={t.text} /></IconBtn>
                 <div style={{ position: "relative" }}>
+                  {/* ✨ แสงวูบวาบรอบวงกลมไอคอน — อยู่ชั้นล่างสุด (behind ปุ่ม) โชว์เฉพาะตอนกำลังเล่นอยู่จริงเท่านั้น หยุด/จบเพลงแล้วหายไปพร้อมกับสีไอคอนกลับเป็นปกติ */}
+                  {playing && <div style={{ position: "absolute", inset: 0, borderRadius: 19, animation: "rh-note-glow 1.6s ease-in-out infinite", pointerEvents: "none" }} />}
                   <IconBtn t={t} onClick={() => setMusicOpen(true)} active={playing} accent={t.accent}>
                     <Music size={17} color={playing ? t.accent : t.text} />
                   </IconBtn>
@@ -1699,7 +1701,7 @@ export default function RefHub() {
                       <Music size={9} color={t.accent} style={{ position: "absolute", left: 8, top: 10, opacity: 0, animation: "rh-note-float 2.2s ease-in infinite" }} />
                       <Music size={7} color={t.accent} style={{ position: "absolute", right: 6, top: 12, opacity: 0, animation: "rh-note-float 2.2s ease-in infinite .75s" }} />
                       <Music size={8} color={t.accent} style={{ position: "absolute", left: 16, top: 8, opacity: 0, animation: "rh-note-float 2.2s ease-in infinite 1.5s" }} />
-                      <style>{`@keyframes rh-note-float { 0% { transform: translateY(0) translateX(0) scale(.6) rotate(0deg); opacity: 0; } 18% { opacity: 1; } 100% { transform: translateY(-30px) translateX(7px) scale(1.1) rotate(12deg); opacity: 0; } }`}</style>
+                      <style>{`@keyframes rh-note-float { 0% { transform: translateY(0) translateX(0) scale(.6) rotate(0deg); opacity: 0; } 18% { opacity: 1; } 100% { transform: translateY(-30px) translateX(7px) scale(1.1) rotate(12deg); opacity: 0; } } @keyframes rh-note-glow { 0%,100% { box-shadow: 0 0 3px ${t.accent}40, 0 0 0px ${t.accent}00; } 50% { box-shadow: 0 0 12px ${t.accent}, 0 0 22px ${t.accent}88; } }`}</style>
                     </div>
                   )}
                 </div>
@@ -1740,7 +1742,7 @@ export default function RefHub() {
           {/* 🎵 การ์ด "กำลังเล่น" ต่อท้ายเนื้อหาหน้า Home (ใต้เป้าหมาย) — div#yt-mini-player mount ค้างตลอด
               ไม่เคย unmount เลย (ซ่อนด้วย display:none เท่านั้น) กันปัญหา React ชนกับ DOM ที่ YouTube API แก้เอง
               🐛 เคยลองทำ portal ย้ายไปโชว์ในหน้าสื่อด้วย แต่พิสูจน์แล้วว่าไม่เสถียร (ref thrashing/DOM timing หลายรอบ) ถอยกลับมาเล่นได้แค่หน้า Home แบบเดิมที่เชื่อถือได้แน่นอนกว่า */}
-          <div style={{ display: page === "home" && cur && cur.kind === "yt" ? "block" : "none", marginTop: 16 }}>
+          <div id="yt-now-playing-card" style={{ display: page === "home" && cur && cur.kind === "yt" ? "block" : "none", marginTop: 16 }}>
             <div style={{ ...card(t), padding: 14 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
                 <div style={{ fontSize: 13, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 6 }}><Music size={15} color={t.accent} /> กำลังเล่น</div>
@@ -2534,7 +2536,7 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
         {/* 🎬 ผู้เล่น YouTube ย้ายมาเล่นตรงนี้ได้เลย (เดิมบอกแค่ว่าไปเล่นอยู่หน้า Home ตอนนี้เล่น+คุมได้จากตรงนี้ทันที) */}
         {/* ตอนนี้เพลง YouTube เล่นอยู่ที่การ์ด "กำลังเล่น" หน้า Home เท่านั้น (ลองทำให้เล่นในหน้าสื่อได้ด้วยไปแล้ว แต่ไม่เสถียรพอ เลยถอยกลับมาแบบนี้ที่เชื่อถือได้แน่นอนกว่า) */}
         {cur && cur.kind === "yt" && (
-          <button onClick={() => { setPage("home"); close(); }} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: `${t.accent}18`, border: `1px dashed ${t.accent}66`, borderRadius: 12, padding: "9px 12px", fontSize: 11.5, color: t.accent, fontWeight: 600, marginBottom: 14, cursor: "pointer", textAlign: "left" }}>
+          <button onClick={() => { setPage("home"); close(); setTimeout(() => { document.getElementById("yt-now-playing-card")?.scrollIntoView({ behavior: "smooth", block: "center" }); }, 80); }} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: `${t.accent}18`, border: `1px dashed ${t.accent}66`, borderRadius: 12, padding: "9px 12px", fontSize: 11.5, color: t.accent, fontWeight: 600, marginBottom: 14, cursor: "pointer", textAlign: "left" }}>
             <Music size={14} /> กำลังเล่น "{cur.name}" อยู่ที่หน้า Home <ChevronRight size={13} style={{ marginLeft: "auto" }} />
           </button>
         )}
