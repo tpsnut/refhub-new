@@ -174,6 +174,27 @@ function ConstellationChart({ t, data }) {
 }
 
 
+// 📄 ชิปเลขหน้าเล็กๆ ใช้แทน PaginationBar เต็มแถวได้ตอนพื้นที่จำกัด — คลิกที่ตัวเลขหน้าเพื่อเลือกหน้าตรงๆ ได้เลย (ไม่ต้องกด ‹ › ทีละหน้า)
+function PageJumpChip({ t, page, setPage, totalPages }) {
+  if (totalPages <= 1) return null;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0, height: 38, padding: "0 4px", borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg }}>
+      <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0} style={{ width: 22, height: 22, borderRadius: 8, border: "none", background: "none", display: "grid", placeItems: "center", cursor: page === 0 ? "default" : "pointer", opacity: page === 0 ? 0.4 : 1 }}>
+        <ChevronLeft size={13} color={t.text} />
+      </button>
+      <span style={{ position: "relative", fontSize: 11.5, fontWeight: 700, color: t.sub, whiteSpace: "nowrap", padding: "0 2px" }}>
+        {page + 1}/{totalPages}
+        <select value={page} onChange={(e) => setPage(Number(e.target.value))} aria-label="เลือกหน้า" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" }}>
+          {Array.from({ length: totalPages }, (_, i) => <option key={i} value={i}>หน้า {i + 1}</option>)}
+        </select>
+      </span>
+      <button onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))} disabled={page === totalPages - 1} style={{ width: 22, height: 22, borderRadius: 8, border: "none", background: "none", display: "grid", placeItems: "center", cursor: page === totalPages - 1 ? "default" : "pointer", opacity: page === totalPages - 1 ? 0.4 : 1 }}>
+        <ChevronRight size={13} color={t.text} />
+      </button>
+    </div>
+  );
+}
+
 const MENTORS = {
   loid: {
     name: "Loid", full: "Loid Forger", tag: "กลยุทธ์ · วางแผน · เวลา", mood: "อบอุ่น โฟกัส",
@@ -7684,6 +7705,9 @@ function IdeasPage({ t, M, userId, session, authProfile, setAuthProfile, setNote
             <RefreshCw size={14} color={t.sub} className={refreshing ? "rh-spin" : ""} />
           </button>
         )}
+        {tab === "saved" && (
+          <div style={{ marginLeft: "auto" }}><PageJumpChip t={t} page={savedPagination.page} setPage={savedPagination.setPage} totalPages={savedPagination.totalPages} /></div>
+        )}
       </div>
 
 
@@ -8111,17 +8135,7 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
       <button onClick={() => setMenuOpen(true)} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "9px 14px", borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, cursor: "pointer", textAlign: "center" }}>
         <span style={{ fontSize: 14, fontWeight: 800, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{currentCat?.label}</span>
       </button>
-      {newsPagination.totalPages > 1 && (
-        <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0, height: 38, padding: "0 4px", borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg }}>
-          <button onClick={() => newsPagination.setPage((p) => Math.max(0, p - 1))} disabled={newsPagination.page === 0} style={{ width: 22, height: 22, borderRadius: 8, border: "none", background: "none", display: "grid", placeItems: "center", cursor: newsPagination.page === 0 ? "default" : "pointer", opacity: newsPagination.page === 0 ? 0.4 : 1 }}>
-            <ChevronLeft size={13} color={t.text} />
-          </button>
-          <span style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, whiteSpace: "nowrap", padding: "0 2px" }}>{newsPagination.page + 1}/{newsPagination.totalPages}</span>
-          <button onClick={() => newsPagination.setPage((p) => Math.min(newsPagination.totalPages - 1, p + 1))} disabled={newsPagination.page === newsPagination.totalPages - 1} style={{ width: 22, height: 22, borderRadius: 8, border: "none", background: "none", display: "grid", placeItems: "center", cursor: newsPagination.page === newsPagination.totalPages - 1 ? "default" : "pointer", opacity: newsPagination.page === newsPagination.totalPages - 1 ? 0.4 : 1 }}>
-            <ChevronRight size={13} color={t.text} />
-          </button>
-        </div>
-      )}
+      <PageJumpChip t={t} page={newsPagination.page} setPage={newsPagination.setPage} totalPages={newsPagination.totalPages} />
     </div>
     <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8 }}>
       {loading && <Empty t={t} text="กำลังโหลด..." />}
@@ -8869,7 +8883,7 @@ function Empty({ t, text }) {
       <div style={{ textAlign: "center", padding: "26px 0" }}>
         <style>{`@keyframes rh-lantern-sway { 0%,100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }`}</style>
         <div style={{ display: "inline-block", animation: "rh-lantern-sway 1.6s ease-in-out infinite", transformOrigin: "top center" }}><LanternIcon size={22} tier={1} /></div>
-        <div style={{ marginTop: 6 }}><PKnowMark width={90} animated /></div>
+        <div style={{ marginTop: 6, display: "flex", justifyContent: "center" }}><PKnowMark width={90} animated /></div>
         <div style={{ color: t.sub, fontSize: 12, marginTop: 2 }}>{text}</div>
       </div>
     );
