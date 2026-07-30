@@ -8024,8 +8024,13 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
         </div>
       </ModalPortal>
     )}
-    <PageHead t={t} title="ข่าวสาร" sub="อัปเดตสถานการณ์โลก" icon={<Newspaper size={20} color={t.accent} />} right={
+    <PageHead t={t} title="ข่าวสาร" sub={category !== "saved" && lastFetchedAt ? `อัปเดตล่าสุด ${new Date(lastFetchedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.` : "อัปเดตสถานการณ์โลก"} icon={<Newspaper size={20} color={t.accent} />} right={
       <div style={{ position: "relative", display: "flex", gap: 4, flexShrink: 0 }}>
+        {category !== "saved" && (
+          <button onClick={() => load(category, true)} disabled={loading} style={{ width: 34, height: 34, borderRadius: 10, border: `1px solid ${t.border}`, background: t.inputBg, display: "grid", placeItems: "center", cursor: "pointer" }} title="รีเฟรชข่าวล่าสุด">
+            <RefreshCw size={15} color={t.text} className={loading ? "rh-news-spin" : ""} />
+          </button>
+        )}
         <button onClick={() => { const idx = visibleCategories.findIndex((c) => c.id === category); if (idx > 0) selectCategory(visibleCategories[idx - 1].id); dismissArrowHint(); }} style={{ width: 34, height: 34, borderRadius: 10, border: `1px solid ${t.border}`, background: t.inputBg, display: "grid", placeItems: "center", cursor: "pointer" }} title="หมวดก่อนหน้า">
           <ChevronLeft size={16} color={t.text} />
         </button>
@@ -8043,21 +8048,21 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
       <button onClick={() => setMenuOpen(true)} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "9px 14px", borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, cursor: "pointer", textAlign: "center" }}>
         <span style={{ fontSize: 14, fontWeight: 800, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{currentCat?.label}</span>
       </button>
-      {category !== "saved" && (
-        <button onClick={() => load(category, true)} disabled={loading} style={{ flexShrink: 0, width: 38, height: 38, borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, display: "grid", placeItems: "center", cursor: "pointer" }} title="รีเฟรชข่าวล่าสุด">
-          <RefreshCw size={15} color={t.text} className={loading ? "rh-news-spin" : ""} />
-        </button>
+      {newsPagination.totalPages > 1 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0, height: 38, padding: "0 4px", borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg }}>
+          <button onClick={() => newsPagination.setPage((p) => Math.max(0, p - 1))} disabled={newsPagination.page === 0} style={{ width: 22, height: 22, borderRadius: 8, border: "none", background: "none", display: "grid", placeItems: "center", cursor: newsPagination.page === 0 ? "default" : "pointer", opacity: newsPagination.page === 0 ? 0.4 : 1 }}>
+            <ChevronLeft size={13} color={t.text} />
+          </button>
+          <span style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, whiteSpace: "nowrap", padding: "0 2px" }}>{newsPagination.page + 1}/{newsPagination.totalPages}</span>
+          <button onClick={() => newsPagination.setPage((p) => Math.min(newsPagination.totalPages - 1, p + 1))} disabled={newsPagination.page === newsPagination.totalPages - 1} style={{ width: 22, height: 22, borderRadius: 8, border: "none", background: "none", display: "grid", placeItems: "center", cursor: newsPagination.page === newsPagination.totalPages - 1 ? "default" : "pointer", opacity: newsPagination.page === newsPagination.totalPages - 1 ? 0.4 : 1 }}>
+            <ChevronRight size={13} color={t.text} />
+          </button>
+        </div>
       )}
     </div>
-    {category !== "saved" && lastFetchedAt && (
-      <div style={{ fontSize: 10.5, color: t.faint, textAlign: "center", marginBottom: 8 }}>
-        อัปเดตล่าสุด {new Date(lastFetchedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.
-      </div>
-    )}
     <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8 }}>
       {loading && <Empty t={t} text="กำลังโหลด..." />}
       {!loading && error && <Empty t={t} text={`⚠️ ${error}`} />}
-      {!loading && !error && <PaginationBar t={t} page={newsPagination.page} setPage={newsPagination.setPage} totalPages={newsPagination.totalPages} />}
       {!loading && !error && visibleItems.length === 0 && <Empty t={t} text={category === "saved" ? "ยังไม่มีข่าวที่บันทึกไว้" : "ยังไม่มีข่าวในหมวดนี้"} />}
       {!loading && !error && newsPagination.pageItems.map((x, i) => {
         const st = stats[x.link] || { views: 0, likeCount: 0, likedByMe: false };
