@@ -1823,9 +1823,9 @@ export default function RefHub() {
 function AuthLoadingScreen() {
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#0D0C0B", gap: 22 }}>
-      <style>{`@keyframes rh-spin { to { transform: rotate(360deg); } } @keyframes rh-pulse { 0%,100% { transform: scale(1); opacity:1; } 50% { transform: scale(1.05); opacity:.85; } }`}</style>
+      <style>{`@keyframes rh-pulse { 0%,100% { transform: scale(1); opacity:1; } 50% { transform: scale(1.05); opacity:.85; } } @keyframes rh-lantern-sway { 0%,100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }`}</style>
       <div style={{ animation: "rh-pulse 1.6s ease-in-out infinite" }}><PKnowLockup width={180} gap={8} animated /></div>
-      <div style={{ width: 28, height: 28, borderRadius: "50%", border: "3px solid #2A2825", borderTopColor: "#F2872E", animation: "rh-spin 0.8s linear infinite" }} />
+      <div style={{ animation: "rh-lantern-sway 1.6s ease-in-out infinite", transformOrigin: "top center" }}><LanternIcon size={30} tier={2} /></div>
     </div>
   );
 }
@@ -8812,7 +8812,10 @@ function Dock({ t, page, setPage, onQuickAdd }) {
       {items.map((it) => {
         if (it.k === "_") return (<button key="c" onClick={onQuickAdd} style={{ width: 50, height: 50, borderRadius: 25, border: "none", cursor: "pointer", background: `linear-gradient(135deg,${t.accent2},${t.accent})`, color: t.onAccent, display: "grid", placeItems: "center", boxShadow: `0 6px 16px ${t.accent}66`, marginTop: -18 }}><Plus size={26} /></button>);
         const A = it.ic; const on = page === it.k;
-        return (<button key={it.k} onClick={() => setPage(it.k)} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "4px 6px", flex: 1 }}><A size={20} color={on ? t.accent : t.sub} strokeWidth={on ? 2.6 : 1.9} /><span style={{ fontSize: 8.5, color: on ? t.accent : t.sub, fontWeight: on ? 700 : 500 }}>{it.lb}</span></button>);
+        return (<button key={it.k} onClick={() => setPage(it.k)} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "4px 6px", flex: 1, position: "relative" }}>
+          {on && <span style={{ position: "absolute", top: -3, width: 32, height: 32, borderRadius: "50%", background: `radial-gradient(circle, ${t.accent}33, transparent 70%)`, pointerEvents: "none" }} />}
+          <A size={20} color={on ? t.accent : t.sub} strokeWidth={on ? 2.6 : 1.9} style={{ position: "relative" }} /><span style={{ fontSize: 8.5, color: on ? t.accent : t.sub, fontWeight: on ? 700 : 500, position: "relative" }}>{it.lb}</span>
+        </button>);
       })}
     </div>
   </div>);
@@ -8839,7 +8842,30 @@ function CatCard({ t, k, icon, label, children, onClick }) {
 const catIcBg = (k) => ({ green: "#7FB894", amber: "#E0B24A", coral: "#E07B57", violet: "#7B6CB0" }[k]);
 function PageHead({ t, title, sub, icon, right }) { return (<div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}><div style={{ width: 44, height: 44, borderRadius: 14, background: `${t.accent}1A`, display: "grid", placeItems: "center", flexShrink: 0 }}>{icon}</div><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 21, fontWeight: 700, color: t.text, fontFamily: "'Kanit', sans-serif" }}>{title}</div><div style={{ fontSize: 12.5, color: t.sub }}>{sub}</div></div>{right}</div>); }
 function MockBanner({ t, text }) { return (<div style={{ display: "flex", alignItems: "center", gap: 8, background: `${t.accent}14`, border: `1px dashed ${t.accent}66`, borderRadius: 12, padding: "9px 12px", fontSize: 11.5, color: t.accent, fontWeight: 600 }}><Clock size={14} /> {text}</div>); }
-function Empty({ t, text }) { return <div style={{ textAlign: "center", color: t.sub, fontSize: 13, padding: "26px 0" }}>{text}</div>; }
+function Empty({ t, text }) {
+  const isLoading = typeof text === "string" && text.includes("กำลังโหลด");
+  if (isLoading) {
+    return (
+      <div style={{ textAlign: "center", padding: "26px 0" }}>
+        <style>{`@keyframes rh-lantern-sway { 0%,100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }`}</style>
+        <div style={{ display: "inline-block", animation: "rh-lantern-sway 1.6s ease-in-out infinite", transformOrigin: "top center" }}><LanternIcon size={22} tier={1} /></div>
+        <div style={{ color: t.sub, fontSize: 13, marginTop: 6 }}>{text}</div>
+      </div>
+    );
+  }
+  return (
+    <div style={{ textAlign: "center", padding: "26px 0", position: "relative" }}>
+      {t.star && (
+        <div style={{ position: "relative", height: 0 }}>
+          <span style={{ position: "absolute", top: -18, left: "38%", width: 2, height: 2, borderRadius: "50%", background: t.faint, opacity: 0.6 }} />
+          <span style={{ position: "absolute", top: -10, left: "58%", width: 2, height: 2, borderRadius: "50%", background: t.faint, opacity: 0.4 }} />
+          <span style={{ position: "absolute", top: -22, left: "50%", width: 2, height: 2, borderRadius: "50%", background: t.faint, opacity: 0.5 }} />
+        </div>
+      )}
+      <div style={{ color: t.sub, fontSize: 13 }}>{text}</div>
+    </div>
+  );
+}
 function IconBtn({ t, onClick, children, active, accent }) { return <button onClick={onClick} style={{ width: 38, height: 38, borderRadius: 19, background: active ? `${accent}1A` : t.surface, border: `1px solid ${active ? accent + "55" : t.border}`, cursor: "pointer", display: "grid", placeItems: "center", boxShadow: t.star ? "none" : "0 3px 10px rgba(40,50,70,.08)" }}>{children}</button>; }
 function Stat({ t, label, val, color }) { return (<div style={{ flex: 1, textAlign: "center" }}><div style={{ fontSize: 10.5, color: t.sub, marginBottom: 3 }}>{label}</div><div style={{ fontSize: 15, fontWeight: 800, color }}>{fmt(val)}</div></div>); }
 function Stars() { const s = Array.from({ length: 26 }).map(() => ({ x: Math.random() * 100, y: Math.random() * 42, r: Math.random() * 1.3 + 0.4, o: Math.random() * 0.6 + 0.3 })); return (<svg style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", zIndex: 1, pointerEvents: "none" }}>{s.map((v, i) => <circle key={i} cx={`${v.x}%`} cy={`${v.y}%`} r={v.r} fill="#fff" opacity={v.o} />)}</svg>); }
