@@ -1095,6 +1095,7 @@ export default function RefHub() {
           const mappedPlaylist = dbPlaylist.map(p => ({
             id: p.id, kind: p.kind, name: p.name, url: p.url, ytId: p.yt_id, persist: p.persist,
             platform: p.platform || "youtube", pinnedHome: !!p.pinned_home, sortOrder: p.sort_order,
+            folderId: p.folder_id || null, // ⚠️ บั๊กเดิม: select("*") ดึง folder_id มาจาก DB แล้ว แต่ตรงนี้ไม่ได้ map เข้า state เลย ทำให้รีเฟรชแล้วหมวดหมู่หายทุกครั้ง (โดยที่ folder_id ใน DB จริงๆ ยังอยู่ครบ)
           })).sort((a, b) => (a.sortOrder ?? 9999) - (b.sortOrder ?? 9999));
           setPlaylist(mappedPlaylist);
         }
@@ -1688,9 +1689,20 @@ export default function RefHub() {
               </button>
               <div style={{ display: "flex", gap: 8 }}>
                 <IconBtn t={t} onClick={() => setSearchOpen(true)}><Search size={17} color={t.text} /></IconBtn>
-                <IconBtn t={t} onClick={() => setMusicOpen(true)} active={playing} accent={t.accent}>
-                  <Music size={17} color={playing ? t.accent : t.text} />
-                </IconBtn>
+                <div style={{ position: "relative" }}>
+                  <IconBtn t={t} onClick={() => setMusicOpen(true)} active={playing} accent={t.accent}>
+                    <Music size={17} color={playing ? t.accent : t.text} />
+                  </IconBtn>
+                  {/* 🎵 เอฟเฟคโน้ตดนตรีลอยออกจากไอคอน — โชว์เฉพาะตอนกำลังเล่นเพลง/คลิปอยู่จริง ให้รู้ว่ามีอะไรเล่นอยู่โดยไม่ต้องกดเข้าไปดู */}
+                  {playing && (
+                    <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+                      <Music size={9} color={t.accent} style={{ position: "absolute", left: 8, top: 10, opacity: 0, animation: "rh-note-float 2.2s ease-in infinite" }} />
+                      <Music size={7} color={t.accent} style={{ position: "absolute", right: 6, top: 12, opacity: 0, animation: "rh-note-float 2.2s ease-in infinite .75s" }} />
+                      <Music size={8} color={t.accent} style={{ position: "absolute", left: 16, top: 8, opacity: 0, animation: "rh-note-float 2.2s ease-in infinite 1.5s" }} />
+                      <style>{`@keyframes rh-note-float { 0% { transform: translateY(0) translateX(0) scale(.6) rotate(0deg); opacity: 0; } 18% { opacity: 1; } 100% { transform: translateY(-30px) translateX(7px) scale(1.1) rotate(12deg); opacity: 0; } }`}</style>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -2464,7 +2476,11 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
     setFolders((fs) => [...fs, f]); setTab(f.id); setNewFolderName(""); setAddingFolder(false);
     if (userId) supabase.from("media_folders").insert({ id: f.id, user_id: userId, name: f.name }).then(({ error }) => { if (error) console.error("บันทึกหมวดหมู่สื่อไม่สำเร็จ:", error.message); }, () => {});
   };
-  const setTrackFolder = (id, folderId) => setPlaylist((p) => p.map((x) => (x.id === id ? { ...x, folderId: folderId || null } : x)));
+  const setTrackFolder = (id, folderId) => {
+    setPlaylist((p) => p.map((x) => (x.id === id ? { ...x, folderId: folderId || null } : x)));
+    // ⚠️ บั๊กเดิม: ฟังก์ชันนี้แก้แค่ state ในเครื่อง ไม่เคยยิง update ไป Supabase เลย ทำให้พอรีเฟรช/โหลดใหม่ค่า folder_id ใน DB ยังเป็นของเดิม (null) หมวดหมู่ที่เพิ่งเลือกเลยหายไปทุกครั้ง
+    if (userId) supabase.from("playlists").update({ folder_id: folderId || null }).eq("id", id).eq("user_id", userId).then(({ error }) => { if (error) console.error("บันทึกหมวดหมู่สื่อไม่สำเร็จ:", error.message); }, () => {});
+  };
   const deleteFolder = (folderId) => {
     if (userId) supabase.from("media_folders").delete().eq("user_id", userId).eq("id", folderId).then(() => {}, () => {});
     setFolders((fs) => fs.filter((f) => f.id !== folderId));
@@ -2518,9 +2534,9 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
         {/* 🎬 ผู้เล่น YouTube ย้ายมาเล่นตรงนี้ได้เลย (เดิมบอกแค่ว่าไปเล่นอยู่หน้า Home ตอนนี้เล่น+คุมได้จากตรงนี้ทันที) */}
         {/* ตอนนี้เพลง YouTube เล่นอยู่ที่การ์ด "กำลังเล่น" หน้า Home เท่านั้น (ลองทำให้เล่นในหน้าสื่อได้ด้วยไปแล้ว แต่ไม่เสถียรพอ เลยถอยกลับมาแบบนี้ที่เชื่อถือได้แน่นอนกว่า) */}
         {cur && cur.kind === "yt" && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, background: `${t.accent}18`, border: `1px dashed ${t.accent}66`, borderRadius: 12, padding: "9px 12px", fontSize: 11.5, color: t.accent, fontWeight: 600, marginBottom: 14 }}>
-            <Music size={14} /> กำลังเล่น "{cur.name}" อยู่ที่หน้า Home
-          </div>
+          <button onClick={() => { setPage("home"); close(); }} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: `${t.accent}18`, border: `1px dashed ${t.accent}66`, borderRadius: 12, padding: "9px 12px", fontSize: 11.5, color: t.accent, fontWeight: 600, marginBottom: 14, cursor: "pointer", textAlign: "left" }}>
+            <Music size={14} /> กำลังเล่น "{cur.name}" อยู่ที่หน้า Home <ChevronRight size={13} style={{ marginLeft: "auto" }} />
+          </button>
         )}
         {/* 📎 IG/X/TikTok/Facebook — โชว์ด้านบนแบบเดียวกับ YouTube เลย ไม่ต้องเปิด modal ซ้อนอีกต่อไป */}
         {viewingMedia && (
