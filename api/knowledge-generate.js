@@ -139,6 +139,15 @@ export default async function handler(req, res) {
       const { data: userData, error: userErr } = await authClient.auth.getUser(callerToken);
       if (userErr || !userData?.user) return res.status(401).json({ error: "ยืนยันตัวตนไม่สำเร็จ ลองล็อกอินใหม่" });
 
+      // เช็คสิทธิ์พรีเมียม (แอดมินเปิดให้เป็นรายคนจากหน้าแอดมินตอนนี้ ยังไม่มีปุ่มสมัครเองในแอป)
+      // คนที่เปิดพรีเมียมไว้ จะได้ fallback ชั้นที่ 3 (Gemini คีย์จ่ายเงิน) ถ้ามีตั้งค่า GEMINI_API_KEY_PAID ไว้ด้วย
+      let isPremium = false;
+      try {
+        const admin = createClient(supabaseUrl, process.env.SUPABASE_SERVICE_ROLE_KEY);
+        const { data: prof } = await admin.from("profiles").select("premium_ai").eq("id", userData.user.id).maybeSingle();
+        isPremium = !!prof?.premium_ai;
+      } catch (e) { console.error("เช็คสิทธิ์พรีเมียมไม่สำเร็จ (ถือว่าไม่มีสิทธิ์):", e.message); }
+
       // เกณฑ์คะแนนกลาง ใช้ร่วมกันทั้ง 2 mode ให้ประเมินสม่ำเสมอ ไม่ลอยๆ คนละมาตรฐาน
       const scoringRule = `เกณฑ์ให้คะแนน "points" เป็นตัวเลข 1-10 ประเมินจากความยาก/ความสำคัญของเป้าหมายนั้นเทียบกับเป้าหมายพัฒนาตัวเองรายวันทั่วไป (1=ง่ายมาก ทำแป๊บเดียว, 10=ท้าทายมาก ต้องวินัยสูง) อ้างอิงมาตรฐานสุขภาพ/พัฒนาตัวเองที่มีงานวิจัยรองรับเมื่อเกี่ยวข้อง เช่น:
 - การเดิน/ออกกำลังกาย: WHO แนะนำ 150-300 นาที/สัปดาห์ระดับปานกลาง เทียบเท่าเดินประมาณ 7,000-8,000 ก้าว/วัน
@@ -176,17 +185,26 @@ ${scoringRule}
         ? { type: "OBJECT", properties: { points: { type: "INTEGER" }, reason: { type: "STRING" } }, required: ["points", "reason"] }
         : { type: "OBJECT", properties: { goals: { type: "ARRAY", items: { type: "OBJECT", properties: { text: { type: "STRING" }, points: { type: "INTEGER" }, reason: { type: "STRING" } }, required: ["text", "points", "reason"] } } }, required: ["goals"] };
 
-      // 🔁 ลอง Gemini ก่อน ถ้าพัง (โควตาเต็ม 429 / ล่ม 5xx ฯลฯ) สลับไป Groq (ฟรี) อัตโนมัติ ไม่ต้องรอผู้ใช้กดใหม่เอง
+      // 🔁 ลอง Gemini ฟรีก่อน -> ไม่ไหวลอง Groq (ฟรี) -> ถ้ายังไม่ไหวและเป็นพรีเมียม (มี key จ่ายเงินตั้งไว้) ลองชั้นสุดท้าย -> ถ้าหมดจริงๆ ค่อยแจ้งผู้ใช้แบบเป็นมิตร
       let raw;
       try {
         if (!geminiKey) throw new Error("ยังไม่ได้ตั้งค่า GEMINI_API_KEY");
         raw = await callGeminiForGoalJSON(geminiKey, prompt, responseSchema);
       } catch (geminiErr) {
-        if (!process.env.GROQ_API_KEY) return res.status(500).json({ error: geminiErr.message || "Gemini API error" });
         try {
+          if (!process.env.GROQ_API_KEY) throw new Error("ยังไม่ได้ตั้งค่า GROQ_API_KEY");
           raw = await callGroqForGoalJSON(prompt);
         } catch (groqErr) {
-          return res.status(500).json({ error: `Gemini ไม่ว่าง (${geminiErr.message}) และ Groq สำรองก็ไม่สำเร็จ (${groqErr.message}) ลองใหม่อีกครั้งครับ` });
+          try {
+            if (!isPremium || !process.env.GEMINI_API_KEY_PAID) throw new Error("ไม่มีสิทธิ์/ไม่ได้ตั้งค่า tier สำรอง");
+            raw = await callGeminiForGoalJSON(process.env.GEMINI_API_KEY_PAID, prompt, responseSchema);
+          } catch (paidErr) {
+            // ทุกช่องทางที่มีอยู่ไม่สำเร็จจริงๆ (ไม่ใช่บั๊ก แค่คนใช้เยอะพร้อมกันจนโควตาเต็มชั่วคราว)
+            return res.status(429).json({
+              error: "ตอนนี้ AI มีคนใช้งานพร้อมกันเยอะจนโควตาเต็มชั่วคราว รอสักครู่ (ไม่กี่นาที) แล้วลองกดใหม่อีกครั้ง หรือติดต่อแอดมินให้เปิดสิทธิ์ใช้งาน AI แบบไม่จำกัดให้",
+              quotaExceeded: true,
+            });
+          }
         }
       }
 
