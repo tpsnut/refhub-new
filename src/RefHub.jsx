@@ -912,6 +912,7 @@ export default function RefHub() {
   const [billManagerOpen, setBillManagerOpen] = useState(false);
   const [leaderboardOpen, setLeaderboardOpen] = useState(false); // ⚠️ ย้ายมาจากใน HomePage — เดิม modal เรนเดอร์อยู่ในกล่อง transform:scale ของ HomePage ทำให้ position:fixed เพี้ยน ไม่เต็มจอจริง (ซ้อนทับกับ Dock) บั๊กแบบเดียวกับที่เคยเจอกับ BillManagerModal ต้องเรนเดอร์จากระดับบนสุดของแอปเท่านั้น
   const [goalTimerTarget, setGoalTimerTarget] = useState(null); // ⏱ เก็บ goal object ที่กำลังจับเวลาอยู่ (null = ไม่ได้เปิด) เรนเดอร์ GoalTimerModal จากระดับบนสุดตาม pattern เดียวกับ leaderboardOpen ข้างบน
+  const [scoreRulesOpen, setScoreRulesOpen] = useState(false); // 📐 หน้ากฎการนับคะแนน — เรนเดอร์จากระดับบนสุดเช่นกัน กันบั๊ก transform:scale
   const [addGoalOpen, setAddGoalOpen] = useState(false); // ⚠️ ย้ายมาจากใน HomePage — เจอบั๊กเดียวกับ leaderboardOpen/BillManagerModal คือ position:fixed เพี้ยนเพราะอยู่ในกล่อง transform:scale ทำให้ modal ไปชนซ้อนกับหัวแอปด้านบน
   const [exportText, setExportText] = useState(null);
   const [musicOpen, setMusicOpen] = useState(false);
@@ -1790,7 +1791,7 @@ export default function RefHub() {
 
         {/* CONTENT — ความสูงหารด้วยสเกลชดเชย transform:scale ข้างบน กันตอนขยายฟอนต์แล้วท้ายเนื้อหาจมใต้ Dock */}
         <div ref={contentScrollRef} onScroll={(e) => setAtTop(e.currentTarget.scrollTop < 80)} style={{ position: "relative", zIndex: 2, padding: `16px 18px ${page === "chat" || page === "chatRoom" ? 16 : 120}px`, height: `calc(${(10000 / fontScale).toFixed(2)}vh - 76px)`, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
-          {page === "home" && <ErrorCatcher t={t}><HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, allGoals: goals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget, setAddGoalOpen }} /></ErrorCatcher>}
+          {page === "home" && <ErrorCatcher t={t}><HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, allGoals: goals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget, setAddGoalOpen, setScoreRulesOpen }} /></ErrorCatcher>}
           {page === "ledger" && <FinancePage {...{ t, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt), userId, billReminders, billPayments, markBillPaid, setBillManagerOpen }} />}
           {page === "note" && <NotePage {...{ t, notes, setNotes, isNight, userId, session, authProfile, reminders, openReminder }} />}
           {page === "ideas" && <IdeasPage t={t} M={M} userId={userId} session={session} authProfile={authProfile} setAuthProfile={setAuthProfile} setNotes={setNotes} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} />}
@@ -1934,6 +1935,7 @@ export default function RefHub() {
         {leaderboardOpen && <LeaderboardModal t={t} userId={userId} close={() => setLeaderboardOpen(false)} />}
         {goalTimerTarget && <GoalTimerModal t={t} goal={goalTimerTarget} close={() => setGoalTimerTarget(null)} />}
         {addGoalOpen && <AddGoalModal t={t} userId={userId} session={session} setGoals={setGoals} goalTemplates={goalTemplates} setGoalTemplates={setGoalTemplates} close={() => setAddGoalOpen(false)} />}
+        {scoreRulesOpen && <ScoreRulesModal t={t} close={() => setScoreRulesOpen(false)} />}
         {reminderTarget && <ReminderModal t={t} targetType={reminderTarget.targetType} targetId={reminderTarget.targetId} label={reminderTarget.label} existing={reminderTarget.existing} upsertReminder={upsertReminder} deleteReminder={deleteReminder} close={() => setReminderTarget(null)} />}
         {exportText != null && <ExportModal t={t} text={exportText} close={() => setExportText(null)} />}
 
@@ -3381,7 +3383,60 @@ function GoalTimerModal({ t, goal, close }) {
   );
 }
 
-function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, allGoals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget, setAddGoalOpen }) {
+// 📐 ===== หน้ากฎการนับคะแนน =====
+// ⚠️ ต้องเรนเดอร์จากระดับบนสุดของแอปเท่านั้น (นอกกล่อง transform:scale) ไม่งั้น position:fixed เพี้ยน — บั๊กแบบเดียวกับ LeaderboardModal/AddGoalModal ที่เคยแก้ไป
+function ScoreRulesModal({ t, close }) {
+  const RuleCard = ({ num, title, children }) => (
+    <div style={{ ...card(t), padding: 14, marginBottom: 10 }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+        <div style={{ width: 24, height: 24, borderRadius: 12, background: t.accent, color: t.onAccent, fontSize: 12, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{num}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 4 }}>{title}</div>
+          <div style={{ fontSize: 11.5, color: t.sub, lineHeight: 1.6 }}>{children}</div>
+        </div>
+      </div>
+    </div>
+  );
+  return (
+    <div style={overlay} onClick={close}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", maxHeight: "85vh", overflowY: "auto", padding: 20 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+          <div style={{ fontSize: 17, fontWeight: 800, color: t.text }}>📐 กฎการนับคะแนน</div>
+          <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+        </div>
+        <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 16 }}>อ่านเข้าใจง่าย รู้ว่าทำไมได้แต้มเท่านี้</div>
+
+        <RuleCard num="1" title="AI ประเมินคะแนนให้ทุกเป้าหมาย">
+          แต่ละเป้าหมายจะได้คะแนน 1-10 แต้ม ประเมินจากความยาก/ความสำคัญเทียบกับเป้าหมายรายวันทั่วไป อ้างอิงมาตรฐานสุขภาพจริง (WHO ก้าวเดิน, เวลาหน้าจอ, สมาธิ ฯลฯ) ไม่ใช่กดเลือกเอง — ทุกคนใช้เกณฑ์เดียวกัน แฟร์เท่ากันหมด
+        </RuleCard>
+
+        <RuleCard num="2" title="ตั้งเยอะทำไม่ครบ โดนหักตามสัดส่วน">
+          แต้มที่ได้จริงไม่ใช่แค่บวกตรงๆ แต่คูณด้วย "อัตราสำเร็จ" ของวันนั้นด้วย กันการตั้งเป้าพรวดพราดแล้วทำไม่ครบ
+          <div style={{ background: `${t.accent}10`, border: `1px dashed ${t.accent}66`, borderRadius: 12, padding: 12, margin: "10px 0", fontSize: 11.5, color: t.text, lineHeight: 1.8 }}>
+            <b style={{ color: t.accent }}>แต้มที่ได้จริง</b> = Σ(แต้มที่ทำสำเร็จ) × (จำนวนที่ทำสำเร็จ ÷ จำนวนที่ตั้งไว้)
+          </div>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+            <thead><tr>{["ตั้ง", "ทำสำเร็จ", "แต้มดิบ", "ได้จริง"].map((h) => <th key={h} style={{ color: t.faint, fontWeight: 700, fontSize: 10, padding: "6px 4px", borderBottom: `1px solid ${t.border}` }}>{h}</th>)}</tr></thead>
+            <tbody>
+              <tr>{["3", "3", "30", "30"].map((v, i) => <td key={i} style={{ textAlign: "center", padding: "7px 4px", borderBottom: `1px solid ${t.border}`, fontWeight: i === 3 ? 800 : 400, color: i === 3 ? t.accent : t.text }}>{v}</td>)}</tr>
+              <tr>{["5", "2", "20", "8"].map((v, i) => <td key={i} style={{ textAlign: "center", padding: "7px 4px", fontWeight: i === 3 ? 800 : 400, color: i === 3 ? t.accent : t.text }}>{v}</td>)}</tr>
+            </tbody>
+          </table>
+        </RuleCard>
+
+        <RuleCard num="3" title="กระดานผู้นำ นับเฉพาะสัปดาห์นี้">
+          คะแนนที่ขึ้นกระดานผู้นำ 🏆 คำนวณจากเป้าหมายที่ทำสำเร็จ "ภายในสัปดาห์นี้" เท่านั้น (จันทร์-อาทิตย์) เห็นเฉพาะคนที่เปิด "แสดงในกระดานผู้นำ" ไว้ในตั้งค่าบัญชีเอง
+        </RuleCard>
+
+        <RuleCard num="4" title="ทำไม่สำเร็จ = ไม่ได้แต้ม ไม่ใช่โดนลบ">
+          เป้าหมายที่ยังไม่กาถูกไม่เสียแต้มที่มีอยู่ แค่ไม่ได้แต้มใหม่จากข้อนั้นเท่านั้น
+        </RuleCard>
+      </div>
+    </div>
+  );
+}
+
+function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, allGoals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget, setAddGoalOpen, setScoreRulesOpen }) {
   const [askConfirm, ConfirmUI] = useConfirm(t);
   const [viewingPinned, setViewingPinned] = useState(null);
   const [commentingId, setCommentingId] = useState(null);
@@ -3548,7 +3603,9 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
 
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, padding: "10px 12px", borderRadius: 12, background: `${t.accent}10` }}>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 17, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 4 }}>{weekPoints} แต้ม {badgeTier > 0 && <LanternIcon size={15} tier={badgeTier} />}</div>
+            <div style={{ fontSize: 17, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 4 }}>{weekPoints} แต้ม {badgeTier > 0 && <LanternIcon size={15} tier={badgeTier} />}
+              <button onClick={() => setScoreRulesOpen(true)} style={{ width: 18, height: 18, borderRadius: 9, border: `1px solid ${t.accent}55`, background: `${t.accent}18`, color: t.accent, fontSize: 10, fontWeight: 800, cursor: "pointer", display: "grid", placeItems: "center", marginLeft: 2 }} title="กฎการนับคะแนน">i</button>
+            </div>
             <div style={{ fontSize: 10.5, color: t.sub }}>สัปดาห์นี้ · เดือนนี้ {monthPoints} · สะสม {allTimePoints}{bestStreak > 0 ? ` · ต่อเนื่อง ${bestStreak} วัน` : ""}</div>
           </div>
           <button onClick={() => setLeaderboardOpen(true)} style={{ display: "flex", alignItems: "center", gap: 4, padding: "7px 11px", borderRadius: 10, border: "none", background: t.accent, color: t.onAccent, cursor: "pointer", fontSize: 11.5, fontWeight: 700 }}>🏆 กระดาน</button>
@@ -3558,24 +3615,26 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
           {badge && <button onClick={() => setShareGoalOpen(true)} style={{ display: "flex", alignItems: "center", padding: "7px 9px", borderRadius: 10, border: `1px solid ${t.border}`, background: "none", cursor: "pointer" }} title="แชร์ไปหน้าชุมชน"><Share2 size={14} color={t.sub} /></button>}
         </div>
 
-        <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ marginTop: 10, display: "flex", flexDirection: "column" }}>
           {goals.length === 0 && <div style={{ fontSize: 12.5, color: t.sub }}>ยังไม่มีเป้าหมาย เพิ่มอันแรกเลย 👇</div>}
-          {goals.map((g) => (
-            <div key={g.id}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <button onClick={() => { const nd = !g.done; const dd = nd ? todayStr() : null; setGoals((gs) => gs.map((x) => (x.id === g.id ? { ...x, done: nd, doneDate: dd } : x))); if (userId) { supabase.from("goals").update({ done: nd, done_date: dd }).eq("id", g.id).then(() => {}, () => {}); if (nd) logAudit(userId, "goals", "complete", "ทำเป้าหมายสำเร็จ"); } }} style={{ width: 22, height: 22, borderRadius: 7, border: `2px solid ${g.done ? t.accent : t.faint}`, background: g.done ? t.accent : "transparent", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}>{g.done && <Check size={14} color={t.onAccent} />}</button>
+          {goals.map((g, gi) => (
+            <div key={g.id} style={{ borderTop: gi === 0 ? "none" : `1px solid ${t.border}`, paddingTop: gi === 0 ? 0 : 10, paddingBottom: 10 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                <button onClick={() => { const nd = !g.done; const dd = nd ? todayStr() : null; setGoals((gs) => gs.map((x) => (x.id === g.id ? { ...x, done: nd, doneDate: dd } : x))); if (userId) { supabase.from("goals").update({ done: nd, done_date: dd }).eq("id", g.id).then(() => {}, () => {}); if (nd) logAudit(userId, "goals", "complete", "ทำเป้าหมายสำเร็จ"); } }} style={{ width: 22, height: 22, borderRadius: 7, border: `2px solid ${g.done ? t.accent : t.faint}`, background: g.done ? t.accent : "transparent", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0, marginTop: 1 }}>{g.done && <Check size={14} color={t.onAccent} />}</button>
+                {/* 💯 badge คะแนน — ความกว้างคงที่เสมอ (แม้ไม่มีคะแนนก็ยังกันที่ไว้) ล็อกตำแหน่งซ้ายบน ไม่ลอยตามความสูงข้อความที่ตัดบรรทัดอีกต่อไป */}
+                <div style={{ width: 28, height: 20, flexShrink: 0, marginTop: 1, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, color: t.accent, background: g.points != null ? `${t.accent}18` : "transparent", borderRadius: 6 }}>{g.points != null ? `+${g.points}` : ""}</div>
                 <button onClick={() => setCommentingId(commentingId === g.id ? null : g.id)} style={{ flex: 1, minWidth: 0, background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}>
-                  <div style={{ fontSize: 13.5, color: g.done ? t.sub : t.text, textDecoration: g.done ? "line-through" : "none", display: "flex", alignItems: "center", gap: 5 }}>
-                    {g.points != null && <span style={{ fontSize: 10, fontWeight: 800, color: t.accent, background: `${t.accent}18`, borderRadius: 6, padding: "1px 5px" }}>+{g.points}</span>}
-                    {g.text}
-                    {g.template_id && <Repeat2 size={11} color={t.faint} />}
+                  <div style={{ fontSize: 13.5, color: g.done ? t.sub : t.text, textDecoration: g.done ? "line-through" : "none", lineHeight: 1.5 }}>
+                    {g.text}{g.template_id && <Repeat2 size={11} color={t.faint} style={{ marginLeft: 5, verticalAlign: "middle" }} />}
                   </div>
                   {g.comment && <div style={{ fontSize: 10.5, color: t.faint, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>💬 {g.comment}</div>}
                 </button>
-                <button onClick={() => setCommentingId(commentingId === g.id ? null : g.id)} style={ghost} title="เพิ่มคอมเมนต์/สถานะ"><MessageCircle size={14} color={g.comment ? t.accent : t.faint} /></button>
-                {g.timerMode && <button onClick={() => setGoalTimerTarget(g)} style={{ ...ghost, display: "flex", alignItems: "center", gap: 3, border: `1px solid ${t.accent}55`, background: `${t.accent}12`, padding: "5px 8px" }} title="เริ่มจับเวลา"><Timer size={13} color={t.accent} /><span style={{ fontSize: 10.5, fontWeight: 700, color: t.accent }}>{formatTimerBadge(g.timerSeconds, g.timerUnit)}</span></button>}
-                <button onClick={() => openReminder("goal", g.id, g.text)} style={ghost} title="ตั้งเตือนเป้าหมายนี้"><Bell size={14} color={reminders.some((r) => r.targetType === "goal" && r.targetId === g.id) ? t.accent : t.faint} fill={reminders.some((r) => r.targetType === "goal" && r.targetId === g.id) ? t.accent : "none"} /></button>
-                <button onClick={() => askConfirm(`ลบเป้าหมาย "${g.text}" เลยไหม?`, () => { setGoals((gs) => gs.filter((x) => x.id !== g.id)); if (userId) { supabase.from("goals").delete().eq("id", g.id).then(() => {}, () => {}); logAudit(userId, "goals", "delete", "ลบเป้าหมาย"); } })} style={ghost}><Trash2 size={15} color={t.faint} /></button>
+                <div style={{ display: "flex", gap: 4, flexShrink: 0, marginTop: 2 }}>
+                  <button onClick={() => setCommentingId(commentingId === g.id ? null : g.id)} style={ghost} title="เพิ่มคอมเมนต์/สถานะ"><MessageCircle size={14} color={g.comment ? t.accent : t.faint} /></button>
+                  {g.timerMode && <button onClick={() => setGoalTimerTarget(g)} style={{ ...ghost, display: "flex", alignItems: "center", gap: 3, border: `1px solid ${t.accent}55`, background: `${t.accent}12`, padding: "5px 8px" }} title="เริ่มจับเวลา"><Timer size={13} color={t.accent} /><span style={{ fontSize: 10.5, fontWeight: 700, color: t.accent }}>{formatTimerBadge(g.timerSeconds, g.timerUnit)}</span></button>}
+                  <button onClick={() => openReminder("goal", g.id, g.text)} style={ghost} title="ตั้งเตือนเป้าหมายนี้"><Bell size={14} color={reminders.some((r) => r.targetType === "goal" && r.targetId === g.id) ? t.accent : t.faint} fill={reminders.some((r) => r.targetType === "goal" && r.targetId === g.id) ? t.accent : "none"} /></button>
+                  <button onClick={() => askConfirm(`ลบเป้าหมาย "${g.text}" เลยไหม?`, () => { setGoals((gs) => gs.filter((x) => x.id !== g.id)); if (userId) { supabase.from("goals").delete().eq("id", g.id).then(() => {}, () => {}); logAudit(userId, "goals", "delete", "ลบเป้าหมาย"); } })} style={ghost}><Trash2 size={15} color={t.faint} /></button>
+                </div>
               </div>
               {commentingId === g.id && (
                 <div style={{ display: "flex", gap: 6, marginTop: 6, marginLeft: 32 }}>
