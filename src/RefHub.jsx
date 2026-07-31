@@ -1051,6 +1051,10 @@ export default function RefHub() {
   const mode = isNight ? "night" : "day";
   const t = palette(mode, theme, customAccent, catColors);
   const shp = shapeTokens(cardShape, t); // 🔲 ทรงกรอบที่ user เลือก ใช้ตัดสินใจ padding ขอบจอ + preview ใน picker ด้วย
+  // 🔲🌐 ทรงเหลี่ยมคม — บังคับ border-radius:0 "ทั้งแอปแบบไม่มีข้อยกเว้น" (รูปโปรไฟล์/ปุ่มค้นหา/แชท/ตั้งค่า/ทุกหน้า) ตามที่ตกลง
+  // ใช้ class บน document.body แทนการไล่แก้ borderRadius ทีละจุดเป็นพันจุด เพราะ modal บางตัว portal ออกไปนอก DOM tree ของแอป
+  // การใส่ class ที่ body จะครอบคลุมถึง modal ที่ portal ออกไปด้วย (portal ยังอยู่ใต้ body เสมอ)
+  useEffect(() => { document.body.classList.toggle("rh-sharp", cardShape === "sharp"); }, [cardShape]);
   const customMentorObj = customMentors.find((c) => c.id === mentor);
   // ⚠️ เดิมเช็ค MENTORS[mentor] || (...) แต่ MENTORS.none มีอยู่จริงในอ็อบเจกต์ เลยชนะ || ก่อนเสมอ
   // ทำให้ไม่มีวันไปถึงส่วนที่เอารูปที่ user ตั้งเองมาใส่ — ต้องเช็ค "none" แยกเป็นเคสแรกสุด
@@ -3668,7 +3672,7 @@ function WalletRow({ t, shp, icon, title, sub, onClick }) {
 }
 
 // 🧱 โครง Home แบบ "โมเสก" — บล็อกยอดเงินใหญ่เด่น + บล็อกเล็กล้อมรอบ (ปรับ/ลบ/เพิ่ม/ลากสลับลำดับเองได้ ใช้สี solid ไม่จางแล้ว)
-function HomeWidgetsBento({ t, shp, M, isNight, setMentorPick, balance, todayNet, goalDone, goals, todayArticles, latestNote, setPage, setCommunityOpen, commPreview, bentoWidgets, onEditWidgets }) {
+function HomeWidgetsBento({ t, shp, M, isNight, setMentorPick, setChatOpen, balance, todayNet, goalDone, goals, todayArticles, latestNote, setPage, setCommunityOpen, commPreview, bentoWidgets, onEditWidgets }) {
   const data = { balance, todayNet, goalDone, goals, todayArticles, latestNote, commPreview };
   const resolve = (id) => {
     const meta = AVAILABLE_WIDGETS.find((w) => w.id === id);
@@ -3682,16 +3686,15 @@ function HomeWidgetsBento({ t, shp, M, isNight, setMentorPick, balance, todayNet
   const d2 = tile2 ? resolve(tile2) : null;
   return (
     <>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", marginTop: 8 }}>
-        <button onClick={onEditWidgets} style={{ background: "none", border: "none", cursor: "pointer", padding: 6, color: t.faint }} title="ปรับบล็อก"><Pencil size={15} /></button>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 10, marginTop: -30, paddingTop: 30 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 10, marginTop: 8 }}>
         <div style={{ background: t.hero, borderRadius: shp.radius, padding: 16, position: "relative", overflow: "hidden" }}>
+          <button onClick={onEditWidgets} style={{ position: "absolute", top: 10, right: 10, background: `${t.onAccent}26`, border: "none", borderRadius: shp.radius === 0 ? 0 : 10, width: 26, height: 26, display: "grid", placeItems: "center", cursor: "pointer" }} title="ปรับบล็อก"><Pencil size={13} color={t.onAccent} /></button>
           <button onClick={() => setMentorPick(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
             <span style={{ fontSize: 10.5, fontWeight: 700, color: `${t.onAccent}CC` }}>{isNight ? "โค้ชคืนนี้" : "โค้ชวันนี้"}</span>
           </button>
           <div style={{ fontSize: 22, fontWeight: 800, color: t.onAccent, marginTop: 6 }}>{fmt(balance)}</div>
           <div style={{ fontSize: 10.5, color: `${t.onAccent}CC`, marginTop: 4 }}>{todayNet >= 0 ? "▲ +" : "▼ "}{Math.abs(todayNet).toLocaleString()} วันนี้</div>
+          <button onClick={() => setChatOpen(true)} style={{ marginTop: 10, border: "none", cursor: "pointer", background: `${t.onAccent}2E`, color: t.onAccent, fontWeight: 700, fontSize: 11, padding: "6px 11px", borderRadius: shp.radius === 0 ? 0 : 14, display: "inline-flex", alignItems: "center", gap: 4 }}>คุยกับโค้ช <ChevronRight size={12} /></button>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {d1 && <BentoTile shp={shp} icon={d1.icon} bg={d1.cat ? t.catIcBg[d1.cat] : t.accent} label={d1.label} onClick={d1.onClick} />}
@@ -3849,7 +3852,7 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
       {homeLayout === "wallet" ? (
         <HomeWidgetsWallet t={t} shp={shp} M={M} isNight={isNight} setMentorPick={setMentorPick} setChatOpen={setChatOpen} balance={balance} todayNet={todayNet} goalDone={goalDone} goals={goals} todayArticles={todayArticles} latestNote={latestNote} setPage={setPage} setCommunityOpen={setCommunityOpen} commPreview={commPreview} walletWidgets={walletWidgets} onEditWidgets={() => setEditWidgetsOpen(true)} />
       ) : homeLayout === "bento" ? (
-        <HomeWidgetsBento t={t} shp={shp} M={M} isNight={isNight} setMentorPick={setMentorPick} balance={balance} todayNet={todayNet} goalDone={goalDone} goals={goals} todayArticles={todayArticles} latestNote={latestNote} setPage={setPage} setCommunityOpen={setCommunityOpen} commPreview={commPreview} bentoWidgets={bentoWidgets} onEditWidgets={() => setEditWidgetsOpen(true)} />
+        <HomeWidgetsBento t={t} shp={shp} M={M} isNight={isNight} setMentorPick={setMentorPick} setChatOpen={setChatOpen} balance={balance} todayNet={todayNet} goalDone={goalDone} goals={goals} todayArticles={todayArticles} latestNote={latestNote} setPage={setPage} setCommunityOpen={setCommunityOpen} commPreview={commPreview} bentoWidgets={bentoWidgets} onEditWidgets={() => setEditWidgetsOpen(true)} />
       ) : (
         <>
       <div style={{ marginTop: 8, background: t.hero, border: `1px solid ${t.heroBorder}`, borderRadius: shp.radius, padding: 20, position: "relative", overflow: "hidden", boxShadow: isNight ? "none" : "0 10px 24px rgba(30,40,70,.18)" }}>

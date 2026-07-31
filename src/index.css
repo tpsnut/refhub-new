@@ -25,3 +25,12 @@ body {
   height: 100%;
   overflow: hidden;
 }
+
+/* 🔲 ทรงเหลี่ยมคม — เมื่อ user เลือกทรงกรอบ "เหลี่ยมคม" (cardShape=sharp) จะใส่ class นี้ที่ <body>
+   บังคับมุมเหลี่ยม 0 ทุกจุดในแอปแบบไม่มีข้อยกเว้น (ปุ่ม การ์ด รูปโปรไฟล์ ไอคอนวงกลม ทุกหน้า)
+   ใช้ !important เพราะ inline style (React) จะแพ้ CSS !important เสมอ — ปลอดภัยกว่าไล่แก้ borderRadius
+   ทีละจุดเป็นพันจุดทั่วไฟล์ และครอบคลุมถึง modal ที่ portal ออกไปนอก DOM tree ของแอปด้วย เพราะ portal ก็ยังอยู่ใต้ body เสมอ */
+body.rh-sharp,
+body.rh-sharp * {
+  border-radius: 0 !important;
+}
