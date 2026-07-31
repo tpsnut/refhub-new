@@ -5281,6 +5281,8 @@ function PostCard({ t, post, userId, onOpenProfile, onChanged, onTag }) {
   const [commentText, setCommentText] = useState("");
   const [commentMentioned, setCommentMentioned] = useState([]); // [{id,name}] คนที่แท็กไว้ในคอมเมนต์ที่กำลังพิมพ์
   const [replyTo, setReplyTo] = useState(null); // { id, name } คอมเมนต์ที่กำลังตอบกลับอยู่
+  const [editingCommentId, setEditingCommentId] = useState(null); // id คอมเมนต์ที่กำลังแก้ไขข้อความอยู่ (แบบเฟซบุ๊ก)
+  const [editCommentText, setEditCommentText] = useState("");
   const [reposted, setReposted] = useState(false);
   const [lightbox, setLightbox] = useState(null);
   const [showFullTime, setShowFullTime] = useState(false);
@@ -5338,6 +5340,15 @@ function PostCard({ t, post, userId, onOpenProfile, onChanged, onTag }) {
     setComments((list) => list.map((x) => x.id === c.id ? { ...x, liked: !x.liked, like_count: x.like_count + (x.liked ? -1 : 1) } : x));
     if (c.liked) await supabase.from("comment_likes").delete().eq("comment_id", c.id).eq("user_id", userId);
     else { await supabase.from("comment_likes").insert({ comment_id: c.id, user_id: userId }); logActivity({ userId: c.author_id, actorId: userId, type: "like", postId: post.id, preview: c.text }); }
+  };
+  const startEditComment = (c) => { setEditingCommentId(c.id); setEditCommentText(c.text); };
+  const saveEditComment = async (c) => {
+    const txt = editCommentText.trim();
+    setEditingCommentId(null);
+    if (!txt || txt === c.text) return;
+    const editedAt = new Date().toISOString();
+    setComments((list) => list.map((x) => (x.id === c.id ? { ...x, text: txt, edited_at: editedAt } : x)));
+    await supabase.from("post_comments").update({ text: txt, edited_at: editedAt }).eq("id", c.id);
   };
   const doRepost = async () => {
     if (reposted) return;
@@ -5433,28 +5444,65 @@ function PostCard({ t, post, userId, onOpenProfile, onChanged, onTag }) {
       {/* คอมเมนต์ */}
       {showComments && (
         <div style={{ marginLeft: 48, marginTop: 12, borderTop: `1px solid ${t.border}`, paddingTop: 10 }}>
-          {comments.map((c) => {
-            const cName = (c.author?.community_use_main === false && c.author?.community_name ? c.author.community_name : c.author?.name) || "ผู้ใช้";
-            return (
-            <div key={c.id} style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-              <button onClick={() => onOpenProfile?.(c.author_id)} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", flexShrink: 0 }}>
-                {c.author?.avatar_url ? <img src={c.author.avatar_url} alt="" style={{ width: 26, height: 26, borderRadius: 13, objectFit: "cover" }} /> : <div style={{ width: 26, height: 26, borderRadius: 13, background: colorFor(cName), display: "grid", placeItems: "center", color: "#fff", fontSize: 11, fontWeight: 700 }}>{cName[0]}</div>}
-              </button>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                {c.replyToName && <div style={{ fontSize: 10.5, color: t.faint, marginBottom: 1 }}>↳ ตอบกลับ {c.replyToName}</div>}
-                <span style={{ fontSize: 12.5, fontWeight: 700, color: t.text }}>{cName}</span>
-                <span style={{ fontSize: 10, color: t.faint, marginLeft: 6 }} title={fullDT(c.created_at)}>{timeAgo(c.created_at)}</span>
-                <div style={{ fontSize: 12.5, color: t.text, marginTop: 1, lineHeight: 1.4 }}><RichText text={c.text} mentions={c.mentions} t={t} onTag={onTag} onOpenProfile={onOpenProfile} /></div>
-                <div style={{ display: "flex", gap: 14, marginTop: 4 }}>
-                  <button onClick={() => toggleCommentLike(c)} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 3, color: c.liked ? "#E0245E" : t.faint }}>
-                    <Heart size={12.5} fill={c.liked ? "#E0245E" : "none"} color={c.liked ? "#E0245E" : t.faint} /> <span style={{ fontSize: 10.5 }}>{c.like_count > 0 ? fmtCount(c.like_count) : ""}</span>
-                  </button>
-                  <button onClick={() => setReplyTo({ id: c.id, name: cName, authorId: c.author_id })} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 10.5, color: t.faint, fontWeight: 700 }}>ตอบกลับ</button>
-                </div>
+          {(() => {
+            // 🧵 จัดกลุ่มคอมเมนต์เป็นเธรดแบบเฟซบุ๊ก/ไอจี — ตอบกลับกี่ต่อกี่ทอด ก็กองรวมอยู่ในบล็อกเดียวกับคอมเมนต์บนสุดของเธรดนั้น
+            // นอกจากเป็นคอมเมนต์ใหม่ที่ไม่ได้ตอบใคร (reply_to_id เป็น null) ถึงจะขึ้นบล็อกใหม่แยกต่างหาก
+            const byId = Object.fromEntries(comments.map((c) => [c.id, c]));
+            const rootIdOf = (c, seen = new Set()) => {
+              if (!c.reply_to_id || seen.has(c.id)) return c.id; // กันลูปเผื่อข้อมูลเพี้ยน
+              seen.add(c.id);
+              const parent = byId[c.reply_to_id];
+              return parent ? rootIdOf(parent, seen) : c.id;
+            };
+            const groups = {}; const order = [];
+            comments.forEach((c) => {
+              const root = rootIdOf(c);
+              if (!groups[root]) { groups[root] = []; order.push(root); }
+              groups[root].push(c);
+            });
+            return order.map((rootId) => (
+              <div key={rootId} style={{ marginBottom: 12 }}>
+                {groups[rootId].map((c, idx) => {
+                  const cName = (c.author?.community_use_main === false && c.author?.community_name ? c.author.community_name : c.author?.name) || "ผู้ใช้";
+                  const isMine = c.author_id === userId;
+                  const isEditing = editingCommentId === c.id;
+                  return (
+                    <div key={c.id} style={{ display: "flex", gap: 8, marginTop: idx > 0 ? 8 : 0, marginLeft: idx > 0 ? 30 : 0 }}>
+                      <button onClick={() => onOpenProfile?.(c.author_id)} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", flexShrink: 0 }}>
+                        {c.author?.avatar_url ? <img src={c.author.avatar_url} alt="" style={{ width: idx > 0 ? 22 : 26, height: idx > 0 ? 22 : 26, borderRadius: 13, objectFit: "cover" }} /> : <div style={{ width: idx > 0 ? 22 : 26, height: idx > 0 ? 22 : 26, borderRadius: 13, background: colorFor(cName), display: "grid", placeItems: "center", color: "#fff", fontSize: 11, fontWeight: 700 }}>{cName[0]}</div>}
+                      </button>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        {idx > 0 && c.replyToName && <div style={{ fontSize: 10.5, color: t.faint, marginBottom: 1 }}>↳ ตอบกลับ {c.replyToName}</div>}
+                        <span style={{ fontSize: 12.5, fontWeight: 700, color: t.text }}>{cName}</span>
+                        <span style={{ fontSize: 10, color: t.faint, marginLeft: 6 }} title={fullDT(c.created_at)}>{timeAgo(c.created_at)}</span>
+                        {c.edited_at && <span style={{ fontSize: 10, color: t.faint, marginLeft: 4 }}>· แก้ไขแล้ว</span>}
+                        {isEditing ? (
+                          <div style={{ marginTop: 4 }}>
+                            <textarea value={editCommentText} onChange={(e) => setEditCommentText(e.target.value)} autoFocus rows={2} style={{ ...input(t), fontSize: 12.5, resize: "vertical", width: "100%" }} />
+                            <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                              <button onClick={() => saveEditComment(c)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 10.5, color: t.accent, fontWeight: 700 }}>บันทึก</button>
+                              <button onClick={() => setEditingCommentId(null)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 10.5, color: t.faint, fontWeight: 700 }}>ยกเลิก</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: 12.5, color: t.text, marginTop: 1, lineHeight: 1.4 }}><RichText text={c.text} mentions={c.mentions} t={t} onTag={onTag} onOpenProfile={onOpenProfile} /></div>
+                        )}
+                        {!isEditing && (
+                          <div style={{ display: "flex", gap: 14, marginTop: 4 }}>
+                            <button onClick={() => toggleCommentLike(c)} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 3, color: c.liked ? "#E0245E" : t.faint }}>
+                              <Heart size={12.5} fill={c.liked ? "#E0245E" : "none"} color={c.liked ? "#E0245E" : t.faint} /> <span style={{ fontSize: 10.5 }}>{c.like_count > 0 ? fmtCount(c.like_count) : ""}</span>
+                            </button>
+                            <button onClick={() => setReplyTo({ id: c.id, name: cName, authorId: c.author_id })} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 10.5, color: t.faint, fontWeight: 700 }}>ตอบกลับ</button>
+                            {isMine && <button onClick={() => startEditComment(c)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 10.5, color: t.faint, fontWeight: 700 }}>แก้ไข</button>}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            </div>
-            );
-          })}
+            ));
+          })()}
           {replyTo && (
             <div style={{ display: "flex", alignItems: "center", gap: 6, background: `${t.accent}14`, borderRadius: 10, padding: "5px 10px", marginBottom: 6 }}>
               <span style={{ fontSize: 11, color: t.sub, flex: 1 }}>กำลังตอบกลับ <b style={{ color: t.accent }}>{replyTo.name}</b></span>
