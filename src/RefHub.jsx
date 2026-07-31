@@ -471,6 +471,24 @@ function relativeLuminance(hex) {
   const [rl, gl, bl] = [r, g, b].map((c) => { const v = c / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
   return 0.2126 * rl + 0.7152 * gl + 0.0722 * bl;
 }
+function rgbToHex(r, g, b) {
+  return `#${[r, g, b].map((c) => Math.max(0, Math.min(255, Math.round(c))).toString(16).padStart(2, "0")).join("")}`;
+}
+function hsvToRgb(h, s, v) {
+  s /= 100; v /= 100;
+  const c = v * s, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = v - c;
+  let [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+  return { r: (r + m) * 255, g: (g + m) * 255, b: (b + m) * 255 };
+}
+function rgbToHsv(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  let h = 0;
+  if (d !== 0) { if (max === r) h = 60 * (((g - b) / d) % 6); else if (max === g) h = 60 * ((b - r) / d + 2); else h = 60 * ((r - g) / d + 4); }
+  if (h < 0) h += 360;
+  const s = max === 0 ? 0 : d / max;
+  return { h, s: s * 100, v: max * 100 };
+}
 
 function palette(mode, themeId, customAccent, catColors) {
   let T;
@@ -1013,7 +1031,6 @@ export default function RefHub() {
   const [themePick, setThemePick] = useState(false);
   const [homeLayoutPick, setHomeLayoutPick] = useState(false); // 🏠 modal เลือกโครงหน้า Home (original/wallet/bento)
   const [cardShapePick, setCardShapePick] = useState(false); // 🔲 modal เลือกทรงกรอบการ์ด (sharp/soft)
-  const [catColorsPick, setCatColorsPick] = useState(false); // 🎨 modal ปรับสีหมวดหมู่การ์ด (การเงิน/ความรู้/เป้าหมาย/โน้ต)
   const [editProfile, setEditProfile] = useState(false);
   const [profileLightbox, setProfileLightbox] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -1964,8 +1981,8 @@ export default function RefHub() {
           )}
           {/* mini now-playing bar (file tracks play across pages) */}
           {cur && cur.kind === "file" && (
-            <div style={{ marginTop: 10, marginLeft: cardShape === "sharp" ? 10 : 0, marginRight: cardShape === "sharp" ? 10 : 0, background: t.surface, border: `1px solid ${t.border}`, borderRadius: 16, padding: "9px 12px", display: "flex", alignItems: "center", gap: 10, boxShadow: t.star ? "none" : "0 8px 20px rgba(30,40,70,.1)" }}>
-              <button onClick={togglePlay} style={{ width: 32, height: 32, borderRadius: 16, border: "none", cursor: "pointer", background: t.accent, color: t.onAccent, display: "grid", placeItems: "center", flexShrink: 0 }}>
+            <div style={{ marginTop: 10, marginLeft: cardShape === "sharp" ? 10 : 0, marginRight: cardShape === "sharp" ? 10 : 0, background: t.surface, border: `1px solid ${t.border}`, borderRadius: cardShape === "sharp" ? 0 : 16, padding: "9px 12px", display: "flex", alignItems: "center", gap: 10, boxShadow: t.star ? "none" : "0 8px 20px rgba(30,40,70,.1)" }}>
+              <button onClick={togglePlay} style={{ width: 32, height: 32, borderRadius: cardShape === "sharp" ? 0 : 16, border: "none", cursor: "pointer", background: t.accent, color: t.onAccent, display: "grid", placeItems: "center", flexShrink: 0 }}>
                 {playing ? <Pause size={15} /> : <Play size={15} />}
               </button>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -2053,7 +2070,6 @@ export default function RefHub() {
         {themePick && <ModalPortal><ThemePicker t={t} theme={theme} setTheme={setTheme} mode={mode} customAccent={customAccent} setCustomAccent={setCustomAccent} close={() => setThemePick(false)} /></ModalPortal>}
         {homeLayoutPick && <ModalPortal><HomeLayoutPicker t={t} shp={shp} homeLayout={homeLayout} setHomeLayout={setHomeLayout} close={() => setHomeLayoutPick(false)} /></ModalPortal>}
         {cardShapePick && <ModalPortal><CardShapePicker t={t} cardShape={cardShape} setCardShape={setCardShape} close={() => setCardShapePick(false)} /></ModalPortal>}
-        {catColorsPick && <ModalPortal><CatColorsModal t={t} catColors={catColors} setCatColors={setCatColors} close={() => setCatColorsPick(false)} /></ModalPortal>}
         {moreMenuOpen && (
           <div style={overlay} onClick={() => setMoreMenuOpen(false)}>
             <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
@@ -2073,10 +2089,6 @@ export default function RefHub() {
                 <button onClick={() => { setHomeLayoutPick(true); setMoreMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
                   <Home size={18} color={t.sub} />
                   <span style={{ fontSize: 14, color: t.text }}>โครงหน้า Home: {homeLayout === "wallet" ? "โฟกัส" : homeLayout === "bento" ? "โมเสก" : "คลาสสิก"}</span>
-                </button>
-                <button onClick={() => { setCatColorsPick(true); setMoreMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
-                  <Palette size={18} color={t.sub} />
-                  <span style={{ fontSize: 14, color: t.text }}>สีหมวดหมู่การ์ด</span>
                 </button>
               </div>
             </div>
@@ -3815,6 +3827,7 @@ const HERO_SHORTCUTS_META = [
 function WidgetOrderModal({ t, title, hint, selected, setSelected, close, catColors, setCatColors, heroShortcuts, setHeroShortcuts }) {
   const chosen = selected.map((id) => AVAILABLE_WIDGETS.find((w) => w.id === id)).filter(Boolean);
   const available = AVAILABLE_WIDGETS.filter((w) => !selected.includes(w.id));
+  const [colorEditKey, setColorEditKey] = useState(null); // 🎨 cat key ที่กำลังเปิด ColorPickerModal อยู่ (null = ไม่ได้เปิด)
   return (<div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
     <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 4 }}>{title}</div>
     <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>{hint}</div>
@@ -3835,7 +3848,7 @@ function WidgetOrderModal({ t, title, hint, selected, setSelected, close, catCol
     )}
 
     <div style={{ fontSize: 11, fontWeight: 800, color: t.sub, marginBottom: 8 }}>กำลังแสดงอยู่ · กดค้างที่ ⋮⋮ เพื่อลากสลับตำแหน่ง · แตะวงกลมสีเพื่อเปลี่ยนสี</div>
-    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 18 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 3, marginBottom: 18 }}>
       {chosen.length === 0 && <div style={{ fontSize: 12.5, color: t.sub, textAlign: "center", padding: "16px 0" }}>ยังไม่มีวิดเจ็ตเลย เพิ่มจากด้านล่างได้เลย</div>}
       <DragReorderList
         items={chosen}
@@ -3847,10 +3860,9 @@ function WidgetOrderModal({ t, title, hint, selected, setSelected, close, catCol
             <div style={{ display: "flex", alignItems: "center", gap: 10, background: t.surface, border: `1px solid ${t.border}`, borderRadius: 14, padding: "10px 12px" }}>
               <span {...handleProps} style={{ display: "grid", placeItems: "center", padding: 4, opacity: priming ? 1 : 0.5, color: t.faint }}><GripVertical size={16} /></span>
               {w.cat && catColors ? (
-                <label style={{ position: "relative", width: 28, height: 28, borderRadius: 8, flexShrink: 0, cursor: "pointer", background: t.catIcBg[w.cat], display: "grid", placeItems: "center", overflow: "hidden" }}>
-                  <Icon size={14} color="#fff" style={{ pointerEvents: "none" }} />
-                  <input type="color" value={catColors[w.cat] || "#888888"} onChange={(e) => setCatColors((cc) => ({ ...cc, [w.cat]: e.target.value }))} style={{ position: "absolute", inset: -4, width: "calc(100% + 8px)", height: "calc(100% + 8px)", opacity: 0, cursor: "pointer" }} />
-                </label>
+                <button onClick={() => setColorEditKey(w.cat)} style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, cursor: "pointer", background: t.catIcBg[w.cat], border: "none", display: "grid", placeItems: "center" }}>
+                  <Icon size={14} color="#fff" />
+                </button>
               ) : (
                 <span style={{ width: 28, height: 28, borderRadius: 8, background: t.accent, display: "grid", placeItems: "center", flexShrink: 0 }}><Icon size={14} color="#fff" /></span>
               )}
@@ -3877,6 +3889,7 @@ function WidgetOrderModal({ t, title, hint, selected, setSelected, close, catCol
         ); })}
       </div>
     </>)}
+    {colorEditKey && <ModalPortal><ColorPickerModal t={t} value={catColors[colorEditKey] || "#888888"} onChange={(hex) => setCatColors((cc) => ({ ...cc, [colorEditKey]: hex }))} close={() => setColorEditKey(null)} /></ModalPortal>}
   </div></div>);
 }
 
@@ -9567,8 +9580,80 @@ function MentorPicker({ t, mentor, setMentor, authProfile, setAuthProfile, userI
   </div></div>);
 }
 
+// 🎨 Color picker แบบสร้างเอง — แทนที่ dialog ของเครื่อง (ควบคุม label ได้เต็มที่ + ใส่ hex/RGB ตรงๆ ได้)
+function ColorPickerModal({ t, value, onChange, close }) {
+  const init = rgbToHsv(hexToRgb(value).r, hexToRgb(value).g, hexToRgb(value).b);
+  const [h, setH] = useState(init.h);
+  const [s, setS] = useState(init.s);
+  const [v, setV] = useState(init.v);
+  const [hexInput, setHexInput] = useState(value.toUpperCase());
+  const [copied, setCopied] = useState(false);
+  const rgb = hsvToRgb(h, s, v);
+  const hex = rgbToHex(rgb.r, rgb.g, rgb.b);
+
+  useEffect(() => { setHexInput(hex); }, [h, s, v]);
+
+  const applyHex = (val) => {
+    setHexInput(val);
+    const clean = val.startsWith("#") ? val : `#${val}`;
+    if (/^#[0-9A-Fa-f]{6}$/.test(clean)) {
+      const { r, g, b } = hexToRgb(clean);
+      const hsv = rgbToHsv(r, g, b);
+      setH(hsv.h); setS(hsv.s); setV(hsv.v);
+    }
+  };
+  const applyRgb = (key, val) => {
+    const n = Math.max(0, Math.min(255, Number(val) || 0));
+    const cur = hexToRgb(hex);
+    const next = { ...cur, [key]: n };
+    const hsv = rgbToHsv(next.r, next.g, next.b);
+    setH(hsv.h); setS(hsv.s); setV(hsv.v);
+  };
+  const copyHex = () => {
+    navigator.clipboard?.writeText(hex).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); });
+  };
+
+  const hueBg = "linear-gradient(90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)";
+  const satBg = `linear-gradient(90deg, #fff, ${rgbToHex(hsvToRgb(h, 100, v).r, hsvToRgb(h, 100, v).g, hsvToRgb(h, 100, v).b)})`;
+  const valBg = `linear-gradient(90deg, #000, ${rgbToHex(hsvToRgb(h, s, 100).r, hsvToRgb(h, s, 100).g, hsvToRgb(h, s, 100).b)})`;
+
+  return (<div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "88vh", overflowY: "auto" }}>
+    <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 14 }}>เลือกสี</div>
+
+    <div style={{ width: "100%", height: 56, borderRadius: 14, background: hex, border: `1px solid ${t.border}`, marginBottom: 16 }} />
+
+    <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>โทนสี</div>
+    <input type="range" min="0" max="359" value={h} onChange={(e) => setH(+e.target.value)} style={{ width: "100%", accentColor: hex, background: hueBg, height: 8, borderRadius: 4, marginBottom: 16 }} />
+
+    <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>ความอิ่มตัวของสี</div>
+    <input type="range" min="0" max="100" value={s} onChange={(e) => setS(+e.target.value)} style={{ width: "100%", accentColor: hex, background: satBg, height: 8, borderRadius: 4, marginBottom: 16 }} />
+
+    <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>ความสว่าง</div>
+    <input type="range" min="0" max="100" value={v} onChange={(e) => setV(+e.target.value)} style={{ width: "100%", accentColor: hex, background: valBg, height: 8, borderRadius: 4, marginBottom: 18 }} />
+
+    <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>รหัสสี (HEX)</div>
+    <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+      <input value={hexInput} onChange={(e) => applyHex(e.target.value)} style={{ flex: 1, padding: "10px 12px", borderRadius: 10, border: `1px solid ${t.border}`, background: t.surface, color: t.text, fontSize: 14, fontFamily: "monospace" }} />
+      <button onClick={copyHex} style={{ padding: "0 16px", borderRadius: 10, border: `1px solid ${t.border}`, background: t.surface, cursor: "pointer", fontSize: 12.5, fontWeight: 700, color: copied ? t.accent : t.sub }}>{copied ? "คัดลอกแล้ว ✓" : "คัดลอก"}</button>
+    </div>
+
+    <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>ค่า RGB</div>
+    <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+      {["r", "g", "b"].map((k) => (
+        <div key={k} style={{ flex: 1 }}>
+          <div style={{ fontSize: 10, color: t.faint, marginBottom: 3, textAlign: "center" }}>{k.toUpperCase()}</div>
+          <input type="number" min="0" max="255" value={Math.round(rgb[k])} onChange={(e) => applyRgb(k, e.target.value)} style={{ width: "100%", padding: "9px 6px", borderRadius: 10, border: `1px solid ${t.border}`, background: t.surface, color: t.text, fontSize: 14, textAlign: "center" }} />
+        </div>
+      ))}
+    </div>
+
+    <button onClick={() => { onChange(hex); close(); }} style={{ ...primaryBtn({ accent: hex, accent2: lightenHex(hex, 0.2), onAccent: relativeLuminance(hex) > 0.5 ? "#141414" : "#FFFFFF" }), width: "100%", padding: "12px 0", fontSize: 14 }}>ใช้สีนี้</button>
+  </div></div>);
+}
+
 function ThemePicker({ t, theme, setTheme, mode, customAccent, setCustomAccent, close }) {
   const [pendingColor, setPendingColor] = useState(customAccent);
+  const [pickerOpen, setPickerOpen] = useState(false);
   return (<div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
     <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 4 }}>เลือกธีมสีแอป</div>
     <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>แต่ละธีมมีเวอร์ชันกลางวัน/กลางคืนของตัวเอง สลับได้อิสระจากโค้ช</div>
@@ -9586,22 +9671,18 @@ function ThemePicker({ t, theme, setTheme, mode, customAccent, setCustomAccent, 
 
       {/* 🎨 กำหนดสีเอง — user เลือกสีอะไรก็ได้ อีก 2 สี (accent2/onAccent) คำนวณอัตโนมัติจากสีที่เลือก */}
       <div style={{ padding: 14, borderRadius: 18, background: t.surface, border: `2px solid ${theme === "custom" ? pendingColor : t.border}` }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <label style={{ position: "relative", width: 46, height: 46, borderRadius: 23, flexShrink: 0, cursor: "pointer", overflow: "hidden", background: pendingColor, border: `1px solid ${t.border}` }}>
-            <input type="color" value={pendingColor} onChange={(e) => setPendingColor(e.target.value)} style={{ position: "absolute", inset: -4, width: "calc(100% + 8px)", height: "calc(100% + 8px)", opacity: 0, cursor: "pointer" }} />
-          </label>
+        <button onClick={() => setPickerOpen(true)} style={{ display: "flex", alignItems: "center", gap: 14, width: "100%", background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: 0 }}>
+          <span style={{ width: 46, height: 46, borderRadius: 23, flexShrink: 0, background: pendingColor, border: `1px solid ${t.border}` }} />
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>กำหนดเอง</div>
             <div style={{ fontSize: 11.5, color: t.sub }}>แตะวงกลมเพื่อเลือกสีที่ชอบ</div>
           </div>
           {theme === "custom" && <Check size={20} color={pendingColor} />}
-        </div>
-        <div style={{ fontSize: 10.5, color: t.faint, lineHeight: 1.6, marginTop: 10, padding: "8px 10px", background: t.inputBg, borderRadius: 10 }}>
-          💡 แตะแล้วจะเปิดตัวเลือกสีของเครื่องคุณเอง (หน้าตาต่างกันไปตามรุ่นมือถือ) ลากแถบ "โทนสี" เพื่อไล่สี แล้วลากแถบด้านล่าง (บางเครื่องเขียนว่า "ราคา" ซึ่งจริงๆ หมายถึงความสว่าง — เป็นคำแปลของระบบมือถือเอง ไม่ใช่ราคาเงิน) เพื่อปรับให้อ่อน/เข้มขึ้น
-        </div>
+        </button>
         <button onClick={() => { setCustomAccent(pendingColor); setTheme("custom"); close(); }} style={{ ...primaryBtn({ accent: pendingColor, accent2: lightenHex(pendingColor, 0.2), onAccent: relativeLuminance(pendingColor) > 0.5 ? "#141414" : "#FFFFFF" }), width: "100%", padding: "10px 0", marginTop: 12, fontSize: 13 }}>ใช้สีนี้</button>
       </div>
     </div>
+    {pickerOpen && <ModalPortal><ColorPickerModal t={t} value={pendingColor} onChange={setPendingColor} close={() => setPickerOpen(false)} /></ModalPortal>}
   </div></div>);
 }
 
