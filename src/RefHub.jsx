@@ -445,10 +445,26 @@ function hexToRgb(hex) {
   const num = parseInt(full, 16);
   return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
 }
-function lightenHex(hex, amt) {
-  const { r, g, b } = hexToRgb(hex);
-  const mix = (c) => Math.round(c + (255 - c) * amt);
-  return `#${[mix(r), mix(g), mix(b)].map((c) => c.toString(16).padStart(2, "0")).join("")}`;
+function mixHex(hex, targetHex, amt) {
+  const a = hexToRgb(hex); const b = hexToRgb(targetHex);
+  const mix = (x, y) => Math.round(x + (y - x) * amt);
+  return `#${[mix(a.r, b.r), mix(a.g, b.g), mix(a.b, b.b)].map((c) => c.toString(16).padStart(2, "0")).join("")}`;
+}
+function lightenHex(hex, amt) { return mixHex(hex, "#FFFFFF", amt); }
+function darkenHex(hex, amt) { return mixHex(hex, "#000000", amt); }
+
+// 🎨 สีหมวดหมู่ (การเงิน=green, ความรู้=amber, เป้าหมาย=coral, โน้ต=violet) — user กำหนดเองได้ทีละสี
+// คำนวณเฉด pale/เข้ม/label อัตโนมัติจากสีหลักที่เลือก แทนการ hardcode ไว้ตายตัวเหมือนเดิม
+const DEFAULT_CAT_COLORS = { green: "#7FB894", amber: "#E0B24A", coral: "#E07B57", violet: "#7B6CB0" };
+function catPalette(catColors, mode) {
+  const C = { ...DEFAULT_CAT_COLORS, ...catColors };
+  const cat = {}, catTx = {}, catLb = {};
+  for (const k of Object.keys(C)) {
+    const hue = C[k];
+    if (mode === "night") { cat[k] = darkenHex(hue, 0.8); catTx[k] = lightenHex(hue, 0.85); catLb[k] = lightenHex(hue, 0.45); }
+    else { cat[k] = lightenHex(hue, 0.87); catTx[k] = darkenHex(hue, 0.75); catLb[k] = darkenHex(hue, 0.4); }
+  }
+  return { cat, catTx, catLb, catIcBg: C };
 }
 function relativeLuminance(hex) {
   const { r, g, b } = hexToRgb(hex);
@@ -456,7 +472,7 @@ function relativeLuminance(hex) {
   return 0.2126 * rl + 0.7152 * gl + 0.0722 * bl;
 }
 
-function palette(mode, themeId, customAccent) {
+function palette(mode, themeId, customAccent, catColors) {
   let T;
   if (themeId === "custom" && customAccent) {
     const onAccent = relativeLuminance(customAccent) > 0.5 ? "#141414" : "#FFFFFF";
@@ -466,13 +482,14 @@ function palette(mode, themeId, customAccent) {
     T = th[mode] || th.day;
   }
   const base = MODE_BASE[mode] || MODE_BASE.day;
+  const cp = catPalette(catColors || DEFAULT_CAT_COLORS, mode);
   const common = { accent: T.accent, accent2: T.accent2, onAccent: T.onAccent };
   return {
     ...common, page: base.page, bg: `linear-gradient(180deg,${base.bgTop} 0%,${base.bgBot} 100%)`,
     surface: base.surface, hero: `linear-gradient(135deg,${T.accent2} 0%,${T.accent} 100%)`, heroBorder: "transparent",
     text: base.text, sub: base.sub, faint: base.faint, border: base.border,
     dock: base.dock, dockBorder: base.dockBorder, star: base.star, inputBg: base.inputBg,
-    cat: base.cat, catTx: base.catTx, catLb: base.catLb,
+    cat: cp.cat, catTx: cp.catTx, catLb: cp.catLb, catIcBg: cp.catIcBg,
   };
 }
 
@@ -961,6 +978,7 @@ export default function RefHub() {
   const [customMentors, setCustomMentors] = useState([]); // โค้ชที่ user สร้างเอง (ไม่ใช่แอดมิน) [{id, name, description, avatarUrl}]
   const [theme, setTheme] = useState("default"); // 🎨 ธีมสีแอป: gray | default | red | navy | twilight | custom — แยกอิสระจาก mentor
   const [customAccent, setCustomAccent] = useState("#F2872E"); // 🎨 สีที่ user กำหนดเอง ใช้เมื่อ theme === "custom" (accent2/onAccent คำนวณอัตโนมัติจากสีนี้)
+  const [catColors, setCatColors] = useState(DEFAULT_CAT_COLORS); // 🎨 สีหมวดหมู่ (การเงิน/ความรู้/เป้าหมาย/โน้ต) ที่ user ปรับเองได้ทีละสี
   const [cardShape, setCardShape] = useState("soft"); // 🔲 ทรงกรอบการ์ด: sharp (เหลี่ยมคมแบบ SCB ไม่มีเงา) | soft (มนเบาๆ ใกล้ตัวอักษร) — default soft ตามที่ตกลง
   const [homeLayout, setHomeLayout] = useState("original"); // 🏠 โครงหน้า Home: original (ของเดิม) | wallet (แนววอลเล็ต) | bento (บล็อกผสม) — default original ตามที่ตกลง
   const [fontScale, setFontScale] = useState(() => { // 📏 ขนาดตัวอักษร: 100 | 115 | 130 (ปกติ/ใหญ่/ใหญ่มาก) — อ่านจาก localStorage ทันทีตอน mount กันจอกระพริบกลับไป 100 ก่อนแวบนึง
@@ -990,6 +1008,7 @@ export default function RefHub() {
   const [callMinimized, setCallMinimized] = useState(false);
   const [themePick, setThemePick] = useState(false);
   const [homeLayoutPick, setHomeLayoutPick] = useState(false); // 🏠 modal เลือกโครงหน้า Home (original/wallet/bento)
+  const [cardShapePick, setCardShapePick] = useState(false); // 🔲 modal เลือกทรงกรอบการ์ด (sharp/soft)
   const [editProfile, setEditProfile] = useState(false);
   const [profileLightbox, setProfileLightbox] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -1027,7 +1046,8 @@ export default function RefHub() {
 
   const isNight = themeMode === "night" || (themeMode === "auto" && autoNight);
   const mode = isNight ? "night" : "day";
-  const t = palette(mode, theme, customAccent);
+  const t = palette(mode, theme, customAccent, catColors);
+  const shp = shapeTokens(cardShape, t); // 🔲 ทรงกรอบที่ user เลือก ใช้ตัดสินใจ padding ขอบจอ + preview ใน picker ด้วย
   const customMentorObj = customMentors.find((c) => c.id === mentor);
   // ⚠️ เดิมเช็ค MENTORS[mentor] || (...) แต่ MENTORS.none มีอยู่จริงในอ็อบเจกต์ เลยชนะ || ก่อนเสมอ
   // ทำให้ไม่มีวันไปถึงส่วนที่เอารูปที่ user ตั้งเองมาใส่ — ต้องเช็ค "none" แยกเป็นเคสแรกสุด
@@ -1071,6 +1091,7 @@ export default function RefHub() {
           setThemeMode(uSettings.theme_mode || "night");
           if (uSettings.theme) setTheme(uSettings.theme);
           if (uSettings.custom_accent) setCustomAccent(uSettings.custom_accent);
+          if (uSettings.cat_colors) setCatColors({ ...DEFAULT_CAT_COLORS, ...uSettings.cat_colors });
           if (uSettings.card_shape) setCardShape(uSettings.card_shape);
           if (uSettings.home_layout) setHomeLayout(uSettings.home_layout);
           if (typeof uSettings.volume === "number") setVolume(uSettings.volume);
@@ -1343,6 +1364,7 @@ export default function RefHub() {
             theme_mode: themeMode,
             theme: theme, // ถ้ายังไม่มีคอลัมน์ "theme" ในตาราง user_settings คำสั่งนี้จะ error เงียบๆ (ถูกดักไว้ใน catch) — เพิ่มคอลัมน์ type text ได้เพื่อให้ธีม sync ข้ามอุปกรณ์
             custom_accent: customAccent, // ต้องมีคอลัมน์ "custom_accent" (text) เช่นกัน
+            cat_colors: catColors, // ต้องมีคอลัมน์ "cat_colors" (jsonb) เก็บสีหมวดหมู่ 4 สีที่ user ปรับเอง
             card_shape: cardShape, // เช่นกัน ต้องมีคอลัมน์ "card_shape" (text) ถึงจะ sync ข้ามอุปกรณ์ได้ ไม่งั้น error เงียบๆ เหมือนกัน
             home_layout: homeLayout, // ต้องมีคอลัมน์ "home_layout" (text) เช่นกัน
             volume: volume
@@ -1354,7 +1376,7 @@ export default function RefHub() {
         console.error("เซฟค่า Settings ลง Cloud ผิดพลาด: ", e);
       }
     })(); 
-  }, [notes, goals, tx, profile, mentor, theme, themeMode, customAccent, cardShape, homeLayout, volume, playlist, loaded]);
+  }, [notes, goals, tx, profile, mentor, theme, themeMode, customAccent, catColors, cardShape, homeLayout, volume, playlist, loaded]);
 
   // music reactions
   const cur = playlist.find((p) => p.id === curId) || null;
@@ -1816,7 +1838,7 @@ export default function RefHub() {
         <div style={{ transform: `scale(${fontScale / 100})`, transformOrigin: "top left", width: `${10000 / fontScale}%` }}>
 
         {/* HEADER */}
-        <div style={{ position: "relative", zIndex: 3, padding: "18px 10px 0" }}>
+        <div style={{ position: "relative", zIndex: 3, padding: `18px ${cardShape === "sharp" ? 0 : 10}px 0` }}>
           {page === "home" ? (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
@@ -1891,7 +1913,7 @@ export default function RefHub() {
         </div>
 
         {/* CONTENT — ความสูงหารด้วยสเกลชดเชย transform:scale ข้างบน กันตอนขยายฟอนต์แล้วท้ายเนื้อหาจมใต้ Dock */}
-        <div ref={contentScrollRef} onScroll={(e) => setAtTop(e.currentTarget.scrollTop < 80)} style={{ position: "relative", zIndex: 2, padding: `16px 10px ${page === "chat" || page === "chatRoom" ? 16 : 120}px`, height: `calc(${(10000 / fontScale).toFixed(2)}vh - 76px)`, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
+        <div ref={contentScrollRef} onScroll={(e) => setAtTop(e.currentTarget.scrollTop < 80)} style={{ position: "relative", zIndex: 2, padding: `16px ${cardShape === "sharp" ? 0 : 10}px ${page === "chat" || page === "chatRoom" ? 16 : 120}px`, height: `calc(${(10000 / fontScale).toFixed(2)}vh - 76px)`, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
           {page === "home" && <ErrorCatcher t={t}><HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, allGoals: goals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget, setAddGoalOpen, setScoreRulesOpen, cardShape, homeLayout }} /></ErrorCatcher>}
           {page === "ledger" && <FinancePage {...{ t, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt), userId, billReminders, billPayments, markBillPaid, setBillManagerOpen }} />}
           {page === "note" && <NotePage {...{ t, notes, setNotes, isNight, userId, session, authProfile, reminders, openReminder }} />}
@@ -1945,7 +1967,7 @@ export default function RefHub() {
 
         </div>
 
-        {page !== "chat" && page !== "chatRoom" && <Dock t={t} page={page} setPage={setPage} onQuickAdd={() => setAddOpen(true)} />}
+        {page !== "chat" && page !== "chatRoom" && <Dock t={t} cardShape={cardShape} page={page} setPage={setPage} onQuickAdd={() => setAddOpen(true)} />}
 
         {page !== "chat" && page !== "chatRoom" && (
           <button
@@ -1963,7 +1985,8 @@ export default function RefHub() {
 
         {mentorPick && <MentorPicker t={t} mentor={mentor} setMentor={setMentor} authProfile={authProfile} setAuthProfile={setAuthProfile} userId={userId} customMentors={customMentors} setCustomMentors={setCustomMentors} close={() => setMentorPick(false)} />}
         {themePick && <ThemePicker t={t} theme={theme} setTheme={setTheme} mode={mode} customAccent={customAccent} setCustomAccent={setCustomAccent} close={() => setThemePick(false)} />}
-        {homeLayoutPick && <HomeLayoutPicker t={t} homeLayout={homeLayout} setHomeLayout={setHomeLayout} close={() => setHomeLayoutPick(false)} />}
+        {homeLayoutPick && <HomeLayoutPicker t={t} shp={shp} homeLayout={homeLayout} setHomeLayout={setHomeLayout} close={() => setHomeLayoutPick(false)} />}
+        {cardShapePick && <CardShapePicker t={t} cardShape={cardShape} setCardShape={setCardShape} close={() => setCardShapePick(false)} />}
         {moreMenuOpen && (
           <div style={overlay} onClick={() => setMoreMenuOpen(false)}>
             <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
@@ -1976,7 +1999,7 @@ export default function RefHub() {
                   {isNight ? <Moon size={18} color={t.sub} /> : <Sun size={18} color={t.sub} />}
                   <span style={{ fontSize: 14, color: t.text }}>โหมด: {themeMode === "auto" ? "อัตโนมัติ" : themeMode === "day" ? "กลางวัน" : "กลางคืน"}</span>
                 </button>
-                <button onClick={() => setCardShape(cardShape === "sharp" ? "soft" : "sharp")} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
+                <button onClick={() => { setCardShapePick(true); setMoreMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
                   <LayoutGrid size={18} color={t.sub} />
                   <span style={{ fontSize: 14, color: t.text }}>ทรงกรอบการ์ด: {cardShape === "sharp" ? "เหลี่ยมคม" : "มนเบาๆ"}</span>
                 </button>
@@ -2022,7 +2045,7 @@ export default function RefHub() {
         )}
         {accountSettingsOpen && <AccountSettingsModal t={t} authProfile={authProfile} setAuthProfile={setAuthProfile} userId={userId} session={session} close={() => setAccountSettingsOpen(false)} />}
         {myActivityOpen && <MyActivityModal t={t} userId={userId} close={() => setMyActivityOpen(false)} />}
-        {communityOpen && <CommunityOverlay t={t} userId={userId} authProfile={authProfile} session={session} openThread={() => {}} close={() => setCommunityOpen(false)} />}
+        {communityOpen && <CommunityOverlay t={t} cardShape={cardShape} userId={userId} authProfile={authProfile} session={session} openThread={() => {}} close={() => setCommunityOpen(false)} />}
         {chatOpen && <ChatModal t={t} M={M} mentor={mentor} setMentor={setMentor} authProfile={authProfile} setAuthProfile={setAuthProfile} customMentors={customMentors} setCustomMentors={setCustomMentors} userId={userId} session={session} goals={goals} askAiTopic={askAiTopic} close={() => { setChatOpen(false); setAskAiTopic(null); }} />}
         {activeCall && (
           <CallModal t={t} threadId={activeCall.threadId} userId={userId} displayName={profile?.name} myAvatar={profile?.avatar} otherMemberIds={activeCall.otherMemberIds} roomName={activeCall.roomName} session={session} minimized={callMinimized} onMinimize={() => setCallMinimized(true)} onClose={() => { setActiveCall(null); setCallMinimized(false); }} />
@@ -5346,7 +5369,7 @@ class ErrorCatcher extends React.Component {
   }
 }
 
-function CommunityOverlay({ t, userId, authProfile, session, openThread, close }) {
+function CommunityOverlay({ t, cardShape, userId, authProfile, session, openThread, close }) {
   const canUse = authProfile?.can_use_community || authProfile?.role === "admin";
   const [tab, setTab] = useState("feed"); // feed | search | activity | profile
   const [viewProfileId, setViewProfileId] = useState(userId);
@@ -5368,7 +5391,7 @@ function CommunityOverlay({ t, userId, authProfile, session, openThread, close }
     <ModalPortal>
       <div style={{ position: "fixed", inset: 0, background: t.page, zIndex: 100, display: "flex", flexDirection: "column" }}>
         {/* หัวแถบ */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 10px 12px", borderBottom: `1px solid ${t.border}`, flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: `16px ${cardShape === "sharp" ? 0 : 10}px 12px`, borderBottom: `1px solid ${t.border}`, flexShrink: 0 }}>
           <button onClick={close} style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 18, width: 36, height: 36, cursor: "pointer", display: "grid", placeItems: "center" }}><ArrowLeft size={18} color={t.text} /></button>
           <div style={{ display: "flex", alignItems: "center", gap: 9, flex: 1 }}>
             <GlobeIcon size={30} accent={t.accent} />
@@ -5378,7 +5401,7 @@ function CommunityOverlay({ t, userId, authProfile, session, openThread, close }
         </div>
 
         {/* เนื้อหา */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "16px 10px 90px" }}>
+        <div style={{ flex: 1, overflowY: "auto", padding: `16px ${cardShape === "sharp" ? 0 : 10}px 90px` }}>
           {!canUse ? (
             <div style={{ textAlign: "center", padding: "50px 20px" }}>
               <div style={{ width: 90, height: 90, borderRadius: 45, margin: "0 auto 22px", position: "relative", overflow: "hidden", background: `radial-gradient(circle at 32% 28%, ${t.accent}, ${t.accent}CC 60%, ${t.accent}66)`, boxShadow: `0 0 30px ${t.accent}66`, opacity: .6 }}>
@@ -5400,7 +5423,7 @@ function CommunityOverlay({ t, userId, authProfile, session, openThread, close }
               {tab === "feed" && <CommunityFeed key={feedKey} t={t} userId={userId} session={session} onOpenProfile={openProfile} />}
               {tab === "search" && <CommunitySearch t={t} userId={userId} onOpenProfile={openProfile} />}
               {tab === "activity" && <CommunityActivity t={t} userId={userId} onOpenProfile={openProfile} />}
-              {tab === "profile" && <CommunityProfile t={t} userId={userId} authProfile={authProfile} profileId={viewProfileId} session={session} onOpenProfile={(id) => setViewProfileId(id)} />}
+              {tab === "profile" && <CommunityProfile t={t} cardShape={cardShape} userId={userId} authProfile={authProfile} profileId={viewProfileId} session={session} onOpenProfile={(id) => setViewProfileId(id)} />}
             </ErrorCatcher>
           )}
         </div>
@@ -6160,7 +6183,7 @@ async function enrichPosts(raw, userId) {
 }
 
 // หน้าโปรไฟล์ — โพสต์ของคนนั้น + จำนวนผู้ติดตาม + ปุ่ม follow
-function CommunityProfile({ t, userId, profileId, session, onOpenProfile }) {
+function CommunityProfile({ t, cardShape, userId, profileId, session, onOpenProfile }) {
   const [prof, setProf] = useState(null);
   const [posts, setPosts] = useState([]);
   const [followerCount, setFollowerCount] = useState(0);
@@ -6273,11 +6296,11 @@ function CommunityProfile({ t, userId, profileId, session, onOpenProfile }) {
       {showBookmarks && (
         <ModalPortal>
           <div style={{ position: "fixed", inset: 0, background: t.page, zIndex: 110, display: "flex", flexDirection: "column" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 10px 12px", borderBottom: `1px solid ${t.border}`, flexShrink: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: `16px ${cardShape === "sharp" ? 0 : 10}px 12px`, borderBottom: `1px solid ${t.border}`, flexShrink: 0 }}>
               <button onClick={() => setShowBookmarks(false)} style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 18, width: 36, height: 36, cursor: "pointer", display: "grid", placeItems: "center" }}><ArrowLeft size={18} color={t.text} /></button>
               <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>🔖 โพสต์ที่บันทึกไว้</div>
             </div>
-            <div style={{ flex: 1, overflowY: "auto", padding: "16px 10px 40px" }}>
+            <div style={{ flex: 1, overflowY: "auto", padding: `16px ${cardShape === "sharp" ? 0 : 10}px 40px` }}>
               <CommunityBookmarks t={t} userId={userId} onOpenProfile={onOpenProfile} />
             </div>
           </div>
@@ -9312,22 +9335,92 @@ function ThemePicker({ t, theme, setTheme, mode, customAccent, setCustomAccent, 
   </div></div>);
 }
 
-// 🏠 เลือกโครงหน้า Home — 3 แบบ (ของเดิม/แนววอลเล็ต/เบนโต) ตามที่ Maxnuss ยืนยันให้ user เลือกเองได้ทั้ง 3
+// 🏠 เลือกโครงหน้า Home — 3 แบบ ชื่อออกแบบให้แปลอังกฤษได้ตรงตัวสวยๆ (Classic/Focus/Mosaic) ตามที่ขอปรับ
 const HOME_LAYOUTS = [
-  { id: "original", label: "ของเดิม", desc: "Hero คำคม+ริง ตามด้วยการ์ด 2x2" },
-  { id: "wallet", label: "แนววอลเล็ต", desc: "ยอดเงินตัวใหญ่บนสุด + แถวไอคอนลัด" },
-  { id: "bento", label: "เบนโต", desc: "การ์ดใหญ่เด่น 1 อัน + บล็อกเล็กล้อมรอบ" },
+  { id: "original", label: "คลาสสิก", en: "Classic", desc: "Hero คำคม+ริง ตามด้วยการ์ด 2x2" },
+  { id: "wallet", label: "โฟกัส", en: "Focus", desc: "ยอดเงินตัวใหญ่บนสุด + แถวไอคอนลัด" },
+  { id: "bento", label: "โมเสก", en: "Mosaic", desc: "การ์ดใหญ่เด่น 1 อัน + บล็อกเล็กล้อมรอบ" },
 ];
-function HomeLayoutPicker({ t, homeLayout, setHomeLayout, close }) {
+// 🖼️ ภาพตัวอย่างย่อ (silhouette) ของแต่ละโครง — ให้เห็นโครงสร้างคร่าวๆ โดยไม่ต้องไปดูหน้าจริง
+function MiniLayoutPreview({ kind, t, shp }) {
+  const r = shp?.radius ?? 8;
+  const box = { background: t.inputBg, borderRadius: r === 0 ? 0 : 5 };
+  if (kind === "wallet") return (
+    <div style={{ width: "100%", height: 62, display: "flex", flexDirection: "column", gap: 5 }}>
+      <div style={{ height: 26, background: t.accent, borderRadius: r === 0 ? 0 : 7 }} />
+      <div style={{ display: "flex", gap: 5 }}>
+        {[0, 1, 2, 3].map((i) => <div key={i} style={{ width: 13, height: 13, borderRadius: r === 0 ? 0 : 7, background: t.inputBg }} />)}
+      </div>
+      <div style={{ ...box, height: 12 }} />
+    </div>
+  );
+  if (kind === "bento") return (
+    <div style={{ width: "100%", height: 62, display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 5 }}>
+      <div style={{ background: t.accent, borderRadius: r === 0 ? 0 : 7 }} />
+      <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+        <div style={{ ...box, flex: 1 }} /><div style={{ ...box, flex: 1 }} />
+      </div>
+    </div>
+  );
+  return (
+    <div style={{ width: "100%", height: 62, display: "flex", flexDirection: "column", gap: 5 }}>
+      <div style={{ height: 24, background: t.accent, borderRadius: r === 0 ? 0 : 7 }} />
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5, flex: 1 }}>
+        <div style={box} /><div style={box} /><div style={box} /><div style={box} />
+      </div>
+    </div>
+  );
+}
+function HomeLayoutPicker({ t, shp, homeLayout, setHomeLayout, close }) {
   return (<div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
     <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 4 }}>โครงหน้า Home</div>
-    <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>เลือกวิธีจัดวางวิดเจ็ตหน้าแรกที่ชอบ เปลี่ยนได้ตลอด</div>
+    <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>แตะตัวอย่างเพื่อเลือกได้เลย เปลี่ยนได้ตลอด</div>
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {HOME_LAYOUTS.map((l) => { const on = homeLayout === l.id; return (
         <button key={l.id} onClick={() => { setHomeLayout(l.id); close(); }} style={{ display: "flex", alignItems: "center", gap: 14, padding: 14, borderRadius: 18, cursor: "pointer", textAlign: "left", background: t.surface, border: `2px solid ${on ? t.accent : t.border}` }}>
+          <div style={{ width: 90, flexShrink: 0 }}><MiniLayoutPreview kind={l.id === "original" ? "classic" : l.id} t={t} shp={shp} /></div>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>{l.label}</div>
             <div style={{ fontSize: 11.5, color: t.sub }}>{l.desc}</div>
+          </div>
+          {on && <Check size={20} color={t.accent} />}
+        </button>
+      ); })}
+    </div>
+  </div></div>);
+}
+
+// 🔲 เลือกทรงกรอบการ์ด — เหลี่ยมคม/มนเบาๆ พร้อมตัวอย่างย่อให้กดเลือกได้ตรงๆ
+const CARD_SHAPES_LIST = [
+  { id: "sharp", label: "เหลี่ยมคม", desc: "ไม่มีมุมโค้งเลย ชิดขอบจอ แบบแอปธนาคาร" },
+  { id: "soft", label: "มนเบาๆ", desc: "มุมโค้งนุ่มๆ ใกล้เคียงตัวอักษร" },
+];
+function MiniShapePreview({ kind, t }) {
+  if (kind === "sharp") return (
+    <div style={{ width: "100%", height: 46, display: "flex", flexDirection: "column" }}>
+      <div style={{ flex: 1, background: t.inputBg, borderBottom: `1px solid ${t.border}` }} />
+      <div style={{ flex: 1, background: t.inputBg, borderBottom: `1px solid ${t.border}` }} />
+      <div style={{ flex: 1, background: t.inputBg }} />
+    </div>
+  );
+  return (
+    <div style={{ width: "100%", height: 46, display: "flex", flexDirection: "column", gap: 5 }}>
+      <div style={{ flex: 1, background: t.inputBg, borderRadius: 8 }} />
+      <div style={{ flex: 1, background: t.inputBg, borderRadius: 8 }} />
+    </div>
+  );
+}
+function CardShapePicker({ t, cardShape, setCardShape, close }) {
+  return (<div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
+    <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 4 }}>ทรงกรอบการ์ด</div>
+    <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>แตะตัวอย่างเพื่อเลือกได้เลย</div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {CARD_SHAPES_LIST.map((s) => { const on = cardShape === s.id; return (
+        <button key={s.id} onClick={() => { setCardShape(s.id); close(); }} style={{ display: "flex", alignItems: "center", gap: 14, padding: 14, borderRadius: 18, cursor: "pointer", textAlign: "left", background: t.surface, border: `2px solid ${on ? t.accent : t.border}` }}>
+          <div style={{ width: 90, flexShrink: 0 }}><MiniShapePreview kind={s.id} t={t} /></div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>{s.label}</div>
+            <div style={{ fontSize: 11.5, color: t.sub }}>{s.desc}</div>
           </div>
           {on && <Check size={20} color={t.accent} />}
         </button>
@@ -9587,15 +9680,16 @@ function IncomingCallWatcher({ t, userId, onAccept }) {
 }
 
 // ---------------- Dock ----------------
-function Dock({ t, page, setPage, onQuickAdd }) {
+function Dock({ t, cardShape, page, setPage, onQuickAdd }) {
+  const sharp = cardShape === "sharp";
   const items = [{ k: "home", ic: Home, lb: "Home" }, { k: "ideas", ic: Lightbulb, lb: "Ideas" }, { k: "trade", ic: TrendingUp, lb: "Trade" }, { k: "_", ic: Plus, lb: "" }, { k: "news", ic: Newspaper, lb: "News" }, { k: "lang", ic: Languages, lb: "Lang" }, { k: "note", ic: StickyNote, lb: "Note" }];
-  return (<div style={{ position: "absolute", bottom: 16, left: 0, right: 0, display: "flex", justifyContent: "center", zIndex: 20, pointerEvents: "none" }}>
-    <div style={{ pointerEvents: "auto", display: "flex", alignItems: "center", background: t.dock, border: `1px solid ${t.dockBorder}`, borderRadius: 34, padding: "8px 10px", maxWidth: 420, width: "92%", justifyContent: "space-between", boxShadow: "0 8px 26px rgba(20,25,45,.18)" }}>
+  return (<div style={{ position: "absolute", bottom: sharp ? 0 : 16, left: 0, right: 0, display: "flex", justifyContent: "center", zIndex: 20, pointerEvents: "none" }}>
+    <div style={{ pointerEvents: "auto", display: "flex", alignItems: "center", background: t.dock, border: sharp ? "none" : `1px solid ${t.dockBorder}`, borderTop: sharp ? `1px solid ${t.dockBorder}` : `1px solid ${t.dockBorder}`, borderRadius: sharp ? 0 : 34, padding: sharp ? "10px 4px" : "8px 10px", maxWidth: sharp ? "100%" : 420, width: sharp ? "100%" : "92%", justifyContent: "space-between", boxShadow: sharp ? "none" : "0 8px 26px rgba(20,25,45,.18)" }}>
       {items.map((it) => {
-        if (it.k === "_") return (<button key="c" onClick={onQuickAdd} style={{ width: 50, height: 50, borderRadius: 25, border: "none", cursor: "pointer", background: `linear-gradient(135deg,${t.accent2},${t.accent})`, color: t.onAccent, display: "grid", placeItems: "center", boxShadow: `0 6px 16px ${t.accent}66`, marginTop: -18 }}><Plus size={26} /></button>);
+        if (it.k === "_") return (<button key="c" onClick={onQuickAdd} style={{ width: 50, height: 50, borderRadius: sharp ? 8 : 25, border: "none", cursor: "pointer", background: `linear-gradient(135deg,${t.accent2},${t.accent})`, color: t.onAccent, display: "grid", placeItems: "center", boxShadow: sharp ? "none" : `0 6px 16px ${t.accent}66`, marginTop: sharp ? 0 : -18 }}><Plus size={26} /></button>);
         const A = it.ic; const on = page === it.k;
         return (<button key={it.k} onClick={() => setPage(it.k)} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "4px 6px", flex: 1, position: "relative" }}>
-          {on && <span style={{ position: "absolute", top: -3, width: 32, height: 32, borderRadius: "50%", background: `radial-gradient(circle, ${t.accent}33, transparent 70%)`, pointerEvents: "none" }} />}
+          {on && <span style={{ position: "absolute", top: sharp ? 0 : -3, width: sharp ? "100%" : 32, height: sharp ? "100%" : 32, borderRadius: sharp ? 0 : "50%", background: sharp ? `${t.accent}14` : `radial-gradient(circle, ${t.accent}33, transparent 70%)`, pointerEvents: "none" }} />}
           <A size={20} color={on ? t.accent : t.sub} strokeWidth={on ? 2.6 : 1.9} style={{ position: "relative" }} /><span style={{ fontSize: 8.5, color: on ? t.accent : t.sub, fontWeight: on ? 700 : 500, position: "relative" }}>{it.lb}</span>
         </button>);
       })}
@@ -9618,11 +9712,10 @@ function Ring({ pct, color, label }) {
 function CatCard({ t, k, icon, label, children, onClick, shp }) {
   const s = shp || shapeTokens("soft", t);
   return (<div onClick={onClick} style={{ background: t.cat[k], borderRadius: s.radius, padding: 14, cursor: onClick ? "pointer" : "default", border: s.radius === 0 ? `1px solid ${t.border}` : `1px solid ${t.border}`, boxShadow: s.radius === 0 ? "none" : (t.star ? "none" : "0 4px 12px rgba(40,50,70,.06)") }}>
-    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}><span style={{ width: 26, height: 26, borderRadius: s.iconRadius, background: catIcBg(k), display: "grid", placeItems: "center", flexShrink: 0 }}>{icon}</span><span style={{ fontSize: 10.5, fontWeight: 700, color: t.catLb[k] }}>{label}</span></div>
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}><span style={{ width: 26, height: 26, borderRadius: s.iconRadius, background: t.catIcBg[k], display: "grid", placeItems: "center", flexShrink: 0 }}>{icon}</span><span style={{ fontSize: 10.5, fontWeight: 700, color: t.catLb[k] }}>{label}</span></div>
     {children}
   </div>);
 }
-const catIcBg = (k) => ({ green: "#7FB894", amber: "#E0B24A", coral: "#E07B57", violet: "#7B6CB0" }[k]);
 function PageHead({ t, title, sub, icon, right }) { return (<div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}><div style={{ width: 44, height: 44, borderRadius: 14, background: `${t.accent}1A`, display: "grid", placeItems: "center", flexShrink: 0 }}>{icon}</div><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 21, fontWeight: 700, color: t.text, fontFamily: "'Kanit', sans-serif" }}>{title}</div><div style={{ fontSize: 12.5, color: t.sub }}>{sub}</div></div>{right}</div>); }
 function MockBanner({ t, text }) { return (<div style={{ display: "flex", alignItems: "center", gap: 8, background: `${t.accent}14`, border: `1px dashed ${t.accent}66`, borderRadius: 12, padding: "9px 12px", fontSize: 11.5, color: t.accent, fontWeight: 600 }}><Clock size={14} /> {text}</div>); }
 function Empty({ t, text }) {
