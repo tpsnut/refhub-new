@@ -34,3 +34,11 @@ body.rh-sharp,
 body.rh-sharp * {
   border-radius: 0 !important;
 }
+
+/* 🔲 กดแล้วเด้ง (เฉพาะโหมดเหลี่ยมคม) — ใช้ได้กับปุ่ม/การ์ดที่กดได้ทั้งหมดในแอปเพราะเกือบทั้งหมดใช้ <button> อยู่แล้ว */
+body.rh-sharp button {
+  transition: transform .1s ease;
+}
+body.rh-sharp button:active {
+  transform: scale(0.94);
+}

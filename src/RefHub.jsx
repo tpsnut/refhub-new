@@ -1051,6 +1051,11 @@ export default function RefHub() {
   const mode = isNight ? "night" : "day";
   const t = palette(mode, theme, customAccent, catColors);
   const shp = shapeTokens(cardShape, t); // 🔲 ทรงกรอบที่ user เลือก ใช้ตัดสินใจ padding ขอบจอ + preview ใน picker ด้วย
+  // 🔲 เติมค่าทรงกรอบเข้าไปใน t object กลาง (ตัวเดียวกับที่ถูกส่งเป็น prop "t" ไปทั่วทั้งแอป)
+  // เพื่อให้ helper card(t) ที่ใช้อยู่ 92 จุดทั่วไฟล์ รับรู้ทรงกรอบที่ user เลือกได้ทันที โดยไม่ต้องไล่แก้ทีละจุด
+  t.cardRadius = shp.radius;
+  t.cardShadow = shp.shadow;
+  t.cardBorderStyle = shp.border;
   // 🔲🌐 ทรงเหลี่ยมคม — บังคับ border-radius:0 "ทั้งแอปแบบไม่มีข้อยกเว้น" (รูปโปรไฟล์/ปุ่มค้นหา/แชท/ตั้งค่า/ทุกหน้า) ตามที่ตกลง
   // ใช้ class บน document.body แทนการไล่แก้ borderRadius ทีละจุดเป็นพันจุด เพราะ modal บางตัว portal ออกไปนอก DOM tree ของแอป
   // การใส่ class ที่ body จะครอบคลุมถึง modal ที่ portal ออกไปด้วย (portal ยังอยู่ใต้ body เสมอ)
@@ -1849,8 +1854,52 @@ export default function RefHub() {
         <div style={{ transform: `scale(${fontScale / 100})`, transformOrigin: "top left", width: `${10000 / fontScale}%` }}>
 
         {/* HEADER */}
-        <div style={{ position: "relative", zIndex: 3, padding: `18px ${cardShape === "sharp" ? 0 : 10}px 0` }}>
-          {page === "home" ? (
+        <div style={{ position: "relative", zIndex: 3, padding: cardShape === "sharp" ? "0" : `18px ${cardShape === "sharp" ? 0 : 10}px 0` }}>
+          {cardShape === "sharp" ? (
+            <div style={{ display: "flex", alignItems: "stretch", justifyContent: "space-between", borderBottom: `1px solid ${t.border}`, minHeight: 56 }}>
+              {page === "home" ? (
+                <>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <button onClick={() => setHamburgerOpen(true)} style={{ position: "relative", width: 44, background: "none", border: "none", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                      <Menu size={20} color={t.text} />
+                      {adminAlerts.length > 0 && <span style={{ position: "absolute", top: 12, right: 10, width: 8, height: 8, background: "#D9534F" }} />}
+                    </button>
+                    <button onClick={() => profile.avatar && setProfileLightbox(true)} style={{ background: "none", border: "none", cursor: profile.avatar ? "pointer" : "default", padding: 0, alignSelf: "stretch", width: 52, flexShrink: 0 }}>
+                      <Avatar profile={profile} t={t} size={52} fill />
+                    </button>
+                    <button onClick={() => setEditProfile(true)} style={{ display: "flex", alignItems: "center", background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}>
+                      <div>
+                        <div style={{ fontSize: 11, color: t.sub }}>{greet(isNight)}</div>
+                        <div style={{ fontSize: 15.5, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 5 }}>
+                          {profile.name || (loaded ? "ผู้ใช้ใหม่" : "กำลังโหลด...")} <Pencil size={12} color={t.faint} />
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "stretch" }}>
+                    <button onClick={() => setSearchOpen(true)} style={{ width: 48, background: "none", border: "none", borderLeft: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }}><Search size={17} color={t.text} /></button>
+                    <button onClick={() => setPage("chat")} style={{ position: "relative", width: 48, background: "none", border: "none", borderLeft: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }}>
+                      <MessageCircle size={17} color={t.text} />
+                      {chatUnread > 0 && <span style={{ position: "absolute", top: 12, right: 10, width: 8, height: 8, background: "#D9534F" }} />}
+                    </button>
+                    <button onClick={() => setMoreMenuOpen(true)} style={{ width: 48, background: "none", border: "none", borderLeft: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }}><MoreVertical size={17} color={t.text} /></button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <button onClick={() => setPage("home")} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", color: t.text, fontWeight: 700, fontSize: 13, padding: "0 14px" }}>
+                    <ArrowLeft size={17} color={t.text} /> กลับ
+                  </button>
+                  <div style={{ display: "flex", alignItems: "stretch" }}>
+                    <button onClick={() => setSearchOpen(true)} style={{ width: 48, background: "none", border: "none", borderLeft: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }}><Search size={17} color={t.text} /></button>
+                    <button onClick={() => setMusicOpen(true)} style={{ position: "relative", width: 48, background: "none", border: "none", borderLeft: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }}>
+                      <Music size={17} color={playing ? t.accent : t.text} />
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : page === "home" ? (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
                 {/* ☰ ตั้งใจไม่ใส่พื้นหลังวงกลม — เลือกแบบ B (ไอคอนโล่งๆ) ตามที่ Maxnuss ยืนยัน */}
@@ -1909,7 +1958,7 @@ export default function RefHub() {
           )}
           {/* mini now-playing bar (file tracks play across pages) */}
           {cur && cur.kind === "file" && (
-            <div style={{ marginTop: 10, background: t.surface, border: `1px solid ${t.border}`, borderRadius: 16, padding: "9px 12px", display: "flex", alignItems: "center", gap: 10, boxShadow: t.star ? "none" : "0 8px 20px rgba(30,40,70,.1)" }}>
+            <div style={{ marginTop: 10, marginLeft: cardShape === "sharp" ? 10 : 0, marginRight: cardShape === "sharp" ? 10 : 0, background: t.surface, border: `1px solid ${t.border}`, borderRadius: 16, padding: "9px 12px", display: "flex", alignItems: "center", gap: 10, boxShadow: t.star ? "none" : "0 8px 20px rgba(30,40,70,.1)" }}>
               <button onClick={togglePlay} style={{ width: 32, height: 32, borderRadius: 16, border: "none", cursor: "pointer", background: t.accent, color: t.onAccent, display: "grid", placeItems: "center", flexShrink: 0 }}>
                 {playing ? <Pause size={15} /> : <Play size={15} />}
               </button>
@@ -9819,13 +9868,27 @@ function IncomingCallWatcher({ t, userId, onAccept }) {
 function Dock({ t, cardShape, page, setPage, onQuickAdd }) {
   const sharp = cardShape === "sharp";
   const items = [{ k: "home", ic: Home, lb: "Home" }, { k: "ideas", ic: Lightbulb, lb: "Ideas" }, { k: "trade", ic: TrendingUp, lb: "Trade" }, { k: "_", ic: Plus, lb: "" }, { k: "news", ic: Newspaper, lb: "News" }, { k: "lang", ic: Languages, lb: "Lang" }, { k: "note", ic: StickyNote, lb: "Note" }];
-  return (<div style={{ position: "absolute", bottom: sharp ? 0 : 16, left: 0, right: 0, display: "flex", justifyContent: "center", zIndex: 20, pointerEvents: "none" }}>
-    <div style={{ pointerEvents: "auto", display: "flex", alignItems: "center", background: t.dock, border: sharp ? "none" : `1px solid ${t.dockBorder}`, borderTop: sharp ? `1px solid ${t.dockBorder}` : `1px solid ${t.dockBorder}`, borderRadius: sharp ? 0 : 34, padding: sharp ? "10px 4px" : "8px 10px", maxWidth: sharp ? "100%" : 420, width: sharp ? "100%" : "92%", justifyContent: "space-between", boxShadow: sharp ? "none" : "0 8px 26px rgba(20,25,45,.18)" }}>
+  if (sharp) {
+    // 🔲 ทรงเหลี่ยมคม — แต่ละปุ่มเป็น tile แยกกันจริง คั่นด้วยช่องไฟ 1.5px โชว์พื้นหลังลอดออกมา + เส้นคั่น 1px ด้านบนจากเนื้อหา
+    return (<div style={{ position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 20 }}>
+      <div style={{ borderTop: `1px solid ${t.dockBorder}`, background: t.page, padding: 1.5, display: "flex", gap: 1.5 }}>
+        {items.map((it) => {
+          if (it.k === "_") return (<button key="c" onClick={onQuickAdd} style={{ flex: 1.15, border: "none", cursor: "pointer", background: t.accent, color: t.onAccent, display: "grid", placeItems: "center", padding: "9px 2px" }}><Plus size={24} /></button>);
+          const A = it.ic; const on = page === it.k;
+          return (<button key={it.k} onClick={() => setPage(it.k)} style={{ flex: 1, background: on ? `${t.accent}1A` : t.dock, border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "9px 2px" }}>
+            <A size={19} color={on ? t.accent : t.sub} strokeWidth={on ? 2.6 : 1.9} /><span style={{ fontSize: 8.5, color: on ? t.accent : t.sub, fontWeight: on ? 700 : 500 }}>{it.lb}</span>
+          </button>);
+        })}
+      </div>
+    </div>);
+  }
+  return (<div style={{ position: "absolute", bottom: 16, left: 0, right: 0, display: "flex", justifyContent: "center", zIndex: 20, pointerEvents: "none" }}>
+    <div style={{ pointerEvents: "auto", display: "flex", alignItems: "center", background: t.dock, border: `1px solid ${t.dockBorder}`, borderRadius: 34, padding: "8px 10px", maxWidth: 420, width: "92%", justifyContent: "space-between", boxShadow: "0 8px 26px rgba(20,25,45,.18)" }}>
       {items.map((it) => {
-        if (it.k === "_") return (<button key="c" onClick={onQuickAdd} style={{ width: 50, height: 50, borderRadius: sharp ? 8 : 25, border: "none", cursor: "pointer", background: `linear-gradient(135deg,${t.accent2},${t.accent})`, color: t.onAccent, display: "grid", placeItems: "center", boxShadow: sharp ? "none" : `0 6px 16px ${t.accent}66`, marginTop: sharp ? 0 : -18 }}><Plus size={26} /></button>);
+        if (it.k === "_") return (<button key="c" onClick={onQuickAdd} style={{ width: 50, height: 50, borderRadius: 25, border: "none", cursor: "pointer", background: `linear-gradient(135deg,${t.accent2},${t.accent})`, color: t.onAccent, display: "grid", placeItems: "center", boxShadow: `0 6px 16px ${t.accent}66`, marginTop: -18 }}><Plus size={26} /></button>);
         const A = it.ic; const on = page === it.k;
         return (<button key={it.k} onClick={() => setPage(it.k)} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "4px 6px", flex: 1, position: "relative" }}>
-          {on && <span style={{ position: "absolute", top: sharp ? 0 : -3, width: sharp ? "100%" : 32, height: sharp ? "100%" : 32, borderRadius: sharp ? 0 : "50%", background: sharp ? `${t.accent}14` : `radial-gradient(circle, ${t.accent}33, transparent 70%)`, pointerEvents: "none" }} />}
+          {on && <span style={{ position: "absolute", top: -3, width: 32, height: 32, borderRadius: "50%", background: `radial-gradient(circle, ${t.accent}33, transparent 70%)`, pointerEvents: "none" }} />}
           <A size={20} color={on ? t.accent : t.sub} strokeWidth={on ? 2.6 : 1.9} style={{ position: "relative" }} /><span style={{ fontSize: 8.5, color: on ? t.accent : t.sub, fontWeight: on ? 700 : 500, position: "relative" }}>{it.lb}</span>
         </button>);
       })}
@@ -9834,9 +9897,10 @@ function Dock({ t, cardShape, page, setPage, onQuickAdd }) {
 }
 
 // ---------------- small ----------------
-function Avatar({ profile, t, size }) {
-  if (profile.avatar) return <img src={profile.avatar} alt="" style={{ width: size, height: size, borderRadius: size / 2, objectFit: "cover", border: `2px solid ${t.accent}` }} />;
-  return <div style={{ width: size, height: size, borderRadius: size / 2, background: `linear-gradient(135deg,${t.accent2},${t.accent})`, color: t.onAccent, display: "grid", placeItems: "center", fontWeight: 800, fontSize: size * 0.42 }}>{(profile.name || "?")[0].toUpperCase()}</div>;
+function Avatar({ profile, t, size, fill }) {
+  const dim = fill ? { width: "100%", height: "100%" } : { width: size, height: size };
+  if (profile.avatar) return <img src={profile.avatar} alt="" style={{ ...dim, borderRadius: size / 2, objectFit: "cover", border: `2px solid ${t.accent}` }} />;
+  return <div style={{ ...dim, borderRadius: size / 2, background: `linear-gradient(135deg,${t.accent2},${t.accent})`, color: t.onAccent, display: "grid", placeItems: "center", fontWeight: 800, fontSize: size * 0.42 }}>{(profile.name || "?")[0].toUpperCase()}</div>;
 }
 function Ring({ pct, color, label }) {
   const r = 32, c = 2 * Math.PI * r, dash = (pct / 100) * c;
@@ -9847,10 +9911,10 @@ function Ring({ pct, color, label }) {
 }
 function CatCard({ t, k, icon, label, children, onClick, shp }) {
   const s = shp || shapeTokens("soft", t);
-  return (<div onClick={onClick} style={{ background: t.cat[k], borderRadius: s.radius, padding: 14, cursor: onClick ? "pointer" : "default", border: s.radius === 0 ? `1px solid ${t.border}` : `1px solid ${t.border}`, boxShadow: s.radius === 0 ? "none" : (t.star ? "none" : "0 4px 12px rgba(40,50,70,.06)") }}>
+  return (<button onClick={onClick} style={{ background: t.cat[k], borderRadius: s.radius, padding: 14, cursor: onClick ? "pointer" : "default", border: s.radius === 0 ? `1px solid ${t.border}` : `1px solid ${t.border}`, boxShadow: s.radius === 0 ? "none" : (t.star ? "none" : "0 4px 12px rgba(40,50,70,.06)"), textAlign: "left", width: "100%", font: "inherit", display: "block" }}>
     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}><span style={{ width: 26, height: 26, borderRadius: s.iconRadius, background: t.catIcBg[k], display: "grid", placeItems: "center", flexShrink: 0 }}>{icon}</span><span style={{ fontSize: 10.5, fontWeight: 700, color: t.catLb[k] }}>{label}</span></div>
     {children}
-  </div>);
+  </button>);
 }
 function PageHead({ t, title, sub, icon, right }) { return (<div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}><div style={{ width: 44, height: 44, borderRadius: 14, background: `${t.accent}1A`, display: "grid", placeItems: "center", flexShrink: 0 }}>{icon}</div><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 21, fontWeight: 700, color: t.text, fontFamily: "'Kanit', sans-serif" }}>{title}</div><div style={{ fontSize: 12.5, color: t.sub }}>{sub}</div></div>{right}</div>); }
 function MockBanner({ t, text }) { return (<div style={{ display: "flex", alignItems: "center", gap: 8, background: `${t.accent}14`, border: `1px dashed ${t.accent}66`, borderRadius: 12, padding: "9px 12px", fontSize: 11.5, color: t.accent, fontWeight: 600 }}><Clock size={14} /> {text}</div>); }
@@ -9884,7 +9948,7 @@ function Stat({ t, label, val, color }) { return (<div style={{ flex: 1, textAli
 function Stars() { const s = Array.from({ length: 26 }).map(() => ({ x: Math.random() * 100, y: Math.random() * 42, r: Math.random() * 1.3 + 0.4, o: Math.random() * 0.6 + 0.3 })); return (<svg style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", zIndex: 1, pointerEvents: "none" }}>{s.map((v, i) => <circle key={i} cx={`${v.x}%`} cy={`${v.y}%`} r={v.r} fill="#fff" opacity={v.o} />)}</svg>); }
 
 // styles
-const card = (t) => ({ background: t.surface, borderRadius: 20, border: `1px solid ${t.border}`, boxShadow: t.star ? "none" : "0 4px 12px rgba(40,50,70,.05)" });
+const card = (t) => ({ background: t.surface, borderRadius: t.cardRadius ?? 20, border: t.cardBorderStyle ?? `1px solid ${t.border}`, boxShadow: t.cardShadow ?? (t.star ? "none" : "0 4px 12px rgba(40,50,70,.05)") });
 const input = (t) => ({ flex: 1, background: t.inputBg, border: `1px solid ${t.border}`, borderRadius: 12, padding: "11px 14px", fontSize: 13.5, color: t.text, outline: "none", width: "100%", boxSizing: "border-box" });
 const primaryBtn = (M) => ({ background: `linear-gradient(135deg,${M.accent2 || M.accent},${M.accent})`, color: M.onAccent, border: "none", borderRadius: 12, fontWeight: 700, fontSize: 13.5, cursor: "pointer" });
 const navBtn = (t) => ({ width: 34, height: 34, borderRadius: 17, border: `1px solid ${t.border}`, background: "none", cursor: "pointer", fontSize: 20, color: t.text, lineHeight: 1 });
