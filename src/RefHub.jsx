@@ -1010,7 +1010,7 @@ export default function RefHub() {
           .eq("active", true);
         if (tplErr) console.error("โหลดแม่แบบเป้าหมายไม่สำเร็จ (ไม่แตะข้อมูลเดิม):", tplErr.message);
         else if (dbTemplates) {
-          const templates = dbTemplates.map((tp) => ({ id: tp.id, text: tp.text, daysOfWeek: tp.days_of_week || [], difficulty: tp.difficulty || "normal", active: tp.active, timerMode: tp.timer_mode || null, timerUnit: tp.timer_unit || null, timerSeconds: tp.timer_seconds || null, timerRepeatCount: tp.timer_repeat_count || null }));
+          const templates = dbTemplates.map((tp) => ({ id: tp.id, text: tp.text, daysOfWeek: tp.days_of_week || [], points: tp.points ?? null, active: tp.active, timerMode: tp.timer_mode || null, timerUnit: tp.timer_unit || null, timerSeconds: tp.timer_seconds || null, timerRepeatCount: tp.timer_repeat_count || null }));
           setGoalTemplates(templates);
           const todayDow = (new Date().getDay() + 6) % 7; // จันทร์=0 ... อาทิตย์=6
           const today = todayStr();
@@ -1025,7 +1025,7 @@ export default function RefHub() {
               date: today,
               done: false,
               template_id: tp.id,
-              difficulty: tp.difficulty,
+              points: tp.points ?? 5,
               timerMode: tp.timerMode || null,
               timerUnit: tp.timerUnit || null,
               timerSeconds: tp.timerSeconds || null,
@@ -1033,7 +1033,7 @@ export default function RefHub() {
             }));
 
             const { error: genErr } = await supabase.from("goals").insert(
-              newRows.map(({ id, user_id, text, comment, date, done, template_id, difficulty, timerMode, timerUnit, timerSeconds, timerRepeatCount }) => ({
+              newRows.map(({ id, user_id, text, comment, date, done, template_id, points, timerMode, timerUnit, timerSeconds, timerRepeatCount }) => ({
                 id,
                 user_id,
                 text,
@@ -1041,7 +1041,7 @@ export default function RefHub() {
                 date,
                 done,
                 template_id,
-                difficulty,
+                points,
                 timer_mode: timerMode,
                 timer_unit: timerUnit,
                 timer_seconds: timerSeconds,
@@ -1933,7 +1933,7 @@ export default function RefHub() {
         {billManagerOpen && <BillManagerModal t={t} billReminders={billReminders} billPayments={billPayments} addBillReminder={addBillReminder} deleteBillReminder={deleteBillReminder} markBillPaid={markBillPaid} unmarkBillPaid={unmarkBillPaid} close={() => setBillManagerOpen(false)} />}
         {leaderboardOpen && <LeaderboardModal t={t} userId={userId} close={() => setLeaderboardOpen(false)} />}
         {goalTimerTarget && <GoalTimerModal t={t} goal={goalTimerTarget} close={() => setGoalTimerTarget(null)} />}
-        {addGoalOpen && <AddGoalModal t={t} userId={userId} setGoals={setGoals} goalTemplates={goalTemplates} setGoalTemplates={setGoalTemplates} close={() => setAddGoalOpen(false)} />}
+        {addGoalOpen && <AddGoalModal t={t} userId={userId} session={session} setGoals={setGoals} goalTemplates={goalTemplates} setGoalTemplates={setGoalTemplates} close={() => setAddGoalOpen(false)} />}
         {reminderTarget && <ReminderModal t={t} targetType={reminderTarget.targetType} targetId={reminderTarget.targetId} label={reminderTarget.label} existing={reminderTarget.existing} upsertReminder={upsertReminder} deleteReminder={deleteReminder} close={() => setReminderTarget(null)} />}
         {exportText != null && <ExportModal t={t} text={exportText} close={() => setExportText(null)} />}
 
@@ -2894,11 +2894,10 @@ const greet = (night) => { const h = new Date().getHours(); return h < 6 ? "ด�
 
 // ---------------- Home ----------------
 // 🎯 เพิ่มเป้าหมาย — เลือกได้ว่าทำครั้งเดียววันนี้ หรือ ตั้งเป็นตารางประจำสัปดาห์ (เลือกวันเองหรือทุกวัน) + ระดับความหิน
-function AddGoalModal({ t, userId, setGoals, goalTemplates, setGoalTemplates, close }) {
+function AddGoalModal({ t, userId, session, setGoals, goalTemplates, setGoalTemplates, close }) {
   const [mode, setMode] = useState("once"); // once | recurring
   const [text, setText] = useState("");
   const [days, setDays] = useState([]); // 0=จ ... 6=อา
-  const [difficulty, setDifficulty] = useState("normal");
   const [busy, setBusy] = useState(false);
   const [timerOn, setTimerOn] = useState(false); // ⏱ ตั้งเวลา (ไม่บังคับ) — เปิดแล้วจะมีปุ่ม "เริ่มจับเวลา" โผล่ที่การ์ดเป้าหมายนี้
   const [timerMode, setTimerMode] = useState("single"); // single = นับถอยหลังครั้งเดียว, interval = เตือนเป็นช่วง
@@ -2906,15 +2905,33 @@ function AddGoalModal({ t, userId, setGoals, goalTemplates, setGoalTemplates, cl
   const [timerMinutes, setTimerMinutes] = useState("30"); // ตัวเลขดิบตามหน่วยที่เลือก (โหมด single = ระยะเวลารวม, โหมด interval = ความยาวต่อช่วง)
   const [timerRepeatCount, setTimerRepeatCount] = useState("4"); // จำนวนช่วง (โหมด interval เท่านั้น)
   const dayLabels = ["จ", "อ", "พ", "พฤ", "ศ", "ส", "อา"];
-  const diffEmoji = { easy: "🟢", normal: "🟡", hard: "🔴" };
+
+  // ✨ AI ช่วยคิดเป้าหมาย — step: form (หน้าหลัก) -> source (เลือกแหล่ง) -> topic (พิมพ์หัวข้อ) -> loading -> results (แก้ไข/ลบ/เพิ่มเองก่อนบันทึก)
+  const [step, setStep] = useState("form");
+  const [aiTopic, setAiTopic] = useState("");
+  const [aiSuggestions, setAiSuggestions] = useState([]); // [{id, text, points, reason}]
+  const [aiError, setAiError] = useState("");
+  const backStep = { source: "form", topic: "source", results: "source" };
 
   const toggleDay = (i) => setDays((ds) => (ds.includes(i) ? ds.filter((x) => x !== i) : [...ds, i].sort()));
+
+  // 🎯 ประเมินคะแนนด้วย AI แทนระบบเลือกระดับความหินเอง (self-report ไม่แฟร์ กดยากมั่วเพื่อเอาแต้มได้)
+  // ประเมินไม่สำเร็จ (เน็ตหลุด/AI ล่ม) fallback เป็นค่ากลาง 5 แต้ม ไม่บล็อกการบันทึกเป้าหมาย
+  const assessPoints = async (goalText) => {
+    try {
+      const r = await fetch("/api/knowledge-generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "goal_ai", mode: "assess", text: goalText, callerToken: session?.access_token }) });
+      const data = await r.json();
+      if (r.ok && data.points) return data.points;
+    } catch (e) {}
+    return 5;
+  };
 
   const save = async () => {
     if (!text.trim()) return;
     if (mode === "recurring" && days.length === 0) return;
     setBusy(true);
     try {
+      const points = await assessPoints(text.trim());
       // ⏱ สรุป field ตั้งเวลาเป็น snake_case พร้อมส่งลง DB — เก็บเป็น "วินาทีรวม" เสมอ (timer_seconds) ไม่ว่าจะเลือกหน่วยไหน เพื่อให้คำนวณง่ายตอนจับเวลาจริง ส่วน timer_unit เก็บไว้แค่จำหน่วยที่เคยเลือกไว้โชว์ตอนแก้ไขภายหลัง
       const unitToSec = { sec: 1, min: 60, hour: 3600 };
       const timerPatch = timerOn
@@ -2926,20 +2943,20 @@ function AddGoalModal({ t, userId, setGoals, goalTemplates, setGoalTemplates, cl
           }
         : { timer_mode: null, timer_unit: null, timer_seconds: null, timer_repeat_count: null };
       if (mode === "once") {
-        const g = { id: uid(), text: text.trim(), done: false, date: todayStr(), doneDate: null, difficulty, timerMode: timerPatch.timer_mode, timerUnit: timerPatch.timer_unit, timerSeconds: timerPatch.timer_seconds, timerRepeatCount: timerPatch.timer_repeat_count };
+        const g = { id: uid(), text: text.trim(), done: false, date: todayStr(), doneDate: null, points, timerMode: timerPatch.timer_mode, timerUnit: timerPatch.timer_unit, timerSeconds: timerPatch.timer_seconds, timerRepeatCount: timerPatch.timer_repeat_count };
         setGoals((gs) => [...gs, g]);
-        if (userId) { await supabase.from("goals").insert({ id: g.id, user_id: userId, text: g.text, done: g.done, date: g.date, done_date: g.doneDate, difficulty, ...timerPatch }); logAudit(userId, "goals", "add", "เพิ่มเป้าหมาย"); }
+        if (userId) { await supabase.from("goals").insert({ id: g.id, user_id: userId, text: g.text, done: g.done, date: g.date, done_date: g.doneDate, points, ...timerPatch }); logAudit(userId, "goals", "add", "เพิ่มเป้าหมาย"); }
       } else {
-        const { data, error } = await supabase.from("goal_templates").insert({ user_id: userId, text: text.trim(), days_of_week: days, difficulty, ...timerPatch }).select().single();
+        const { data, error } = await supabase.from("goal_templates").insert({ user_id: userId, text: text.trim(), days_of_week: days, points, ...timerPatch }).select().single();
         if (!error && data) {
-          setGoalTemplates((ts) => [...ts, { id: data.id, text: data.text, daysOfWeek: data.days_of_week, difficulty: data.difficulty, active: true, timerMode: data.timer_mode, timerUnit: data.timer_unit, timerSeconds: data.timer_seconds, timerRepeatCount: data.timer_repeat_count }]);
+          setGoalTemplates((ts) => [...ts, { id: data.id, text: data.text, daysOfWeek: data.days_of_week, points: data.points, active: true, timerMode: data.timer_mode, timerUnit: data.timer_unit, timerSeconds: data.timer_seconds, timerRepeatCount: data.timer_repeat_count }]);
           logAudit(userId, "goals", "add", "ตั้งเป้าหมายประจำสัปดาห์ใหม่");
           // ถ้าวันนี้ตรงกับวันที่เลือกไว้ สร้างรายการของวันนี้ให้เลย ไม่ต้องรอรีเฟรชหน้า
           const todayDow = (new Date().getDay() + 6) % 7;
           if (days.includes(todayDow)) {
-            const g = { id: uid(), text: text.trim(), done: false, date: todayStr(), doneDate: null, template_id: data.id, difficulty, timerMode: timerPatch.timer_mode, timerUnit: timerPatch.timer_unit, timerSeconds: timerPatch.timer_seconds, timerRepeatCount: timerPatch.timer_repeat_count };
+            const g = { id: uid(), text: text.trim(), done: false, date: todayStr(), doneDate: null, template_id: data.id, points, timerMode: timerPatch.timer_mode, timerUnit: timerPatch.timer_unit, timerSeconds: timerPatch.timer_seconds, timerRepeatCount: timerPatch.timer_repeat_count };
             setGoals((gs) => [...gs, g]);
-            await supabase.from("goals").insert({ id: g.id, user_id: userId, text: g.text, done: false, date: g.date, template_id: data.id, difficulty, ...timerPatch });
+            await supabase.from("goals").insert({ id: g.id, user_id: userId, text: g.text, done: false, date: g.date, template_id: data.id, points, ...timerPatch });
           }
         }
       }
@@ -2952,110 +2969,237 @@ function AddGoalModal({ t, userId, setGoals, goalTemplates, setGoalTemplates, cl
     setGoalTemplates((ts) => ts.filter((x) => x.id !== id));
   };
 
+  // ✨ ---- AI ช่วยคิดเป้าหมาย ----
+  const chooseSource = async (src) => {
+    setAiError("");
+    if (src === "topic") { setStep("topic"); return; }
+    await generateSuggestions("history", "");
+  };
+
+  const generateSuggestions = async (src, topic) => {
+    setStep("loading");
+    setAiError("");
+    try {
+      let historyTexts = [];
+      if (src === "history" && userId) {
+        const { data } = await supabase.from("goals").select("text").eq("user_id", userId).order("date", { ascending: false }).limit(20);
+        historyTexts = (data || []).map((g) => g.text).filter(Boolean);
+      }
+      const r = await fetch("/api/knowledge-generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "goal_ai", mode: "suggest", source: src, topic, historyTexts, callerToken: session?.access_token }) });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "AI ช่วยคิดเป้าหมายไม่สำเร็จ");
+      setAiSuggestions((data.goals || []).map((g) => ({ id: uid(), text: g.text, points: g.points, reason: g.reason })));
+      setStep("results");
+    } catch (e) {
+      setAiError(e.message || "เกิดข้อผิดพลาด ลองใหม่อีกครั้ง");
+      setStep("source");
+    }
+  };
+
+  const updateSuggestion = (id, patch) => setAiSuggestions((list) => list.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+  const removeSuggestion = (id) => setAiSuggestions((list) => list.filter((s) => s.id !== id));
+  const addBlankSuggestion = () => setAiSuggestions((list) => [...list, { id: uid(), text: "", points: 5, reason: "" }]);
+
+  const confirmSuggestions = async () => {
+    const valid = aiSuggestions.filter((s) => s.text.trim());
+    if (valid.length === 0) return;
+    setBusy(true);
+    try {
+      const rows = valid.map((s) => ({ id: uid(), text: s.text.trim(), done: false, date: todayStr(), doneDate: null, points: s.points || 5 }));
+      setGoals((gs) => [...gs, ...rows]);
+      if (userId) {
+        await supabase.from("goals").insert(rows.map((g) => ({ id: g.id, user_id: userId, text: g.text, done: g.done, date: g.date, done_date: g.doneDate, points: g.points })));
+        logAudit(userId, "goals", "add", `เพิ่มเป้าหมายจาก AI ${rows.length} ข้อ`);
+      }
+      close();
+    } finally { setBusy(false); }
+  };
+
   const disabled = busy || !text.trim() || (mode === "recurring" && days.length === 0);
+  const validSuggestions = aiSuggestions.filter((s) => s.text.trim());
 
   return (
     <div style={overlay} onClick={close}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", maxHeight: "85vh", display: "flex", flexDirection: "column" }}>
         <div style={{ padding: "20px 20px 0", flexShrink: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-            <div style={{ fontSize: 17, fontWeight: 800, color: t.text }}>เพิ่มเป้าหมาย</div>
-            <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+              {step !== "form" && <button onClick={() => setStep(backStep[step] || "form")} style={{ ...ghost, flexShrink: 0 }}><ChevronLeft size={20} color={t.sub} /></button>}
+              <div style={{ fontSize: 17, fontWeight: 800, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {step === "form" && "เพิ่มเป้าหมาย"}
+                {step === "source" && "✨ AI ช่วยคิดเป้าหมาย"}
+                {step === "topic" && "พิมพ์หัวข้อที่อยากพัฒนา"}
+                {step === "loading" && "กำลังคิดเป้าหมายให้..."}
+                {step === "results" && `AI แนะนำให้ ${aiSuggestions.length} ข้อ`}
+              </div>
+            </div>
+            <button onClick={close} style={{ ...ghost, flexShrink: 0 }}><X size={20} color={t.sub} /></button>
           </div>
         </div>
 
         <div style={{ padding: "0 20px", overflowY: "auto", flex: 1, minHeight: 0 }}>
-          <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-            {[["once", "ครั้งเดียว (วันนี้)"], ["recurring", "ทำประจำ (ตั้งตาราง)"]].map(([v, lb]) => (
-              <button key={v} onClick={() => setMode(v)} style={{ flex: 1, padding: "10px 0", borderRadius: 12, cursor: "pointer", border: `1.5px solid ${mode === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 12.5, background: mode === v ? t.accent : "transparent", color: mode === v ? t.onAccent : t.sub }}>{lb}</button>
-            ))}
-          </div>
 
-          <input value={text} onChange={(e) => setText(e.target.value)} placeholder="เช่น ออกกำลังกาย 30 นาที" style={{ ...input(t), marginBottom: 16 }} autoFocus />
-
-          {mode === "recurring" && (
+          {/* ===== STEP: form (หน้าหลัก) ===== */}
+          {step === "form" && (
             <>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: t.sub }}>ทำวันไหนบ้าง</div>
-                <button onClick={() => setDays([0, 1, 2, 3, 4, 5, 6])} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11.5, color: t.accent, fontWeight: 700 }}>ทุกวัน</button>
-              </div>
-              <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
-                {dayLabels.map((lb, i) => (
-                  <button key={i} onClick={() => toggleDay(i)} style={{ flex: 1, padding: "9px 0", borderRadius: 10, cursor: "pointer", border: `1.5px solid ${days.includes(i) ? t.accent : t.border}`, fontWeight: 700, fontSize: 12, background: days.includes(i) ? t.accent : "transparent", color: days.includes(i) ? t.onAccent : t.sub }}>{lb}</button>
+              <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+                {[["once", "ครั้งเดียว (วันนี้)"], ["recurring", "ทำประจำ (ตั้งตาราง)"]].map(([v, lb]) => (
+                  <button key={v} onClick={() => setMode(v)} style={{ flex: 1, padding: "10px 0", borderRadius: 12, cursor: "pointer", border: `1.5px solid ${mode === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 12.5, background: mode === v ? t.accent : "transparent", color: mode === v ? t.onAccent : t.sub }}>{lb}</button>
                 ))}
               </div>
+
+              <input value={text} onChange={(e) => setText(e.target.value)} placeholder="เช่น ออกกำลังกาย 30 นาที" style={{ ...input(t), marginBottom: 12 }} autoFocus />
+
+              <button onClick={() => setStep("source")} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", padding: "11px 0", borderRadius: 12, border: `1.5px dashed ${t.accent}66`, background: `${t.accent}0f`, color: t.accent, fontWeight: 700, fontSize: 13, cursor: "pointer", marginBottom: 16 }}>
+                <Sparkles size={15} /> ให้ AI ช่วยคิดเป้าหมาย
+              </button>
+
+              {mode === "recurring" && (
+                <>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: t.sub }}>ทำวันไหนบ้าง</div>
+                    <button onClick={() => setDays([0, 1, 2, 3, 4, 5, 6])} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11.5, color: t.accent, fontWeight: 700 }}>ทุกวัน</button>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
+                    {dayLabels.map((lb, i) => (
+                      <button key={i} onClick={() => toggleDay(i)} style={{ flex: 1, padding: "9px 0", borderRadius: 10, cursor: "pointer", border: `1.5px solid ${days.includes(i) ? t.accent : t.border}`, fontWeight: 700, fontSize: 12, background: days.includes(i) ? t.accent : "transparent", color: days.includes(i) ? t.onAccent : t.sub }}>{lb}</button>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              <div style={{ fontSize: 10.5, color: t.faint, marginBottom: 20, lineHeight: 1.6 }}>💡 ไม่ต้องเลือกระดับความยากเองแล้ว — AI จะประเมินคะแนนให้ตอนกดบันทึก อ้างอิงมาตรฐานสุขภาพ/พัฒนาตัวเองจริง ให้แฟร์เท่ากันทุกคน</div>
+
+              {/* ⏱ ตั้งเวลา (ไม่บังคับ) — เปิดแล้วจะมีปุ่ม "▶ เริ่มจับเวลา" โผล่ที่การ์ดเป้าหมายนี้ */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: timerOn ? 10 : 20 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: t.sub }}>⏱ ตั้งเวลา (ไม่บังคับ)</div>
+                <button onClick={() => setTimerOn((v) => !v)} style={{ width: 42, height: 24, borderRadius: 12, border: "none", cursor: "pointer", background: timerOn ? t.accent : t.border, position: "relative", transition: "background .15s" }}>
+                  <span style={{ position: "absolute", top: 2, left: timerOn ? 20 : 2, width: 20, height: 20, borderRadius: 10, background: "#fff", transition: "left .15s" }} />
+                </button>
+              </div>
+              {timerOn && (
+                <div style={{ ...card(t), padding: 12, marginBottom: 20 }}>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                    {[["single", "นับถอยหลังครั้งเดียว"], ["interval", "เตือนเป็นช่วง"]].map(([v, lb]) => (
+                      <button key={v} onClick={() => setTimerMode(v)} style={{ flex: 1, padding: "8px 0", borderRadius: 10, cursor: "pointer", border: `1.5px solid ${timerMode === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 11, background: timerMode === v ? `${t.accent}18` : "transparent", color: t.text }}>{lb}</button>
+                    ))}
+                  </div>
+                  {timerMode === "single" ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <input type="number" min="1" value={timerMinutes} onChange={(e) => setTimerMinutes(e.target.value)} style={{ ...input(t), flex: 1 }} />
+                      {[["sec", "วิ"], ["min", "นาที"], ["hour", "ชม."]].map(([v, lb]) => (
+                        <button key={v} onClick={() => setTimerUnit(v)} style={{ padding: "9px 10px", borderRadius: 8, cursor: "pointer", border: `1.5px solid ${timerUnit === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 11, background: timerUnit === v ? t.accent : "transparent", color: timerUnit === v ? t.onAccent : t.sub, flexShrink: 0 }}>{lb}</button>
+                      ))}
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                        <span style={{ fontSize: 12, color: t.sub, width: 60, flexShrink: 0 }}>เตือนทุก</span>
+                        <input type="number" min="1" value={timerMinutes} onChange={(e) => setTimerMinutes(e.target.value)} style={{ ...input(t), flex: 1 }} />
+                        {[["sec", "วิ"], ["min", "นาที"], ["hour", "ชม."]].map(([v, lb]) => (
+                          <button key={v} onClick={() => setTimerUnit(v)} style={{ padding: "9px 8px", borderRadius: 8, cursor: "pointer", border: `1.5px solid ${timerUnit === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 10.5, background: timerUnit === v ? t.accent : "transparent", color: timerUnit === v ? t.onAccent : t.sub, flexShrink: 0 }}>{lb}</button>
+                        ))}
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 12, color: t.sub, width: 78, flexShrink: 0 }}>จำนวนครั้ง</span>
+                        <input type="number" min="1" value={timerRepeatCount} onChange={(e) => setTimerRepeatCount(e.target.value)} style={{ ...input(t), flex: 1 }} />
+                      </div>
+                      <div style={{ fontSize: 10.5, color: t.faint, marginTop: 8, lineHeight: 1.5 }}>เช่น ทุก 15 นาที × 4 ครั้ง = ครบ 1 ชม. เตือนเป็นระยะระหว่างทาง ไม่ใช่รอครบทีเดียว</div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {goalTemplates.length > 0 && (
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: t.sub, marginBottom: 8 }}>เป้าหมายประจำที่ตั้งไว้</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {goalTemplates.map((tp) => (
+                      <div key={tp.id} style={{ ...card(t), padding: "9px 12px", display: "flex", alignItems: "center", gap: 8 }}>
+                        {tp.points != null && <span style={{ fontSize: 10, fontWeight: 800, color: t.accent, background: `${t.accent}18`, borderRadius: 6, padding: "2px 5px", flexShrink: 0 }}>+{tp.points}</span>}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12.5, color: t.text, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tp.text}</div>
+                          <div style={{ fontSize: 10, color: t.faint }}>{tp.daysOfWeek.length === 7 ? "ทุกวัน" : tp.daysOfWeek.map((i) => dayLabels[i]).join(" ")}</div>
+                        </div>
+                        <button onClick={() => pauseTemplate(tp.id)} style={ghost} title="หยุด/ลบเป้าหมายประจำนี้"><Trash2 size={14} color={t.faint} /></button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </>
           )}
 
-          <div style={{ fontSize: 12, fontWeight: 700, color: t.sub, marginBottom: 8 }}>ระดับความหิน</div>
-          <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-            {[["easy", "🟢 เบาๆ"], ["normal", "🟡 ปกติ"], ["hard", "🔴 โหด"]].map(([v, lb]) => (
-              <button key={v} onClick={() => setDifficulty(v)} style={{ flex: 1, padding: "9px 0", borderRadius: 10, cursor: "pointer", border: `1.5px solid ${difficulty === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 11.5, background: difficulty === v ? `${t.accent}18` : "transparent", color: t.text }}>{lb}</button>
-            ))}
-          </div>
-
-          {/* ⏱ ตั้งเวลา (ไม่บังคับ) — เปิดแล้วจะมีปุ่ม "▶ เริ่มจับเวลา" โผล่ที่การ์ดเป้าหมายนี้ */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: timerOn ? 10 : 20 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: t.sub }}>⏱ ตั้งเวลา (ไม่บังคับ)</div>
-            <button onClick={() => setTimerOn((v) => !v)} style={{ width: 42, height: 24, borderRadius: 12, border: "none", cursor: "pointer", background: timerOn ? t.accent : t.border, position: "relative", transition: "background .15s" }}>
-              <span style={{ position: "absolute", top: 2, left: timerOn ? 20 : 2, width: 20, height: 20, borderRadius: 10, background: "#fff", transition: "left .15s" }} />
-            </button>
-          </div>
-          {timerOn && (
-            <div style={{ ...card(t), padding: 12, marginBottom: 20 }}>
-              <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-                {[["single", "นับถอยหลังครั้งเดียว"], ["interval", "เตือนเป็นช่วง"]].map(([v, lb]) => (
-                  <button key={v} onClick={() => setTimerMode(v)} style={{ flex: 1, padding: "8px 0", borderRadius: 10, cursor: "pointer", border: `1.5px solid ${timerMode === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 11, background: timerMode === v ? `${t.accent}18` : "transparent", color: t.text }}>{lb}</button>
-                ))}
+          {/* ===== STEP: source (เลือกแหล่งข้อมูลให้ AI) ===== */}
+          {step === "source" && (
+            <div style={{ paddingBottom: 20 }}>
+              <div style={{ fontSize: 12, color: t.sub, marginBottom: 14, lineHeight: 1.6 }}>อยากให้ AI เอาอะไรมาช่วยคิด?</div>
+              {aiError && <div style={{ fontSize: 11.5, color: "#D9534F", marginBottom: 12, padding: "8px 10px", background: "#D9534F18", borderRadius: 8 }}>{aiError}</div>}
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <button onClick={() => chooseSource("history")} style={{ display: "flex", alignItems: "center", gap: 12, padding: 14, borderRadius: 14, border: `1.5px solid ${t.border}`, background: t.surface, cursor: "pointer", textAlign: "left" }}>
+                  <div style={{ width: 38, height: 38, borderRadius: 12, background: `${t.accent}18`, display: "grid", placeItems: "center", flexShrink: 0, fontSize: 18 }}>📊</div>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>ดูจากประวัติของฉัน</div>
+                    <div style={{ fontSize: 11, color: t.sub }}>อิงจากเป้าหมายที่เคยตั้งไว้ก่อนหน้านี้</div>
+                  </div>
+                </button>
+                <button onClick={() => chooseSource("topic")} style={{ display: "flex", alignItems: "center", gap: 12, padding: 14, borderRadius: 14, border: `1.5px solid ${t.border}`, background: t.surface, cursor: "pointer", textAlign: "left" }}>
+                  <div style={{ width: 38, height: 38, borderRadius: 12, background: `${t.accent}18`, display: "grid", placeItems: "center", flexShrink: 0, fontSize: 18 }}>⌨️</div>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>พิมพ์หัวข้อเอง</div>
+                    <div style={{ fontSize: 11, color: t.sub }}>บอกสิ่งที่อยากพัฒนา ให้ AI แตกเป็นเป้าหมายย่อย</div>
+                  </div>
+                </button>
               </div>
-              {timerMode === "single" ? (
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <input type="number" min="1" value={timerMinutes} onChange={(e) => setTimerMinutes(e.target.value)} style={{ ...input(t), flex: 1 }} />
-                  {[["sec", "วิ"], ["min", "นาที"], ["hour", "ชม."]].map(([v, lb]) => (
-                    <button key={v} onClick={() => setTimerUnit(v)} style={{ padding: "9px 10px", borderRadius: 8, cursor: "pointer", border: `1.5px solid ${timerUnit === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 11, background: timerUnit === v ? t.accent : "transparent", color: timerUnit === v ? t.onAccent : t.sub, flexShrink: 0 }}>{lb}</button>
-                  ))}
+            </div>
+          )}
+
+          {/* ===== STEP: topic (พิมพ์หัวข้อ) ===== */}
+          {step === "topic" && (
+            <div style={{ paddingBottom: 20 }}>
+              <div style={{ fontSize: 12, color: t.sub, marginBottom: 12, lineHeight: 1.6 }}>เช่น "อยากลดน้ำหนัก" "อยากเก่งภาษาอังกฤษ" "อยากมีวินัยเรื่องเงิน"</div>
+              <input value={aiTopic} onChange={(e) => setAiTopic(e.target.value)} placeholder="พิมพ์สิ่งที่อยากพัฒนา..." style={{ ...input(t), marginBottom: 16 }} autoFocus />
+              <button onClick={() => generateSuggestions("topic", aiTopic.trim())} disabled={!aiTopic.trim()} style={{ ...primaryBtn(t), width: "100%", padding: "12px 0", opacity: aiTopic.trim() ? 1 : 0.5 }}>ให้ AI ช่วยคิด →</button>
+            </div>
+          )}
+
+          {/* ===== STEP: loading ===== */}
+          {step === "loading" && (
+            <div style={{ padding: "60px 0", textAlign: "center" }}>
+              <div style={{ width: 34, height: 34, borderRadius: "50%", border: `3px solid ${t.border}`, borderTopColor: t.accent, margin: "0 auto 14px", animation: "rh-ai-spin .8s linear infinite" }} />
+              <div style={{ fontSize: 12.5, color: t.sub }}>กำลังให้ AI ช่วยคิดเป้าหมาย...<br />(อ้างอิงมาตรฐานสุขภาพ + ข้อมูลของคุณ)</div>
+              <style>{`@keyframes rh-ai-spin { to { transform: rotate(360deg); } }`}</style>
+            </div>
+          )}
+
+          {/* ===== STEP: results (แก้ไข/ลบ/เพิ่มเองก่อนบันทึก) ===== */}
+          {step === "results" && (
+            <div style={{ paddingBottom: 20 }}>
+              <div style={{ fontSize: 11, color: t.sub, marginBottom: 14 }}>แก้ไขชื่อ ลบทิ้ง หรือเพิ่มข้อเองได้ก่อนบันทึก — ทุกข้อบันทึกเป็นเป้าหมายวันนี้</div>
+              {aiSuggestions.map((s) => (
+                <div key={s.id} style={{ ...card(t), padding: 12, marginBottom: 10, display: "flex", gap: 10, alignItems: "flex-start" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <input value={s.text} onChange={(e) => updateSuggestion(s.id, { text: e.target.value })} style={{ ...input(t), padding: "8px 10px", fontSize: 13, fontWeight: 600, marginBottom: s.reason ? 4 : 0 }} />
+                    {s.reason && <div style={{ fontSize: 10, color: t.faint, lineHeight: 1.5, padding: "0 2px" }}>{s.reason}</div>}
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                    <span style={{ fontSize: 11, fontWeight: 800, color: t.accent, background: `${t.accent}18`, borderRadius: 8, padding: "3px 7px", whiteSpace: "nowrap" }}>+{s.points}</span>
+                    <button onClick={() => removeSuggestion(s.id)} style={ghost}><Trash2 size={14} color={t.faint} /></button>
+                  </div>
                 </div>
-              ) : (
-                <>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-                    <span style={{ fontSize: 12, color: t.sub, width: 60, flexShrink: 0 }}>เตือนทุก</span>
-                    <input type="number" min="1" value={timerMinutes} onChange={(e) => setTimerMinutes(e.target.value)} style={{ ...input(t), flex: 1 }} />
-                    {[["sec", "วิ"], ["min", "นาที"], ["hour", "ชม."]].map(([v, lb]) => (
-                      <button key={v} onClick={() => setTimerUnit(v)} style={{ padding: "9px 8px", borderRadius: 8, cursor: "pointer", border: `1.5px solid ${timerUnit === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 10.5, background: timerUnit === v ? t.accent : "transparent", color: timerUnit === v ? t.onAccent : t.sub, flexShrink: 0 }}>{lb}</button>
-                    ))}
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: 12, color: t.sub, width: 78, flexShrink: 0 }}>จำนวนครั้ง</span>
-                    <input type="number" min="1" value={timerRepeatCount} onChange={(e) => setTimerRepeatCount(e.target.value)} style={{ ...input(t), flex: 1 }} />
-                  </div>
-                  <div style={{ fontSize: 10.5, color: t.faint, marginTop: 8, lineHeight: 1.5 }}>เช่น ทุก 15 นาที × 4 ครั้ง = ครบ 1 ชม. เตือนเป็นระยะระหว่างทาง ไม่ใช่รอครบทีเดียว</div>
-                </>
-              )}
-            </div>
-          )}
-
-          {goalTemplates.length > 0 && (
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: t.sub, marginBottom: 8 }}>เป้าหมายประจำที่ตั้งไว้</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {goalTemplates.map((tp) => (
-                  <div key={tp.id} style={{ ...card(t), padding: "9px 12px", display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: 10 }}>{diffEmoji[tp.difficulty]}</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12.5, color: t.text, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tp.text}</div>
-                      <div style={{ fontSize: 10, color: t.faint }}>{tp.daysOfWeek.length === 7 ? "ทุกวัน" : tp.daysOfWeek.map((i) => dayLabels[i]).join(" ")}</div>
-                    </div>
-                    <button onClick={() => pauseTemplate(tp.id)} style={ghost} title="หยุด/ลบเป้าหมายประจำนี้"><Trash2 size={14} color={t.faint} /></button>
-                  </div>
-                ))}
-              </div>
+              ))}
+              <button onClick={addBlankSuggestion} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", padding: "10px 0", borderRadius: 12, border: `1.5px dashed ${t.border}`, color: t.sub, fontSize: 12, cursor: "pointer", background: "none", marginBottom: 4 }}><Plus size={14} /> เพิ่มเป้าหมายเอง</button>
             </div>
           )}
         </div>
 
-        <div style={{ padding: "12px 20px calc(20px + env(safe-area-inset-bottom, 0px) + 78px)", flexShrink: 0, borderTop: `1px solid ${t.border}` }}>
-          <button onClick={save} disabled={disabled} style={{ ...primaryBtn(t), width: "100%", padding: "13px 0", fontSize: 15, opacity: disabled ? 0.6 : 1 }}>{busy ? "กำลังบันทึก..." : "บันทึก"}</button>
-        </div>
+        {(step === "form" || step === "results") && (
+          <div style={{ padding: "12px 20px calc(20px + env(safe-area-inset-bottom, 0px) + 78px)", flexShrink: 0, borderTop: `1px solid ${t.border}` }}>
+            {step === "form"
+              ? <button onClick={save} disabled={disabled} style={{ ...primaryBtn(t), width: "100%", padding: "13px 0", fontSize: 15, opacity: disabled ? 0.6 : 1 }}>{busy ? "กำลังประเมิน+บันทึก..." : "บันทึก"}</button>
+              : <button onClick={confirmSuggestions} disabled={busy || validSuggestions.length === 0} style={{ ...primaryBtn(t), width: "100%", padding: "13px 0", fontSize: 15, opacity: busy || validSuggestions.length === 0 ? 0.6 : 1 }}>{busy ? "กำลังบันทึก..." : `บันทึกทั้งหมด (${validSuggestions.length})`}</button>}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -3247,8 +3391,8 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
   const todayNet = tx.filter((x) => x.date === todayStr()).reduce((s, x) => s + (x.type === "in" ? x.amount : -x.amount), 0);
 
   // 🏆 คำนวณแต้ม + streak ที่ดีที่สุด จากข้อมูลเป้าหมายทั้งหมด (ไม่ใช่แค่วันนี้)
-  const diffPoints = { easy: 1, normal: 2, hard: 3 };
-  const pointsInRange = (fromDate) => (allGoals || []).filter((g) => g.done && g.date && (!fromDate || g.date >= fromDate)).reduce((s, g) => s + (diffPoints[g.difficulty] || 2), 0);
+  const diffPoints = { easy: 1, normal: 2, hard: 3 }; // เก็บไว้เป็น fallback สำหรับเป้าหมายเก่าก่อนเปลี่ยนมาใช้ AI ประเมินคะแนน (g.points)
+  const pointsInRange = (fromDate) => (allGoals || []).filter((g) => g.done && g.date && (!fromDate || g.date >= fromDate)).reduce((s, g) => s + (g.points ?? diffPoints[g.difficulty] ?? 2), 0);
   const weekStartStr = (() => { const d = new Date(); const dow = (d.getDay() + 6) % 7; d.setDate(d.getDate() - dow); return d.toISOString().slice(0, 10); })();
   const monthStartStr = todayStr().slice(0, 7) + "-01";
   const weekPoints = pointsInRange(weekStartStr);
@@ -3422,7 +3566,7 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
                 <button onClick={() => { const nd = !g.done; const dd = nd ? todayStr() : null; setGoals((gs) => gs.map((x) => (x.id === g.id ? { ...x, done: nd, doneDate: dd } : x))); if (userId) { supabase.from("goals").update({ done: nd, done_date: dd }).eq("id", g.id).then(() => {}, () => {}); if (nd) logAudit(userId, "goals", "complete", "ทำเป้าหมายสำเร็จ"); } }} style={{ width: 22, height: 22, borderRadius: 7, border: `2px solid ${g.done ? t.accent : t.faint}`, background: g.done ? t.accent : "transparent", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}>{g.done && <Check size={14} color={t.onAccent} />}</button>
                 <button onClick={() => setCommentingId(commentingId === g.id ? null : g.id)} style={{ flex: 1, minWidth: 0, background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}>
                   <div style={{ fontSize: 13.5, color: g.done ? t.sub : t.text, textDecoration: g.done ? "line-through" : "none", display: "flex", alignItems: "center", gap: 5 }}>
-                    {g.difficulty && <span style={{ fontSize: 10 }}>{{ easy: "🟢", normal: "🟡", hard: "🔴" }[g.difficulty]}</span>}
+                    {g.points != null && <span style={{ fontSize: 10, fontWeight: 800, color: t.accent, background: `${t.accent}18`, borderRadius: 6, padding: "1px 5px" }}>+{g.points}</span>}
                     {g.text}
                     {g.template_id && <Repeat2 size={11} color={t.faint} />}
                   </div>

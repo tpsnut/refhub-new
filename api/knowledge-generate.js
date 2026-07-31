@@ -80,6 +80,98 @@ export default async function handler(req, res) {
     }
   }
 
+  // 🎯 กิ่งใหม่: AI ช่วยคิดเป้าหมาย + ประเมินคะแนนเป้าหมาย (ใช้ endpoint เดียวกัน กัน Vercel function เกิน 12 อัน)
+  // mode "suggest" = แนะนำเป้าหมายใหม่ 4 ข้อ (จากประวัติ หรือจากหัวข้อที่พิมพ์)
+  // mode "assess"  = ประเมินคะแนนให้เป้าหมายที่ผู้ใช้พิมพ์เอง (แทนระบบเลือกระดับความหินเดิมที่เลือกเองแล้วไม่แฟร์)
+  if (body.action === "goal_ai") {
+    const { mode, source, topic, historyTexts, text, callerToken } = body;
+    if (!callerToken) return res.status(401).json({ error: "ไม่พบข้อมูลยืนยันตัวตน ลองล็อกอินใหม่" });
+    const geminiKey = process.env.GEMINI_API_KEY;
+    if (!geminiKey) return res.status(500).json({ error: "ยังไม่ได้ตั้งค่า GEMINI_API_KEY บน Vercel" });
+
+    try {
+      const supabaseUrl = process.env.VITE_SUPABASE_URL;
+      const anonKey = process.env.VITE_SUPABASE_ANON_KEY;
+      const authClient = createClient(supabaseUrl, anonKey);
+      const { data: userData, error: userErr } = await authClient.auth.getUser(callerToken);
+      if (userErr || !userData?.user) return res.status(401).json({ error: "ยืนยันตัวตนไม่สำเร็จ ลองล็อกอินใหม่" });
+
+      // เกณฑ์คะแนนกลาง ใช้ร่วมกันทั้ง 2 mode ให้ประเมินสม่ำเสมอ ไม่ลอยๆ คนละมาตรฐาน
+      const scoringRule = `เกณฑ์ให้คะแนน "points" เป็นตัวเลข 1-10 ประเมินจากความยาก/ความสำคัญของเป้าหมายนั้นเทียบกับเป้าหมายพัฒนาตัวเองรายวันทั่วไป (1=ง่ายมาก ทำแป๊บเดียว, 10=ท้าทายมาก ต้องวินัยสูง) อ้างอิงมาตรฐานสุขภาพ/พัฒนาตัวเองที่มีงานวิจัยรองรับเมื่อเกี่ยวข้อง เช่น:
+- การเดิน/ออกกำลังกาย: WHO แนะนำ 150-300 นาที/สัปดาห์ระดับปานกลาง เทียบเท่าเดินประมาณ 7,000-8,000 ก้าว/วัน
+- สมาธิ: ผู้เริ่มต้นควรเริ่มที่ 10-20 นาที/วัน
+- หน้าจอเพื่อความบันเทิง (ผู้ใหญ่): ผู้เชี่ยวชาญแนะนำจำกัดไม่เกิน 2 ชม./วัน
+- เรื่องอื่น (การเงิน/ภาษา/อ่านหนังสือ) ให้ประเมินตามความเหมาะสมทั่วไปอย่างสมเหตุสมผล
+ใช้เกณฑ์เดียวกันนี้เสมอเพื่อให้คะแนนเทียบกันได้แฟร์ระหว่างผู้ใช้แต่ละคน`;
+
+      let prompt;
+      if (mode === "assess") {
+        if (!text || typeof text !== "string") return res.status(400).json({ error: "ไม่มีข้อความเป้าหมายให้ประเมิน" });
+        prompt = `ประเมินคะแนนสำหรับเป้าหมายพัฒนาตัวเองนี้: "${text.slice(0, 200)}"
+${scoringRule}
+เพิ่ม "reason": เหตุผลสั้นๆ ภาษาไทย ไม่เกิน 20 คำ อ้างอิงมาตรฐานที่ใช้ (ถ้ามี)
+ตอบกลับเป็น JSON ล้วนๆ เท่านั้น ไม่มีข้อความอื่น ไม่มี markdown code fence รูปแบบนี้เป๊ะ:
+{"points":5,"reason":"..."}`;
+      } else {
+        const ctx = source === "topic"
+          ? `โดยเน้นหัวข้อที่ผู้ใช้สนใจ: "${(topic || "").slice(0, 200)}"`
+          : `โดยดูจากเป้าหมายที่ผู้ใช้เคยตั้งไว้ก่อนหน้านี้: ${Array.isArray(historyTexts) && historyTexts.length ? historyTexts.slice(0, 20).join(", ") : "(ยังไม่มีประวัติ ให้แนะนำเป้าหมายพัฒนาตัวเองทั่วไปที่เหมาะกับผู้ใหญ่วัยทำงาน)"} — แนะนำเป้าหมายใหม่ที่ต่อยอด/เสริมจากพฤติกรรมเดิม ไม่ซ้ำของเดิมเป๊ะๆ`;
+        prompt = `สร้างข้อเสนอแนะเป้าหมายพัฒนาตัวเองรายวัน ภาษาไทย จำนวน 4 ข้อ ${ctx}
+${scoringRule}
+แต่ละข้อต้องมี:
+- "text": ข้อความเป้าหมาย กระชับ ปฏิบัติได้จริงภายในวันเดียว ไม่เกิน 12 คำ
+- "points": ตามเกณฑ์ข้างต้น
+- "reason": เหตุผลสั้นๆ ไม่เกิน 20 คำ อ้างอิงมาตรฐานที่ใช้ (ถ้ามี)
+
+ตอบกลับเป็น JSON ล้วนๆ เท่านั้น ไม่มีข้อความอื่นนำหน้า/ตามหลัง ไม่มี markdown code fence รูปแบบนี้เป๊ะ:
+{"goals":[{"text":"...","points":5,"reason":"..."}]}`;
+      }
+
+      const r = await fetch(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            generationConfig: { maxOutputTokens: 2000 },
+          }),
+        }
+      );
+      const data = await r.json();
+      if (!r.ok) return res.status(r.status).json({ error: data?.error?.message || "Gemini API error" });
+
+      const raw = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("").trim();
+      if (!raw) {
+        const reason = data.candidates?.[0]?.finishReason || data.promptFeedback?.blockReason;
+        return res.status(500).json({ error: reason ? `AI ไม่ตอบกลับเนื้อหา (สาเหตุ: ${reason})` : "AI ไม่ตอบกลับเนื้อหาใดๆ ลองใหม่อีกครั้ง" });
+      }
+      const cleaned = raw.replace(/^```json\s*|```\s*$/g, "").trim();
+      let parsed;
+      try {
+        parsed = JSON.parse(cleaned);
+      } catch (e) {
+        const start = cleaned.indexOf("{");
+        const end = cleaned.lastIndexOf("}");
+        if (start !== -1 && end > start) { try { parsed = JSON.parse(cleaned.slice(start, end + 1)); } catch (e2) {} }
+        if (!parsed) return res.status(500).json({ error: `แปลงผลลัพธ์จาก AI ไม่สำเร็จ ตัวอย่างที่ได้รับ: "${cleaned.slice(0, 150)}"` });
+      }
+
+      const clampPoints = (p) => Math.min(10, Math.max(1, Math.round(Number(p) || 5)));
+      if (mode === "assess") {
+        return res.status(200).json({ points: clampPoints(parsed.points), reason: parsed.reason || "" });
+      }
+      const goals = (Array.isArray(parsed.goals) ? parsed.goals : []).slice(0, 4).map((g) => ({
+        text: (g.text || "").toString().slice(0, 80),
+        points: clampPoints(g.points),
+        reason: (g.reason || "").toString().slice(0, 120),
+      })).filter((g) => g.text);
+      return res.status(200).json({ goals });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
   // ---- โค้ดเดิม: สร้างบทความความรู้รายวันด้วย Gemini ----
   const { interests, count, callerToken } = body;
   if (!Array.isArray(interests) || interests.length === 0) return res.status(400).json({ error: "ยังไม่ได้เลือกความสนใจ" });
