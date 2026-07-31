@@ -438,9 +438,33 @@ const THEMES = {
   },
 };
 
-function palette(mode, themeId) {
-  const th = THEMES[themeId] || THEMES.default;
-  const T = th[mode] || th.day;
+// 🎨 helper สำหรับธีมสีกำหนดเอง — ผสมสีให้อ่อนลง (ทำ accent2 จาก accent หลักที่ user เลือก) + คำนวณความสว่างเพื่อเลือกสีตัวหนังสือ (onAccent) ให้ contrast ปลอดภัยอัตโนมัติ
+function hexToRgb(hex) {
+  const h = (hex || "#F2872E").replace("#", "");
+  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  const num = parseInt(full, 16);
+  return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
+}
+function lightenHex(hex, amt) {
+  const { r, g, b } = hexToRgb(hex);
+  const mix = (c) => Math.round(c + (255 - c) * amt);
+  return `#${[mix(r), mix(g), mix(b)].map((c) => c.toString(16).padStart(2, "0")).join("")}`;
+}
+function relativeLuminance(hex) {
+  const { r, g, b } = hexToRgb(hex);
+  const [rl, gl, bl] = [r, g, b].map((c) => { const v = c / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+  return 0.2126 * rl + 0.7152 * gl + 0.0722 * bl;
+}
+
+function palette(mode, themeId, customAccent) {
+  let T;
+  if (themeId === "custom" && customAccent) {
+    const onAccent = relativeLuminance(customAccent) > 0.5 ? "#141414" : "#FFFFFF";
+    T = { accent: customAccent, accent2: lightenHex(customAccent, 0.2), onAccent };
+  } else {
+    const th = THEMES[themeId] || THEMES.default;
+    T = th[mode] || th.day;
+  }
   const base = MODE_BASE[mode] || MODE_BASE.day;
   const common = { accent: T.accent, accent2: T.accent2, onAccent: T.onAccent };
   return {
@@ -935,7 +959,8 @@ export default function RefHub() {
   const [themeMode, setThemeMode] = useState("night");
   const [mentor, setMentor] = useState("none");
   const [customMentors, setCustomMentors] = useState([]); // โค้ชที่ user สร้างเอง (ไม่ใช่แอดมิน) [{id, name, description, avatarUrl}]
-  const [theme, setTheme] = useState("default"); // 🎨 ธีมสีแอป: gray | default | red | navy | twilight — แยกอิสระจาก mentor
+  const [theme, setTheme] = useState("default"); // 🎨 ธีมสีแอป: gray | default | red | navy | twilight | custom — แยกอิสระจาก mentor
+  const [customAccent, setCustomAccent] = useState("#F2872E"); // 🎨 สีที่ user กำหนดเอง ใช้เมื่อ theme === "custom" (accent2/onAccent คำนวณอัตโนมัติจากสีนี้)
   const [cardShape, setCardShape] = useState("soft"); // 🔲 ทรงกรอบการ์ด: sharp (เหลี่ยมคมแบบ SCB ไม่มีเงา) | soft (มนเบาๆ ใกล้ตัวอักษร) — default soft ตามที่ตกลง
   const [homeLayout, setHomeLayout] = useState("original"); // 🏠 โครงหน้า Home: original (ของเดิม) | wallet (แนววอลเล็ต) | bento (บล็อกผสม) — default original ตามที่ตกลง
   const [fontScale, setFontScale] = useState(() => { // 📏 ขนาดตัวอักษร: 100 | 115 | 130 (ปกติ/ใหญ่/ใหญ่มาก) — อ่านจาก localStorage ทันทีตอน mount กันจอกระพริบกลับไป 100 ก่อนแวบนึง
@@ -1002,7 +1027,7 @@ export default function RefHub() {
 
   const isNight = themeMode === "night" || (themeMode === "auto" && autoNight);
   const mode = isNight ? "night" : "day";
-  const t = palette(mode, theme);
+  const t = palette(mode, theme, customAccent);
   const customMentorObj = customMentors.find((c) => c.id === mentor);
   // ⚠️ เดิมเช็ค MENTORS[mentor] || (...) แต่ MENTORS.none มีอยู่จริงในอ็อบเจกต์ เลยชนะ || ก่อนเสมอ
   // ทำให้ไม่มีวันไปถึงส่วนที่เอารูปที่ user ตั้งเองมาใส่ — ต้องเช็ค "none" แยกเป็นเคสแรกสุด
@@ -1045,6 +1070,7 @@ export default function RefHub() {
           setMentor(uSettings.mentor || "none");
           setThemeMode(uSettings.theme_mode || "night");
           if (uSettings.theme) setTheme(uSettings.theme);
+          if (uSettings.custom_accent) setCustomAccent(uSettings.custom_accent);
           if (uSettings.card_shape) setCardShape(uSettings.card_shape);
           if (uSettings.home_layout) setHomeLayout(uSettings.home_layout);
           if (typeof uSettings.volume === "number") setVolume(uSettings.volume);
@@ -1316,6 +1342,7 @@ export default function RefHub() {
             mentor: mentor,
             theme_mode: themeMode,
             theme: theme, // ถ้ายังไม่มีคอลัมน์ "theme" ในตาราง user_settings คำสั่งนี้จะ error เงียบๆ (ถูกดักไว้ใน catch) — เพิ่มคอลัมน์ type text ได้เพื่อให้ธีม sync ข้ามอุปกรณ์
+            custom_accent: customAccent, // ต้องมีคอลัมน์ "custom_accent" (text) เช่นกัน
             card_shape: cardShape, // เช่นกัน ต้องมีคอลัมน์ "card_shape" (text) ถึงจะ sync ข้ามอุปกรณ์ได้ ไม่งั้น error เงียบๆ เหมือนกัน
             home_layout: homeLayout, // ต้องมีคอลัมน์ "home_layout" (text) เช่นกัน
             volume: volume
@@ -1327,7 +1354,7 @@ export default function RefHub() {
         console.error("เซฟค่า Settings ลง Cloud ผิดพลาด: ", e);
       }
     })(); 
-  }, [notes, goals, tx, profile, mentor, theme, themeMode, cardShape, homeLayout, volume, playlist, loaded]);
+  }, [notes, goals, tx, profile, mentor, theme, themeMode, customAccent, cardShape, homeLayout, volume, playlist, loaded]);
 
   // music reactions
   const cur = playlist.find((p) => p.id === curId) || null;
@@ -1935,7 +1962,7 @@ export default function RefHub() {
         )}
 
         {mentorPick && <MentorPicker t={t} mentor={mentor} setMentor={setMentor} authProfile={authProfile} setAuthProfile={setAuthProfile} userId={userId} customMentors={customMentors} setCustomMentors={setCustomMentors} close={() => setMentorPick(false)} />}
-        {themePick && <ThemePicker t={t} theme={theme} setTheme={setTheme} mode={mode} close={() => setThemePick(false)} />}
+        {themePick && <ThemePicker t={t} theme={theme} setTheme={setTheme} mode={mode} customAccent={customAccent} setCustomAccent={setCustomAccent} close={() => setThemePick(false)} />}
         {homeLayoutPick && <HomeLayoutPicker t={t} homeLayout={homeLayout} setHomeLayout={setHomeLayout} close={() => setHomeLayoutPick(false)} />}
         {moreMenuOpen && (
           <div style={overlay} onClick={() => setMoreMenuOpen(false)}>
@@ -9250,8 +9277,9 @@ function MentorPicker({ t, mentor, setMentor, authProfile, setAuthProfile, userI
   </div></div>);
 }
 
-function ThemePicker({ t, theme, setTheme, mode, close }) {
-  return (<div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
+function ThemePicker({ t, theme, setTheme, mode, customAccent, setCustomAccent, close }) {
+  const [pendingColor, setPendingColor] = useState(customAccent);
+  return (<div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
     <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 4 }}>เลือกธีมสีแอป</div>
     <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>แต่ละธีมมีเวอร์ชันกลางวัน/กลางคืนของตัวเอง สลับได้อิสระจากโค้ช</div>
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -9265,6 +9293,21 @@ function ThemePicker({ t, theme, setTheme, mode, close }) {
           {on && <Check size={20} color={T.accent} />}
         </button>
       ); })}
+
+      {/* 🎨 กำหนดสีเอง — user เลือกสีอะไรก็ได้ อีก 2 สี (accent2/onAccent) คำนวณอัตโนมัติจากสีที่เลือก */}
+      <div style={{ padding: 14, borderRadius: 18, background: t.surface, border: `2px solid ${theme === "custom" ? pendingColor : t.border}` }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <label style={{ position: "relative", width: 46, height: 46, borderRadius: 23, flexShrink: 0, cursor: "pointer", overflow: "hidden", background: pendingColor, border: `1px solid ${t.border}` }}>
+            <input type="color" value={pendingColor} onChange={(e) => setPendingColor(e.target.value)} style={{ position: "absolute", inset: -4, width: "calc(100% + 8px)", height: "calc(100% + 8px)", opacity: 0, cursor: "pointer" }} />
+          </label>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>กำหนดเอง</div>
+            <div style={{ fontSize: 11.5, color: t.sub }}>แตะวงกลมเพื่อเลือกสีที่ชอบ</div>
+          </div>
+          {theme === "custom" && <Check size={20} color={pendingColor} />}
+        </div>
+        <button onClick={() => { setCustomAccent(pendingColor); setTheme("custom"); close(); }} style={{ ...primaryBtn({ accent: pendingColor, accent2: lightenHex(pendingColor, 0.2), onAccent: relativeLuminance(pendingColor) > 0.5 ? "#141414" : "#FFFFFF" }), width: "100%", padding: "10px 0", marginTop: 12, fontSize: 13 }}>ใช้สีนี้</button>
+      </div>
     </div>
   </div></div>);
 }
