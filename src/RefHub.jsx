@@ -1877,17 +1877,17 @@ export default function RefHub() {
         <div style={{ transform: `scale(${fontScale / 100})`, transformOrigin: "top left", width: `${10000 / fontScale}%` }}>
 
         {/* HEADER */}
-        <div style={{ position: "relative", zIndex: 3, padding: cardShape === "sharp" ? "0" : `18px ${cardShape === "sharp" ? 0 : 10}px 0` }}>
+        <div style={{ position: "relative", zIndex: 3, padding: cardShape === "sharp" ? "10px 0 0" : `18px ${cardShape === "sharp" ? 0 : 10}px 0` }}>
           {cardShape === "sharp" ? (
             <div style={{ display: "flex", alignItems: "stretch", justifyContent: "space-between", borderBottom: `1px solid ${t.border}`, minHeight: 56 }}>
               {page === "home" ? (
                 <>
                   <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                     <button onClick={() => setHamburgerOpen(true)} style={{ position: "relative", width: 40, background: "none", border: "none", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}>
-                      <Menu size={20} color={t.text} />
+                      <Menu size={22} color={t.text} />
                       {adminAlerts.length > 0 && <span style={{ position: "absolute", top: 12, right: 10, width: 8, height: 8, background: "#D9534F" }} />}
                     </button>
-                    <button onClick={() => profile.avatar && setProfileLightbox(true)} style={{ background: "none", border: "none", cursor: profile.avatar ? "pointer" : "default", padding: 0, alignSelf: "stretch", width: 52, flexShrink: 0 }}>
+                    <button onClick={() => profile.avatar && setProfileLightbox(true)} style={{ background: "none", border: "none", cursor: profile.avatar ? "pointer" : "default", padding: 0, width: 52, height: 52, flexShrink: 0 }}>
                       <Avatar profile={profile} t={t} size={52} fill />
                     </button>
                     <button onClick={() => setEditProfile(true)} style={{ display: "flex", alignItems: "center", background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left", marginLeft: 8 }}>
@@ -1900,22 +1900,22 @@ export default function RefHub() {
                     </button>
                   </div>
                   <div style={{ display: "flex", alignItems: "stretch" }}>
-                    <button onClick={() => setSearchOpen(true)} style={{ width: 48, background: "none", border: "none", borderLeft: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }}><Search size={17} color={t.text} /></button>
-                    <button onClick={() => setMoreMenuOpen(true)} style={{ width: 48, background: "none", border: "none", borderLeft: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }}><MoreVertical size={17} color={t.text} /></button>
+                    <button onClick={() => setSearchOpen(true)} style={{ width: 48, background: "none", border: "none", borderLeft: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }}><Search size={19} color={t.text} /></button>
+                    <button onClick={() => setMoreMenuOpen(true)} style={{ width: 48, background: "none", border: "none", borderLeft: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }}><MoreVertical size={19} color={t.text} /></button>
                   </div>
                 </>
               ) : (
                 <>
                   <button onClick={() => setPage("home")} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", color: t.text, fontWeight: 700, fontSize: 13, padding: "0 14px" }}>
-                    <ArrowLeft size={17} color={t.text} /> กลับ
+                    <ArrowLeft size={19} color={t.text} /> กลับ
                   </button>
                   <div style={{ display: "flex", alignItems: "stretch" }}>
-                    <button onClick={() => setSearchOpen(true)} style={{ width: 48, background: "none", border: "none", borderLeft: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }}><Search size={17} color={t.text} /></button>
+                    <button onClick={() => setSearchOpen(true)} style={{ width: 48, background: "none", border: "none", borderLeft: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }}><Search size={19} color={t.text} /></button>
                     <div style={{ position: "relative", width: 48, alignSelf: "stretch" }}>
                       {/* ✨ เอฟเฟคเดียวกับโหมดมน ย้ายมาให้โหมดเหลี่ยมด้วย กันไอคอนเพลงดูขาดๆ ตอนกำลังเล่นอยู่ */}
                       {playing && <div style={{ position: "absolute", inset: 0, animation: "rh-note-glow 1.6s ease-in-out infinite", pointerEvents: "none" }} />}
                       <button onClick={() => setMusicOpen(true)} style={{ position: "relative", width: "100%", height: "100%", background: "none", border: "none", borderLeft: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }}>
-                        <Music size={17} color={playing ? t.accent : t.text} />
+                        <Music size={19} color={playing ? t.accent : t.text} />
                       </button>
                       {playing && (
                         <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
@@ -1935,10 +1935,10 @@ export default function RefHub() {
               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 {/* ☰ ตั้งใจไม่ใส่พื้นหลังวงกลม — เลือกแบบ B (ไอคอนโล่งๆ) ตามที่ Maxnuss ยืนยัน */}
                 <button onClick={() => setHamburgerOpen(true)} style={{ position: "relative", width: 38, background: "none", border: "none", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}>
-                  <Menu size={20} color={t.text} />
+                  <Menu size={22} color={t.text} />
                   {adminAlerts.length > 0 && <span style={{ position: "absolute", top: 3, right: 3, width: 8, height: 8, borderRadius: 4, background: "#D9534F" }} />}
                 </button>
-                <button onClick={() => profile.avatar && setProfileLightbox(true)} style={{ background: "none", border: "none", cursor: profile.avatar ? "pointer" : "default", padding: 0, alignSelf: "stretch", width: 46, flexShrink: 0 }}>
+                <button onClick={() => profile.avatar && setProfileLightbox(true)} style={{ background: "none", border: "none", cursor: profile.avatar ? "pointer" : "default", padding: 0, width: 46, height: 46, flexShrink: 0 }}>
                   <Avatar profile={profile} t={t} size={46} fill />
                 </button>
                 <button onClick={() => setEditProfile(true)} style={{ display: "flex", alignItems: "center", background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left", marginLeft: 10 }}>
@@ -1951,24 +1951,24 @@ export default function RefHub() {
                 </button>
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <IconBtn t={t} onClick={() => setSearchOpen(true)}><Search size={17} color={t.text} /></IconBtn>
+                <IconBtn t={t} onClick={() => setSearchOpen(true)}><Search size={19} color={t.text} /></IconBtn>
                 <button onClick={() => setMoreMenuOpen(true)} style={{ position: "relative", width: 38, height: 38, borderRadius: 19, background: t.surface, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }}>
-                  <MoreVertical size={17} color={t.text} />
+                  <MoreVertical size={19} color={t.text} />
                 </button>
               </div>
             </div>
           ) : (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <button onClick={() => setPage("home")} style={{ display: "flex", alignItems: "center", gap: 6, background: t.surface, border: `1px solid ${t.border}`, borderRadius: 20, padding: "8px 14px 8px 10px", cursor: "pointer", color: t.text, fontWeight: 700, fontSize: 13 }}>
-                <ArrowLeft size={17} color={t.text} /> กลับ
+                <ArrowLeft size={19} color={t.text} /> กลับ
               </button>
               <div style={{ display: "flex", gap: 8 }}>
-                <IconBtn t={t} onClick={() => setSearchOpen(true)}><Search size={17} color={t.text} /></IconBtn>
+                <IconBtn t={t} onClick={() => setSearchOpen(true)}><Search size={19} color={t.text} /></IconBtn>
                 <div style={{ position: "relative" }}>
                   {/* ✨ แสงวูบวาบรอบวงกลมไอคอน — อยู่ชั้นล่างสุด (behind ปุ่ม) โชว์เฉพาะตอนกำลังเล่นอยู่จริงเท่านั้น หยุด/จบเพลงแล้วหายไปพร้อมกับสีไอคอนกลับเป็นปกติ */}
                   {playing && <div style={{ position: "absolute", inset: 0, borderRadius: 19, animation: "rh-note-glow 1.6s ease-in-out infinite", pointerEvents: "none" }} />}
                   <IconBtn t={t} onClick={() => setMusicOpen(true)} active={playing} accent={t.accent}>
-                    <Music size={17} color={playing ? t.accent : t.text} />
+                    <Music size={19} color={playing ? t.accent : t.text} />
                   </IconBtn>
                   {/* 🎵 เอฟเฟคโน้ตดนตรีลอยออกจากไอคอน — โชว์เฉพาะตอนกำลังเล่นเพลง/คลิปอยู่จริง ให้รู้ว่ามีอะไรเล่นอยู่โดยไม่ต้องกดเข้าไปดู */}
                   {playing && (
@@ -2187,12 +2187,12 @@ function AuthLoadingScreen() {
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#0D0C0B", gap: 22 }}>
       <style>{`@keyframes rh-pulse { 0%,100% { transform: scale(1); opacity:1; } 50% { transform: scale(1.05); opacity:.85; } }`}</style>
-      <div style={{ animation: "rh-pulse 1.6s ease-in-out infinite" }}><PKnowLockup width={180} gap={8} animated /></div>
+      <div style={{ animation: "rh-pulse 1.6s ease-in-out infinite" }}><PKnowLockup width={180} gap={8} animated cycle /></div>
     </div>
   );
 }
 
-function PKnowMark({ width = 220, animated = false, color = "#F2872E" }) {
+function PKnowMark({ width = 220, animated = false, color = "#F2872E", cycle = false }) {
   const h = width * 0.34;
   return (
     <svg width={width} height={h} viewBox="0 0 220 75" style={{ display: "block" }}>
@@ -2200,11 +2200,13 @@ function PKnowMark({ width = 220, animated = false, color = "#F2872E" }) {
         @import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');
         @keyframes pk-in { 0% { opacity: 0; transform: translateY(5px) scale(0.85); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
         @keyframes pk-dot { 0% { opacity: 0; } 25% { opacity: 1; } 75% { opacity: 1; } 100% { opacity: 0; } }
+        @keyframes pk-color-cycle { 0% { fill: #F2872E; } 16% { fill: #9B59B6; } 33% { fill: #E74C3C; } 50% { fill: #A8D62B; } 66% { fill: #16A085; } 83% { fill: #3B82F6; } 100% { fill: #F2872E; } }
         .pk-p { animation: pk-in 0.3s cubic-bezier(.2,.8,.3,1.15) both; transform-box: fill-box; transform-origin: center; }
         .pk-know { animation: pk-in 0.25s cubic-bezier(.2,.8,.3,1.15) both; animation-delay: 0.62s; transform-box: fill-box; transform-origin: center; }
         .pk-dot1 { animation: pk-dot 0.45s ease-in-out both; animation-delay: 0.15s; }
         .pk-dot2 { animation: pk-dot 0.45s ease-in-out both; animation-delay: 0.23s; }
         .pk-dot3 { animation: pk-dot 0.45s ease-in-out both; animation-delay: 0.31s; }
+        .pk-cycle { animation: pk-color-cycle 10s linear infinite; }
       `}</style>
       <defs>
         <filter id="pkRough" x="-20%" y="-20%" width="140%" height="140%">
@@ -2212,13 +2214,13 @@ function PKnowMark({ width = 220, animated = false, color = "#F2872E" }) {
           <feDisplacementMap in="SourceGraphic" in2="noise" scale="3.4" xChannelSelector="R" yChannelSelector="G" />
         </filter>
       </defs>
-      <text x="50%" y="58" textAnchor="middle" filter="url(#pkRough)"
+      <text x="50%" y="58" textAnchor="middle" filter="url(#pkRough)" className={cycle ? "pk-cycle" : ""}
         style={{ fontFamily: "'Anton','IBM Plex Sans Thai',sans-serif", fontSize: 58, letterSpacing: 1 }}
         fill={color}>
         {animated ? (<><tspan className="pk-p">P</tspan><tspan className="pk-know">KNOW</tspan></>) : "PKNOW"}
       </text>
       {animated && (
-        <g filter="url(#pkRough)" fill={color}>
+        <g filter="url(#pkRough)" fill={color} className={cycle ? "pk-cycle" : ""}>
           <circle className="pk-dot1" cx="48" cy="48" r="3.2" />
           <circle className="pk-dot2" cx="58" cy="48" r="3.2" />
           <circle className="pk-dot3" cx="68" cy="48" r="3.2" />
@@ -2228,10 +2230,10 @@ function PKnowMark({ width = 220, animated = false, color = "#F2872E" }) {
   );
 }
 
-function PKnowLockup({ width = 220, gap = 10, animated = false }) {
+function PKnowLockup({ width = 220, gap = 10, animated = false, cycle = false }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap }}>
-      <PKnowMark width={width} animated={animated} />
+      <PKnowMark width={width} animated={animated} cycle={cycle} />
       <div style={{ textAlign: "center" }}>
         <div style={{ fontSize: 12, color: "#C7C2BC", letterSpacing: 1 }}>プレイヤーは知っている</div>
         <div style={{ fontSize: 11, color: "#6B655F", marginTop: 2 }}>คนเล่นเขารู้กัน</div>
@@ -2331,7 +2333,7 @@ function AuthPage() {
   return (
     <div style={{ minHeight: "100vh", display: "flex", justifyContent: "center", background: "#0D0C0B", fontFamily: "'IBM Plex Sans Thai',sans-serif" }}>
       <div style={{ width: "100%", maxWidth: 440, padding: "64px 24px", display: "flex", flexDirection: "column" }}>
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: 40 }}><PKnowLockup width={230} /></div>
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 40 }}><PKnowLockup width={230} cycle /></div>
 
         <div style={{ display: "flex", background: "#1C1A18", borderRadius: 14, padding: 4, marginBottom: 16, border: "1px solid rgba(255,255,255,0.07)" }}>
           <button onClick={() => setMode("login")} style={{ flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 11, border: "none", cursor: "pointer", background: mode === "login" ? "#F2872E" : "transparent", color: mode === "login" ? "#141414" : "#8C857C", fontWeight: 600, fontSize: 13.5 }}>เข้าสู่ระบบ</button>
@@ -2651,7 +2653,7 @@ function PendingApprovalScreen({ profile, onLogout }) {
   return (
     <div style={{ minHeight: "100vh", display: "flex", justifyContent: "center", background: "#0D0C0B", fontFamily: "'IBM Plex Sans Thai',sans-serif" }}>
       <div style={{ width: "100%", maxWidth: 440, padding: "80px 24px", textAlign: "center" }}>
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: 28 }}><PKnowLockup width={190} /></div>
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 28 }}><PKnowLockup width={190} cycle /></div>
         <div style={{ fontSize: 16, fontWeight: 700, color: "#F2EDE6", marginBottom: 8 }}>รอแอดมินอนุมัติ</div>
         <div style={{ fontSize: 13, color: "#8C857C", lineHeight: 1.6, marginBottom: 4 }}>
           บัญชี {profile?.email ? <b style={{ color: "#C7C2BC" }}>{profile.email}</b> : "ของคุณ"} สมัครสำเร็จแล้ว<br />แต่ยังใช้งานแอปไม่ได้จนกว่าแอดมินจะกดอนุมัติ
@@ -10101,8 +10103,8 @@ function Dock({ t, cardShape, page, setPage, onQuickAdd }) {
 // ---------------- small ----------------
 function Avatar({ profile, t, size, fill }) {
   const dim = fill ? { width: "100%", height: "100%" } : { width: size, height: size };
-  if (profile.avatar) return <img src={profile.avatar} alt="" style={{ ...dim, borderRadius: size / 2, objectFit: "cover", border: `2px solid ${t.accent}` }} />;
-  return <div style={{ ...dim, borderRadius: size / 2, background: `linear-gradient(135deg,${t.accent2},${t.accent})`, color: t.onAccent, display: "grid", placeItems: "center", fontWeight: 800, fontSize: size * 0.42 }}>{(profile.name || "?")[0].toUpperCase()}</div>;
+  if (profile.avatar) return <img src={profile.avatar} alt="" style={{ ...dim, borderRadius: "50%", objectFit: "cover", border: `2px solid ${t.accent}` }} />;
+  return <div style={{ ...dim, borderRadius: "50%", background: `linear-gradient(135deg,${t.accent2},${t.accent})`, color: t.onAccent, display: "grid", placeItems: "center", fontWeight: 800, fontSize: size * 0.42 }}>{(profile.name || "?")[0].toUpperCase()}</div>;
 }
 function Ring({ pct, color, label }) {
   const r = 32, c = 2 * Math.PI * r, dash = (pct / 100) * c;
