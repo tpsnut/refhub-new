@@ -1757,8 +1757,9 @@ export default function RefHub() {
           {page === "home" ? (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
-                <button onClick={() => setHamburgerOpen(true)} style={{ position: "relative", width: 38, height: 38, borderRadius: 19, background: t.surface, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}>
-                  <Menu size={18} color={t.text} />
+                {/* ☰ ตั้งใจไม่ใส่พื้นหลังวงกลม — เลือกแบบ B (ไอคอนโล่งๆ) ตามที่ Maxnuss ยืนยัน */}
+                <button onClick={() => setHamburgerOpen(true)} style={{ position: "relative", width: 38, height: 38, background: "none", border: "none", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                  <Menu size={20} color={t.text} />
                   {adminAlerts.length > 0 && <span style={{ position: "absolute", top: 3, right: 3, width: 8, height: 8, borderRadius: 4, background: "#D9534F" }} />}
                 </button>
                 <button onClick={() => profile.avatar && setProfileLightbox(true)} style={{ background: "none", border: "none", cursor: profile.avatar ? "pointer" : "default", padding: 0 }}>
