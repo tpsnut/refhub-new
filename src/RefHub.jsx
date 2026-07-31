@@ -981,6 +981,8 @@ export default function RefHub() {
   const [catColors, setCatColors] = useState(DEFAULT_CAT_COLORS); // 🎨 สีหมวดหมู่ (การเงิน/ความรู้/เป้าหมาย/โน้ต) ที่ user ปรับเองได้ทีละสี
   const [cardShape, setCardShape] = useState("soft"); // 🔲 ทรงกรอบการ์ด: sharp (เหลี่ยมคมแบบ SCB ไม่มีเงา) | soft (มนเบาๆ ใกล้ตัวอักษร) — default soft ตามที่ตกลง
   const [homeLayout, setHomeLayout] = useState("original"); // 🏠 โครงหน้า Home: original (ของเดิม) | wallet (แนววอลเล็ต) | bento (บล็อกผสม) — default original ตามที่ตกลง
+  const [walletWidgets, setWalletWidgets] = useState(["finance", "knowledge", "goals", "notes", "community"]); // 🔘 วิดเจ็ตในแถวไอคอนลัดของ layout วอลเล็ต (โฟกัส) — user ปรับ/ลบ/เพิ่ม/สลับลำดับเองได้
+  const [bentoWidgets, setBentoWidgets] = useState(["goals", "knowledge", "notes", "community"]); // 🧱 วิดเจ็ตในบล็อกเล็กของ layout เบนโต (โมเสก) — user ปรับ/ลบ/เพิ่ม/สลับลำดับเองได้
   const [fontScale, setFontScale] = useState(() => { // 📏 ขนาดตัวอักษร: 100 | 115 | 130 (ปกติ/ใหญ่/ใหญ่มาก) — อ่านจาก localStorage ทันทีตอน mount กันจอกระพริบกลับไป 100 ก่อนแวบนึง
     try { const fs = JSON.parse(localStorage.getItem("refhub:fontScale") || "null"); return fs || 100; } catch (e) { return 100; }
   });
@@ -1094,6 +1096,8 @@ export default function RefHub() {
           if (uSettings.cat_colors) setCatColors({ ...DEFAULT_CAT_COLORS, ...uSettings.cat_colors });
           if (uSettings.card_shape) setCardShape(uSettings.card_shape);
           if (uSettings.home_layout) setHomeLayout(uSettings.home_layout);
+          if (Array.isArray(uSettings.wallet_widgets)) setWalletWidgets(uSettings.wallet_widgets);
+          if (Array.isArray(uSettings.bento_widgets)) setBentoWidgets(uSettings.bento_widgets);
           if (typeof uSettings.volume === "number") setVolume(uSettings.volume);
         } else {
           // ยืนยันแล้วว่าไม่มี error และไม่มีแถวจริงๆ (ผู้ใช้ใหม่จริง) ถึงจะสร้างข้อมูลตั้งต้นให้
@@ -1367,6 +1371,8 @@ export default function RefHub() {
             cat_colors: catColors, // ต้องมีคอลัมน์ "cat_colors" (jsonb) เก็บสีหมวดหมู่ 4 สีที่ user ปรับเอง
             card_shape: cardShape, // เช่นกัน ต้องมีคอลัมน์ "card_shape" (text) ถึงจะ sync ข้ามอุปกรณ์ได้ ไม่งั้น error เงียบๆ เหมือนกัน
             home_layout: homeLayout, // ต้องมีคอลัมน์ "home_layout" (text) เช่นกัน
+            wallet_widgets: walletWidgets, // ต้องมีคอลัมน์ "wallet_widgets" (jsonb)
+            bento_widgets: bentoWidgets, // ต้องมีคอลัมน์ "bento_widgets" (jsonb)
             volume: volume
           }).eq("user_id", userId);
           // ซิงค์ชื่อ+รูปไปที่ตาราง profiles ด้วย (ตารางนี้แชท/หน้า Admin ใช้แสดงข้อมูลของแต่ละคน ต้องให้ตรงกันเสมอ)
@@ -1376,7 +1382,7 @@ export default function RefHub() {
         console.error("เซฟค่า Settings ลง Cloud ผิดพลาด: ", e);
       }
     })(); 
-  }, [notes, goals, tx, profile, mentor, theme, themeMode, customAccent, catColors, cardShape, homeLayout, volume, playlist, loaded]);
+  }, [notes, goals, tx, profile, mentor, theme, themeMode, customAccent, catColors, cardShape, homeLayout, walletWidgets, bentoWidgets, volume, playlist, loaded]);
 
   // music reactions
   const cur = playlist.find((p) => p.id === curId) || null;
@@ -1914,7 +1920,7 @@ export default function RefHub() {
 
         {/* CONTENT — ความสูงหารด้วยสเกลชดเชย transform:scale ข้างบน กันตอนขยายฟอนต์แล้วท้ายเนื้อหาจมใต้ Dock */}
         <div ref={contentScrollRef} onScroll={(e) => setAtTop(e.currentTarget.scrollTop < 80)} style={{ position: "relative", zIndex: 2, padding: `16px ${cardShape === "sharp" ? 0 : 10}px ${page === "chat" || page === "chatRoom" ? 16 : 120}px`, height: `calc(${(10000 / fontScale).toFixed(2)}vh - 76px)`, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
-          {page === "home" && <ErrorCatcher t={t}><HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, allGoals: goals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget, setAddGoalOpen, setScoreRulesOpen, cardShape, homeLayout }} /></ErrorCatcher>}
+          {page === "home" && <ErrorCatcher t={t}><HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, allGoals: goals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget, setAddGoalOpen, setScoreRulesOpen, cardShape, homeLayout, walletWidgets, setWalletWidgets, bentoWidgets, setBentoWidgets }} /></ErrorCatcher>}
           {page === "ledger" && <FinancePage {...{ t, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt), userId, billReminders, billPayments, markBillPaid, setBillManagerOpen }} />}
           {page === "note" && <NotePage {...{ t, notes, setNotes, isNight, userId, session, authProfile, reminders, openReminder }} />}
           {page === "ideas" && <IdeasPage t={t} M={M} userId={userId} session={session} authProfile={authProfile} setAuthProfile={setAuthProfile} setNotes={setNotes} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} />}
@@ -3582,7 +3588,25 @@ function ScoreRulesModal({ t, close }) {
 }
 
 // 🏠 โครง Home แบบ "วอลเล็ต" — ยอดเงินตัวใหญ่บนสุด + แถวไอคอนฟังก์ชันลัด + list เรียบ (ทางเลือกที่ 2 จาก 3 แบบที่ user เลือกได้)
-function HomeWidgetsWallet({ t, shp, M, quote, isNight, setMentorPick, setChatOpen, balance, todayNet, goalDone, goals, todayArticles, latestNote, setPage, setCommunityOpen, commPreview }) {
+// 🧩 รายการวิดเจ็ตที่มีให้เลือกใส่ในแถวไอคอนลัด (โฟกัส) / บล็อกเล็ก (โมเสก) — user เพิ่ม/ลบ/ลากสลับลำดับเองได้
+const AVAILABLE_WIDGETS = [
+  { id: "finance", label: "การเงิน", icon: Wallet, cat: "green", page: "ledger" },
+  { id: "knowledge", label: "ความรู้", icon: BookOpen, cat: "amber", page: "ideas" },
+  { id: "goals", label: "เป้าหมาย", icon: Target, cat: "coral", page: "goalsReport" },
+  { id: "notes", label: "โน้ต", icon: StickyNote, cat: "violet", page: "note" },
+  { id: "community", label: "ชุมชน", icon: Users, cat: null, page: null },
+];
+function widgetBentoData(id, t, { balance, todayNet, goalDone, goals, todayArticles, latestNote, commPreview }) {
+  if (id === "finance") return { icon: <Wallet size={15} color="#fff" />, cat: "green", label: fmt(balance) };
+  if (id === "knowledge") return { icon: <BookOpen size={15} color="#fff" />, cat: "amber", label: todayArticles === null ? "กำลังโหลด" : todayArticles.length === 0 ? "ยังไม่มีวันนี้" : `${todayArticles.length} บทความ` };
+  if (id === "goals") return { icon: <Target size={15} color="#fff" />, cat: "coral", label: `${goalDone}/${goals.length || 0} เป้าหมาย` };
+  if (id === "notes") return { icon: <StickyNote size={15} color="#fff" />, cat: "violet", label: latestNote ? (latestNote.title || "(ไม่มีหัวข้อ)") : "ยังไม่มีโน้ต" };
+  if (id === "community") return { icon: <Users size={15} color="#fff" />, cat: null, label: commPreview.newCount > 0 ? `ชุมชน · ใหม่ ${commPreview.newCount}` : "ชุมชน" };
+  return null;
+}
+
+// 🏠 โครง Home แบบ "โฟกัส" — ยอดเงินตัวใหญ่บนสุด + แถวไอคอนฟังก์ชันลัด (ปรับ/ลบ/เพิ่ม/ลากสลับลำดับเองได้) + list เรียบ
+function HomeWidgetsWallet({ t, shp, M, isNight, setMentorPick, setChatOpen, balance, todayNet, goalDone, goals, todayArticles, latestNote, setPage, setCommunityOpen, commPreview, walletWidgets, onEditWidgets }) {
   return (
     <>
       <div style={{ marginTop: 8, background: t.hero, borderRadius: shp.radius, padding: "18px 16px", position: "relative", overflow: "hidden" }}>
@@ -3594,12 +3618,18 @@ function HomeWidgetsWallet({ t, shp, M, quote, isNight, setMentorPick, setChatOp
         <button onClick={() => setChatOpen(true)} style={{ marginTop: 12, border: "none", cursor: "pointer", background: `${t.onAccent}2E`, color: t.onAccent, fontWeight: 700, fontSize: 12.5, padding: "8px 14px", borderRadius: shp.radius === 0 ? 0 : 18, display: "inline-flex", alignItems: "center", gap: 6 }}>คุยกับโค้ช <ChevronRight size={14} /></button>
       </div>
 
-      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 18, marginBottom: 6 }}>
-        <WalletQuick t={t} icon={<Wallet size={18} color={t.accent} />} label="การเงิน" onClick={() => setPage("ledger")} />
-        <WalletQuick t={t} icon={<BookOpen size={18} color={t.accent} />} label="ความรู้" onClick={() => setPage("ideas")} />
-        <WalletQuick t={t} icon={<Target size={18} color={t.accent} />} label="เป้าหมาย" onClick={() => setPage("goalsReport")} />
-        <WalletQuick t={t} icon={<StickyNote size={18} color={t.accent} />} label="โน้ต" onClick={() => setPage("note")} />
-        <WalletQuick t={t} icon={<Users size={18} color={t.accent} />} label="ชุมชน" onClick={() => setCommunityOpen(true)} />
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 18, marginBottom: 6 }}>
+        <div style={{ display: "flex", justifyContent: "flex-start", gap: 14, flex: 1, overflowX: "auto" }}>
+          {walletWidgets.map((wid) => {
+            const w = AVAILABLE_WIDGETS.find((x) => x.id === wid);
+            if (!w) return null;
+            const Icon = w.icon;
+            const bg = w.cat ? t.catIcBg[w.cat] : t.accent;
+            const onClick = w.id === "community" ? () => setCommunityOpen(true) : () => setPage(w.page);
+            return <WalletQuick key={w.id} t={t} shp={shp} icon={<Icon size={18} color="#fff" />} bg={bg} label={w.label} onClick={onClick} />;
+          })}
+        </div>
+        <button onClick={onEditWidgets} style={{ background: "none", border: "none", cursor: "pointer", padding: 6, flexShrink: 0, color: t.faint }} title="ปรับไอคอนลัด"><Pencil size={15} /></button>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 9, marginTop: 8 }}>
@@ -3610,10 +3640,10 @@ function HomeWidgetsWallet({ t, shp, M, quote, isNight, setMentorPick, setChatOp
     </>
   );
 }
-function WalletQuick({ t, icon, label, onClick }) {
+function WalletQuick({ t, shp, icon, bg, label, onClick }) {
   return (
-    <button onClick={onClick} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 6, width: 60 }}>
-      <span style={{ width: 50, height: 50, borderRadius: 25, background: t.surface, border: `1px solid ${t.border}`, display: "grid", placeItems: "center" }}>{icon}</span>
+    <button onClick={onClick} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 6, width: 56, flexShrink: 0 }}>
+      <span style={{ width: 50, height: 50, borderRadius: shp.radius === 0 ? 10 : 25, background: bg, display: "grid", placeItems: "center" }}>{icon}</span>
       <span style={{ fontSize: 10, fontWeight: 700, color: t.sub, textAlign: "center" }}>{label}</span>
     </button>
   );
@@ -3631,11 +3661,25 @@ function WalletRow({ t, shp, icon, title, sub, onClick }) {
   );
 }
 
-// 🧱 โครง Home แบบ "เบนโต" — บล็อกขนาดผสม การ์ดยอดเงินใหญ่เด่น + การ์ดเล็กล้อมรอบ (ทางเลือกที่ 3 จาก 3 แบบที่ user เลือกได้)
-function HomeWidgetsBento({ t, shp, M, isNight, setMentorPick, balance, todayNet, goalDone, goals, todayArticles, latestNote, setPage, setCommunityOpen, commPreview }) {
+// 🧱 โครง Home แบบ "โมเสก" — บล็อกยอดเงินใหญ่เด่น + บล็อกเล็กล้อมรอบ (ปรับ/ลบ/เพิ่ม/ลากสลับลำดับเองได้ ใช้สี solid ไม่จางแล้ว)
+function HomeWidgetsBento({ t, shp, M, isNight, setMentorPick, balance, todayNet, goalDone, goals, todayArticles, latestNote, setPage, setCommunityOpen, commPreview, bentoWidgets, onEditWidgets }) {
+  const data = { balance, todayNet, goalDone, goals, todayArticles, latestNote, commPreview };
+  const resolve = (id) => {
+    const meta = AVAILABLE_WIDGETS.find((w) => w.id === id);
+    const d = widgetBentoData(id, t, data);
+    if (!meta || !d) return null;
+    const onClick = id === "community" ? () => setCommunityOpen(true) : () => setPage(meta.page);
+    return { ...d, onClick };
+  };
+  const [tile1, tile2, ...rest] = bentoWidgets;
+  const d1 = tile1 ? resolve(tile1) : null;
+  const d2 = tile2 ? resolve(tile2) : null;
   return (
     <>
-      <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 10, marginTop: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", marginTop: 8 }}>
+        <button onClick={onEditWidgets} style={{ background: "none", border: "none", cursor: "pointer", padding: 6, color: t.faint }} title="ปรับบล็อก"><Pencil size={15} /></button>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 10, marginTop: -30, paddingTop: 30 }}>
         <div style={{ background: t.hero, borderRadius: shp.radius, padding: 16, position: "relative", overflow: "hidden" }}>
           <button onClick={() => setMentorPick(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
             <span style={{ fontSize: 10.5, fontWeight: 700, color: `${t.onAccent}CC` }}>{isNight ? "โค้ชคืนนี้" : "โค้ชวันนี้"}</span>
@@ -3644,27 +3688,70 @@ function HomeWidgetsBento({ t, shp, M, isNight, setMentorPick, balance, todayNet
           <div style={{ fontSize: 10.5, color: `${t.onAccent}CC`, marginTop: 4 }}>{todayNet >= 0 ? "▲ +" : "▼ "}{Math.abs(todayNet).toLocaleString()} วันนี้</div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <BentoTile shp={shp} icon={<Target size={15} color="#fff" />} bg={t.cat.coral} label={`${goalDone}/${goals.length || 0} เป้าหมาย`} onClick={() => setPage("goalsReport")} />
-          <BentoTile shp={shp} icon={<BookOpen size={15} color="#fff" />} bg={t.cat.amber} label={todayArticles === null ? "กำลังโหลด" : todayArticles.length === 0 ? "ยังไม่มีวันนี้" : `${todayArticles.length} บทความ`} onClick={() => setPage("ideas")} />
+          {d1 && <BentoTile shp={shp} icon={d1.icon} bg={d1.cat ? t.catIcBg[d1.cat] : t.accent} label={d1.label} onClick={d1.onClick} />}
+          {d2 && <BentoTile shp={shp} icon={d2.icon} bg={d2.cat ? t.catIcBg[d2.cat] : t.accent} label={d2.label} onClick={d2.onClick} />}
         </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
-        <BentoTile shp={shp} icon={<StickyNote size={15} color="#fff" />} bg={t.cat.violet} label={latestNote ? (latestNote.title || "(ไม่มีหัวข้อ)") : "ยังไม่มีโน้ต"} onClick={() => setPage("note")} full />
-        <BentoTile shp={shp} icon={<Users size={15} color="#fff" />} bg={t.cat.green} label={commPreview.newCount > 0 ? `ชุมชน · ใหม่ ${commPreview.newCount}` : "ชุมชน"} onClick={() => setCommunityOpen(true)} full />
-      </div>
+      {rest.length > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
+          {rest.map((id) => { const d = resolve(id); if (!d) return null; return <BentoTile key={id} shp={shp} icon={d.icon} bg={d.cat ? t.catIcBg[d.cat] : t.accent} label={d.label} onClick={d.onClick} full />; })}
+        </div>
+      )}
     </>
   );
 }
 function BentoTile({ shp, icon, bg, label, onClick, full }) {
   return (
     <button onClick={onClick} style={{ background: bg, border: "none", borderRadius: shp.radius, padding: 12, cursor: "pointer", textAlign: "left", display: "flex", flexDirection: full ? "row" : "column", alignItems: full ? "center" : "flex-start", gap: full ? 10 : 6, flex: full ? "none" : 1, width: "100%" }}>
-      <span style={{ width: 26, height: 26, borderRadius: shp.iconRadius, background: "rgba(0,0,0,.15)", display: "grid", placeItems: "center", flexShrink: 0 }}>{icon}</span>
+      <span style={{ width: 26, height: 26, borderRadius: shp.iconRadius, background: "rgba(255,255,255,.22)", display: "grid", placeItems: "center", flexShrink: 0 }}>{icon}</span>
       <span style={{ fontSize: 11, fontWeight: 700, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: full ? "nowrap" : "normal", flex: full ? 1 : "none" }}>{label}</span>
     </button>
   );
 }
 
-function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, allGoals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget, setAddGoalOpen, setScoreRulesOpen, cardShape, homeLayout }) {
+// 🔀 modal ปรับวิดเจ็ต — ใช้ร่วมกันทั้งแถวไอคอนโฟกัส และบล็อกโมเสก ลากด้วย DragReorderList เดียวกับที่ใช้ทั่วแอป
+function WidgetOrderModal({ t, title, hint, selected, setSelected, close }) {
+  const chosen = selected.map((id) => AVAILABLE_WIDGETS.find((w) => w.id === id)).filter(Boolean);
+  const available = AVAILABLE_WIDGETS.filter((w) => !selected.includes(w.id));
+  return (<div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
+    <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 4 }}>{title}</div>
+    <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>{hint}</div>
+    <div style={{ fontSize: 11, fontWeight: 800, color: t.sub, marginBottom: 8 }}>กำลังแสดงอยู่ · กดค้างที่ ⋮⋮ เพื่อลากสลับตำแหน่ง</div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
+      {chosen.length === 0 && <div style={{ fontSize: 12.5, color: t.sub, textAlign: "center", padding: "16px 0" }}>ยังไม่มีวิดเจ็ตเลย เพิ่มจากด้านล่างได้เลย</div>}
+      <DragReorderList
+        items={chosen}
+        getId={(w) => w.id}
+        onReorder={(newItems) => setSelected(newItems.map((w) => w.id))}
+        renderItem={(w, i, { handleProps, priming }) => {
+          const Icon = w.icon;
+          return (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, background: t.surface, border: `1px solid ${t.border}`, borderRadius: 14, padding: "10px 12px" }}>
+              <span {...handleProps} style={{ display: "grid", placeItems: "center", padding: 4, opacity: priming ? 1 : 0.5, color: t.faint }}><GripVertical size={16} /></span>
+              <span style={{ width: 28, height: 28, borderRadius: 8, background: w.cat ? t.catIcBg[w.cat] : t.accent, display: "grid", placeItems: "center", flexShrink: 0 }}><Icon size={14} color="#fff" /></span>
+              <span style={{ flex: 1, fontSize: 13.5, fontWeight: 700, color: t.text }}>{w.label}</span>
+              <button onClick={() => setSelected(selected.filter((id) => id !== w.id))} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><X size={16} color={t.faint} /></button>
+            </div>
+          );
+        }}
+      />
+    </div>
+    {available.length > 0 && (<>
+      <div style={{ fontSize: 11, fontWeight: 800, color: t.sub, marginBottom: 8 }}>+ เพิ่มวิดเจ็ต</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {available.map((w) => { const Icon = w.icon; return (
+          <button key={w.id} onClick={() => setSelected([...selected, w.id])} style={{ display: "flex", alignItems: "center", gap: 10, background: "none", border: `1.5px dashed ${t.border}`, borderRadius: 14, padding: "10px 12px", cursor: "pointer", textAlign: "left" }}>
+            <span style={{ width: 28, height: 28, borderRadius: 8, background: w.cat ? t.catIcBg[w.cat] : t.accent, display: "grid", placeItems: "center", flexShrink: 0 }}><Icon size={14} color="#fff" /></span>
+            <span style={{ flex: 1, fontSize: 13.5, fontWeight: 700, color: t.text }}>{w.label}</span>
+            <Plus size={16} color={t.accent} />
+          </button>
+        ); })}
+      </div>
+    </>)}
+  </div></div>);
+}
+
+function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, allGoals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget, setAddGoalOpen, setScoreRulesOpen, cardShape, homeLayout, walletWidgets, setWalletWidgets, bentoWidgets, setBentoWidgets }) {
   const [askConfirm, ConfirmUI] = useConfirm(t);
   const [viewingPinned, setViewingPinned] = useState(null);
   const [commentingId, setCommentingId] = useState(null);
@@ -3673,6 +3760,7 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
   const latestNote = notes[0];
   const todayNet = tx.filter((x) => x.date === todayStr()).reduce((s, x) => s + (x.type === "in" ? x.amount : -x.amount), 0);
   const shp = shapeTokens(cardShape, t); // 🔲 ทรงกรอบการ์ดที่ user เลือก (sharp/soft) ใช้กับ hero/CatCard/การ์ดชุมชนในหน้านี้
+  const [editWidgetsOpen, setEditWidgetsOpen] = useState(false); // 🔀 modal ปรับวิดเจ็ตของ layout โฟกัส/โมเสก (เปิดจากปุ่มดินสอในแต่ละ layout)
 
   // 🏆 คำนวณแต้ม + streak ที่ดีที่สุด จากข้อมูลเป้าหมายทั้งหมด (ไม่ใช่แค่วันนี้)
   const diffPoints = { easy: 1, normal: 2, hard: 3 }; // เก็บไว้เป็น fallback สำหรับเป้าหมายเก่าก่อนเปลี่ยนมาใช้ AI ประเมินคะแนน (g.points)
@@ -3753,9 +3841,9 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
         </div>
       ))}
       {homeLayout === "wallet" ? (
-        <HomeWidgetsWallet t={t} shp={shp} M={M} isNight={isNight} setMentorPick={setMentorPick} setChatOpen={setChatOpen} balance={balance} todayNet={todayNet} goalDone={goalDone} goals={goals} todayArticles={todayArticles} latestNote={latestNote} setPage={setPage} setCommunityOpen={setCommunityOpen} commPreview={commPreview} />
+        <HomeWidgetsWallet t={t} shp={shp} M={M} isNight={isNight} setMentorPick={setMentorPick} setChatOpen={setChatOpen} balance={balance} todayNet={todayNet} goalDone={goalDone} goals={goals} todayArticles={todayArticles} latestNote={latestNote} setPage={setPage} setCommunityOpen={setCommunityOpen} commPreview={commPreview} walletWidgets={walletWidgets} onEditWidgets={() => setEditWidgetsOpen(true)} />
       ) : homeLayout === "bento" ? (
-        <HomeWidgetsBento t={t} shp={shp} M={M} isNight={isNight} setMentorPick={setMentorPick} balance={balance} todayNet={todayNet} goalDone={goalDone} goals={goals} todayArticles={todayArticles} latestNote={latestNote} setPage={setPage} setCommunityOpen={setCommunityOpen} commPreview={commPreview} />
+        <HomeWidgetsBento t={t} shp={shp} M={M} isNight={isNight} setMentorPick={setMentorPick} balance={balance} todayNet={todayNet} goalDone={goalDone} goals={goals} todayArticles={todayArticles} latestNote={latestNote} setPage={setPage} setCommunityOpen={setCommunityOpen} commPreview={commPreview} bentoWidgets={bentoWidgets} onEditWidgets={() => setEditWidgetsOpen(true)} />
       ) : (
         <>
       <div style={{ marginTop: 8, background: t.hero, border: `1px solid ${t.heroBorder}`, borderRadius: shp.radius, padding: 20, position: "relative", overflow: "hidden", boxShadow: isNight ? "none" : "0 10px 24px rgba(30,40,70,.18)" }}>
@@ -3908,6 +3996,12 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
         </div>
       </div>
       {shareGoalOpen && <ShareGoalModal t={t} userId={userId} authProfile={authProfile} weekPoints={weekPoints} bestStreak={bestStreak} badge={badge} close={() => setShareGoalOpen(false)} />}
+      {editWidgetsOpen && homeLayout === "wallet" && (
+        <WidgetOrderModal t={t} title="ปรับไอคอนลัด" hint="เลือกว่าจะโชว์อะไรบ้างในแถวไอคอนลัด ลากสลับลำดับหรือลบ/เพิ่มได้เลย" selected={walletWidgets} setSelected={setWalletWidgets} close={() => setEditWidgetsOpen(false)} />
+      )}
+      {editWidgetsOpen && homeLayout === "bento" && (
+        <WidgetOrderModal t={t} title="ปรับบล็อก" hint="เลือกว่าจะโชว์อะไรบ้างในบล็อกเล็ก ลากสลับลำดับหรือลบ/เพิ่มได้เลย (2 อันแรกเป็นบล็อกข้างเล็ก ที่เหลือเป็นบล็อกเต็มแถวด้านล่าง)" selected={bentoWidgets} setSelected={setBentoWidgets} close={() => setEditWidgetsOpen(false)} />
+      )}
 
       {pinnedMedia.length > 0 && (
         <div style={{ ...card(t), marginTop: 16, padding: 16 }}>
