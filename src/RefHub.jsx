@@ -8229,7 +8229,7 @@ function IdeasPage({ t, M, userId, session, authProfile, setAuthProfile, setNote
                 {(a.bullets || []).map((b, i) => <li key={i} style={{ fontSize: 12.5, color: t.sub, lineHeight: 1.6 }}>{b}</li>)}
               </ul>
               <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                <button onClick={() => notedTo(a)} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 0", borderRadius: 10, border: `1px solid ${notedIds[a.id] ? "#2E9E6B" : t.border}`, cursor: "pointer", background: notedIds[a.id] ? "#2E9E6B18" : "none", color: notedIds[a.id] ? "#2E9E6B" : t.text, fontSize: 12, fontWeight: 700 }}>{notedIds[a.id] ? <Check size={14} /> : <StickyNote size={14} />} {notedIds[a.id] ? "ส่งเข้าโน้ตแล้ว ✓" : "ส่งเข้าโน้ต"}</button>
+                <button onClick={() => notedTo(a)} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 0", borderRadius: 10, border: `1px solid ${notedIds[a.id] ? "#2E9E6B" : t.border}`, cursor: "pointer", background: notedIds[a.id] ? "#2E9E6B18" : "none", color: notedIds[a.id] ? "#2E9E6B" : t.text, fontSize: 12, fontWeight: 700 }}><StickyNote size={14} /> {notedIds[a.id] ? "ส่งเข้าโน้ตแล้ว ✓" : "ส่งเข้าโน้ต"}</button>
                 <button onClick={() => askAi(a)} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 0", borderRadius: 10, border: "none", cursor: "pointer", background: t.accent, color: t.onAccent, fontSize: 12, fontWeight: 700 }}><MessageCircle size={14} /> ถามAIต่อ</button>
               </div>
             </div>
@@ -8252,7 +8252,7 @@ function IdeasPage({ t, M, userId, session, authProfile, setAuthProfile, setNote
                     {(a.bullets || []).map((b, i) => <li key={i} style={{ fontSize: 12.5, color: t.sub, lineHeight: 1.6 }}>{b}</li>)}
                   </ul>
                   <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                    <button onClick={() => notedTo(a)} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 0", borderRadius: 10, border: `1px solid ${notedIds[a.id] ? "#2E9E6B" : t.border}`, cursor: "pointer", background: notedIds[a.id] ? "#2E9E6B18" : "none", color: notedIds[a.id] ? "#2E9E6B" : t.text, fontSize: 12, fontWeight: 700 }}>{notedIds[a.id] ? <Check size={14} /> : <StickyNote size={14} />} {notedIds[a.id] ? "ส่งเข้าโน้ตแล้ว ✓" : "ส่งเข้าโน้ต"}</button>
+                    <button onClick={() => notedTo(a)} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 0", borderRadius: 10, border: `1px solid ${notedIds[a.id] ? "#2E9E6B" : t.border}`, cursor: "pointer", background: notedIds[a.id] ? "#2E9E6B18" : "none", color: notedIds[a.id] ? "#2E9E6B" : t.text, fontSize: 12, fontWeight: 700 }}><StickyNote size={14} /> {notedIds[a.id] ? "ส่งเข้าโน้ตแล้ว ✓" : "ส่งเข้าโน้ต"}</button>
                     <button onClick={() => askAi(a)} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 0", borderRadius: 10, border: "none", cursor: "pointer", background: t.accent, color: t.onAccent, fontSize: 12, fontWeight: 700 }}><MessageCircle size={14} /> ถามAIต่อ</button>
                     <button onClick={() => speak(a.id, `${a.title}. ${(a.bullets || []).join(". ")}`)} style={ghost} title="อ่านออกเสียง">
                       {speakingId === a.id ? <Pause size={16} color={t.accent} /> : <Volume2 size={16} color={t.faint} />}
@@ -8664,7 +8664,7 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
               <span style={{ fontSize: 11 }}>{st.views}</span>
             </div>
             <button onClick={() => sendNewsToNote(x)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px" }}>
-              {notedIds[x.link] ? <Check size={15} color="#2E9E6B" /> : <StickyNote size={15} color={t.faint} />}
+              <StickyNote size={15} color={notedIds[x.link] ? "#2E9E6B" : t.faint} />
               <span style={{ fontSize: 11, color: notedIds[x.link] ? "#2E9E6B" : t.faint, fontWeight: 700, whiteSpace: "nowrap" }}>{notedIds[x.link] ? "ส่งแล้ว ✓" : "ส่งเข้าโน้ต"}</span>
             </button>
             <button onClick={() => askAi(x)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px" }}>
