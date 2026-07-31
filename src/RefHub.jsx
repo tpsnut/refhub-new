@@ -388,52 +388,70 @@ function startTimerAlarm(onRing, maxRings) {
 // ---------------- Theme ----------------
 // 🎨 ระบบธีมสีแอป (แยกอิสระจากสี Mentor โดยสิ้นเชิง — Mentor ใช้แค่จุดที่เป็นตัวตนโค้ชเท่านั้น เช่น การ์ดเลือกโค้ช/แชท)
 // แต่ละธีมมีเวอร์ชัน day และ night ของตัวเอง อิสระจากกัน (เลือกธีมได้โดยไม่ผูกกับเวลา/โหมดกลางวัน-กลางคืน)
+// 🎨 สถาปัตยกรรมธีมใหม่ — แยก "โหมด" (สว่าง/มืด = พื้นหลัง/การ์ด/ตัวหนังสือ ขาว-ดำสากล ใช้ร่วมกันทุกธีม)
+// ออกจาก "สีเด่น" (accent เฉพาะของแต่ละธีม คุมแค่ปุ่ม/ไอคอน active/hero/ไฮไลท์) ตามที่ Maxnuss ขอ
+// ข้อดี: ธีมไหนก็พื้นขาว/ดำเหมือนกันหมด ต่างกันแค่สีจุดเน้นที่โผล่มา + เพิ่มธีมใหม่ได้ง่ายแค่ใส่ accent ไม่ต้องคิดพื้นหลังใหม่ทุกครั้ง
+const MODE_BASE = {
+  day: {
+    page: "#F5F5F4", bgTop: "#F5F5F4", bgBot: "#FFFFFF", surface: "#FFFFFF",
+    text: "#1A1A1A", sub: "#6E6E6E", faint: "#A3A3A3", border: "rgba(0,0,0,0.07)",
+    inputBg: "#F1F1F0", dock: "#FFFFFF", dockBorder: "rgba(0,0,0,0.05)", star: false,
+    cat: { green: "#E7F1E9", amber: "#FBF0D6", coral: "#FBE4DC", violet: "#E9E7F4" },
+    catTx: { green: "#2A3B30", amber: "#3A3320", coral: "#5A3327", violet: "#39316A" },
+    catLb: { green: "#5E7A66", amber: "#8A7434", coral: "#A85C42", violet: "#6A5C9A" },
+  },
+  night: {
+    page: "#0D0D0D", bgTop: "#151515", bgBot: "#0D0D0D", surface: "#1C1C1C",
+    text: "#F2F2F2", sub: "#9A9A9A", faint: "#5C5C5C", border: "rgba(255,255,255,0.08)",
+    inputBg: "rgba(255,255,255,.06)", dock: "#1C1C1C", dockBorder: "rgba(255,255,255,0.10)", star: true,
+    cat: { green: "#16223C", amber: "#1E2438", coral: "#2A1C24", violet: "#201E33" },
+    catTx: { green: "#EAF2EC", amber: "#F0E9D6", coral: "#F6E4DC", violet: "#E7E3F6" },
+    catLb: { green: "#8FA79A", amber: "#C6B274", coral: "#D89A86", violet: "#A99CD6" },
+  },
+};
+
 const THEMES = {
+  gray: {
+    label: "เทา",
+    day:   { accent: "#8A8A8E", accent2: "#A6A6AA", onAccent: "#FFFFFF" },
+    night: { accent: "#B5B5BA", accent2: "#D0D0D4", onAccent: "#141414" },
+  },
   default:  {
-    label: "PKNOW",
-    day:   { accent: "#F2872E", accent2: "#F5A050", onAccent: "#141414", page: "#F5F3F0", bgTop: "#F5F3F0", bgBot: "#FFFFFF", surface: "#FFFFFF" },
-    night: { accent: "#F2872E", accent2: "#F5A050", onAccent: "#141414", page: "#0D0C0B", bgTop: "#151311", bgBot: "#0D0C0B", surface: "#1C1A18" },
+    label: "PKNOW (ส้ม)",
+    day:   { accent: "#F2872E", accent2: "#F5A050", onAccent: "#141414" },
+    night: { accent: "#F2872E", accent2: "#F5A050", onAccent: "#141414" },
   },
   red: {
     label: "เรดโบลด์",
-    day:   { accent: "#D64A3D", accent2: "#E8756A", onAccent: "#FFFFFF", page: "#FBF4F3", bgTop: "#FBF4F3", bgBot: "#FFFFFF", surface: "#FFFFFF" },
-    night: { accent: "#E8574A", accent2: "#F2857A", onAccent: "#FFFFFF", page: "#170B0A", bgTop: "#241412", bgBot: "#170B0A", surface: "#271613" },
+    day:   { accent: "#D64A3D", accent2: "#E8756A", onAccent: "#FFFFFF" },
+    night: { accent: "#E8574A", accent2: "#F2857A", onAccent: "#FFFFFF" },
   },
   navy: {
     label: "เนวี่พรีเมียม",
-    day:   { accent: "#2B3953", accent2: "#44577A", onAccent: "#FFFFFF", page: "#F3F5F9", bgTop: "#F3F5F9", bgBot: "#FAFBFD", surface: "#FFFFFF" },
-    night: { accent: "#6C93D9", accent2: "#8CAEE8", onAccent: "#0D1420", page: "#0D1420", bgTop: "#16202E", bgBot: "#0D1420", surface: "#182333" },
+    day:   { accent: "#2B3953", accent2: "#44577A", onAccent: "#FFFFFF" },
+    night: { accent: "#6C93D9", accent2: "#8CAEE8", onAccent: "#0D1420" },
   },
   twilight: {
     label: "ทไวไลท์",
-    day:   { accent: "#C2607E", accent2: "#D6839B", onAccent: "#FFFFFF", page: "#FAF3F6", bgTop: "#FAF3F6", bgBot: "#FFFFFF", surface: "#FFFFFF" },
-    night: { accent: "#B48DD9", accent2: "#CBA8E8", onAccent: "#241C2B", page: "#17121B", bgTop: "#241C2B", bgBot: "#17121B", surface: "#2A2130" },
+    day:   { accent: "#C2607E", accent2: "#D6839B", onAccent: "#FFFFFF" },
+    night: { accent: "#B48DD9", accent2: "#CBA8E8", onAccent: "#241C2B" },
   },
 };
 
 function palette(mode, themeId) {
   const th = THEMES[themeId] || THEMES.default;
   const T = th[mode] || th.day;
+  const base = MODE_BASE[mode] || MODE_BASE.day;
   const common = { accent: T.accent, accent2: T.accent2, onAccent: T.onAccent };
-  if (mode === "night") return {
-    ...common, page: T.page, bg: `linear-gradient(180deg,${T.bgTop} 0%,${T.bgBot} 100%)`,
-    surface: T.surface, hero: `linear-gradient(135deg,${T.accent2} 0%,${T.accent} 100%)`, heroBorder: "transparent",
-    text: "#F2EDE6", sub: "#8C857C", faint: "#5C5750", border: "rgba(255,255,255,0.08)",
-    dock: T.surface, dockBorder: "rgba(255,255,255,0.10)", star: true, inputBg: "rgba(255,255,255,.06)",
-    cat: { green: "#16223C", amber: "#1E2438", coral: "#2A1C24", violet: "#201E33" },
-    catTx: { green: "#EAF2EC", amber: "#F0E9D6", coral: "#F6E4DC", violet: "#E7E3F6" },
-    catLb: { green: "#8FA79A", amber: "#C6B274", coral: "#D89A86", violet: "#A99CD6" },
-  };
   return {
-    ...common, page: T.page, bg: `linear-gradient(180deg,${T.bgTop} 0%,${T.bgBot} 100%)`,
-    surface: T.surface, hero: `linear-gradient(135deg,${T.accent2} 0%,${T.accent} 100%)`, heroBorder: "transparent",
-    text: "#221F1C", sub: "#6B655F", faint: "#A39C93", border: "rgba(0,0,0,0.06)",
-    dock: T.surface, dockBorder: "rgba(0,0,0,0.05)", star: false, inputBg: "#F4F5F7",
-    cat: { green: "#E7F1E9", amber: "#FBF0D6", coral: "#FBE4DC", violet: "#E9E7F4" },
-    catTx: { green: "#2A3B30", amber: "#3A3320", coral: "#5A3327", violet: "#39316A" },
-    catLb: { green: "#5E7A66", amber: "#8A7434", coral: "#A85C42", violet: "#6A5C9A" },
+    ...common, page: base.page, bg: `linear-gradient(180deg,${base.bgTop} 0%,${base.bgBot} 100%)`,
+    surface: base.surface, hero: `linear-gradient(135deg,${T.accent2} 0%,${T.accent} 100%)`, heroBorder: "transparent",
+    text: base.text, sub: base.sub, faint: base.faint, border: base.border,
+    dock: base.dock, dockBorder: base.dockBorder, star: base.star, inputBg: base.inputBg,
+    cat: base.cat, catTx: base.catTx, catLb: base.catLb,
   };
 }
+
 
 // 🚪 Portal สำหรับ popup ที่สร้างจากข้างในหน้าเพจ (เช่น Admin, Chat) ให้หลุดออกไปแปะที่ document.body ตรงๆ
 // กันปัญหาติดอยู่ใน "เขตซ้อนชั้น" ของกล่องเนื้อหา ซึ่งทำให้ z-index สูงแค่ไหนก็ไม่มีทางซ้อนทับแถบเมนูด้านล่างได้
@@ -3578,16 +3596,16 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
         <div style={{ position: "absolute", bottom: -44, left: -24, width: 105, height: 105, borderRadius: "50%", background: "rgba(255,255,255,.06)", pointerEvents: "none" }} />
         <div style={{ position: "relative" }}>
           <button onClick={() => setMentorPick(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontSize: 14.5, fontWeight: 800, color: "#141414", letterSpacing: .5 }}>{isNight ? "โค้ชคืนนี้" : "โค้ชวันนี้"} · {M.name.toUpperCase()}</span>
+            <span style={{ fontSize: 14.5, fontWeight: 800, color: t.onAccent, letterSpacing: .5 }}>{isNight ? "โค้ชคืนนี้" : "โค้ชวันนี้"} · {M.name.toUpperCase()}</span>
             <span style={{ fontSize: 10, fontWeight: 800, color: "#D9302F" }}>เปลี่ยน ▾</span>
           </button>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, gap: 14 }}>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 16.5, fontWeight: 700, color: "#fff", lineHeight: 1.4, minHeight: 46 }}>“{quote}”</div>
+              <div style={{ fontSize: 16.5, fontWeight: 700, color: t.onAccent, lineHeight: 1.4, minHeight: 46 }}>“{quote}”</div>
               <style>{`@keyframes rh-coach-nudge { 0%,88%,100% { transform: translateX(0) rotate(0); } 90% { transform: translateX(-2px) rotate(-1.5deg); } 92% { transform: translateX(2px) rotate(1.5deg); } 94% { transform: translateX(-2px) rotate(-1deg); } 96% { transform: translateX(2px) rotate(1deg); } 98% { transform: translateX(0) rotate(0); } }`}</style>
-              <button onClick={() => setChatOpen(true)} style={{ marginTop: 14, border: "none", cursor: "pointer", background: "rgba(255,255,255,.18)", color: "#fff", fontWeight: 700, fontSize: 13, padding: "9px 16px", borderRadius: 18, display: "inline-flex", alignItems: "center", gap: 6, animation: "rh-coach-nudge 3s ease-in-out infinite" }}>คุยกับโค้ช <ChevronRight size={15} /></button>
+              <button onClick={() => setChatOpen(true)} style={{ marginTop: 14, border: "none", cursor: "pointer", background: `${t.onAccent}2E`, color: t.onAccent, fontWeight: 700, fontSize: 13, padding: "9px 16px", borderRadius: 18, display: "inline-flex", alignItems: "center", gap: 6, animation: "rh-coach-nudge 3s ease-in-out infinite" }}>คุยกับโค้ช <ChevronRight size={15} /></button>
             </div>
-            <Ring pct={goalPct} color="#fff" label="เป้าหมาย" />
+            <Ring pct={goalPct} color={t.onAccent} label="เป้าหมาย" />
           </div>
         </div>
       </div>
@@ -8918,15 +8936,15 @@ function ChatModal({ t, M, mentor, setMentor, authProfile, setAuthProfile, custo
               <span style={{ width: 40, height: 40, borderRadius: 20, background: `linear-gradient(135deg,${M.accent2},${M.accent})`, color: M.onAccent, display: "grid", placeItems: "center", fontWeight: 800, flexShrink: 0 }}>{M.letter}</span>
             )}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 15, fontWeight: 800, color: "#fff", display: "flex", alignItems: "center", gap: 5 }}>{M.full} <ChevronRight size={13} color="rgba(255,255,255,.6)" style={{ transform: "rotate(90deg)" }} /></div>
-              <div style={{ fontSize: 11, color: "rgba(255,255,255,.7)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{M.tag}</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: t.onAccent, display: "flex", alignItems: "center", gap: 5 }}>{M.full} <ChevronRight size={13} color={`${t.onAccent}99`} style={{ transform: "rotate(90deg)" }} /></div>
+              <div style={{ fontSize: 11, color: `${t.onAccent}B3`, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{M.tag}</div>
             </div>
           </button>
-          <button onClick={() => setShowHistList(true)} style={{ background: "rgba(255,255,255,.15)", border: "none", borderRadius: 12, width: 32, height: 32, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }} title="ดูแชทเก่าที่เก็บไว้"><Clock size={15} color="#fff" /></button>
-          <button onClick={newChat} style={{ background: "rgba(255,255,255,.15)", border: "none", borderRadius: 12, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }} title="เริ่มแชทใหม่ (ของเก่ายังเก็บไว้ ดูย้อนหลังได้)">
-            <Plus size={13} color="#fff" /><span style={{ fontSize: 10.5, color: "#fff", fontWeight: 700 }}>ใหม่</span>
+          <button onClick={() => setShowHistList(true)} style={{ background: `${t.onAccent}26`, border: "none", borderRadius: 12, width: 32, height: 32, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }} title="ดูแชทเก่าที่เก็บไว้"><Clock size={15} color={t.onAccent} /></button>
+          <button onClick={newChat} style={{ background: `${t.onAccent}26`, border: "none", borderRadius: 12, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }} title="เริ่มแชทใหม่ (ของเก่ายังเก็บไว้ ดูย้อนหลังได้)">
+            <Plus size={13} color={t.onAccent} /><span style={{ fontSize: 10.5, color: t.onAccent, fontWeight: 700 }}>ใหม่</span>
           </button>
-          <button onClick={close} style={{ background: "rgba(255,255,255,.15)", border: "none", borderRadius: 16, width: 32, height: 32, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}><X size={18} color="#fff" /></button>
+          <button onClick={close} style={{ background: `${t.onAccent}26`, border: "none", borderRadius: 16, width: 32, height: 32, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}><X size={18} color={t.onAccent} /></button>
         </div>
         {switchPick && <MentorPicker t={t} mentor={mentor} setMentor={setMentor} authProfile={authProfile} setAuthProfile={setAuthProfile} userId={userId} customMentors={customMentors} setCustomMentors={setCustomMentors} close={() => setSwitchPick(false)} />}
         {showHistList && <ChatHistoryListModal t={t} userId={userId} mentor={mentor} currentSessionId={currentSessionId} onSelect={viewSession} close={() => setShowHistList(false)} />}
