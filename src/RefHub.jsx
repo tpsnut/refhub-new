@@ -2050,10 +2050,10 @@ export default function RefHub() {
         )}
 
         {mentorPick && <MentorPicker t={t} mentor={mentor} setMentor={setMentor} authProfile={authProfile} setAuthProfile={setAuthProfile} userId={userId} customMentors={customMentors} setCustomMentors={setCustomMentors} close={() => setMentorPick(false)} />}
-        {themePick && <ThemePicker t={t} theme={theme} setTheme={setTheme} mode={mode} customAccent={customAccent} setCustomAccent={setCustomAccent} close={() => setThemePick(false)} />}
-        {homeLayoutPick && <HomeLayoutPicker t={t} shp={shp} homeLayout={homeLayout} setHomeLayout={setHomeLayout} close={() => setHomeLayoutPick(false)} />}
-        {cardShapePick && <CardShapePicker t={t} cardShape={cardShape} setCardShape={setCardShape} close={() => setCardShapePick(false)} />}
-        {catColorsPick && <CatColorsModal t={t} catColors={catColors} setCatColors={setCatColors} close={() => setCatColorsPick(false)} />}
+        {themePick && <ModalPortal><ThemePicker t={t} theme={theme} setTheme={setTheme} mode={mode} customAccent={customAccent} setCustomAccent={setCustomAccent} close={() => setThemePick(false)} /></ModalPortal>}
+        {homeLayoutPick && <ModalPortal><HomeLayoutPicker t={t} shp={shp} homeLayout={homeLayout} setHomeLayout={setHomeLayout} close={() => setHomeLayoutPick(false)} /></ModalPortal>}
+        {cardShapePick && <ModalPortal><CardShapePicker t={t} cardShape={cardShape} setCardShape={setCardShape} close={() => setCardShapePick(false)} /></ModalPortal>}
+        {catColorsPick && <ModalPortal><CatColorsModal t={t} catColors={catColors} setCatColors={setCatColors} close={() => setCatColorsPick(false)} /></ModalPortal>}
         {moreMenuOpen && (
           <div style={overlay} onClick={() => setMoreMenuOpen(false)}>
             <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
@@ -3835,7 +3835,7 @@ function WidgetOrderModal({ t, title, hint, selected, setSelected, close, catCol
     )}
 
     <div style={{ fontSize: 11, fontWeight: 800, color: t.sub, marginBottom: 8 }}>กำลังแสดงอยู่ · กดค้างที่ ⋮⋮ เพื่อลากสลับตำแหน่ง · แตะวงกลมสีเพื่อเปลี่ยนสี</div>
-    <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 18 }}>
       {chosen.length === 0 && <div style={{ fontSize: 12.5, color: t.sub, textAlign: "center", padding: "16px 0" }}>ยังไม่มีวิดเจ็ตเลย เพิ่มจากด้านล่างได้เลย</div>}
       <DragReorderList
         items={chosen}
@@ -4165,14 +4165,15 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
       </div>
       {shareGoalOpen && <ShareGoalModal t={t} userId={userId} authProfile={authProfile} weekPoints={weekPoints} bestStreak={bestStreak} badge={badge} close={() => setShareGoalOpen(false)} />}
       {editWidgetsOpen && homeLayout === "wallet" && (
-        <WidgetOrderModal t={t} title="ปรับการ์ดใหญ่" hint="ทางลัดเสริม+วิดเจ็ตทั้งหมด ปรับได้ในที่เดียว การ์ดแม่ (การเงิน/เป้าหมาย) ลบไม่ได้เพราะไม่มีทางเข้าอื่น" selected={walletWidgets} setSelected={setWalletWidgets} close={() => setEditWidgetsOpen(false)} catColors={catColors} setCatColors={setCatColors} heroShortcuts={heroShortcuts} setHeroShortcuts={setHeroShortcuts} />
+        <ModalPortal><WidgetOrderModal t={t} title="ปรับการ์ดใหญ่" hint="ทางลัดเสริม+วิดเจ็ตทั้งหมด ปรับได้ในที่เดียว การ์ดแม่ (การเงิน/เป้าหมาย) ลบไม่ได้เพราะไม่มีทางเข้าอื่น" selected={walletWidgets} setSelected={setWalletWidgets} close={() => setEditWidgetsOpen(false)} catColors={catColors} setCatColors={setCatColors} heroShortcuts={heroShortcuts} setHeroShortcuts={setHeroShortcuts} /></ModalPortal>
       )}
       {editWidgetsOpen && homeLayout === "bento" && (
-        <WidgetOrderModal t={t} title="ปรับการ์ดใหญ่" hint="ทางลัดเสริม+วิดเจ็ตทั้งหมด ปรับได้ในที่เดียว (2 อันแรกเป็นบล็อกข้างเล็ก ที่เหลือเป็นบล็อกเต็มแถวด้านล่าง) การ์ดแม่ (การเงิน/เป้าหมาย) ลบไม่ได้เพราะไม่มีทางเข้าอื่น" selected={bentoWidgets} setSelected={setBentoWidgets} close={() => setEditWidgetsOpen(false)} catColors={catColors} setCatColors={setCatColors} heroShortcuts={heroShortcuts} setHeroShortcuts={setHeroShortcuts} />
+        <ModalPortal><WidgetOrderModal t={t} title="ปรับการ์ดใหญ่" hint="ทางลัดเสริม+วิดเจ็ตทั้งหมด ปรับได้ในที่เดียว (2 อันแรกเป็นบล็อกข้างเล็ก ที่เหลือเป็นบล็อกเต็มแถวด้านล่าง) การ์ดแม่ (การเงิน/เป้าหมาย) ลบไม่ได้เพราะไม่มีทางเข้าอื่น" selected={bentoWidgets} setSelected={setBentoWidgets} close={() => setEditWidgetsOpen(false)} catColors={catColors} setCatColors={setCatColors} heroShortcuts={heroShortcuts} setHeroShortcuts={setHeroShortcuts} /></ModalPortal>
       )}
       {editWidgetsOpen && homeLayout === "original" && (
-        <WidgetOrderModal t={t} title="ปรับการ์ดใหญ่" hint="ทางลัดเสริม+วิดเจ็ตทั้งหมด ปรับได้ในที่เดียว การ์ดแม่ (การเงิน/เป้าหมาย) ลบไม่ได้เพราะไม่มีทางเข้าอื่น" selected={classicWidgets} setSelected={setClassicWidgets} close={() => setEditWidgetsOpen(false)} catColors={catColors} setCatColors={setCatColors} heroShortcuts={heroShortcuts} setHeroShortcuts={setHeroShortcuts} />
+        <ModalPortal><WidgetOrderModal t={t} title="ปรับการ์ดใหญ่" hint="ทางลัดเสริม+วิดเจ็ตทั้งหมด ปรับได้ในที่เดียว การ์ดแม่ (การเงิน/เป้าหมาย) ลบไม่ได้เพราะไม่มีทางเข้าอื่น" selected={classicWidgets} setSelected={setClassicWidgets} close={() => setEditWidgetsOpen(false)} catColors={catColors} setCatColors={setCatColors} heroShortcuts={heroShortcuts} setHeroShortcuts={setHeroShortcuts} /></ModalPortal>
       )}
+
 
 
       {pinnedMedia.length > 0 && (
