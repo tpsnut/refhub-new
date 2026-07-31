@@ -732,12 +732,21 @@ function CallModal({ t, threadId, userId, displayName, myAvatar, otherMemberIds,
   );
 }
 
-function ImageLightbox({ src, onClose }) {
+// 🖼️ ดูรูปเต็มจอ — รองรับทั้งรูปเดียว (ส่ง src) และหลายรูปในโพสต์เดียวกัน (ส่ง images+index ปัด/กดลูกศรเลื่อนไปรูปถัดไปได้)
+// เพิ่มปุ่มดาวน์โหลดรูปลงเครื่อง — ใช้วิธี fetch เป็น blob ก่อนสร้างลิงก์ดาวน์โหลด (เหมือน pattern doExportCsv/downloadText เดิม)
+// เพราะ URL ของ Supabase Storage เป็นคนละ origin การใส่ attribute download ตรงๆ บน <a> เฉยๆ เบราว์เซอร์จะไม่ยอมบังคับดาวน์โหลดให้ (แค่เปิดรูปแทน)
+function ImageLightbox({ src, images, index, onClose }) {
+  const list = images && images.length > 0 ? images : (src ? [src] : []);
+  const [curIndex, setCurIndex] = useState(index || 0);
+  const currentSrc = list[curIndex] || src;
   const [scale, setScale] = useState(1);
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const stateRef = useRef({ startDist: 0, startScale: 1, startPos: { x: 0, y: 0 }, dragStart: null, lastTap: 0 });
+  const swipeRef = useRef({ startX: 0, lastX: 0, active: false });
 
   const dist = (touches) => Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
+  const goNext = () => { setScale(1); setPos({ x: 0, y: 0 }); setCurIndex((i) => Math.min(list.length - 1, i + 1)); };
+  const goPrev = () => { setScale(1); setPos({ x: 0, y: 0 }); setCurIndex((i) => Math.max(0, i - 1)); };
 
   const onTouchStart = (e) => {
     if (e.touches.length === 2) {
@@ -748,6 +757,7 @@ function ImageLightbox({ src, onClose }) {
       if (now - stateRef.current.lastTap < 300) { setScale(1); setPos({ x: 0, y: 0 }); } // ดับเบิลแท็ป -> รีเซ็ตซูม
       stateRef.current.lastTap = now;
       stateRef.current.dragStart = { x: e.touches[0].clientX - pos.x, y: e.touches[0].clientY - pos.y };
+      swipeRef.current = { startX: e.touches[0].clientX, lastX: e.touches[0].clientX, active: scale === 1 && list.length > 1 }; // ปัดซ้าย/ขวาเลื่อนรูปได้เฉพาะตอนไม่ได้ซูมอยู่ และมีมากกว่า 1 รูป
     }
   };
   const onTouchMove = (e) => {
@@ -755,21 +765,49 @@ function ImageLightbox({ src, onClose }) {
       e.preventDefault();
       const newScale = Math.min(5, Math.max(1, stateRef.current.startScale * (dist(e.touches) / stateRef.current.startDist)));
       setScale(newScale);
-    } else if (e.touches.length === 1 && scale > 1 && stateRef.current.dragStart) {
-      e.preventDefault();
-      setPos({ x: e.touches[0].clientX - stateRef.current.dragStart.x, y: e.touches[0].clientY - stateRef.current.dragStart.y });
+    } else if (e.touches.length === 1) {
+      if (scale > 1 && stateRef.current.dragStart) {
+        e.preventDefault();
+        setPos({ x: e.touches[0].clientX - stateRef.current.dragStart.x, y: e.touches[0].clientY - stateRef.current.dragStart.y });
+      }
+      if (swipeRef.current.active) swipeRef.current.lastX = e.touches[0].clientX;
     }
   };
-  const onTouchEnd = () => { stateRef.current.startDist = 0; stateRef.current.dragStart = null; };
+  const onTouchEnd = () => {
+    if (swipeRef.current.active) {
+      const delta = swipeRef.current.lastX - swipeRef.current.startX;
+      if (delta < -50) goNext(); else if (delta > 50) goPrev(); // ปัดซ้ายแรงพอ -> รูปถัดไป, ปัดขวา -> ย้อนกลับ
+    }
+    stateRef.current.startDist = 0; stateRef.current.dragStart = null;
+    swipeRef.current = { startX: 0, lastX: 0, active: false };
+  };
   const onWheel = (e) => { e.preventDefault(); setScale((s) => Math.min(5, Math.max(1, s - e.deltaY * 0.002))); };
+
+  const downloadImage = async () => {
+    try {
+      const res = await fetch(currentSrc);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl; a.download = `refhub-${Date.now()}.jpg`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 3000);
+    } catch (e) {
+      window.open(currentSrc, "_blank"); // เผื่อโหลดเป็น blob ไม่สำเร็จ (เช่น CORS) เปิดแท็บใหม่ให้กด save เองแทน
+    }
+  };
 
   return (
     <ModalPortal>
       <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.9)", zIndex: 150, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", touchAction: "none" }} onClick={() => scale === 1 && onClose()}>
-        <button onClick={onClose} style={{ position: "absolute", top: 20, right: 20, background: "rgba(255,255,255,.15)", border: "none", borderRadius: 20, width: 40, height: 40, cursor: "pointer", display: "grid", placeItems: "center", zIndex: 1 }}><X size={22} color="#fff" /></button>
+        <button onClick={onClose} style={{ position: "absolute", top: 20, right: 20, background: "rgba(255,255,255,.15)", border: "none", borderRadius: 20, width: 40, height: 40, cursor: "pointer", display: "grid", placeItems: "center", zIndex: 2 }}><X size={22} color="#fff" /></button>
+        <button onClick={(e) => { e.stopPropagation(); downloadImage(); }} style={{ position: "absolute", top: 20, right: 70, background: "rgba(255,255,255,.15)", border: "none", borderRadius: 20, width: 40, height: 40, cursor: "pointer", display: "grid", placeItems: "center", zIndex: 2 }} title="บันทึกรูปลงเครื่อง"><Download size={19} color="#fff" /></button>
+        {list.length > 1 && <div style={{ position: "absolute", top: 27, left: "50%", transform: "translateX(-50%)", color: "#fff", fontSize: 12, fontWeight: 700, background: "rgba(255,255,255,.18)", padding: "4px 12px", borderRadius: 12, zIndex: 2 }}>{curIndex + 1}/{list.length}</div>}
+        {list.length > 1 && curIndex > 0 && <button onClick={(e) => { e.stopPropagation(); goPrev(); }} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", background: "rgba(255,255,255,.15)", border: "none", borderRadius: 20, width: 40, height: 40, cursor: "pointer", display: "grid", placeItems: "center", zIndex: 2 }}><ChevronLeft size={24} color="#fff" /></button>}
+        {list.length > 1 && curIndex < list.length - 1 && <button onClick={(e) => { e.stopPropagation(); goNext(); }} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "rgba(255,255,255,.15)", border: "none", borderRadius: 20, width: 40, height: 40, cursor: "pointer", display: "grid", placeItems: "center", zIndex: 2 }}><ChevronRight size={24} color="#fff" /></button>}
         {scale > 1 && <div style={{ position: "absolute", bottom: 24, left: "50%", transform: "translateX(-50%)", color: "rgba(255,255,255,.6)", fontSize: 11 }}>ดับเบิลแท็ปเพื่อรีเซ็ตซูม</div>}
         <img
-          src={src} alt=""
+          src={currentSrc} alt=""
           onClick={(e) => e.stopPropagation()}
           onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onWheel={onWheel}
           style={{ maxWidth: "92vw", maxHeight: "85vh", objectFit: "contain", borderRadius: 8, transform: `translate(${pos.x}px, ${pos.y}px) scale(${scale})`, transition: stateRef.current.startDist || stateRef.current.dragStart ? "none" : "transform .15s ease", cursor: scale > 1 ? "grab" : "zoom-in" }}
@@ -5413,7 +5451,7 @@ function PostCard({ t, post, userId, onOpenProfile, onChanged, onTag }) {
             </div>
             {showImgs.length > 0 && (
               <div style={{ display: "grid", gridTemplateColumns: showImgs.length === 1 ? "1fr" : "1fr 1fr", gap: 6, marginBottom: 8, marginLeft: 48 }}>
-                {showImgs.map((url, i) => <img key={i} src={url} alt="" onClick={() => setLightbox(url)} style={{ width: "100%", aspectRatio: showImgs.length === 1 ? "auto" : "1/1", maxHeight: showImgs.length === 1 ? 360 : "auto", objectFit: "cover", borderRadius: 12, cursor: "pointer" }} />)}
+                {showImgs.map((url, i) => <img key={i} src={url} alt="" onClick={() => setLightbox({ images: showImgs, index: i })} style={{ width: "100%", aspectRatio: showImgs.length === 1 ? "auto" : "1/1", maxHeight: showImgs.length === 1 ? 360 : "auto", objectFit: "cover", borderRadius: 12, cursor: "pointer" }} />)}
               </div>
             )}
           </>
@@ -5515,7 +5553,7 @@ function PostCard({ t, post, userId, onOpenProfile, onChanged, onTag }) {
           </div>
         </div>
       )}
-      {lightbox && <ImageLightbox src={lightbox} onClose={() => setLightbox(null)} />}
+      {lightbox && <ImageLightbox images={lightbox.images} index={lightbox.index} onClose={() => setLightbox(null)} />}
       {editing && (
         <ModalPortal>
           <div style={overlayHi} onClick={() => setEditing(false)}>
