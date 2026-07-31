@@ -452,6 +452,17 @@ function palette(mode, themeId) {
   };
 }
 
+// 🔲 ทรงกรอบการ์ด — sharp (เหลี่ยมคมแบบ SCB ไม่มีเงา ไม่มีมุมโค้ง คั่นด้วยเส้นบางแทน) หรือ soft (มนเบาๆ ใกล้ตัวอักษร ไม่กลมฟูเหมือนเดิม)
+// ใช้ร่วมกับ t (จาก palette()) เพื่อคำนวณ border/shadow ที่ตรงกับธีมสีปัจจุบันด้วย
+function shapeTokens(cardShape, t) {
+  if (cardShape === "sharp") return {
+    radius: 0, shadow: "none", border: `1px solid ${t.border}`, bg: t.surface, iconRadius: 0,
+  };
+  return {
+    radius: 10, shadow: t.star ? "none" : "0 2px 8px rgba(0,0,0,.05)", border: "none", bg: t.surface, iconRadius: 8,
+  };
+}
+
 
 // 🚪 Portal สำหรับ popup ที่สร้างจากข้างในหน้าเพจ (เช่น Admin, Chat) ให้หลุดออกไปแปะที่ document.body ตรงๆ
 // กันปัญหาติดอยู่ใน "เขตซ้อนชั้น" ของกล่องเนื้อหา ซึ่งทำให้ z-index สูงแค่ไหนก็ไม่มีทางซ้อนทับแถบเมนูด้านล่างได้
@@ -924,7 +935,9 @@ export default function RefHub() {
   const [themeMode, setThemeMode] = useState("night");
   const [mentor, setMentor] = useState("none");
   const [customMentors, setCustomMentors] = useState([]); // โค้ชที่ user สร้างเอง (ไม่ใช่แอดมิน) [{id, name, description, avatarUrl}]
-  const [theme, setTheme] = useState("default"); // 🎨 ธีมสีแอป: default | red | navy | twilight — แยกอิสระจาก mentor
+  const [theme, setTheme] = useState("default"); // 🎨 ธีมสีแอป: gray | default | red | navy | twilight — แยกอิสระจาก mentor
+  const [cardShape, setCardShape] = useState("soft"); // 🔲 ทรงกรอบการ์ด: sharp (เหลี่ยมคมแบบ SCB ไม่มีเงา) | soft (มนเบาๆ ใกล้ตัวอักษร) — default soft ตามที่ตกลง
+  const [homeLayout, setHomeLayout] = useState("original"); // 🏠 โครงหน้า Home: original (ของเดิม) | wallet (แนววอลเล็ต) | bento (บล็อกผสม) — default original ตามที่ตกลง
   const [fontScale, setFontScale] = useState(() => { // 📏 ขนาดตัวอักษร: 100 | 115 | 130 (ปกติ/ใหญ่/ใหญ่มาก) — อ่านจาก localStorage ทันทีตอน mount กันจอกระพริบกลับไป 100 ก่อนแวบนึง
     try { const fs = JSON.parse(localStorage.getItem("refhub:fontScale") || "null"); return fs || 100; } catch (e) { return 100; }
   });
@@ -951,6 +964,7 @@ export default function RefHub() {
   const [activeCall, setActiveCall] = useState(null); // { threadId, roomName, otherMemberIds } ห้องที่กำลังคุยอยู่ (อยู่ระดับบนสุด กันสายหลุดตอนสลับหน้าในแอป)
   const [callMinimized, setCallMinimized] = useState(false);
   const [themePick, setThemePick] = useState(false);
+  const [homeLayoutPick, setHomeLayoutPick] = useState(false); // 🏠 modal เลือกโครงหน้า Home (original/wallet/bento)
   const [editProfile, setEditProfile] = useState(false);
   const [profileLightbox, setProfileLightbox] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -1031,6 +1045,8 @@ export default function RefHub() {
           setMentor(uSettings.mentor || "none");
           setThemeMode(uSettings.theme_mode || "night");
           if (uSettings.theme) setTheme(uSettings.theme);
+          if (uSettings.card_shape) setCardShape(uSettings.card_shape);
+          if (uSettings.home_layout) setHomeLayout(uSettings.home_layout);
           if (typeof uSettings.volume === "number") setVolume(uSettings.volume);
         } else {
           // ยืนยันแล้วว่าไม่มี error และไม่มีแถวจริงๆ (ผู้ใช้ใหม่จริง) ถึงจะสร้างข้อมูลตั้งต้นให้
@@ -1300,6 +1316,8 @@ export default function RefHub() {
             mentor: mentor,
             theme_mode: themeMode,
             theme: theme, // ถ้ายังไม่มีคอลัมน์ "theme" ในตาราง user_settings คำสั่งนี้จะ error เงียบๆ (ถูกดักไว้ใน catch) — เพิ่มคอลัมน์ type text ได้เพื่อให้ธีม sync ข้ามอุปกรณ์
+            card_shape: cardShape, // เช่นกัน ต้องมีคอลัมน์ "card_shape" (text) ถึงจะ sync ข้ามอุปกรณ์ได้ ไม่งั้น error เงียบๆ เหมือนกัน
+            home_layout: homeLayout, // ต้องมีคอลัมน์ "home_layout" (text) เช่นกัน
             volume: volume
           }).eq("user_id", userId);
           // ซิงค์ชื่อ+รูปไปที่ตาราง profiles ด้วย (ตารางนี้แชท/หน้า Admin ใช้แสดงข้อมูลของแต่ละคน ต้องให้ตรงกันเสมอ)
@@ -1309,7 +1327,7 @@ export default function RefHub() {
         console.error("เซฟค่า Settings ลง Cloud ผิดพลาด: ", e);
       }
     })(); 
-  }, [notes, goals, tx, profile, mentor, theme, themeMode, volume, playlist, loaded]);
+  }, [notes, goals, tx, profile, mentor, theme, themeMode, cardShape, homeLayout, volume, playlist, loaded]);
 
   // music reactions
   const cur = playlist.find((p) => p.id === curId) || null;
@@ -1847,7 +1865,7 @@ export default function RefHub() {
 
         {/* CONTENT — ความสูงหารด้วยสเกลชดเชย transform:scale ข้างบน กันตอนขยายฟอนต์แล้วท้ายเนื้อหาจมใต้ Dock */}
         <div ref={contentScrollRef} onScroll={(e) => setAtTop(e.currentTarget.scrollTop < 80)} style={{ position: "relative", zIndex: 2, padding: `16px 10px ${page === "chat" || page === "chatRoom" ? 16 : 120}px`, height: `calc(${(10000 / fontScale).toFixed(2)}vh - 76px)`, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
-          {page === "home" && <ErrorCatcher t={t}><HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, allGoals: goals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget, setAddGoalOpen, setScoreRulesOpen }} /></ErrorCatcher>}
+          {page === "home" && <ErrorCatcher t={t}><HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, allGoals: goals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget, setAddGoalOpen, setScoreRulesOpen, cardShape, homeLayout }} /></ErrorCatcher>}
           {page === "ledger" && <FinancePage {...{ t, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt), userId, billReminders, billPayments, markBillPaid, setBillManagerOpen }} />}
           {page === "note" && <NotePage {...{ t, notes, setNotes, isNight, userId, session, authProfile, reminders, openReminder }} />}
           {page === "ideas" && <IdeasPage t={t} M={M} userId={userId} session={session} authProfile={authProfile} setAuthProfile={setAuthProfile} setNotes={setNotes} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} />}
@@ -1918,6 +1936,7 @@ export default function RefHub() {
 
         {mentorPick && <MentorPicker t={t} mentor={mentor} setMentor={setMentor} authProfile={authProfile} setAuthProfile={setAuthProfile} userId={userId} customMentors={customMentors} setCustomMentors={setCustomMentors} close={() => setMentorPick(false)} />}
         {themePick && <ThemePicker t={t} theme={theme} setTheme={setTheme} mode={mode} close={() => setThemePick(false)} />}
+        {homeLayoutPick && <HomeLayoutPicker t={t} homeLayout={homeLayout} setHomeLayout={setHomeLayout} close={() => setHomeLayoutPick(false)} />}
         {moreMenuOpen && (
           <div style={overlay} onClick={() => setMoreMenuOpen(false)}>
             <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
@@ -1929,6 +1948,14 @@ export default function RefHub() {
                 <button onClick={() => setThemeMode(themeMode === "auto" ? "day" : themeMode === "day" ? "night" : "auto")} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
                   {isNight ? <Moon size={18} color={t.sub} /> : <Sun size={18} color={t.sub} />}
                   <span style={{ fontSize: 14, color: t.text }}>โหมด: {themeMode === "auto" ? "อัตโนมัติ" : themeMode === "day" ? "กลางวัน" : "กลางคืน"}</span>
+                </button>
+                <button onClick={() => setCardShape(cardShape === "sharp" ? "soft" : "sharp")} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
+                  <LayoutGrid size={18} color={t.sub} />
+                  <span style={{ fontSize: 14, color: t.text }}>ทรงกรอบการ์ด: {cardShape === "sharp" ? "เหลี่ยมคม" : "มนเบาๆ"}</span>
+                </button>
+                <button onClick={() => { setHomeLayoutPick(true); setMoreMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
+                  <Home size={18} color={t.sub} />
+                  <span style={{ fontSize: 14, color: t.text }}>โครงหน้า Home: {homeLayout === "wallet" ? "แนววอลเล็ต" : homeLayout === "bento" ? "เบนโต" : "ของเดิม"}</span>
                 </button>
               </div>
             </div>
@@ -3504,7 +3531,90 @@ function ScoreRulesModal({ t, close }) {
   );
 }
 
-function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, allGoals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget, setAddGoalOpen, setScoreRulesOpen }) {
+// 🏠 โครง Home แบบ "วอลเล็ต" — ยอดเงินตัวใหญ่บนสุด + แถวไอคอนฟังก์ชันลัด + list เรียบ (ทางเลือกที่ 2 จาก 3 แบบที่ user เลือกได้)
+function HomeWidgetsWallet({ t, shp, M, quote, isNight, setMentorPick, setChatOpen, balance, todayNet, goalDone, goals, todayArticles, latestNote, setPage, setCommunityOpen, commPreview }) {
+  return (
+    <>
+      <div style={{ marginTop: 8, background: t.hero, borderRadius: shp.radius, padding: "18px 16px", position: "relative", overflow: "hidden" }}>
+        <button onClick={() => setMentorPick(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: `${t.onAccent}CC` }}>{isNight ? "โค้ชคืนนี้" : "โค้ชวันนี้"} · {M.name.toUpperCase()} ▾</span>
+        </button>
+        <div style={{ fontSize: 30, fontWeight: 800, color: t.onAccent, marginTop: 8, letterSpacing: -0.5 }}>{fmt(balance)}</div>
+        <div style={{ fontSize: 11, color: `${t.onAccent}CC`, marginTop: 6 }}>{todayNet >= 0 ? "▲ +" : "▼ "}{Math.abs(todayNet).toLocaleString()} วันนี้ · เป้าหมายสำเร็จ {goalDone}/{goals.length || 0}</div>
+        <button onClick={() => setChatOpen(true)} style={{ marginTop: 12, border: "none", cursor: "pointer", background: `${t.onAccent}2E`, color: t.onAccent, fontWeight: 700, fontSize: 12.5, padding: "8px 14px", borderRadius: shp.radius === 0 ? 0 : 18, display: "inline-flex", alignItems: "center", gap: 6 }}>คุยกับโค้ช <ChevronRight size={14} /></button>
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 18, marginBottom: 6 }}>
+        <WalletQuick t={t} icon={<Wallet size={18} color={t.accent} />} label="การเงิน" onClick={() => setPage("ledger")} />
+        <WalletQuick t={t} icon={<BookOpen size={18} color={t.accent} />} label="ความรู้" onClick={() => setPage("ideas")} />
+        <WalletQuick t={t} icon={<Target size={18} color={t.accent} />} label="เป้าหมาย" onClick={() => setPage("goalsReport")} />
+        <WalletQuick t={t} icon={<StickyNote size={18} color={t.accent} />} label="โน้ต" onClick={() => setPage("note")} />
+        <WalletQuick t={t} icon={<Users size={18} color={t.accent} />} label="ชุมชน" onClick={() => setCommunityOpen(true)} />
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 9, marginTop: 8 }}>
+        <WalletRow t={t} shp={shp} icon={<BookOpen size={17} color={t.accent} />} title="ความรู้วันนี้" sub={todayArticles === null ? "กำลังโหลด..." : todayArticles.length === 0 ? "ยังไม่มีวันนี้" : `${todayArticles.length} บทความ · AI คัดให้`} onClick={() => setPage("ideas")} />
+        <WalletRow t={t} shp={shp} icon={<StickyNote size={17} color={t.accent} />} title="โน้ตล่าสุด" sub={latestNote ? (latestNote.title || "(ไม่มีหัวข้อ)") : "ยังไม่มีโน้ต"} onClick={() => setPage("note")} />
+        <WalletRow t={t} shp={shp} icon={<Users size={17} color={t.accent} />} title="ชุมชน" sub={commPreview.newCount > 0 ? `มีโพสต์ใหม่ ${commPreview.newCount} รายการวันนี้` : "แตะเพื่อเข้าสู่โลกโซเชียล"} onClick={() => setCommunityOpen(true)} />
+      </div>
+    </>
+  );
+}
+function WalletQuick({ t, icon, label, onClick }) {
+  return (
+    <button onClick={onClick} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 6, width: 60 }}>
+      <span style={{ width: 50, height: 50, borderRadius: 25, background: t.surface, border: `1px solid ${t.border}`, display: "grid", placeItems: "center" }}>{icon}</span>
+      <span style={{ fontSize: 10, fontWeight: 700, color: t.sub, textAlign: "center" }}>{label}</span>
+    </button>
+  );
+}
+function WalletRow({ t, shp, icon, title, sub, onClick }) {
+  return (
+    <button onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 12, background: shp.bg, border: shp.border, borderRadius: shp.radius, boxShadow: shp.shadow, padding: "12px 14px", cursor: "pointer", textAlign: "left", width: "100%" }}>
+      <span style={{ width: 34, height: 34, borderRadius: shp.iconRadius, background: t.inputBg, display: "grid", placeItems: "center", flexShrink: 0 }}>{icon}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</div>
+        <div style={{ fontSize: 10.5, color: t.sub, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sub}</div>
+      </div>
+      <ChevronRight size={15} color={t.faint} />
+    </button>
+  );
+}
+
+// 🧱 โครง Home แบบ "เบนโต" — บล็อกขนาดผสม การ์ดยอดเงินใหญ่เด่น + การ์ดเล็กล้อมรอบ (ทางเลือกที่ 3 จาก 3 แบบที่ user เลือกได้)
+function HomeWidgetsBento({ t, shp, M, isNight, setMentorPick, balance, todayNet, goalDone, goals, todayArticles, latestNote, setPage, setCommunityOpen, commPreview }) {
+  return (
+    <>
+      <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 10, marginTop: 8 }}>
+        <div style={{ background: t.hero, borderRadius: shp.radius, padding: 16, position: "relative", overflow: "hidden" }}>
+          <button onClick={() => setMentorPick(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+            <span style={{ fontSize: 10.5, fontWeight: 700, color: `${t.onAccent}CC` }}>{isNight ? "โค้ชคืนนี้" : "โค้ชวันนี้"}</span>
+          </button>
+          <div style={{ fontSize: 22, fontWeight: 800, color: t.onAccent, marginTop: 6 }}>{fmt(balance)}</div>
+          <div style={{ fontSize: 10.5, color: `${t.onAccent}CC`, marginTop: 4 }}>{todayNet >= 0 ? "▲ +" : "▼ "}{Math.abs(todayNet).toLocaleString()} วันนี้</div>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <BentoTile shp={shp} icon={<Target size={15} color="#fff" />} bg={t.cat.coral} label={`${goalDone}/${goals.length || 0} เป้าหมาย`} onClick={() => setPage("goalsReport")} />
+          <BentoTile shp={shp} icon={<BookOpen size={15} color="#fff" />} bg={t.cat.amber} label={todayArticles === null ? "กำลังโหลด" : todayArticles.length === 0 ? "ยังไม่มีวันนี้" : `${todayArticles.length} บทความ`} onClick={() => setPage("ideas")} />
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
+        <BentoTile shp={shp} icon={<StickyNote size={15} color="#fff" />} bg={t.cat.violet} label={latestNote ? (latestNote.title || "(ไม่มีหัวข้อ)") : "ยังไม่มีโน้ต"} onClick={() => setPage("note")} full />
+        <BentoTile shp={shp} icon={<Users size={15} color="#fff" />} bg={t.cat.green} label={commPreview.newCount > 0 ? `ชุมชน · ใหม่ ${commPreview.newCount}` : "ชุมชน"} onClick={() => setCommunityOpen(true)} full />
+      </div>
+    </>
+  );
+}
+function BentoTile({ shp, icon, bg, label, onClick, full }) {
+  return (
+    <button onClick={onClick} style={{ background: bg, border: "none", borderRadius: shp.radius, padding: 12, cursor: "pointer", textAlign: "left", display: "flex", flexDirection: full ? "row" : "column", alignItems: full ? "center" : "flex-start", gap: full ? 10 : 6, flex: full ? "none" : 1, width: "100%" }}>
+      <span style={{ width: 26, height: 26, borderRadius: shp.iconRadius, background: "rgba(0,0,0,.15)", display: "grid", placeItems: "center", flexShrink: 0 }}>{icon}</span>
+      <span style={{ fontSize: 11, fontWeight: 700, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: full ? "nowrap" : "normal", flex: full ? 1 : "none" }}>{label}</span>
+    </button>
+  );
+}
+
+function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, allGoals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget, setAddGoalOpen, setScoreRulesOpen, cardShape, homeLayout }) {
   const [askConfirm, ConfirmUI] = useConfirm(t);
   const [viewingPinned, setViewingPinned] = useState(null);
   const [commentingId, setCommentingId] = useState(null);
@@ -3512,6 +3622,7 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
   const [shareGoalOpen, setShareGoalOpen] = useState(false);
   const latestNote = notes[0];
   const todayNet = tx.filter((x) => x.date === todayStr()).reduce((s, x) => s + (x.type === "in" ? x.amount : -x.amount), 0);
+  const shp = shapeTokens(cardShape, t); // 🔲 ทรงกรอบการ์ดที่ user เลือก (sharp/soft) ใช้กับ hero/CatCard/การ์ดชุมชนในหน้านี้
 
   // 🏆 คำนวณแต้ม + streak ที่ดีที่สุด จากข้อมูลเป้าหมายทั้งหมด (ไม่ใช่แค่วันนี้)
   const diffPoints = { easy: 1, normal: 2, hard: 3 }; // เก็บไว้เป็น fallback สำหรับเป้าหมายเก่าก่อนเปลี่ยนมาใช้ AI ประเมินคะแนน (g.points)
@@ -3591,7 +3702,13 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
           <button onClick={() => dismiss(a.id)} style={{ background: "none", border: "none", cursor: "pointer", flexShrink: 0, padding: 2 }}><X size={15} color={t.faint} /></button>
         </div>
       ))}
-      <div style={{ marginTop: 8, background: t.hero, border: `1px solid ${t.heroBorder}`, borderRadius: 26, padding: 20, position: "relative", overflow: "hidden", boxShadow: isNight ? "none" : "0 10px 24px rgba(30,40,70,.18)" }}>
+      {homeLayout === "wallet" ? (
+        <HomeWidgetsWallet t={t} shp={shp} M={M} isNight={isNight} setMentorPick={setMentorPick} setChatOpen={setChatOpen} balance={balance} todayNet={todayNet} goalDone={goalDone} goals={goals} todayArticles={todayArticles} latestNote={latestNote} setPage={setPage} setCommunityOpen={setCommunityOpen} commPreview={commPreview} />
+      ) : homeLayout === "bento" ? (
+        <HomeWidgetsBento t={t} shp={shp} M={M} isNight={isNight} setMentorPick={setMentorPick} balance={balance} todayNet={todayNet} goalDone={goalDone} goals={goals} todayArticles={todayArticles} latestNote={latestNote} setPage={setPage} setCommunityOpen={setCommunityOpen} commPreview={commPreview} />
+      ) : (
+        <>
+      <div style={{ marginTop: 8, background: t.hero, border: `1px solid ${t.heroBorder}`, borderRadius: shp.radius, padding: 20, position: "relative", overflow: "hidden", boxShadow: isNight ? "none" : "0 10px 24px rgba(30,40,70,.18)" }}>
         <div style={{ position: "absolute", top: -34, right: -34, width: 130, height: 130, borderRadius: "50%", background: "rgba(255,255,255,.10)", pointerEvents: "none" }} />
         <div style={{ position: "absolute", bottom: -44, left: -24, width: 105, height: 105, borderRadius: "50%", background: "rgba(255,255,255,.06)", pointerEvents: "none" }} />
         <div style={{ position: "relative" }}>
@@ -3603,7 +3720,7 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 16.5, fontWeight: 700, color: t.onAccent, lineHeight: 1.4, minHeight: 46 }}>“{quote}”</div>
               <style>{`@keyframes rh-coach-nudge { 0%,88%,100% { transform: translateX(0) rotate(0); } 90% { transform: translateX(-2px) rotate(-1.5deg); } 92% { transform: translateX(2px) rotate(1.5deg); } 94% { transform: translateX(-2px) rotate(-1deg); } 96% { transform: translateX(2px) rotate(1deg); } 98% { transform: translateX(0) rotate(0); } }`}</style>
-              <button onClick={() => setChatOpen(true)} style={{ marginTop: 14, border: "none", cursor: "pointer", background: `${t.onAccent}2E`, color: t.onAccent, fontWeight: 700, fontSize: 13, padding: "9px 16px", borderRadius: 18, display: "inline-flex", alignItems: "center", gap: 6, animation: "rh-coach-nudge 3s ease-in-out infinite" }}>คุยกับโค้ช <ChevronRight size={15} /></button>
+              <button onClick={() => setChatOpen(true)} style={{ marginTop: 14, border: "none", cursor: "pointer", background: `${t.onAccent}2E`, color: t.onAccent, fontWeight: 700, fontSize: 13, padding: "9px 16px", borderRadius: shp.radius === 0 ? 0 : 18, display: "inline-flex", alignItems: "center", gap: 6, animation: "rh-coach-nudge 3s ease-in-out infinite" }}>คุยกับโค้ช <ChevronRight size={15} /></button>
             </div>
             <Ring pct={goalPct} color={t.onAccent} label="เป้าหมาย" />
           </div>
@@ -3612,11 +3729,11 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
 
       <div style={{ fontSize: 13, fontWeight: 700, color: t.sub, margin: "22px 0 12px" }}>วิดเจ็ตของฉัน</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <CatCard t={t} k="green" icon={<Wallet size={15} color="#fff" />} label="การเงิน" onClick={() => setPage("ledger")}>
+        <CatCard t={t} shp={shp} k="green" icon={<Wallet size={15} color="#fff" />} label="การเงิน" onClick={() => setPage("ledger")}>
           <div style={{ fontSize: 19, fontWeight: 800, color: t.catTx.green }}>{fmt(balance)}</div>
           <div style={{ fontSize: 11, fontWeight: 700, color: todayNet >= 0 ? "#2E9E6B" : "#D9534F", marginTop: 2 }}>{todayNet >= 0 ? "▲ +" : "▼ "}{Math.abs(todayNet).toLocaleString()} วันนี้</div>
         </CatCard>
-        <CatCard t={t} k="amber" icon={<BookOpen size={15} color="#fff" />} label="ความรู้วันนี้" onClick={() => setPage("ideas")}>
+        <CatCard t={t} shp={shp} k="amber" icon={<BookOpen size={15} color="#fff" />} label="ความรู้วันนี้" onClick={() => setPage("ideas")}>
           <div style={{ fontSize: 14, fontWeight: 800, color: t.catTx.amber, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             {todayArticles === null ? "กำลังโหลด..." : todayArticles.length === 0 ? "ยังไม่มีวันนี้" : todayArticles[0].title}
           </div>
@@ -3624,18 +3741,18 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
             {todayArticles === null ? "" : todayArticles.length === 0 ? "แตะเพื่อดู" : `${todayArticles.length} บทความ · AI คัดให้`}
           </div>
         </CatCard>
-        <CatCard t={t} k="coral" icon={<Target size={15} color="#fff" />} label="เป้าหมายวันนี้" onClick={() => setPage("goalsReport")}>
+        <CatCard t={t} shp={shp} k="coral" icon={<Target size={15} color="#fff" />} label="เป้าหมายวันนี้" onClick={() => setPage("goalsReport")}>
           <div style={{ fontSize: 16, fontWeight: 800, color: t.catTx.coral }}>{goalDone} / {goals.length || 0} สำเร็จ</div>
           <div style={{ height: 7, borderRadius: 4, background: "rgba(0,0,0,.1)", marginTop: 8, overflow: "hidden" }}><div style={{ width: `${goalPct}%`, height: "100%", background: "#E07B57" }} /></div>
         </CatCard>
-        <CatCard t={t} k="violet" icon={<StickyNote size={15} color="#fff" />} label="โน้ตล่าสุด" onClick={() => setPage("note")}>
+        <CatCard t={t} shp={shp} k="violet" icon={<StickyNote size={15} color="#fff" />} label="โน้ตล่าสุด" onClick={() => setPage("note")}>
           <div style={{ fontSize: 12.5, fontWeight: 800, color: t.catTx.violet, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{latestNote ? latestNote.title || "(ไม่มีหัวข้อ)" : "ยังไม่มีโน้ต"}</div>
           <div style={{ fontSize: 10.5, color: t.catLb.violet, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{latestNote ? (blocksToPlainText(latestNote.body).trim() || "แตะเพื่อเปิด") : "แตะเพื่อเริ่ม"}</div>
         </CatCard>
       </div>
 
       {/* 🌐 การ์ดเข้าชุมชน — พรีวิวเนื้อหาจริง + ลูกโลกหมุน */}
-      <button onClick={() => setCommunityOpen(true)} style={{ marginTop: 16, width: "100%", border: `1px solid ${t.border}`, cursor: "pointer", textAlign: "left", borderRadius: 20, padding: 16, background: `linear-gradient(135deg, ${t.accent}22, ${t.surface})`, position: "relative", overflow: "hidden", boxShadow: t.star ? "none" : "0 8px 22px rgba(40,50,70,.10)" }}>
+      <button onClick={() => setCommunityOpen(true)} style={{ marginTop: 16, width: "100%", border: `1px solid ${t.border}`, cursor: "pointer", textAlign: "left", borderRadius: shp.radius, padding: 16, background: `linear-gradient(135deg, ${t.accent}22, ${t.surface})`, position: "relative", overflow: "hidden", boxShadow: shp.radius === 0 ? "none" : (t.star ? "none" : "0 8px 22px rgba(40,50,70,.10)") }}>
         <div style={{ position: "absolute", top: -30, right: -30, width: 120, height: 120, borderRadius: "50%", background: `radial-gradient(circle, ${t.accent}33, transparent 70%)`, pointerEvents: "none" }} />
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", position: "relative" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -3662,6 +3779,8 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
           <div style={{ fontSize: 12, color: t.sub, marginTop: 12, position: "relative" }}>แตะเพื่อเข้าสู่โลกโซเชียล — โพสต์ แชร์ ติดตามกัน</div>
         )}
       </button>
+        </>
+      )}
 
       <div style={{ ...card(t), marginTop: 16, padding: 16 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -9150,6 +9269,30 @@ function ThemePicker({ t, theme, setTheme, mode, close }) {
   </div></div>);
 }
 
+// 🏠 เลือกโครงหน้า Home — 3 แบบ (ของเดิม/แนววอลเล็ต/เบนโต) ตามที่ Maxnuss ยืนยันให้ user เลือกเองได้ทั้ง 3
+const HOME_LAYOUTS = [
+  { id: "original", label: "ของเดิม", desc: "Hero คำคม+ริง ตามด้วยการ์ด 2x2" },
+  { id: "wallet", label: "แนววอลเล็ต", desc: "ยอดเงินตัวใหญ่บนสุด + แถวไอคอนลัด" },
+  { id: "bento", label: "เบนโต", desc: "การ์ดใหญ่เด่น 1 อัน + บล็อกเล็กล้อมรอบ" },
+];
+function HomeLayoutPicker({ t, homeLayout, setHomeLayout, close }) {
+  return (<div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
+    <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 4 }}>โครงหน้า Home</div>
+    <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>เลือกวิธีจัดวางวิดเจ็ตหน้าแรกที่ชอบ เปลี่ยนได้ตลอด</div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {HOME_LAYOUTS.map((l) => { const on = homeLayout === l.id; return (
+        <button key={l.id} onClick={() => { setHomeLayout(l.id); close(); }} style={{ display: "flex", alignItems: "center", gap: 14, padding: 14, borderRadius: 18, cursor: "pointer", textAlign: "left", background: t.surface, border: `2px solid ${on ? t.accent : t.border}` }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>{l.label}</div>
+            <div style={{ fontSize: 11.5, color: t.sub }}>{l.desc}</div>
+          </div>
+          {on && <Check size={20} color={t.accent} />}
+        </button>
+      ); })}
+    </div>
+  </div></div>);
+}
+
 function EditProfile({ t, M, profile, setProfile, userId, authProfile, setAuthProfile, close }) {
   const [name, setName] = useState(profile.name); const [avatar, setAvatar] = useState(profile.avatar); const fileRef = useRef(null);
   const [showUrlBox, setShowUrlBox] = useState(false);
@@ -9429,9 +9572,10 @@ function Ring({ pct, color, label }) {
     <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center" }}><div style={{ textAlign: "center" }}><div style={{ fontSize: 17, fontWeight: 800, color: "#fff", lineHeight: 1 }}>{pct}%</div><div style={{ fontSize: 8.5, color: "rgba(255,255,255,.7)" }}>{label}</div></div></div>
   </div>);
 }
-function CatCard({ t, k, icon, label, children, onClick }) {
-  return (<div onClick={onClick} style={{ background: t.cat[k], borderRadius: 20, padding: 14, cursor: onClick ? "pointer" : "default", border: `1px solid ${t.border}`, boxShadow: t.star ? "none" : "0 4px 12px rgba(40,50,70,.06)" }}>
-    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}><span style={{ width: 26, height: 26, borderRadius: 13, background: catIcBg(k), display: "grid", placeItems: "center", flexShrink: 0 }}>{icon}</span><span style={{ fontSize: 10.5, fontWeight: 700, color: t.catLb[k] }}>{label}</span></div>
+function CatCard({ t, k, icon, label, children, onClick, shp }) {
+  const s = shp || shapeTokens("soft", t);
+  return (<div onClick={onClick} style={{ background: t.cat[k], borderRadius: s.radius, padding: 14, cursor: onClick ? "pointer" : "default", border: s.radius === 0 ? `1px solid ${t.border}` : `1px solid ${t.border}`, boxShadow: s.radius === 0 ? "none" : (t.star ? "none" : "0 4px 12px rgba(40,50,70,.06)") }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}><span style={{ width: 26, height: 26, borderRadius: s.iconRadius, background: catIcBg(k), display: "grid", placeItems: "center", flexShrink: 0 }}>{icon}</span><span style={{ fontSize: 10.5, fontWeight: 700, color: t.catLb[k] }}>{label}</span></div>
     {children}
   </div>);
 }
