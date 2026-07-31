@@ -1882,15 +1882,15 @@ export default function RefHub() {
             <div style={{ display: "flex", alignItems: "stretch", justifyContent: "space-between", borderBottom: `1px solid ${t.border}`, minHeight: 56 }}>
               {page === "home" ? (
                 <>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <button onClick={() => setHamburgerOpen(true)} style={{ position: "relative", width: 44, background: "none", border: "none", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <button onClick={() => setHamburgerOpen(true)} style={{ position: "relative", width: 40, background: "none", border: "none", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}>
                       <Menu size={20} color={t.text} />
                       {adminAlerts.length > 0 && <span style={{ position: "absolute", top: 12, right: 10, width: 8, height: 8, background: "#D9534F" }} />}
                     </button>
                     <button onClick={() => profile.avatar && setProfileLightbox(true)} style={{ background: "none", border: "none", cursor: profile.avatar ? "pointer" : "default", padding: 0, alignSelf: "stretch", width: 52, flexShrink: 0 }}>
                       <Avatar profile={profile} t={t} size={52} fill />
                     </button>
-                    <button onClick={() => setEditProfile(true)} style={{ display: "flex", alignItems: "center", background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}>
+                    <button onClick={() => setEditProfile(true)} style={{ display: "flex", alignItems: "center", background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left", marginLeft: 8 }}>
                       <div>
                         <div style={{ fontSize: 11, color: t.sub }}>{greet(isNight)}</div>
                         <div style={{ fontSize: 15.5, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 5 }}>
@@ -1901,10 +1901,6 @@ export default function RefHub() {
                   </div>
                   <div style={{ display: "flex", alignItems: "stretch" }}>
                     <button onClick={() => setSearchOpen(true)} style={{ width: 48, background: "none", border: "none", borderLeft: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }}><Search size={17} color={t.text} /></button>
-                    <button onClick={() => setPage("chat")} style={{ position: "relative", width: 48, background: "none", border: "none", borderLeft: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }}>
-                      <MessageCircle size={17} color={t.text} />
-                      {chatUnread > 0 && <span style={{ position: "absolute", top: 12, right: 10, width: 8, height: 8, background: "#D9534F" }} />}
-                    </button>
                     <button onClick={() => setMoreMenuOpen(true)} style={{ width: 48, background: "none", border: "none", borderLeft: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }}><MoreVertical size={17} color={t.text} /></button>
                   </div>
                 </>
@@ -1923,17 +1919,17 @@ export default function RefHub() {
               )}
             </div>
           ) : page === "home" ? (
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
+            <div style={{ display: "flex", alignItems: "stretch", justifyContent: "space-between", minHeight: 52 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 {/* ☰ ตั้งใจไม่ใส่พื้นหลังวงกลม — เลือกแบบ B (ไอคอนโล่งๆ) ตามที่ Maxnuss ยืนยัน */}
-                <button onClick={() => setHamburgerOpen(true)} style={{ position: "relative", width: 38, height: 38, background: "none", border: "none", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                <button onClick={() => setHamburgerOpen(true)} style={{ position: "relative", width: 38, background: "none", border: "none", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}>
                   <Menu size={20} color={t.text} />
                   {adminAlerts.length > 0 && <span style={{ position: "absolute", top: 3, right: 3, width: 8, height: 8, borderRadius: 4, background: "#D9534F" }} />}
                 </button>
-                <button onClick={() => profile.avatar && setProfileLightbox(true)} style={{ background: "none", border: "none", cursor: profile.avatar ? "pointer" : "default", padding: 0 }}>
-                  <Avatar profile={profile} t={t} size={46} />
+                <button onClick={() => profile.avatar && setProfileLightbox(true)} style={{ background: "none", border: "none", cursor: profile.avatar ? "pointer" : "default", padding: 0, alignSelf: "stretch", width: 46, flexShrink: 0 }}>
+                  <Avatar profile={profile} t={t} size={46} fill />
                 </button>
-                <button onClick={() => setEditProfile(true)} style={{ display: "flex", alignItems: "center", background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}>
+                <button onClick={() => setEditProfile(true)} style={{ display: "flex", alignItems: "center", background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left", marginLeft: 10 }}>
                   <div>
                     <div style={{ fontSize: 11.5, color: t.sub }}>{greet(isNight)}</div>
                     <div style={{ fontSize: 17, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 5 }}>
@@ -1942,12 +1938,8 @@ export default function RefHub() {
                   </div>
                 </button>
               </div>
-              <div style={{ display: "flex", gap: 8 }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <IconBtn t={t} onClick={() => setSearchOpen(true)}><Search size={17} color={t.text} /></IconBtn>
-                <button onClick={() => setPage("chat")} style={{ position: "relative", width: 38, height: 38, borderRadius: 19, background: t.surface, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }}>
-                  <MessageCircle size={17} color={t.text} />
-                  {chatUnread > 0 && <span style={{ position: "absolute", top: 3, right: 3, width: 8, height: 8, borderRadius: 4, background: "#D9534F" }} />}
-                </button>
                 <button onClick={() => setMoreMenuOpen(true)} style={{ position: "relative", width: 38, height: 38, borderRadius: 19, background: t.surface, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }}>
                   <MoreVertical size={17} color={t.text} />
                 </button>
@@ -2108,6 +2100,10 @@ export default function RefHub() {
                   </button>
                 )}
                 <button onClick={() => { setMusicOpen(true); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}><Music size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>สื่อ</span></button>
+                <button onClick={() => { setPage("chat"); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
+                  <MessageCircle size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>แชท</span>
+                  {chatUnread > 0 && <span style={{ marginLeft: "auto", width: 8, height: 8, borderRadius: 4, background: "#D9534F" }} />}
+                </button>
                 {(authProfile?.can_view_locations || authProfile?.role === "admin") && (
                   <button onClick={() => { setPage("locations"); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
                     <MapPin size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>ตำแหน่งล่าสุด</span>
@@ -3706,7 +3702,7 @@ function HomeWidgetsWallet({ t, shp, M, isNight, setMentorPick, setChatOpen, set
             {heroShortcuts.map((sid) => {
               const s = HERO_SHORTCUTS_META.find((x) => x.id === sid); if (!s) return null;
               const SIcon = s.icon;
-              const onClick = sid === "chat" ? () => setChatOpen(true) : sid === "community" ? () => setCommunityOpen(true) : () => setMusicOpen(true);
+              const onClick = sid === "chat" ? () => setPage("chat") : sid === "community" ? () => setCommunityOpen(true) : () => setMusicOpen(true);
               return (
                 <button key={sid} onClick={onClick} style={{ flex: 1, background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
                   <span style={{ width: 32, height: 32, borderRadius: shp.radius === 0 ? 0 : 10, background: `${t.onAccent}22`, display: "grid", placeItems: "center" }}><SIcon size={14} color={t.onAccent} /></span>
@@ -3729,11 +3725,6 @@ function HomeWidgetsWallet({ t, shp, M, isNight, setMentorPick, setChatOpen, set
         })}
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 9, marginTop: 8 }}>
-        <WalletRow t={t} shp={shp} icon={<BookOpen size={17} color={t.accent} />} title="ความรู้วันนี้" sub={todayArticles === null ? "กำลังโหลด..." : todayArticles.length === 0 ? "ยังไม่มีวันนี้" : `${todayArticles.length} บทความ · AI คัดให้`} onClick={() => setPage("ideas")} />
-        <WalletRow t={t} shp={shp} icon={<StickyNote size={17} color={t.accent} />} title="โน้ตล่าสุด" sub={latestNote ? (latestNote.title || "(ไม่มีหัวข้อ)") : "ยังไม่มีโน้ต"} onClick={() => setPage("note")} />
-        <WalletRow t={t} shp={shp} icon={<Users size={17} color={t.accent} />} title="ชุมชน" sub={commPreview.newCount > 0 ? `มีโพสต์ใหม่ ${commPreview.newCount} รายการวันนี้` : "แตะเพื่อเข้าสู่โลกโซเชียล"} onClick={() => setCommunityOpen(true)} />
-      </div>
     </>
   );
 }
@@ -3788,7 +3779,7 @@ function HomeWidgetsBento({ t, shp, M, isNight, setMentorPick, setChatOpen, setM
               {heroShortcuts.map((sid) => {
                 const s = HERO_SHORTCUTS_META.find((x) => x.id === sid); if (!s) return null;
                 const SIcon = s.icon;
-                const onClick = sid === "chat" ? () => setChatOpen(true) : sid === "community" ? () => setCommunityOpen(true) : () => setMusicOpen(true);
+                const onClick = sid === "chat" ? () => setPage("chat") : sid === "community" ? () => setCommunityOpen(true) : () => setMusicOpen(true);
                 return <button key={sid} onClick={onClick} style={{ width: 24, height: 24, background: `${t.onAccent}22`, border: "none", borderRadius: shp.radius === 0 ? 0 : 8, display: "grid", placeItems: "center", cursor: "pointer" }}><SIcon size={12} color={t.onAccent} /></button>;
               })}
             </div>
@@ -3820,7 +3811,7 @@ function BentoTile({ shp, icon, bg, label, onClick, full, padSide }) {
 
 // 🔀 modal ปรับวิดเจ็ต — ใช้ร่วมกันทั้งแถวไอคอนโฟกัส และบล็อกโมเสก ลากด้วย DragReorderList เดียวกับที่ใช้ทั่วแอป
 const HERO_SHORTCUTS_META = [
-  { id: "media", label: "สื่อ", icon: ImageIcon },
+  { id: "media", label: "สื่อ", icon: Music },
   { id: "chat", label: "แชท", icon: MessageCircle },
   { id: "community", label: "คอมมู", icon: Users },
 ];
@@ -4011,7 +4002,7 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
               {heroShortcuts.map((sid) => {
                 const s = HERO_SHORTCUTS_META.find((x) => x.id === sid); if (!s) return null;
                 const SIcon = s.icon;
-                const onClick = sid === "chat" ? () => setChatOpen(true) : sid === "community" ? () => setCommunityOpen(true) : () => setMusicOpen(true);
+                const onClick = sid === "chat" ? () => setPage("chat") : sid === "community" ? () => setCommunityOpen(true) : () => setMusicOpen(true);
                 return (
                   <button key={sid} onClick={onClick} style={{ flex: 1, background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
                     <span style={{ width: 32, height: 32, borderRadius: shp.radius === 0 ? 0 : 10, background: `${t.onAccent}22`, display: "grid", placeItems: "center" }}><SIcon size={14} color={t.onAccent} /></span>
@@ -4069,34 +4060,7 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
         })}
       </div>
 
-      {/* 🌐 การ์ดเข้าชุมชน — พรีวิวเนื้อหาจริง + ลูกโลกหมุน */}
-      <button onClick={() => setCommunityOpen(true)} style={{ marginTop: 16, width: "100%", border: `1px solid ${t.border}`, cursor: "pointer", textAlign: "left", borderRadius: shp.radius, padding: shp.radius === 0 ? 26 : 16, background: `linear-gradient(135deg, ${t.accent}22, ${t.surface})`, position: "relative", overflow: "hidden", boxShadow: shp.radius === 0 ? "none" : (t.star ? "none" : "0 8px 22px rgba(40,50,70,.10)") }}>
-        <div style={{ position: "absolute", top: -30, right: -30, width: 120, height: 120, borderRadius: "50%", background: `radial-gradient(circle, ${t.accent}33, transparent 70%)`, pointerEvents: "none" }} />
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", position: "relative" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <GlobeIcon size={40} accent={t.accent} />
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 800, color: t.text }}>ชุมชน</div>
-              <div style={{ fontSize: 11, color: t.sub }}>โลกโซเชียลของ PKNOW</div>
-            </div>
-          </div>
-          {commPreview.newCount > 0 && <div style={{ background: "#E0563E", color: "#fff", fontSize: 10.5, fontWeight: 800, padding: "3px 9px", borderRadius: 10 }}>{commPreview.newCount > 99 ? "99+" : commPreview.newCount} ใหม่</div>}
-        </div>
-        {commPreview.avatars.length > 0 ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, position: "relative" }}>
-            <div style={{ display: "flex" }}>
-              {commPreview.avatars.map((a, i) => (
-                <div key={i} style={{ width: 26, height: 26, borderRadius: 13, marginLeft: i === 0 ? 0 : -8, border: `2px solid ${t.surface}`, overflow: "hidden", background: colorFor(a.name || "?"), display: "grid", placeItems: "center", color: "#fff", fontSize: 11, fontWeight: 700 }}>
-                  {a.avatar_url ? <img src={a.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : (a.name || "?")[0]}
-                </div>
-              ))}
-            </div>
-            <span style={{ fontSize: 12, color: t.sub }}>แตะเพื่อดูโพสต์ล่าสุดของทุกคน</span>
-          </div>
-        ) : (
-          <div style={{ fontSize: 12, color: t.sub, marginTop: 12, position: "relative" }}>แตะเพื่อเข้าสู่โลกโซเชียล — โพสต์ แชร์ ติดตามกัน</div>
-        )}
-      </button>
+      {/* 🌐 ชุมชน ย้ายไปเป็นวิดเจ็ตที่เลือกเพิ่ม/ลบเองได้ในกริดด้านบนแล้ว (เดิมมีการ์ดตายตัวซ้ำอยู่ตรงนี้ด้วย เอาออกแล้วกันซ้ำ) */}
         </>
       )}
       </div>
@@ -10072,10 +10036,10 @@ function Dock({ t, cardShape, page, setPage, onQuickAdd }) {
     return (<div style={{ position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 20 }}>
       <div style={{ borderTop: `1px solid ${t.dockBorder}`, background: t.page, padding: 1.5, display: "flex", gap: 1.5 }}>
         {items.map((it) => {
-          if (it.k === "_") return (<button key="c" onClick={onQuickAdd} style={{ flex: 1.15, border: "none", cursor: "pointer", background: t.accent, color: t.onAccent, display: "grid", placeItems: "center", padding: "9px 2px" }}><Plus size={24} /></button>);
+          if (it.k === "_") return (<button key="c" onClick={onQuickAdd} style={{ flex: 1.15, border: "none", cursor: "pointer", background: t.accent, color: t.onAccent, display: "grid", placeItems: "center", padding: "9px 2px" }}><Plus size={28} /></button>);
           const A = it.ic; const on = page === it.k;
           return (<button key={it.k} onClick={() => setPage(it.k)} style={{ flex: 1, background: on ? `${t.accent}1A` : t.dock, border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "9px 2px" }}>
-            <A size={19} color={on ? t.accent : t.sub} strokeWidth={on ? 2.6 : 1.9} /><span style={{ fontSize: 8.5, color: on ? t.accent : t.sub, fontWeight: on ? 700 : 500 }}>{it.lb}</span>
+            <A size={23} color={on ? t.accent : t.sub} strokeWidth={on ? 2.6 : 1.9} /><span style={{ fontSize: 9.5, color: on ? t.accent : t.sub, fontWeight: on ? 700 : 500 }}>{it.lb}</span>
           </button>);
         })}
       </div>
@@ -10084,11 +10048,11 @@ function Dock({ t, cardShape, page, setPage, onQuickAdd }) {
   return (<div style={{ position: "absolute", bottom: 16, left: 0, right: 0, display: "flex", justifyContent: "center", zIndex: 20, pointerEvents: "none" }}>
     <div style={{ pointerEvents: "auto", display: "flex", alignItems: "center", background: t.dock, border: `1px solid ${t.dockBorder}`, borderRadius: 34, padding: "8px 10px", maxWidth: 420, width: "92%", justifyContent: "space-between", boxShadow: "0 8px 26px rgba(20,25,45,.18)" }}>
       {items.map((it) => {
-        if (it.k === "_") return (<button key="c" onClick={onQuickAdd} style={{ width: 50, height: 50, borderRadius: 25, border: "none", cursor: "pointer", background: `linear-gradient(135deg,${t.accent2},${t.accent})`, color: t.onAccent, display: "grid", placeItems: "center", boxShadow: `0 6px 16px ${t.accent}66`, marginTop: -18 }}><Plus size={26} /></button>);
+        if (it.k === "_") return (<button key="c" onClick={onQuickAdd} style={{ width: 50, height: 50, borderRadius: 25, border: "none", cursor: "pointer", background: `linear-gradient(135deg,${t.accent2},${t.accent})`, color: t.onAccent, display: "grid", placeItems: "center", boxShadow: `0 6px 16px ${t.accent}66`, marginTop: -18 }}><Plus size={28} /></button>);
         const A = it.ic; const on = page === it.k;
         return (<button key={it.k} onClick={() => setPage(it.k)} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "4px 6px", flex: 1, position: "relative" }}>
           {on && <span style={{ position: "absolute", top: -3, width: 32, height: 32, borderRadius: "50%", background: `radial-gradient(circle, ${t.accent}33, transparent 70%)`, pointerEvents: "none" }} />}
-          <A size={20} color={on ? t.accent : t.sub} strokeWidth={on ? 2.6 : 1.9} style={{ position: "relative" }} /><span style={{ fontSize: 8.5, color: on ? t.accent : t.sub, fontWeight: on ? 700 : 500, position: "relative" }}>{it.lb}</span>
+          <A size={24} color={on ? t.accent : t.sub} strokeWidth={on ? 2.6 : 1.9} style={{ position: "relative" }} /><span style={{ fontSize: 9.5, color: on ? t.accent : t.sub, fontWeight: on ? 700 : 500, position: "relative" }}>{it.lb}</span>
         </button>);
       })}
     </div>
