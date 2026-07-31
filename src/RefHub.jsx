@@ -912,6 +912,7 @@ export default function RefHub() {
   const [billManagerOpen, setBillManagerOpen] = useState(false);
   const [leaderboardOpen, setLeaderboardOpen] = useState(false); // ⚠️ ย้ายมาจากใน HomePage — เดิม modal เรนเดอร์อยู่ในกล่อง transform:scale ของ HomePage ทำให้ position:fixed เพี้ยน ไม่เต็มจอจริง (ซ้อนทับกับ Dock) บั๊กแบบเดียวกับที่เคยเจอกับ BillManagerModal ต้องเรนเดอร์จากระดับบนสุดของแอปเท่านั้น
   const [goalTimerTarget, setGoalTimerTarget] = useState(null); // ⏱ เก็บ goal object ที่กำลังจับเวลาอยู่ (null = ไม่ได้เปิด) เรนเดอร์ GoalTimerModal จากระดับบนสุดตาม pattern เดียวกับ leaderboardOpen ข้างบน
+  const [addGoalOpen, setAddGoalOpen] = useState(false); // ⚠️ ย้ายมาจากใน HomePage — เจอบั๊กเดียวกับ leaderboardOpen/BillManagerModal คือ position:fixed เพี้ยนเพราะอยู่ในกล่อง transform:scale ทำให้ modal ไปชนซ้อนกับหัวแอปด้านบน
   const [exportText, setExportText] = useState(null);
   const [musicOpen, setMusicOpen] = useState(false);
   const [playlist, setPlaylist] = useState([]);
@@ -999,7 +1000,7 @@ export default function RefHub() {
           .select("*")
           .eq("user_id", userId);
         if (goalsErr) console.error("โหลดเป้าหมายไม่สำเร็จ (ไม่แตะข้อมูลเดิม):", goalsErr.message);
-        else if (dbGoals) setGoals(dbGoals.map((g) => ({ ...g, doneDate: g.done_date || null, timerMode: g.timer_mode || null, timerMinutes: g.timer_minutes || null, timerRepeatCount: g.timer_repeat_count || null })));
+        else if (dbGoals) setGoals(dbGoals.map((g) => ({ ...g, doneDate: g.done_date || null, timerMode: g.timer_mode || null, timerUnit: g.timer_unit || null, timerSeconds: g.timer_seconds || null, timerRepeatCount: g.timer_repeat_count || null })));
 
         // 3b. ดึงแม่แบบเป้าหมายประจำสัปดาห์ + สร้างรายการของ "วันนี้" อัตโนมัติถ้ายังไม่มี (ไม่แตะรายการเก่า ไม่สร้างซ้ำ)
         const { data: dbTemplates, error: tplErr } = await supabase
@@ -1009,7 +1010,7 @@ export default function RefHub() {
           .eq("active", true);
         if (tplErr) console.error("โหลดแม่แบบเป้าหมายไม่สำเร็จ (ไม่แตะข้อมูลเดิม):", tplErr.message);
         else if (dbTemplates) {
-          const templates = dbTemplates.map((tp) => ({ id: tp.id, text: tp.text, daysOfWeek: tp.days_of_week || [], difficulty: tp.difficulty || "normal", active: tp.active, timerMode: tp.timer_mode || null, timerMinutes: tp.timer_minutes || null, timerRepeatCount: tp.timer_repeat_count || null }));
+          const templates = dbTemplates.map((tp) => ({ id: tp.id, text: tp.text, daysOfWeek: tp.days_of_week || [], difficulty: tp.difficulty || "normal", active: tp.active, timerMode: tp.timer_mode || null, timerUnit: tp.timer_unit || null, timerSeconds: tp.timer_seconds || null, timerRepeatCount: tp.timer_repeat_count || null }));
           setGoalTemplates(templates);
           const todayDow = (new Date().getDay() + 6) % 7; // จันทร์=0 ... อาทิตย์=6
           const today = todayStr();
@@ -1026,12 +1027,13 @@ export default function RefHub() {
               template_id: tp.id,
               difficulty: tp.difficulty,
               timerMode: tp.timerMode || null,
-              timerMinutes: tp.timerMinutes || null,
+              timerUnit: tp.timerUnit || null,
+              timerSeconds: tp.timerSeconds || null,
               timerRepeatCount: tp.timerRepeatCount || null,
             }));
 
             const { error: genErr } = await supabase.from("goals").insert(
-              newRows.map(({ id, user_id, text, comment, date, done, template_id, difficulty, timerMode, timerMinutes, timerRepeatCount }) => ({
+              newRows.map(({ id, user_id, text, comment, date, done, template_id, difficulty, timerMode, timerUnit, timerSeconds, timerRepeatCount }) => ({
                 id,
                 user_id,
                 text,
@@ -1041,7 +1043,8 @@ export default function RefHub() {
                 template_id,
                 difficulty,
                 timer_mode: timerMode,
-                timer_minutes: timerMinutes,
+                timer_unit: timerUnit,
+                timer_seconds: timerSeconds,
                 timer_repeat_count: timerRepeatCount,
               }))
             );
@@ -1787,7 +1790,7 @@ export default function RefHub() {
 
         {/* CONTENT — ความสูงหารด้วยสเกลชดเชย transform:scale ข้างบน กันตอนขยายฟอนต์แล้วท้ายเนื้อหาจมใต้ Dock */}
         <div ref={contentScrollRef} onScroll={(e) => setAtTop(e.currentTarget.scrollTop < 80)} style={{ position: "relative", zIndex: 2, padding: `16px 18px ${page === "chat" || page === "chatRoom" ? 16 : 120}px`, height: `calc(${(10000 / fontScale).toFixed(2)}vh - 76px)`, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
-          {page === "home" && <ErrorCatcher t={t}><HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, allGoals: goals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget }} /></ErrorCatcher>}
+          {page === "home" && <ErrorCatcher t={t}><HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, allGoals: goals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget, setAddGoalOpen }} /></ErrorCatcher>}
           {page === "ledger" && <FinancePage {...{ t, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt), userId, billReminders, billPayments, markBillPaid, setBillManagerOpen }} />}
           {page === "note" && <NotePage {...{ t, notes, setNotes, isNight, userId, session, authProfile, reminders, openReminder }} />}
           {page === "ideas" && <IdeasPage t={t} M={M} userId={userId} session={session} authProfile={authProfile} setAuthProfile={setAuthProfile} setNotes={setNotes} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} />}
@@ -1930,6 +1933,7 @@ export default function RefHub() {
         {billManagerOpen && <BillManagerModal t={t} billReminders={billReminders} billPayments={billPayments} addBillReminder={addBillReminder} deleteBillReminder={deleteBillReminder} markBillPaid={markBillPaid} unmarkBillPaid={unmarkBillPaid} close={() => setBillManagerOpen(false)} />}
         {leaderboardOpen && <LeaderboardModal t={t} userId={userId} close={() => setLeaderboardOpen(false)} />}
         {goalTimerTarget && <GoalTimerModal t={t} goal={goalTimerTarget} close={() => setGoalTimerTarget(null)} />}
+        {addGoalOpen && <AddGoalModal t={t} userId={userId} setGoals={setGoals} goalTemplates={goalTemplates} setGoalTemplates={setGoalTemplates} close={() => setAddGoalOpen(false)} />}
         {reminderTarget && <ReminderModal t={t} targetType={reminderTarget.targetType} targetId={reminderTarget.targetId} label={reminderTarget.label} existing={reminderTarget.existing} upsertReminder={upsertReminder} deleteReminder={deleteReminder} close={() => setReminderTarget(null)} />}
         {exportText != null && <ExportModal t={t} text={exportText} close={() => setExportText(null)} />}
 
@@ -2898,7 +2902,8 @@ function AddGoalModal({ t, userId, setGoals, goalTemplates, setGoalTemplates, cl
   const [busy, setBusy] = useState(false);
   const [timerOn, setTimerOn] = useState(false); // ⏱ ตั้งเวลา (ไม่บังคับ) — เปิดแล้วจะมีปุ่ม "เริ่มจับเวลา" โผล่ที่การ์ดเป้าหมายนี้
   const [timerMode, setTimerMode] = useState("single"); // single = นับถอยหลังครั้งเดียว, interval = เตือนเป็นช่วง
-  const [timerMinutes, setTimerMinutes] = useState("30"); // นาที (โหมด single) หรือ ความยาวต่อช่วง (โหมด interval)
+  const [timerUnit, setTimerUnit] = useState("min"); // sec = วินาที, min = นาที, hour = ชม.
+  const [timerMinutes, setTimerMinutes] = useState("30"); // ตัวเลขดิบตามหน่วยที่เลือก (โหมด single = ระยะเวลารวม, โหมด interval = ความยาวต่อช่วง)
   const [timerRepeatCount, setTimerRepeatCount] = useState("4"); // จำนวนช่วง (โหมด interval เท่านั้น)
   const dayLabels = ["จ", "อ", "พ", "พฤ", "ศ", "ส", "อา"];
   const diffEmoji = { easy: "🟢", normal: "🟡", hard: "🔴" };
@@ -2910,27 +2915,29 @@ function AddGoalModal({ t, userId, setGoals, goalTemplates, setGoalTemplates, cl
     if (mode === "recurring" && days.length === 0) return;
     setBusy(true);
     try {
-      // ⏱ สรุป field ตั้งเวลาเป็น snake_case พร้อมส่งลง DB — ถ้าไม่ได้เปิดตั้งเวลาไว้ ทุก field เป็น null (ไม่มีปุ่มจับเวลาที่การ์ด)
+      // ⏱ สรุป field ตั้งเวลาเป็น snake_case พร้อมส่งลง DB — เก็บเป็น "วินาทีรวม" เสมอ (timer_seconds) ไม่ว่าจะเลือกหน่วยไหน เพื่อให้คำนวณง่ายตอนจับเวลาจริง ส่วน timer_unit เก็บไว้แค่จำหน่วยที่เคยเลือกไว้โชว์ตอนแก้ไขภายหลัง
+      const unitToSec = { sec: 1, min: 60, hour: 3600 };
       const timerPatch = timerOn
         ? {
             timer_mode: timerMode,
-            timer_minutes: Number(timerMinutes) || null,
+            timer_unit: timerUnit,
+            timer_seconds: (Number(timerMinutes) || 0) * (unitToSec[timerUnit] || 60) || null,
             timer_repeat_count: timerMode === "interval" ? (Number(timerRepeatCount) || null) : null,
           }
-        : { timer_mode: null, timer_minutes: null, timer_repeat_count: null };
+        : { timer_mode: null, timer_unit: null, timer_seconds: null, timer_repeat_count: null };
       if (mode === "once") {
-        const g = { id: uid(), text: text.trim(), done: false, date: todayStr(), doneDate: null, difficulty, timerMode: timerPatch.timer_mode, timerMinutes: timerPatch.timer_minutes, timerRepeatCount: timerPatch.timer_repeat_count };
+        const g = { id: uid(), text: text.trim(), done: false, date: todayStr(), doneDate: null, difficulty, timerMode: timerPatch.timer_mode, timerUnit: timerPatch.timer_unit, timerSeconds: timerPatch.timer_seconds, timerRepeatCount: timerPatch.timer_repeat_count };
         setGoals((gs) => [...gs, g]);
         if (userId) { await supabase.from("goals").insert({ id: g.id, user_id: userId, text: g.text, done: g.done, date: g.date, done_date: g.doneDate, difficulty, ...timerPatch }); logAudit(userId, "goals", "add", "เพิ่มเป้าหมาย"); }
       } else {
         const { data, error } = await supabase.from("goal_templates").insert({ user_id: userId, text: text.trim(), days_of_week: days, difficulty, ...timerPatch }).select().single();
         if (!error && data) {
-          setGoalTemplates((ts) => [...ts, { id: data.id, text: data.text, daysOfWeek: data.days_of_week, difficulty: data.difficulty, active: true, timerMode: data.timer_mode, timerMinutes: data.timer_minutes, timerRepeatCount: data.timer_repeat_count }]);
+          setGoalTemplates((ts) => [...ts, { id: data.id, text: data.text, daysOfWeek: data.days_of_week, difficulty: data.difficulty, active: true, timerMode: data.timer_mode, timerUnit: data.timer_unit, timerSeconds: data.timer_seconds, timerRepeatCount: data.timer_repeat_count }]);
           logAudit(userId, "goals", "add", "ตั้งเป้าหมายประจำสัปดาห์ใหม่");
           // ถ้าวันนี้ตรงกับวันที่เลือกไว้ สร้างรายการของวันนี้ให้เลย ไม่ต้องรอรีเฟรชหน้า
           const todayDow = (new Date().getDay() + 6) % 7;
           if (days.includes(todayDow)) {
-            const g = { id: uid(), text: text.trim(), done: false, date: todayStr(), doneDate: null, template_id: data.id, difficulty, timerMode: timerPatch.timer_mode, timerMinutes: timerPatch.timer_minutes, timerRepeatCount: timerPatch.timer_repeat_count };
+            const g = { id: uid(), text: text.trim(), done: false, date: todayStr(), doneDate: null, template_id: data.id, difficulty, timerMode: timerPatch.timer_mode, timerUnit: timerPatch.timer_unit, timerSeconds: timerPatch.timer_seconds, timerRepeatCount: timerPatch.timer_repeat_count };
             setGoals((gs) => [...gs, g]);
             await supabase.from("goals").insert({ id: g.id, user_id: userId, text: g.text, done: false, date: g.date, template_id: data.id, difficulty, ...timerPatch });
           }
@@ -3002,16 +3009,20 @@ function AddGoalModal({ t, userId, setGoals, goalTemplates, setGoalTemplates, cl
                 ))}
               </div>
               {timerMode === "single" ? (
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <input type="number" min="1" value={timerMinutes} onChange={(e) => setTimerMinutes(e.target.value)} style={{ ...input(t), flex: 1 }} />
-                  <span style={{ fontSize: 12, color: t.sub, flexShrink: 0 }}>นาที</span>
+                  {[["sec", "วิ"], ["min", "นาที"], ["hour", "ชม."]].map(([v, lb]) => (
+                    <button key={v} onClick={() => setTimerUnit(v)} style={{ padding: "9px 10px", borderRadius: 8, cursor: "pointer", border: `1.5px solid ${timerUnit === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 11, background: timerUnit === v ? t.accent : "transparent", color: timerUnit === v ? t.onAccent : t.sub, flexShrink: 0 }}>{lb}</button>
+                  ))}
                 </div>
               ) : (
                 <>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                    <span style={{ fontSize: 12, color: t.sub, width: 78, flexShrink: 0 }}>เตือนทุก</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                    <span style={{ fontSize: 12, color: t.sub, width: 60, flexShrink: 0 }}>เตือนทุก</span>
                     <input type="number" min="1" value={timerMinutes} onChange={(e) => setTimerMinutes(e.target.value)} style={{ ...input(t), flex: 1 }} />
-                    <span style={{ fontSize: 12, color: t.sub, flexShrink: 0 }}>นาที</span>
+                    {[["sec", "วิ"], ["min", "นาที"], ["hour", "ชม."]].map(([v, lb]) => (
+                      <button key={v} onClick={() => setTimerUnit(v)} style={{ padding: "9px 8px", borderRadius: 8, cursor: "pointer", border: `1.5px solid ${timerUnit === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 10.5, background: timerUnit === v ? t.accent : "transparent", color: timerUnit === v ? t.onAccent : t.sub, flexShrink: 0 }}>{lb}</button>
+                    ))}
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ fontSize: 12, color: t.sub, width: 78, flexShrink: 0 }}>จำนวนครั้ง</span>
@@ -3133,11 +3144,20 @@ function ShareGoalModal({ t, userId, authProfile, weekPoints, bestStreak, badge,
 // นับถอยหลังพร้อมอนิเมชันนาฬิกาทราย (พลิกทุก 15 วิ) ครบเวลาแล้วดังเสียงปลุกจริง 5 ครั้งห่างกัน 1.5 วิ (startTimerAlarm)
 // กด "รับทราบ" หยุดเสียงได้ก่อนครบ 5 ครั้ง — โหมด interval ทำซ้ำหลายช่วง (เช่น 15 นาที×4 ครั้ง) แต่ละช่วงจบแล้วดังปลุกเหมือนกันทุกช่วง
 // ⚠️ ต้องเรนเดอร์จากระดับบนสุดของแอปเท่านั้น (นอกกล่อง transform:scale) ไม่งั้น position:fixed เพี้ยน — บั๊กแบบเดียวกับ LeaderboardModal ที่เพิ่งแก้ไป
+// ⏱ แปลงวินาทีรวมกลับเป็นตัวเลข+หน่วยที่ผู้ใช้เลือกไว้ตอนสร้าง (เก็บ timer_unit ไว้เพื่อโชว์กลับแบบเดิมเป๊ะๆ ไม่ปัดเศษเพี้ยน)
+function formatTimerBadge(totalSeconds, unit) {
+  if (!totalSeconds) return "";
+  const map = { sec: [1, "วิ"], min: [60, "น."], hour: [3600, "ชม."] };
+  const [div, label] = map[unit] || map.min;
+  const val = totalSeconds / div;
+  return `${Number.isInteger(val) ? val : val.toFixed(1)}${label}`;
+}
+
 function GoalTimerModal({ t, goal, close }) {
   const totalSegments = goal.timerMode === "interval" ? (Number(goal.timerRepeatCount) || 1) : 1;
-  const segmentMinutes = Number(goal.timerMinutes) || 1;
+  const segmentSeconds = Number(goal.timerSeconds) || 60;
   const [segmentIndex, setSegmentIndex] = useState(1); // ช่วงที่กำลังนับอยู่ (นับจาก 1)
-  const [remainingSec, setRemainingSec] = useState(segmentMinutes * 60);
+  const [remainingSec, setRemainingSec] = useState(segmentSeconds);
   const [paused, setPaused] = useState(false);
   const [ringing, setRinging] = useState(false); // true = ครบเวลาช่วงนี้แล้ว กำลังดังปลุกรอกดรับทราบ
   const [ringInfo, setRingInfo] = useState({ count: 0, total: 5 });
@@ -3156,11 +3176,15 @@ function GoalTimerModal({ t, goal, close }) {
     alarmRef.current?.stop(); alarmRef.current = null; setRinging(false);
     if (segmentIndex >= totalSegments) { close(); return; } // ครบทุกช่วงของเซสชันนี้แล้ว ปิดเลย
     setSegmentIndex((i) => i + 1);
-    setRemainingSec(segmentMinutes * 60);
+    setRemainingSec(segmentSeconds);
   };
 
-  const mm = String(Math.floor(Math.max(0, remainingSec) / 60)).padStart(2, "0");
-  const ss = String(Math.max(0, remainingSec) % 60).padStart(2, "0");
+  const rs = Math.max(0, remainingSec);
+  const showHours = rs >= 3600 || segmentSeconds >= 3600;
+  const hh = String(Math.floor(rs / 3600)).padStart(2, "0");
+  const mm = String(Math.floor((rs % 3600) / 60)).padStart(2, "0");
+  const ss = String(rs % 60).padStart(2, "0");
+  const timeLabel = showHours ? `${hh}:${mm}:${ss}` : `${mm}:${ss}`;
 
   if (ringing) {
     return (
@@ -3195,7 +3219,7 @@ function GoalTimerModal({ t, goal, close }) {
               <div style={{ position: "absolute", left: 2, right: 2, bottom: 0, background: t.accent, animation: "rh-hourglass-fill 15s linear infinite" }} />
             </div>
           </div>
-          <div style={{ fontFamily: "'Kanit',sans-serif", fontSize: 38, fontWeight: 800, color: t.text, marginTop: 16, letterSpacing: 1 }}>{mm}:{ss}</div>
+          <div style={{ fontFamily: "'Kanit',sans-serif", fontSize: showHours ? 30 : 38, fontWeight: 800, color: t.text, marginTop: 16, letterSpacing: 1 }}>{timeLabel}</div>
           <div style={{ fontSize: 11.5, color: t.sub, marginTop: 4 }}>{paused ? "หยุดชั่วคราวอยู่" : "กำลังนับถอยหลัง..."}</div>
         </div>
 
@@ -3213,12 +3237,11 @@ function GoalTimerModal({ t, goal, close }) {
   );
 }
 
-function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, allGoals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget }) {
+function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, allGoals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget, setAddGoalOpen }) {
   const [askConfirm, ConfirmUI] = useConfirm(t);
   const [viewingPinned, setViewingPinned] = useState(null);
   const [commentingId, setCommentingId] = useState(null);
   const pinnedMedia = (playlist || []).filter((p) => p.kind === "link" && p.pinnedHome);
-  const [addGoalOpen, setAddGoalOpen] = useState(false);
   const [shareGoalOpen, setShareGoalOpen] = useState(false);
   const latestNote = notes[0];
   const todayNet = tx.filter((x) => x.date === todayStr()).reduce((s, x) => s + (x.type === "in" ? x.amount : -x.amount), 0);
@@ -3406,7 +3429,7 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
                   {g.comment && <div style={{ fontSize: 10.5, color: t.faint, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>💬 {g.comment}</div>}
                 </button>
                 <button onClick={() => setCommentingId(commentingId === g.id ? null : g.id)} style={ghost} title="เพิ่มคอมเมนต์/สถานะ"><MessageCircle size={14} color={g.comment ? t.accent : t.faint} /></button>
-                {g.timerMode && <button onClick={() => setGoalTimerTarget(g)} style={{ ...ghost, display: "flex", alignItems: "center", gap: 3, border: `1px solid ${t.accent}55`, background: `${t.accent}12`, padding: "5px 8px" }} title="เริ่มจับเวลา"><Timer size={13} color={t.accent} /><span style={{ fontSize: 10.5, fontWeight: 700, color: t.accent }}>{g.timerMinutes}น.</span></button>}
+                {g.timerMode && <button onClick={() => setGoalTimerTarget(g)} style={{ ...ghost, display: "flex", alignItems: "center", gap: 3, border: `1px solid ${t.accent}55`, background: `${t.accent}12`, padding: "5px 8px" }} title="เริ่มจับเวลา"><Timer size={13} color={t.accent} /><span style={{ fontSize: 10.5, fontWeight: 700, color: t.accent }}>{formatTimerBadge(g.timerSeconds, g.timerUnit)}</span></button>}
                 <button onClick={() => openReminder("goal", g.id, g.text)} style={ghost} title="ตั้งเตือนเป้าหมายนี้"><Bell size={14} color={reminders.some((r) => r.targetType === "goal" && r.targetId === g.id) ? t.accent : t.faint} fill={reminders.some((r) => r.targetType === "goal" && r.targetId === g.id) ? t.accent : "none"} /></button>
                 <button onClick={() => askConfirm(`ลบเป้าหมาย "${g.text}" เลยไหม?`, () => { setGoals((gs) => gs.filter((x) => x.id !== g.id)); if (userId) { supabase.from("goals").delete().eq("id", g.id).then(() => {}, () => {}); logAudit(userId, "goals", "delete", "ลบเป้าหมาย"); } })} style={ghost}><Trash2 size={15} color={t.faint} /></button>
               </div>
@@ -3444,7 +3467,6 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
           <button onClick={() => setAddGoalOpen(true)} style={{ ...primaryBtn(t), width: "100%", padding: "11px 0", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Plus size={16} /> เพิ่มเป้าหมาย</button>
         </div>
       </div>
-      {addGoalOpen && <AddGoalModal t={t} userId={userId} setGoals={setGoals} goalTemplates={goalTemplates} setGoalTemplates={setGoalTemplates} close={() => setAddGoalOpen(false)} />}
       {shareGoalOpen && <ShareGoalModal t={t} userId={userId} authProfile={authProfile} weekPoints={weekPoints} bestStreak={bestStreak} badge={badge} close={() => setShareGoalOpen(false)} />}
 
       {pinnedMedia.length > 0 && (
