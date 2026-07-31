@@ -1973,7 +1973,7 @@ export default function RefHub() {
         </div>
 
         {/* CONTENT — ความสูงหารด้วยสเกลชดเชย transform:scale ข้างบน กันตอนขยายฟอนต์แล้วท้ายเนื้อหาจมใต้ Dock */}
-        <div ref={contentScrollRef} onScroll={(e) => setAtTop(e.currentTarget.scrollTop < 80)} style={{ position: "relative", zIndex: 2, padding: `${cardShape === "sharp" ? 6 : 16}px ${cardShape === "sharp" ? 0 : 10}px ${page === "chat" || page === "chatRoom" ? 16 : 120}px`, height: `calc(${(10000 / fontScale).toFixed(2)}vh - 76px)`, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
+        <div ref={contentScrollRef} onScroll={(e) => setAtTop(e.currentTarget.scrollTop < 80)} style={{ position: "relative", zIndex: 2, padding: `8px 10px ${page === "chat" || page === "chatRoom" ? 16 : 120}px`, height: `calc(${(10000 / fontScale).toFixed(2)}vh - 76px)`, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
           {page === "home" && <ErrorCatcher t={t}><HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, allGoals: goals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget, setAddGoalOpen, setScoreRulesOpen, cardShape, homeLayout, walletWidgets, setWalletWidgets, bentoWidgets, setBentoWidgets }} /></ErrorCatcher>}
           {page === "ledger" && <FinancePage {...{ t, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt), userId, billReminders, billPayments, markBillPaid, setBillManagerOpen }} />}
           {page === "note" && <NotePage {...{ t, notes, setNotes, isNight, userId, session, authProfile, reminders, openReminder }} />}
@@ -3666,9 +3666,10 @@ function widgetBentoData(id, t, { balance, todayNet, goalDone, goals, todayArtic
 
 // 🏠 โครง Home แบบ "โฟกัส" — ยอดเงินตัวใหญ่บนสุด + แถวไอคอนฟังก์ชันลัด (ปรับ/ลบ/เพิ่ม/ลากสลับลำดับเองได้) + list เรียบ
 function HomeWidgetsWallet({ t, shp, M, isNight, setMentorPick, setChatOpen, balance, todayNet, goalDone, goals, todayArticles, latestNote, setPage, setCommunityOpen, commPreview, walletWidgets, onEditWidgets }) {
+  const sharp = shp.radius === 0;
   return (
     <>
-      <div style={{ marginTop: 8, background: t.hero, borderRadius: shp.radius, padding: "18px 16px", position: "relative", overflow: "hidden" }}>
+      <div style={{ marginTop: 8, background: t.hero, borderRadius: shp.radius, padding: sharp ? "18px 26px" : "18px 16px", position: "relative", overflow: "hidden" }}>
         <button onClick={() => setMentorPick(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: `${t.onAccent}CC` }}>{isNight ? "โค้ชคืนนี้" : "โค้ชวันนี้"} · {M.name.toUpperCase()} ▾</span>
         </button>
@@ -3677,7 +3678,7 @@ function HomeWidgetsWallet({ t, shp, M, isNight, setMentorPick, setChatOpen, bal
         <button onClick={() => setChatOpen(true)} style={{ marginTop: 12, border: "none", cursor: "pointer", background: `${t.onAccent}2E`, color: t.onAccent, fontWeight: 700, fontSize: 12.5, padding: "8px 14px", borderRadius: shp.radius === 0 ? 0 : 18, display: "inline-flex", alignItems: "center", gap: 6 }}>คุยกับโค้ช <ChevronRight size={14} /></button>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 18, marginBottom: 6 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 18, marginBottom: 6, paddingLeft: sharp ? 10 : 0, paddingRight: sharp ? 10 : 0 }}>
         <div style={{ display: "flex", justifyContent: "flex-start", gap: 14, flex: 1, overflowX: "auto" }}>
           {walletWidgets.map((wid) => {
             const w = AVAILABLE_WIDGETS.find((x) => x.id === wid);
@@ -3709,7 +3710,7 @@ function WalletQuick({ t, shp, icon, bg, label, onClick }) {
 }
 function WalletRow({ t, shp, icon, title, sub, onClick }) {
   return (
-    <button onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 12, background: shp.bg, border: shp.border, borderRadius: shp.radius, boxShadow: shp.shadow, padding: "12px 14px", cursor: "pointer", textAlign: "left", width: "100%" }}>
+    <button onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 12, background: shp.bg, border: shp.border, borderRadius: shp.radius, boxShadow: shp.shadow, padding: shp.radius === 0 ? "12px 24px" : "12px 14px", cursor: "pointer", textAlign: "left", width: "100%" }}>
       <span style={{ width: 34, height: 34, borderRadius: shp.iconRadius, background: t.inputBg, display: "grid", placeItems: "center", flexShrink: 0 }}>{icon}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 12.5, fontWeight: 700, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</div>
@@ -3722,6 +3723,7 @@ function WalletRow({ t, shp, icon, title, sub, onClick }) {
 
 // 🧱 โครง Home แบบ "โมเสก" — บล็อกยอดเงินใหญ่เด่น + บล็อกเล็กล้อมรอบ (ปรับ/ลบ/เพิ่ม/ลากสลับลำดับเองได้ ใช้สี solid ไม่จางแล้ว)
 function HomeWidgetsBento({ t, shp, M, isNight, setMentorPick, setChatOpen, balance, todayNet, goalDone, goals, todayArticles, latestNote, setPage, setCommunityOpen, commPreview, bentoWidgets, onEditWidgets }) {
+  const sharp = shp.radius === 0;
   const data = { balance, todayNet, goalDone, goals, todayArticles, latestNote, commPreview };
   const resolve = (id) => {
     const meta = AVAILABLE_WIDGETS.find((w) => w.id === id);
@@ -3736,7 +3738,7 @@ function HomeWidgetsBento({ t, shp, M, isNight, setMentorPick, setChatOpen, bala
   return (
     <>
       <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 10, marginTop: 8 }}>
-        <div style={{ background: t.hero, borderRadius: shp.radius, padding: 16, position: "relative", overflow: "hidden" }}>
+        <div style={{ background: t.hero, borderRadius: shp.radius, padding: sharp ? "16px 16px 16px 26px" : 16, position: "relative", overflow: "hidden" }}>
           <button onClick={onEditWidgets} style={{ position: "absolute", top: 10, right: 10, background: `${t.onAccent}26`, border: "none", borderRadius: shp.radius === 0 ? 0 : 10, width: 26, height: 26, display: "grid", placeItems: "center", cursor: "pointer" }} title="ปรับบล็อก"><Pencil size={13} color={t.onAccent} /></button>
           <button onClick={() => setMentorPick(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
             <span style={{ fontSize: 10.5, fontWeight: 700, color: `${t.onAccent}CC` }}>{isNight ? "โค้ชคืนนี้" : "โค้ชวันนี้"}</span>
@@ -3746,21 +3748,23 @@ function HomeWidgetsBento({ t, shp, M, isNight, setMentorPick, setChatOpen, bala
           <button onClick={() => setChatOpen(true)} style={{ marginTop: 10, border: "none", cursor: "pointer", background: `${t.onAccent}2E`, color: t.onAccent, fontWeight: 700, fontSize: 11, padding: "6px 11px", borderRadius: shp.radius === 0 ? 0 : 14, display: "inline-flex", alignItems: "center", gap: 4 }}>คุยกับโค้ช <ChevronRight size={12} /></button>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {d1 && <BentoTile shp={shp} icon={d1.icon} bg={d1.cat ? t.catIcBg[d1.cat] : t.accent} label={d1.label} onClick={d1.onClick} />}
-          {d2 && <BentoTile shp={shp} icon={d2.icon} bg={d2.cat ? t.catIcBg[d2.cat] : t.accent} label={d2.label} onClick={d2.onClick} />}
+          {d1 && <BentoTile shp={shp} icon={d1.icon} bg={d1.cat ? t.catIcBg[d1.cat] : t.accent} label={d1.label} onClick={d1.onClick} padSide="right" />}
+          {d2 && <BentoTile shp={shp} icon={d2.icon} bg={d2.cat ? t.catIcBg[d2.cat] : t.accent} label={d2.label} onClick={d2.onClick} padSide="right" />}
         </div>
       </div>
       {rest.length > 0 && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
-          {rest.map((id) => { const d = resolve(id); if (!d) return null; return <BentoTile key={id} shp={shp} icon={d.icon} bg={d.cat ? t.catIcBg[d.cat] : t.accent} label={d.label} onClick={d.onClick} full />; })}
+          {rest.map((id, i) => { const d = resolve(id); if (!d) return null; return <BentoTile key={id} shp={shp} icon={d.icon} bg={d.cat ? t.catIcBg[d.cat] : t.accent} label={d.label} onClick={d.onClick} full padSide={i % 2 === 0 ? "left" : "right"} />; })}
         </div>
       )}
     </>
   );
 }
-function BentoTile({ shp, icon, bg, label, onClick, full }) {
+function BentoTile({ shp, icon, bg, label, onClick, full, padSide }) {
+  const sharp = shp.radius === 0;
+  const extra = sharp ? (padSide === "right" ? { paddingRight: 22 } : padSide === "left" ? { paddingLeft: 22 } : {}) : {};
   return (
-    <button onClick={onClick} style={{ background: bg, border: "none", borderRadius: shp.radius, padding: 12, cursor: "pointer", textAlign: "left", display: "flex", flexDirection: full ? "row" : "column", alignItems: full ? "center" : "flex-start", gap: full ? 10 : 6, flex: full ? "none" : 1, width: "100%" }}>
+    <button onClick={onClick} style={{ background: bg, border: "none", borderRadius: shp.radius, padding: 12, ...extra, cursor: "pointer", textAlign: "left", display: "flex", flexDirection: full ? "row" : "column", alignItems: full ? "center" : "flex-start", gap: full ? 10 : 6, flex: full ? "none" : 1, width: "100%" }}>
       <span style={{ width: 26, height: 26, borderRadius: shp.iconRadius, background: "rgba(255,255,255,.22)", display: "grid", placeItems: "center", flexShrink: 0 }}>{icon}</span>
       <span style={{ fontSize: 11, fontWeight: 700, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: full ? "nowrap" : "normal", flex: full ? 1 : "none" }}>{label}</span>
     </button>
@@ -3898,13 +3902,14 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
           <button onClick={() => dismiss(a.id)} style={{ background: "none", border: "none", cursor: "pointer", flexShrink: 0, padding: 2 }}><X size={15} color={t.faint} /></button>
         </div>
       ))}
+      <div style={{ margin: cardShape === "sharp" ? "0 -10px" : 0 }}>
       {homeLayout === "wallet" ? (
         <HomeWidgetsWallet t={t} shp={shp} M={M} isNight={isNight} setMentorPick={setMentorPick} setChatOpen={setChatOpen} balance={balance} todayNet={todayNet} goalDone={goalDone} goals={goals} todayArticles={todayArticles} latestNote={latestNote} setPage={setPage} setCommunityOpen={setCommunityOpen} commPreview={commPreview} walletWidgets={walletWidgets} onEditWidgets={() => setEditWidgetsOpen(true)} />
       ) : homeLayout === "bento" ? (
         <HomeWidgetsBento t={t} shp={shp} M={M} isNight={isNight} setMentorPick={setMentorPick} setChatOpen={setChatOpen} balance={balance} todayNet={todayNet} goalDone={goalDone} goals={goals} todayArticles={todayArticles} latestNote={latestNote} setPage={setPage} setCommunityOpen={setCommunityOpen} commPreview={commPreview} bentoWidgets={bentoWidgets} onEditWidgets={() => setEditWidgetsOpen(true)} />
       ) : (
         <>
-      <div style={{ marginTop: 8, background: t.hero, border: `1px solid ${t.heroBorder}`, borderRadius: shp.radius, padding: 20, position: "relative", overflow: "hidden", boxShadow: isNight ? "none" : "0 10px 24px rgba(30,40,70,.18)" }}>
+      <div style={{ marginTop: 8, background: t.hero, border: `1px solid ${t.heroBorder}`, borderRadius: shp.radius, padding: shp.radius === 0 ? 30 : 20, position: "relative", overflow: "hidden", boxShadow: isNight ? "none" : "0 10px 24px rgba(30,40,70,.18)" }}>
         <div style={{ position: "absolute", top: -34, right: -34, width: 130, height: 130, borderRadius: "50%", background: "rgba(255,255,255,.10)", pointerEvents: "none" }} />
         <div style={{ position: "absolute", bottom: -44, left: -24, width: 105, height: 105, borderRadius: "50%", background: "rgba(255,255,255,.06)", pointerEvents: "none" }} />
         <div style={{ position: "relative" }}>
@@ -3923,7 +3928,7 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
         </div>
       </div>
 
-      <div style={{ fontSize: 13, fontWeight: 700, color: t.sub, margin: "22px 0 12px" }}>วิดเจ็ตของฉัน</div>
+      <div style={{ fontSize: 13, fontWeight: 700, color: t.sub, margin: "22px 0 12px", paddingLeft: shp.radius === 0 ? 10 : 0, paddingRight: shp.radius === 0 ? 10 : 0 }}>วิดเจ็ตของฉัน</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <CatCard t={t} shp={shp} k="green" icon={<Wallet size={15} color="#fff" />} label="การเงิน" onClick={() => setPage("ledger")}>
           <div style={{ fontSize: 19, fontWeight: 800, color: t.catTx.green }}>{fmt(balance)}</div>
@@ -3948,7 +3953,7 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
       </div>
 
       {/* 🌐 การ์ดเข้าชุมชน — พรีวิวเนื้อหาจริง + ลูกโลกหมุน */}
-      <button onClick={() => setCommunityOpen(true)} style={{ marginTop: 16, width: "100%", border: `1px solid ${t.border}`, cursor: "pointer", textAlign: "left", borderRadius: shp.radius, padding: 16, background: `linear-gradient(135deg, ${t.accent}22, ${t.surface})`, position: "relative", overflow: "hidden", boxShadow: shp.radius === 0 ? "none" : (t.star ? "none" : "0 8px 22px rgba(40,50,70,.10)") }}>
+      <button onClick={() => setCommunityOpen(true)} style={{ marginTop: 16, width: "100%", border: `1px solid ${t.border}`, cursor: "pointer", textAlign: "left", borderRadius: shp.radius, padding: shp.radius === 0 ? 26 : 16, background: `linear-gradient(135deg, ${t.accent}22, ${t.surface})`, position: "relative", overflow: "hidden", boxShadow: shp.radius === 0 ? "none" : (t.star ? "none" : "0 8px 22px rgba(40,50,70,.10)") }}>
         <div style={{ position: "absolute", top: -30, right: -30, width: 120, height: 120, borderRadius: "50%", background: `radial-gradient(circle, ${t.accent}33, transparent 70%)`, pointerEvents: "none" }} />
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", position: "relative" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -3977,6 +3982,7 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
       </button>
         </>
       )}
+      </div>
 
       <div style={{ ...card(t), marginTop: 16, padding: 16 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -9911,7 +9917,7 @@ function Ring({ pct, color, label }) {
 }
 function CatCard({ t, k, icon, label, children, onClick, shp }) {
   const s = shp || shapeTokens("soft", t);
-  const pad = s.radius === 0 ? 18 : 14; // 🔲 มุมเหลี่ยมทำให้ padding เท่าเดิม "ดูแคบกว่า" มุมมน เลยเพิ่มให้อีกนิดเฉพาะโหมดนี้ กันไอคอนดูชิดมุม
+  const pad = s.radius === 0 ? 24 : 14; // 🔲 มุมเหลี่ยม+bleed ขอบจอ ต้องชดเชย padding ให้เท่ากับโหมดมน (10px ขอบนอก + 14px เดิม = 24) กันไอคอนดูชิดมุม
   return (<button onClick={onClick} style={{ background: t.cat[k], borderRadius: s.radius, padding: pad, cursor: onClick ? "pointer" : "default", border: s.radius === 0 ? `1px solid ${t.border}` : `1px solid ${t.border}`, boxShadow: s.radius === 0 ? "none" : (t.star ? "none" : "0 4px 12px rgba(40,50,70,.06)"), textAlign: "left", width: "100%", font: "inherit", display: "block" }}>
     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}><span style={{ width: 26, height: 26, borderRadius: s.iconRadius, background: t.catIcBg[k], display: "grid", placeItems: "center", flexShrink: 0 }}>{icon}</span><span style={{ fontSize: 10.5, fontWeight: 700, color: t.catLb[k] }}>{label}</span></div>
     {children}
