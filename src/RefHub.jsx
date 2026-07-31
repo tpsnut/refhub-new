@@ -1753,7 +1753,7 @@ export default function RefHub() {
         <div style={{ transform: `scale(${fontScale / 100})`, transformOrigin: "top left", width: `${10000 / fontScale}%` }}>
 
         {/* HEADER */}
-        <div style={{ position: "relative", zIndex: 3, padding: "18px 18px 0" }}>
+        <div style={{ position: "relative", zIndex: 3, padding: "18px 8px 0" }}>
           {page === "home" ? (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
@@ -1828,7 +1828,7 @@ export default function RefHub() {
         </div>
 
         {/* CONTENT — ความสูงหารด้วยสเกลชดเชย transform:scale ข้างบน กันตอนขยายฟอนต์แล้วท้ายเนื้อหาจมใต้ Dock */}
-        <div ref={contentScrollRef} onScroll={(e) => setAtTop(e.currentTarget.scrollTop < 80)} style={{ position: "relative", zIndex: 2, padding: `16px 18px ${page === "chat" || page === "chatRoom" ? 16 : 120}px`, height: `calc(${(10000 / fontScale).toFixed(2)}vh - 76px)`, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
+        <div ref={contentScrollRef} onScroll={(e) => setAtTop(e.currentTarget.scrollTop < 80)} style={{ position: "relative", zIndex: 2, padding: `16px 8px ${page === "chat" || page === "chatRoom" ? 16 : 120}px`, height: `calc(${(10000 / fontScale).toFixed(2)}vh - 76px)`, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
           {page === "home" && <ErrorCatcher t={t}><HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, allGoals: goals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget, setAddGoalOpen, setScoreRulesOpen }} /></ErrorCatcher>}
           {page === "ledger" && <FinancePage {...{ t, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt), userId, billReminders, billPayments, markBillPaid, setBillManagerOpen }} />}
           {page === "note" && <NotePage {...{ t, notes, setNotes, isNight, userId, session, authProfile, reminders, openReminder }} />}
@@ -5204,7 +5204,7 @@ function CommunityOverlay({ t, userId, authProfile, session, openThread, close }
     <ModalPortal>
       <div style={{ position: "fixed", inset: 0, background: t.page, zIndex: 100, display: "flex", flexDirection: "column" }}>
         {/* หัวแถบ */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 18px 12px", borderBottom: `1px solid ${t.border}`, flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 8px 12px", borderBottom: `1px solid ${t.border}`, flexShrink: 0 }}>
           <button onClick={close} style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 18, width: 36, height: 36, cursor: "pointer", display: "grid", placeItems: "center" }}><ArrowLeft size={18} color={t.text} /></button>
           <div style={{ display: "flex", alignItems: "center", gap: 9, flex: 1 }}>
             <GlobeIcon size={30} accent={t.accent} />
@@ -5214,7 +5214,7 @@ function CommunityOverlay({ t, userId, authProfile, session, openThread, close }
         </div>
 
         {/* เนื้อหา */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "16px 18px 90px" }}>
+        <div style={{ flex: 1, overflowY: "auto", padding: "16px 8px 90px" }}>
           {!canUse ? (
             <div style={{ textAlign: "center", padding: "50px 20px" }}>
               <div style={{ width: 90, height: 90, borderRadius: 45, margin: "0 auto 22px", position: "relative", overflow: "hidden", background: `radial-gradient(circle at 32% 28%, ${t.accent}, ${t.accent}CC 60%, ${t.accent}66)`, boxShadow: `0 0 30px ${t.accent}66`, opacity: .6 }}>
@@ -6109,11 +6109,11 @@ function CommunityProfile({ t, userId, profileId, session, onOpenProfile }) {
       {showBookmarks && (
         <ModalPortal>
           <div style={{ position: "fixed", inset: 0, background: t.page, zIndex: 110, display: "flex", flexDirection: "column" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 18px 12px", borderBottom: `1px solid ${t.border}`, flexShrink: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 8px 12px", borderBottom: `1px solid ${t.border}`, flexShrink: 0 }}>
               <button onClick={() => setShowBookmarks(false)} style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 18, width: 36, height: 36, cursor: "pointer", display: "grid", placeItems: "center" }}><ArrowLeft size={18} color={t.text} /></button>
               <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>🔖 โพสต์ที่บันทึกไว้</div>
             </div>
-            <div style={{ flex: 1, overflowY: "auto", padding: "16px 18px 40px" }}>
+            <div style={{ flex: 1, overflowY: "auto", padding: "16px 8px 40px" }}>
               <CommunityBookmarks t={t} userId={userId} onOpenProfile={onOpenProfile} />
             </div>
           </div>
