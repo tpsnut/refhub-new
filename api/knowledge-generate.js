@@ -127,6 +127,12 @@ ${scoringRule}
 {"goals":[{"text":"...","points":5,"reason":"..."}]}`;
       }
 
+      // 🔒 บังคับให้ Gemini ตอบเป็น JSON ตาม schema ที่กำหนดตรงๆ (Structured Output) แทนการหวังพึ่งคำสั่งในพรอมต์เฉยๆ
+      // แก้บั๊กเดิม: บางครั้ง AI ตอบ JSON ที่มีรูปแบบเพี้ยนเล็กน้อย (เช่น ขึ้นบรรทัดใหม่ในค่า string) ทำให้ JSON.parse พังกลางทาง
+      const responseSchema = mode === "assess"
+        ? { type: "OBJECT", properties: { points: { type: "INTEGER" }, reason: { type: "STRING" } }, required: ["points", "reason"] }
+        : { type: "OBJECT", properties: { goals: { type: "ARRAY", items: { type: "OBJECT", properties: { text: { type: "STRING" }, points: { type: "INTEGER" }, reason: { type: "STRING" } }, required: ["text", "points", "reason"] } } }, required: ["goals"] };
+
       const r = await fetch(
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
         {
@@ -134,7 +140,7 @@ ${scoringRule}
           headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
           body: JSON.stringify({
             contents: [{ role: "user", parts: [{ text: prompt }] }],
-            generationConfig: { maxOutputTokens: 2000 },
+            generationConfig: { maxOutputTokens: 2000, responseMimeType: "application/json", responseSchema },
           }),
         }
       );
@@ -154,7 +160,7 @@ ${scoringRule}
         const start = cleaned.indexOf("{");
         const end = cleaned.lastIndexOf("}");
         if (start !== -1 && end > start) { try { parsed = JSON.parse(cleaned.slice(start, end + 1)); } catch (e2) {} }
-        if (!parsed) return res.status(500).json({ error: `แปลงผลลัพธ์จาก AI ไม่สำเร็จ ตัวอย่างที่ได้รับ: "${cleaned.slice(0, 150)}"` });
+        if (!parsed) return res.status(500).json({ error: `แปลงผลลัพธ์จาก AI ไม่สำเร็จ ตัวอย่างที่ได้รับ: "${cleaned.slice(0, 400)}"` });
       }
 
       const clampPoints = (p) => Math.min(10, Math.max(1, Math.round(Number(p) || 5)));
