@@ -1973,7 +1973,7 @@ export default function RefHub() {
         </div>
 
         {/* CONTENT — ความสูงหารด้วยสเกลชดเชย transform:scale ข้างบน กันตอนขยายฟอนต์แล้วท้ายเนื้อหาจมใต้ Dock */}
-        <div ref={contentScrollRef} onScroll={(e) => setAtTop(e.currentTarget.scrollTop < 80)} style={{ position: "relative", zIndex: 2, padding: `16px ${cardShape === "sharp" ? 0 : 10}px ${page === "chat" || page === "chatRoom" ? 16 : 120}px`, height: `calc(${(10000 / fontScale).toFixed(2)}vh - 76px)`, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
+        <div ref={contentScrollRef} onScroll={(e) => setAtTop(e.currentTarget.scrollTop < 80)} style={{ position: "relative", zIndex: 2, padding: `${cardShape === "sharp" ? 6 : 16}px ${cardShape === "sharp" ? 0 : 10}px ${page === "chat" || page === "chatRoom" ? 16 : 120}px`, height: `calc(${(10000 / fontScale).toFixed(2)}vh - 76px)`, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
           {page === "home" && <ErrorCatcher t={t}><HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, allGoals: goals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget, setAddGoalOpen, setScoreRulesOpen, cardShape, homeLayout, walletWidgets, setWalletWidgets, bentoWidgets, setBentoWidgets }} /></ErrorCatcher>}
           {page === "ledger" && <FinancePage {...{ t, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt), userId, billReminders, billPayments, markBillPaid, setBillManagerOpen }} />}
           {page === "note" && <NotePage {...{ t, notes, setNotes, isNight, userId, session, authProfile, reminders, openReminder }} />}
@@ -9911,7 +9911,8 @@ function Ring({ pct, color, label }) {
 }
 function CatCard({ t, k, icon, label, children, onClick, shp }) {
   const s = shp || shapeTokens("soft", t);
-  return (<button onClick={onClick} style={{ background: t.cat[k], borderRadius: s.radius, padding: 14, cursor: onClick ? "pointer" : "default", border: s.radius === 0 ? `1px solid ${t.border}` : `1px solid ${t.border}`, boxShadow: s.radius === 0 ? "none" : (t.star ? "none" : "0 4px 12px rgba(40,50,70,.06)"), textAlign: "left", width: "100%", font: "inherit", display: "block" }}>
+  const pad = s.radius === 0 ? 18 : 14; // 🔲 มุมเหลี่ยมทำให้ padding เท่าเดิม "ดูแคบกว่า" มุมมน เลยเพิ่มให้อีกนิดเฉพาะโหมดนี้ กันไอคอนดูชิดมุม
+  return (<button onClick={onClick} style={{ background: t.cat[k], borderRadius: s.radius, padding: pad, cursor: onClick ? "pointer" : "default", border: s.radius === 0 ? `1px solid ${t.border}` : `1px solid ${t.border}`, boxShadow: s.radius === 0 ? "none" : (t.star ? "none" : "0 4px 12px rgba(40,50,70,.06)"), textAlign: "left", width: "100%", font: "inherit", display: "block" }}>
     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}><span style={{ width: 26, height: 26, borderRadius: s.iconRadius, background: t.catIcBg[k], display: "grid", placeItems: "center", flexShrink: 0 }}>{icon}</span><span style={{ fontSize: 10.5, fontWeight: 700, color: t.catLb[k] }}>{label}</span></div>
     {children}
   </button>);
