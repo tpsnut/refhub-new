@@ -999,8 +999,8 @@ export default function RefHub() {
   const [catColors, setCatColors] = useState(DEFAULT_CAT_COLORS); // 🎨 สีหมวดหมู่ (การเงิน/ความรู้/เป้าหมาย/โน้ต) ที่ user ปรับเองได้ทีละสี
   const [cardShape, setCardShape] = useState("soft"); // 🔲 ทรงกรอบการ์ด: sharp (เหลี่ยมคมแบบ SCB ไม่มีเงา) | soft (มนเบาๆ ใกล้ตัวอักษร) — default soft ตามที่ตกลง
   const [homeLayout, setHomeLayout] = useState("original"); // 🏠 โครงหน้า Home: original (ของเดิม) | wallet (แนววอลเล็ต) | bento (บล็อกผสม) — default original ตามที่ตกลง
-  const [walletWidgets, setWalletWidgets] = useState(["finance", "knowledge", "goals", "notes", "community"]); // 🔘 วิดเจ็ตในแถวไอคอนลัดของ layout วอลเล็ต (โฟกัส) — user ปรับ/ลบ/เพิ่ม/สลับลำดับเองได้
-  const [bentoWidgets, setBentoWidgets] = useState(["goals", "knowledge", "notes", "community"]); // 🧱 วิดเจ็ตในบล็อกเล็กของ layout เบนโต (โมเสก) — user ปรับ/ลบ/เพิ่ม/สลับลำดับเองได้
+  const [walletWidgets, setWalletWidgets] = useState(["finance", "knowledge", "goals", "notes"]); // 🔘 วิดเจ็ตในแถวไอคอนลัดของ layout วอลเล็ต (โฟกัส) — user ปรับ/ลบ/เพิ่ม/สลับลำดับเองได้ ("community" เอาออกแล้ว ซ้ำกับทางลัดเสริม)
+  const [bentoWidgets, setBentoWidgets] = useState(["goals", "knowledge", "notes"]); // 🧱 วิดเจ็ตในบล็อกเล็กของ layout เบนโต (โมเสก) — user ปรับ/ลบ/เพิ่ม/สลับลำดับเองได้ ("community" เอาออกแล้ว ซ้ำกับทางลัดเสริม)
   const [classicWidgets, setClassicWidgets] = useState(["finance", "knowledge", "goals", "notes"]); // 🏛️ วิดเจ็ตในการ์ด 2x2 ของ layout คลาสสิก — user ปรับ/ลบ/เพิ่ม/สลับลำดับเองได้เหมือนกัน
   const [heroShortcuts, setHeroShortcuts] = useState([]); // 🔗 ทางลัดเสริมในการ์ดใหญ่เท่านั้น: media | chat | community (เลือกได้หลายอัน ค่าเริ่มต้นไม่มี)
   const [fontScale, setFontScale] = useState(() => { // 📏 ขนาดตัวอักษร: 100 | 115 | 130 (ปกติ/ใหญ่/ใหญ่มาก) — อ่านจาก localStorage ทันทีตอน mount กันจอกระพริบกลับไป 100 ก่อนแวบนึง
@@ -1911,9 +1911,21 @@ export default function RefHub() {
                   </button>
                   <div style={{ display: "flex", alignItems: "stretch" }}>
                     <button onClick={() => setSearchOpen(true)} style={{ width: 48, background: "none", border: "none", borderLeft: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }}><Search size={17} color={t.text} /></button>
-                    <button onClick={() => setMusicOpen(true)} style={{ position: "relative", width: 48, background: "none", border: "none", borderLeft: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }}>
-                      <Music size={17} color={playing ? t.accent : t.text} />
-                    </button>
+                    <div style={{ position: "relative", width: 48, alignSelf: "stretch" }}>
+                      {/* ✨ เอฟเฟคเดียวกับโหมดมน ย้ายมาให้โหมดเหลี่ยมด้วย กันไอคอนเพลงดูขาดๆ ตอนกำลังเล่นอยู่ */}
+                      {playing && <div style={{ position: "absolute", inset: 0, animation: "rh-note-glow 1.6s ease-in-out infinite", pointerEvents: "none" }} />}
+                      <button onClick={() => setMusicOpen(true)} style={{ position: "relative", width: "100%", height: "100%", background: "none", border: "none", borderLeft: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }}>
+                        <Music size={17} color={playing ? t.accent : t.text} />
+                      </button>
+                      {playing && (
+                        <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+                          <Music size={9} color={t.accent} style={{ position: "absolute", left: 14, top: 10, opacity: 0, animation: "rh-note-float 2.2s ease-in infinite" }} />
+                          <Music size={7} color={t.accent} style={{ position: "absolute", right: 10, top: 12, opacity: 0, animation: "rh-note-float 2.2s ease-in infinite .75s" }} />
+                          <Music size={8} color={t.accent} style={{ position: "absolute", left: 22, top: 8, opacity: 0, animation: "rh-note-float 2.2s ease-in infinite 1.5s" }} />
+                          <style>{`@keyframes rh-note-float { 0% { transform: translateY(0) translateX(0) scale(.6) rotate(0deg); opacity: 0; } 18% { opacity: 1; } 100% { transform: translateY(-30px) translateX(7px) scale(1.1) rotate(12deg); opacity: 0; } } @keyframes rh-note-glow { 0%,100% { box-shadow: inset 0 0 3px ${t.accent}40, 0 0 0px ${t.accent}00; } 50% { box-shadow: inset 0 0 10px ${t.accent}66, 0 0 0px ${t.accent}00; } }`}</style>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </>
               )}
@@ -2174,14 +2186,13 @@ export default function RefHub() {
 function AuthLoadingScreen() {
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#0D0C0B", gap: 22 }}>
-      <style>{`@keyframes rh-pulse { 0%,100% { transform: scale(1); opacity:1; } 50% { transform: scale(1.05); opacity:.85; } } @keyframes rh-lantern-sway { 0%,100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }`}</style>
+      <style>{`@keyframes rh-pulse { 0%,100% { transform: scale(1); opacity:1; } 50% { transform: scale(1.05); opacity:.85; } }`}</style>
       <div style={{ animation: "rh-pulse 1.6s ease-in-out infinite" }}><PKnowLockup width={180} gap={8} animated /></div>
-      <div style={{ animation: "rh-lantern-sway 1.6s ease-in-out infinite", transformOrigin: "top center" }}><LanternIcon size={30} tier={2} /></div>
     </div>
   );
 }
 
-function PKnowMark({ width = 220, animated = false }) {
+function PKnowMark({ width = 220, animated = false, color = "#F2872E" }) {
   const h = width * 0.34;
   return (
     <svg width={width} height={h} viewBox="0 0 220 75" style={{ display: "block" }}>
@@ -2203,11 +2214,11 @@ function PKnowMark({ width = 220, animated = false }) {
       </defs>
       <text x="50%" y="58" textAnchor="middle" filter="url(#pkRough)"
         style={{ fontFamily: "'Anton','IBM Plex Sans Thai',sans-serif", fontSize: 58, letterSpacing: 1 }}
-        fill="#F2872E">
+        fill={color}>
         {animated ? (<><tspan className="pk-p">P</tspan><tspan className="pk-know">KNOW</tspan></>) : "PKNOW"}
       </text>
       {animated && (
-        <g filter="url(#pkRough)" fill="#F2872E">
+        <g filter="url(#pkRough)" fill={color}>
           <circle className="pk-dot1" cx="48" cy="48" r="3.2" />
           <circle className="pk-dot2" cx="58" cy="48" r="3.2" />
           <circle className="pk-dot3" cx="68" cy="48" r="3.2" />
@@ -3670,7 +3681,7 @@ const AVAILABLE_WIDGETS = [
   { id: "trade", label: "หุ้น", icon: TrendingUp, cat: "navy", page: "trade" },
   { id: "lang", label: "คำศัพท์", icon: Languages, cat: "teal", page: "lang" },
   { id: "news", label: "ข่าว", icon: Newspaper, cat: "rose", page: "news" },
-  { id: "community", label: "ชุมชน", icon: Users, cat: null, page: null },
+  // 🗑️ เอา "ชุมชน" ออกจากลิสต์วิดเจ็ตแล้ว — ซ้ำกับทางลัดเสริม "คอมมู" ที่ทำหน้าที่เดียวกัน (เปิดชุมชน) อยู่แล้วในการ์ดใหญ่
 ];
 function widgetBentoData(id, t, { balance, todayNet, goalDone, goals, todayArticles, latestNote, commPreview }) {
   if (id === "finance") return { icon: <Wallet size={15} color="#fff" />, cat: "green", label: fmt(balance) };
@@ -3818,23 +3829,51 @@ const HERO_SHORTCUTS_META = [
 function WidgetOrderModal({ t, title, hint, selected, setSelected, close, catColors, setCatColors, heroShortcuts, setHeroShortcuts }) {
   const chosen = selected.map((id) => AVAILABLE_WIDGETS.find((w) => w.id === id)).filter(Boolean);
   const available = AVAILABLE_WIDGETS.filter((w) => !selected.includes(w.id));
+  const hs = heroShortcuts || [];
+  const chosenShortcuts = hs.map((id) => HERO_SHORTCUTS_META.find((s) => s.id === id)).filter(Boolean);
+  const availableShortcuts = HERO_SHORTCUTS_META.filter((s) => !hs.includes(s.id));
   const [colorEditKey, setColorEditKey] = useState(null); // 🎨 cat key ที่กำลังเปิด ColorPickerModal อยู่ (null = ไม่ได้เปิด)
   return (<div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
     <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 4 }}>{title}</div>
     <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>{hint}</div>
 
-    {/* 🔗 ทางลัดเสริม — มีแค่ที่การ์ดใหญ่เท่านั้น (ปุ่มเดียวจากการ์ดใหญ่เรียก editor นี้ขึ้นมาแก้ได้ทุกอย่างในที่เดียว) */}
+    {/* 🔗 ทางลัดเสริม — มีแค่ที่การ์ดใหญ่เท่านั้น (ปุ่มเดียวจากการ์ดใหญ่เรียก editor นี้ขึ้นมาแก้ได้ทุกอย่างในที่เดียว) ลากสลับตำแหน่งได้ + ไอคอนโยกเยก (wiggle) บอกว่ากำลังอยู่ในโหมดแก้ไข เหมือนรายการวิดเจ็ตหลักด้านล่าง */}
     {setHeroShortcuts && (
       <>
-        <div style={{ fontSize: 11, fontWeight: 800, color: t.sub, marginBottom: 8 }}>ทางลัดเสริมในการ์ดใหญ่</div>
-        <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-          {HERO_SHORTCUTS_META.map((s) => {
-            const Icon = s.icon; const on = heroShortcuts.includes(s.id);
-            return (<button key={s.id} onClick={() => setHeroShortcuts(on ? heroShortcuts.filter((x) => x !== s.id) : [...heroShortcuts, s.id])} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5, padding: "10px 4px", borderRadius: 14, cursor: "pointer", background: on ? `${t.accent}1A` : t.surface, border: `1.5px solid ${on ? t.accent : t.border}` }}>
-              <Icon size={16} color={on ? t.accent : t.sub} /><span style={{ fontSize: 10.5, fontWeight: 700, color: on ? t.accent : t.sub }}>{s.label}</span>
-            </button>);
-          })}
+        <style>{`@keyframes rh-wiggle { 0% { transform: rotate(-3deg); } 100% { transform: rotate(3deg); } }`}</style>
+        <div style={{ fontSize: 11, fontWeight: 800, color: t.sub, marginBottom: 8 }}>ทางลัดเสริมในการ์ดใหญ่ · กดค้างที่ ⋮⋮ เพื่อลากสลับตำแหน่ง</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 3, marginBottom: 10 }}>
+          {chosenShortcuts.length === 0 && <div style={{ fontSize: 12.5, color: t.sub, textAlign: "center", padding: "12px 0" }}>ยังไม่มีทางลัดเลย เพิ่มจากด้านล่างได้เลย</div>}
+          <DragReorderList
+            items={chosenShortcuts}
+            getId={(s) => s.id}
+            onReorder={(newItems) => setHeroShortcuts(newItems.map((s) => s.id))}
+            renderItem={(s, i, { handleProps, priming }) => {
+              const Icon = s.icon;
+              return (
+                <div style={{ display: "flex", alignItems: "center", gap: 10, background: t.surface, border: `1px solid ${t.border}`, borderRadius: 14, padding: "10px 12px" }}>
+                  <span {...handleProps} style={{ display: "grid", placeItems: "center", padding: 4, opacity: priming ? 1 : 0.5, color: t.faint }}><GripVertical size={16} /></span>
+                  <span style={{ width: 28, height: 28, borderRadius: 8, background: t.accent, display: "grid", placeItems: "center", flexShrink: 0, animation: "rh-wiggle 0.24s ease-in-out infinite alternate", animationDelay: `${i * 0.08}s` }}>
+                    <Icon size={14} color="#fff" />
+                  </span>
+                  <span style={{ flex: 1, fontSize: 13.5, fontWeight: 700, color: t.text }}>{s.label}</span>
+                  <button onClick={() => setHeroShortcuts(hs.filter((id) => id !== s.id))} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><X size={16} color={t.faint} /></button>
+                </div>
+              );
+            }}
+          />
         </div>
+        {availableShortcuts.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+            {availableShortcuts.map((s) => { const Icon = s.icon; return (
+              <button key={s.id} onClick={() => setHeroShortcuts([...hs, s.id])} style={{ display: "flex", alignItems: "center", gap: 10, background: "none", border: `1.5px dashed ${t.border}`, borderRadius: 14, padding: "10px 12px", cursor: "pointer", textAlign: "left" }}>
+                <span style={{ width: 28, height: 28, borderRadius: 8, background: t.accent, display: "grid", placeItems: "center", flexShrink: 0 }}><Icon size={14} color="#fff" /></span>
+                <span style={{ flex: 1, fontSize: 13.5, fontWeight: 700, color: t.text }}>{s.label}</span>
+                <Plus size={16} color={t.accent} />
+              </button>
+            ); })}
+          </div>
+        )}
       </>
     )}
 
@@ -10034,7 +10073,7 @@ function Dock({ t, cardShape, page, setPage, onQuickAdd }) {
   if (sharp) {
     // 🔲 ทรงเหลี่ยมคม — แต่ละปุ่มเป็น tile แยกกันจริง คั่นด้วยช่องไฟ 1.5px โชว์พื้นหลังลอดออกมา + เส้นคั่น 1px ด้านบนจากเนื้อหา
     return (<div style={{ position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 20 }}>
-      <div style={{ borderTop: `1px solid ${t.dockBorder}`, background: t.page, padding: 1.5, display: "flex", gap: 1.5 }}>
+      <div style={{ borderTop: `1.5px solid ${t.dockBorder}`, background: t.page, padding: 1.5, display: "flex", gap: 1.5, boxShadow: "0 -6px 14px rgba(20,25,45,.06)" }}>
         {items.map((it) => {
           if (it.k === "_") return (<button key="c" onClick={onQuickAdd} style={{ flex: 1.15, border: "none", cursor: "pointer", background: t.accent, color: t.onAccent, display: "grid", placeItems: "center", padding: "9px 2px" }}><Plus size={28} /></button>);
           const A = it.ic; const on = page === it.k;
@@ -10087,9 +10126,7 @@ function Empty({ t, text }) {
   if (isLoading) {
     return (
       <div style={{ textAlign: "center", padding: "26px 0" }}>
-        <style>{`@keyframes rh-lantern-sway { 0%,100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }`}</style>
-        <div style={{ display: "inline-block", animation: "rh-lantern-sway 1.6s ease-in-out infinite", transformOrigin: "top center" }}><LanternIcon size={22} tier={1} /></div>
-        <div style={{ marginTop: 6, display: "flex", justifyContent: "center" }}><PKnowMark width={90} animated /></div>
+        <div style={{ display: "flex", justifyContent: "center" }}><PKnowMark width={90} animated color={t.accent} /></div>
         <div style={{ color: t.sub, fontSize: 12, marginTop: 2 }}>{text}</div>
       </div>
     );
