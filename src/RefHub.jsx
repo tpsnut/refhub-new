@@ -1011,6 +1011,7 @@ export default function RefHub() {
   const [themePick, setThemePick] = useState(false);
   const [homeLayoutPick, setHomeLayoutPick] = useState(false); // 🏠 modal เลือกโครงหน้า Home (original/wallet/bento)
   const [cardShapePick, setCardShapePick] = useState(false); // 🔲 modal เลือกทรงกรอบการ์ด (sharp/soft)
+  const [catColorsPick, setCatColorsPick] = useState(false); // 🎨 modal ปรับสีหมวดหมู่การ์ด (การเงิน/ความรู้/เป้าหมาย/โน้ต)
   const [editProfile, setEditProfile] = useState(false);
   const [profileLightbox, setProfileLightbox] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -1993,6 +1994,7 @@ export default function RefHub() {
         {themePick && <ThemePicker t={t} theme={theme} setTheme={setTheme} mode={mode} customAccent={customAccent} setCustomAccent={setCustomAccent} close={() => setThemePick(false)} />}
         {homeLayoutPick && <HomeLayoutPicker t={t} shp={shp} homeLayout={homeLayout} setHomeLayout={setHomeLayout} close={() => setHomeLayoutPick(false)} />}
         {cardShapePick && <CardShapePicker t={t} cardShape={cardShape} setCardShape={setCardShape} close={() => setCardShapePick(false)} />}
+        {catColorsPick && <CatColorsModal t={t} catColors={catColors} setCatColors={setCatColors} close={() => setCatColorsPick(false)} />}
         {moreMenuOpen && (
           <div style={overlay} onClick={() => setMoreMenuOpen(false)}>
             <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
@@ -2011,7 +2013,11 @@ export default function RefHub() {
                 </button>
                 <button onClick={() => { setHomeLayoutPick(true); setMoreMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
                   <Home size={18} color={t.sub} />
-                  <span style={{ fontSize: 14, color: t.text }}>โครงหน้า Home: {homeLayout === "wallet" ? "แนววอลเล็ต" : homeLayout === "bento" ? "เบนโต" : "ของเดิม"}</span>
+                  <span style={{ fontSize: 14, color: t.text }}>โครงหน้า Home: {homeLayout === "wallet" ? "โฟกัส" : homeLayout === "bento" ? "โมเสก" : "คลาสสิก"}</span>
+                </button>
+                <button onClick={() => { setCatColorsPick(true); setMoreMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
+                  <Palette size={18} color={t.sub} />
+                  <span style={{ fontSize: 14, color: t.text }}>สีหมวดหมู่การ์ด</span>
                 </button>
               </div>
             </div>
@@ -9423,6 +9429,9 @@ function ThemePicker({ t, theme, setTheme, mode, customAccent, setCustomAccent, 
           </div>
           {theme === "custom" && <Check size={20} color={pendingColor} />}
         </div>
+        <div style={{ fontSize: 10.5, color: t.faint, lineHeight: 1.6, marginTop: 10, padding: "8px 10px", background: t.inputBg, borderRadius: 10 }}>
+          💡 แตะแล้วจะเปิดตัวเลือกสีของเครื่องคุณเอง (หน้าตาต่างกันไปตามรุ่นมือถือ) ลากแถบ "โทนสี" เพื่อไล่สี แล้วลากแถบด้านล่าง (บางเครื่องเขียนว่า "ราคา" ซึ่งจริงๆ หมายถึงความสว่าง — เป็นคำแปลของระบบมือถือเอง ไม่ใช่ราคาเงิน) เพื่อปรับให้อ่อน/เข้มขึ้น
+        </div>
         <button onClick={() => { setCustomAccent(pendingColor); setTheme("custom"); close(); }} style={{ ...primaryBtn({ accent: pendingColor, accent2: lightenHex(pendingColor, 0.2), onAccent: relativeLuminance(pendingColor) > 0.5 ? "#141414" : "#FFFFFF" }), width: "100%", padding: "10px 0", marginTop: 12, fontSize: 13 }}>ใช้สีนี้</button>
       </div>
     </div>
@@ -9519,6 +9528,36 @@ function CardShapePicker({ t, cardShape, setCardShape, close }) {
           {on && <Check size={20} color={t.accent} />}
         </button>
       ); })}
+    </div>
+  </div></div>);
+}
+
+// 🎨 ปรับสีหมวดหมู่การ์ด (การเงิน/ความรู้/เป้าหมาย/โน้ต) ทีละสี — เฉดอ่อน/เข้ม/ตัวอักษรคำนวณอัตโนมัติจากสีที่เลือก
+const CAT_COLOR_META = [
+  { k: "green", label: "การเงิน" },
+  { k: "amber", label: "ความรู้" },
+  { k: "coral", label: "เป้าหมาย" },
+  { k: "violet", label: "โน้ต" },
+];
+function CatColorsModal({ t, catColors, setCatColors, close }) {
+  return (<div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
+    <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 4 }}>สีหมวดหมู่การ์ด</div>
+    <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 10, lineHeight: 1.6 }}>สีพวกนี้ใช้แยกประเภทวิดเจ็ตในหน้า Home (การ์ด 2x2 / วงกลมไอคอนลัด / บล็อกเล็ก) แตะวงกลมเพื่อเปลี่ยนสีแต่ละอัน เฉดอ่อน-เข้มคำนวณให้อัตโนมัติ</div>
+    <div style={{ fontSize: 10.5, color: t.faint, lineHeight: 1.6, marginBottom: 16, padding: "8px 10px", background: t.inputBg, borderRadius: 10 }}>
+      💡 แตะวงกลมจะเปิดตัวเลือกสีของเครื่องคุณเอง แถบที่บางเครื่องเขียนว่า "ราคา" คือความสว่างของสี ไม่ใช่ราคาเงิน (คำแปลของระบบมือถือเอง)
+    </div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {CAT_COLOR_META.map((c) => (
+        <div key={c.k} style={{ display: "flex", alignItems: "center", gap: 14, padding: 14, borderRadius: 18, background: t.surface, border: `1px solid ${t.border}` }}>
+          <label style={{ position: "relative", width: 40, height: 40, borderRadius: 20, flexShrink: 0, cursor: "pointer", overflow: "hidden", background: catColors[c.k], border: `1px solid ${t.border}` }}>
+            <input type="color" value={catColors[c.k]} onChange={(e) => setCatColors((cc) => ({ ...cc, [c.k]: e.target.value }))} style={{ position: "absolute", inset: -4, width: "calc(100% + 8px)", height: "calc(100% + 8px)", opacity: 0, cursor: "pointer" }} />
+          </label>
+          <div style={{ flex: 1, fontSize: 14.5, fontWeight: 700, color: t.text }}>{c.label}</div>
+          {catColors[c.k] !== DEFAULT_CAT_COLORS[c.k] && (
+            <button onClick={() => setCatColors((cc) => ({ ...cc, [c.k]: DEFAULT_CAT_COLORS[c.k] }))} style={{ fontSize: 11, fontWeight: 700, color: t.sub, background: "none", border: "none", cursor: "pointer" }}>รีเซ็ต</button>
+          )}
+        </div>
+      ))}
     </div>
   </div></div>);
 }
