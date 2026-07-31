@@ -49,6 +49,49 @@ async function synthesizeAzureTTS(text, voice) {
   return Buffer.from(arrayBuf);
 }
 
+// 🎯 เรียก Gemini แบบบังคับ JSON schema — ใช้เฉพาะ action goal_ai (แยกจาก logic เดิมของบทความ ไม่แตะของเดิม)
+async function callGeminiForGoalJSON(geminiKey, prompt, responseSchema) {
+  const r = await fetch(
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: 2000, responseMimeType: "application/json", responseSchema },
+      }),
+    }
+  );
+  const data = await r.json();
+  if (!r.ok) throw new Error(data?.error?.message || "Gemini API error");
+  const raw = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("").trim();
+  if (!raw) {
+    const reason = data.candidates?.[0]?.finishReason || data.promptFeedback?.blockReason;
+    throw new Error(reason ? `AI ไม่ตอบกลับเนื้อหา (สาเหตุ: ${reason})` : "AI ไม่ตอบกลับเนื้อหาใดๆ");
+  }
+  return raw;
+}
+
+// 🔁 ตัวสำรองเมื่อ Gemini เต็มโควตา/ล่ม (429/5xx ฯลฯ) — ใช้ Groq (ฟรี ไม่ต้องผูกบัตร) แบบเดียวกับที่ /api/chat.js ใช้เป็น fallback ของแชทโค้ชอยู่แล้ว
+// ใช้ response_format json_object ของ Groq (รองรับใน llama-3.1-8b-instant) บังคับให้ตอบ JSON เหมือนกัน
+async function callGroqForGoalJSON(prompt) {
+  const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
+    body: JSON.stringify({
+      model: "llama-3.1-8b-instant",
+      messages: [{ role: "user", content: prompt }],
+      response_format: { type: "json_object" },
+      max_tokens: 1500,
+    }),
+  });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data?.error?.message || "Groq API error");
+  const text = data.choices?.[0]?.message?.content?.trim();
+  if (!text) throw new Error("Groq ไม่ตอบกลับเนื้อหา");
+  return text;
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
@@ -86,8 +129,8 @@ export default async function handler(req, res) {
   if (body.action === "goal_ai") {
     const { mode, source, topic, historyTexts, text, callerToken } = body;
     if (!callerToken) return res.status(401).json({ error: "ไม่พบข้อมูลยืนยันตัวตน ลองล็อกอินใหม่" });
-    const geminiKey = process.env.GEMINI_API_KEY;
-    if (!geminiKey) return res.status(500).json({ error: "ยังไม่ได้ตั้งค่า GEMINI_API_KEY บน Vercel" });
+    const geminiKey = process.env.GEMINI_API_KEY; // ไม่มีก็ได้ ถ้ามี GROQ_API_KEY เป็นตัวสำรอง (เช็คด้านล่าง)
+    if (!geminiKey && !process.env.GROQ_API_KEY) return res.status(500).json({ error: "ยังไม่ได้ตั้งค่า GEMINI_API_KEY หรือ GROQ_API_KEY บน Vercel" });
 
     try {
       const supabaseUrl = process.env.VITE_SUPABASE_URL;
@@ -127,31 +170,26 @@ ${scoringRule}
 {"goals":[{"text":"...","points":5,"reason":"..."}]}`;
       }
 
-      // 🔒 บังคับให้ Gemini ตอบเป็น JSON ตาม schema ที่กำหนดตรงๆ (Structured Output) แทนการหวังพึ่งคำสั่งในพรอมต์เฉยๆ
+      // 🔒 บังคับให้ตอบเป็น JSON ตาม schema ที่กำหนดตรงๆ (Structured Output) แทนการหวังพึ่งคำสั่งในพรอมต์เฉยๆ
       // แก้บั๊กเดิม: บางครั้ง AI ตอบ JSON ที่มีรูปแบบเพี้ยนเล็กน้อย (เช่น ขึ้นบรรทัดใหม่ในค่า string) ทำให้ JSON.parse พังกลางทาง
       const responseSchema = mode === "assess"
         ? { type: "OBJECT", properties: { points: { type: "INTEGER" }, reason: { type: "STRING" } }, required: ["points", "reason"] }
         : { type: "OBJECT", properties: { goals: { type: "ARRAY", items: { type: "OBJECT", properties: { text: { type: "STRING" }, points: { type: "INTEGER" }, reason: { type: "STRING" } }, required: ["text", "points", "reason"] } } }, required: ["goals"] };
 
-      const r = await fetch(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
-          body: JSON.stringify({
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
-            generationConfig: { maxOutputTokens: 2000, responseMimeType: "application/json", responseSchema },
-          }),
+      // 🔁 ลอง Gemini ก่อน ถ้าพัง (โควตาเต็ม 429 / ล่ม 5xx ฯลฯ) สลับไป Groq (ฟรี) อัตโนมัติ ไม่ต้องรอผู้ใช้กดใหม่เอง
+      let raw;
+      try {
+        if (!geminiKey) throw new Error("ยังไม่ได้ตั้งค่า GEMINI_API_KEY");
+        raw = await callGeminiForGoalJSON(geminiKey, prompt, responseSchema);
+      } catch (geminiErr) {
+        if (!process.env.GROQ_API_KEY) return res.status(500).json({ error: geminiErr.message || "Gemini API error" });
+        try {
+          raw = await callGroqForGoalJSON(prompt);
+        } catch (groqErr) {
+          return res.status(500).json({ error: `Gemini ไม่ว่าง (${geminiErr.message}) และ Groq สำรองก็ไม่สำเร็จ (${groqErr.message}) ลองใหม่อีกครั้งครับ` });
         }
-      );
-      const data = await r.json();
-      if (!r.ok) return res.status(r.status).json({ error: data?.error?.message || "Gemini API error" });
-
-      const raw = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("").trim();
-      if (!raw) {
-        const reason = data.candidates?.[0]?.finishReason || data.promptFeedback?.blockReason;
-        return res.status(500).json({ error: reason ? `AI ไม่ตอบกลับเนื้อหา (สาเหตุ: ${reason})` : "AI ไม่ตอบกลับเนื้อหาใดๆ ลองใหม่อีกครั้ง" });
       }
+
       const cleaned = raw.replace(/^```json\s*|```\s*$/g, "").trim();
       let parsed;
       try {
