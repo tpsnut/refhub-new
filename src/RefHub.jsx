@@ -1796,7 +1796,7 @@ export default function RefHub() {
           {page === "note" && <NotePage {...{ t, notes, setNotes, isNight, userId, session, authProfile, reminders, openReminder }} />}
           {page === "ideas" && <IdeasPage t={t} M={M} userId={userId} session={session} authProfile={authProfile} setAuthProfile={setAuthProfile} setNotes={setNotes} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} />}
           {page === "trade" && <TradePage t={t} />}
-          {page === "news" && <NewsPage t={t} userId={userId} authProfile={authProfile} setAuthProfile={setAuthProfile} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} hintDefs={hintDefs} seenHintKeys={seenHintKeys} dismissHint={dismissHint} />}
+          {page === "news" && <NewsPage t={t} userId={userId} authProfile={authProfile} setAuthProfile={setAuthProfile} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} hintDefs={hintDefs} seenHintKeys={seenHintKeys} dismissHint={dismissHint} setNotes={setNotes} />}
           {page === "lang" && <LangPage t={t} />}
           {page === "goalsReport" && <GoalsReportPage t={t} goals={goals} setGoals={setGoals} userId={userId} />}
           {page === "admin" && <AdminPage t={t} session={session} userId={userId} adminAlerts={adminAlerts} setAdminAlerts={setAdminAlerts} authProfile={authProfile} setAuthProfile={setAuthProfile} />}
@@ -8300,8 +8300,9 @@ const NEWS_CATEGORY_GROUPS = [
   { id: "lifestyle", label: "🎨 ไลฟ์สไตล์", catIds: ["tech", "life"] },
 ];
 
-function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskAiTopic, hintDefs, seenHintKeys, dismissHint }) {
+function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskAiTopic, hintDefs, seenHintKeys, dismissHint, setNotes }) {
   const [category, setCategory] = useState(authProfile?.news_category || "tech");
+  const [notedIds, setNotedIds] = useState({}); // article.link -> true ชั่วคราวหลังส่งเข้าโน้ตสำเร็จ (โชว์ติ๊กถูกเขียว เหมือนหน้าความรู้)
   const [showArrowHint, arrowHintText, dismissArrowHint] = useHint("news_category_arrows", hintDefs, seenHintKeys, dismissHint); // 💡 แนะนำครั้งแรกว่าปัด/กดลูกศรเปลี่ยนหมวดได้ (ข้อความแก้ได้จากหน้าแอดมิน)
   const [menuOpen, setMenuOpen] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState(() => new Set(
@@ -8468,6 +8469,9 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
       { type: "paragraph", content: x.link },
     ];
     const newNote = { id: uid(), title: x.title, body, date: todayStr(), pinned: false, tags: ["ข่าว"] };
+    setNotes?.((n) => [newNote, ...n]); // ⚠️ บั๊กเดิม: บันทึกลง DB จริง แต่ลืมอัปเดต state ในเครื่อง ทำให้หน้าโน้ตไม่เห็นทันที ต้องรีเฟรชทั้งแอปก่อนถึงจะเห็น
+    setNotedIds((m) => ({ ...m, [x.link]: true }));
+    setTimeout(() => setNotedIds((m) => ({ ...m, [x.link]: false })), 2500);
     if (userId) {
       await supabase.from("notes").insert({ id: newNote.id, user_id: userId, title: newNote.title, body: newNote.body, date: newNote.date, pinned: newNote.pinned, tags: newNote.tags });
       logAudit(userId, "notes", "add", "ส่งข่าวเข้าโน้ต: " + x.title);
@@ -8660,8 +8664,8 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
               <span style={{ fontSize: 11 }}>{st.views}</span>
             </div>
             <button onClick={() => sendNewsToNote(x)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px" }}>
-              <StickyNote size={15} color={t.faint} />
-              <span style={{ fontSize: 11, color: t.faint, fontWeight: 700, whiteSpace: "nowrap" }}>ส่งเข้าโน้ต</span>
+              {notedIds[x.link] ? <Check size={15} color="#2E9E6B" /> : <StickyNote size={15} color={t.faint} />}
+              <span style={{ fontSize: 11, color: notedIds[x.link] ? "#2E9E6B" : t.faint, fontWeight: 700, whiteSpace: "nowrap" }}>{notedIds[x.link] ? "ส่งแล้ว ✓" : "ส่งเข้าโน้ต"}</span>
             </button>
             <button onClick={() => askAi(x)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px" }}>
               <MessageCircle size={15} color={t.faint} />
