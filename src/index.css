@@ -16,16 +16,6 @@ html, body {
   touch-action: pan-y; /* อนุญาตแค่เลื่อนขึ้น-ลงปกติ ปิดซูมนิ้ว (pinch-zoom) จริงๆ ทั้งสองระบบ (manipulation เดิมไม่ได้ปิดซูมนิ้ว เป็นความเข้าใจผิดของรอบก่อน) */
 }
 
-/* 🍎🐛 แก้บั๊กจอกระโดดตอนกดปุ่ม/แตะอินพุตบน iOS Safari โดยเฉพาะ — ผูกกับ class "ios-device" ที่ main.jsx ติดให้ <html>
-   เฉพาะเครื่อง iOS เท่านั้น (เช็ค user agent) กันไม่ให้ไปกระทบ Android ที่ overflow:hidden เดิมทำงานถูกต้องอยู่แล้ว
-   ก่อนหน้านี้เคยลองใส่ position:fixed ให้ html/body ทุกเครื่อง แต่ทำให้ Android เพี้ยน (จอขยับซ้าย-ขวาตอนกดปุ่ม)
-   รอบนี้เลยจำกัดวงไว้แค่ iOS เท่านั้นผ่าน class นี้ */
-html.ios-device, html.ios-device body {
-  position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  width: 100%;
-}
-
 body {
   margin: 0;
   font-family: 'IBM Plex Sans Thai', sans-serif;
