@@ -2166,9 +2166,9 @@ export default function RefHub() {
         )}
 
         {mentorPick && <MentorPicker t={t} mentor={mentor} setMentor={setMentor} authProfile={authProfile} setAuthProfile={setAuthProfile} userId={userId} customMentors={customMentors} setCustomMentors={setCustomMentors} close={() => setMentorPick(false)} />}
-        {themePick && <ModalPortal><ThemePicker t={t} theme={theme} setTheme={setTheme} mode={mode} customAccent={customAccent} setCustomAccent={setCustomAccent} close={() => setThemePick(false)} /></ModalPortal>}
-        {homeLayoutPick && <ModalPortal><HomeLayoutPicker t={t} shp={shp} homeLayout={homeLayout} setHomeLayout={setHomeLayout} close={() => setHomeLayoutPick(false)} /></ModalPortal>}
-        {cardShapePick && <ModalPortal><CardShapePicker t={t} cardShape={cardShape} setCardShape={setCardShape} close={() => setCardShapePick(false)} /></ModalPortal>}
+        {themePick && <ThemePicker t={t} theme={theme} setTheme={setTheme} mode={mode} customAccent={customAccent} setCustomAccent={setCustomAccent} close={() => setThemePick(false)} />}
+        {homeLayoutPick && <HomeLayoutPicker t={t} shp={shp} homeLayout={homeLayout} setHomeLayout={setHomeLayout} close={() => setHomeLayoutPick(false)} />}
+        {cardShapePick && <CardShapePicker t={t} cardShape={cardShape} setCardShape={setCardShape} close={() => setCardShapePick(false)} />}
         {moreMenuOpen && (
           <div style={overlay} onClick={() => setMoreMenuOpen(false)}>
             <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
@@ -4135,8 +4135,7 @@ function WidgetOrderModal({ t, title, hint, selected, setSelected, close, catCol
   const chosenShortcuts = hs.map((id) => HERO_SHORTCUTS_META.find((s) => s.id === id)).filter(Boolean);
   const availableShortcuts = HERO_SHORTCUTS_META.filter((s) => !hs.includes(s.id));
   const [colorEditKey, setColorEditKey] = useState(null); // 🎨 cat key ที่กำลังเปิด ColorPickerModal อยู่ (null = ไม่ได้เปิด)
-  <ModalPortal>
-  return (<div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
+  return (<ModalPortal><div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
     <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 4 }}>{title}</div>
     <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>{hint}</div>
 
@@ -4222,9 +4221,8 @@ function WidgetOrderModal({ t, title, hint, selected, setSelected, close, catCol
         ); })}
       </div>
     </>)}
-    {colorEditKey && <ModalPortal><ColorPickerModal t={t} value={catColors[colorEditKey] || "#888888"} onChange={(hex) => setCatColors((cc) => ({ ...cc, [colorEditKey]: hex }))} close={() => setColorEditKey(null)} /></ModalPortal>}
-  </div></div>);
-  </ModalPortal>
+    {colorEditKey && <ColorPickerModal t={t} value={catColors[colorEditKey] || "#888888"} onChange={(hex) => setCatColors((cc) => ({ ...cc, [colorEditKey]: hex }))} close={() => setColorEditKey(null)} />}
+  </div></div></ModalPortal>);
 }
 
 function HomePage({ t, lang, M, quote, isNight, setMentorPick, balance, tx, goals, allGoals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, setMusicOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget, setAddGoalOpen, setScoreRulesOpen, cardShape, homeLayout, walletWidgets, setWalletWidgets, bentoWidgets, setBentoWidgets, classicWidgets, setClassicWidgets, catColors, setCatColors, heroShortcuts, setHeroShortcuts }) {
@@ -4486,13 +4484,13 @@ function HomePage({ t, lang, M, quote, isNight, setMentorPick, balance, tx, goal
       </div>
       {shareGoalOpen && <ShareGoalModal t={t} userId={userId} authProfile={authProfile} weekPoints={weekPoints} bestStreak={bestStreak} badge={badge} close={() => setShareGoalOpen(false)} />}
       {editWidgetsOpen && homeLayout === "wallet" && (
-        <ModalPortal><WidgetOrderModal t={t} title="ปรับการ์ดใหญ่" hint="ทางลัดเสริม+วิดเจ็ตทั้งหมด ปรับได้ในที่เดียว การ์ดแม่ (การเงิน/เป้าหมาย) ลบไม่ได้เพราะไม่มีทางเข้าอื่น" selected={walletWidgets} setSelected={setWalletWidgets} close={() => setEditWidgetsOpen(false)} catColors={catColors} setCatColors={setCatColors} heroShortcuts={heroShortcuts} setHeroShortcuts={setHeroShortcuts} /></ModalPortal>
+        <WidgetOrderModal t={t} title="ปรับการ์ดใหญ่" hint="ทางลัดเสริม+วิดเจ็ตทั้งหมด ปรับได้ในที่เดียว การ์ดแม่ (การเงิน/เป้าหมาย) ลบไม่ได้เพราะไม่มีทางเข้าอื่น" selected={walletWidgets} setSelected={setWalletWidgets} close={() => setEditWidgetsOpen(false)} catColors={catColors} setCatColors={setCatColors} heroShortcuts={heroShortcuts} setHeroShortcuts={setHeroShortcuts} />
       )}
       {editWidgetsOpen && homeLayout === "bento" && (
-        <ModalPortal><WidgetOrderModal t={t} title="ปรับการ์ดใหญ่" hint="ทางลัดเสริม+วิดเจ็ตทั้งหมด ปรับได้ในที่เดียว (2 อันแรกเป็นบล็อกข้างเล็ก ที่เหลือเป็นบล็อกเต็มแถวด้านล่าง) การ์ดแม่ (การเงิน/เป้าหมาย) ลบไม่ได้เพราะไม่มีทางเข้าอื่น" selected={bentoWidgets} setSelected={setBentoWidgets} close={() => setEditWidgetsOpen(false)} catColors={catColors} setCatColors={setCatColors} heroShortcuts={heroShortcuts} setHeroShortcuts={setHeroShortcuts} /></ModalPortal>
+        <WidgetOrderModal t={t} title="ปรับการ์ดใหญ่" hint="ทางลัดเสริม+วิดเจ็ตทั้งหมด ปรับได้ในที่เดียว (2 อันแรกเป็นบล็อกข้างเล็ก ที่เหลือเป็นบล็อกเต็มแถวด้านล่าง) การ์ดแม่ (การเงิน/เป้าหมาย) ลบไม่ได้เพราะไม่มีทางเข้าอื่น" selected={bentoWidgets} setSelected={setBentoWidgets} close={() => setEditWidgetsOpen(false)} catColors={catColors} setCatColors={setCatColors} heroShortcuts={heroShortcuts} setHeroShortcuts={setHeroShortcuts} />
       )}
       {editWidgetsOpen && homeLayout === "original" && (
-        <ModalPortal><WidgetOrderModal t={t} title="ปรับการ์ดใหญ่" hint="ทางลัดเสริม+วิดเจ็ตทั้งหมด ปรับได้ในที่เดียว การ์ดแม่ (การเงิน/เป้าหมาย) ลบไม่ได้เพราะไม่มีทางเข้าอื่น" selected={classicWidgets} setSelected={setClassicWidgets} close={() => setEditWidgetsOpen(false)} catColors={catColors} setCatColors={setCatColors} heroShortcuts={heroShortcuts} setHeroShortcuts={setHeroShortcuts} /></ModalPortal>
+        <WidgetOrderModal t={t} title="ปรับการ์ดใหญ่" hint="ทางลัดเสริม+วิดเจ็ตทั้งหมด ปรับได้ในที่เดียว การ์ดแม่ (การเงิน/เป้าหมาย) ลบไม่ได้เพราะไม่มีทางเข้าอื่น" selected={classicWidgets} setSelected={setClassicWidgets} close={() => setEditWidgetsOpen(false)} catColors={catColors} setCatColors={setCatColors} heroShortcuts={heroShortcuts} setHeroShortcuts={setHeroShortcuts} />
       )}
 
 
@@ -11303,8 +11301,7 @@ function MentorPicker({ t, mentor, setMentor, authProfile, setAuthProfile, userI
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
 
-  <ModalPortal>
-  return (<div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
+  return (<ModalPortal><div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
     <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 4 }}>โค้ชของคุณ</div>
     <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>
       {isAdmin ? "สร้างโค้ชของคุณเองได้ไม่จำกัด (สิทธิ์แอดมิน)" : `สร้างโค้ชของคุณเองได้สูงสุด ${limit} คน (${customMentors.length}/${limit})`}
@@ -11387,8 +11384,7 @@ function MentorPicker({ t, mentor, setMentor, authProfile, setAuthProfile, userI
         </div>
       </div>
     )}
-  </div></div>);
-  </ModalPortal>
+  </div></div></ModalPortal>);
 }
 
 // 🎨 Color picker แบบสร้างเอง — แทนที่ dialog ของเครื่อง (ควบคุม label ได้เต็มที่ + ใส่ hex/RGB ตรงๆ ได้)
@@ -11428,8 +11424,7 @@ function ColorPickerModal({ t, value, onChange, close }) {
   const satBg = `linear-gradient(90deg, #fff, ${rgbToHex(hsvToRgb(h, 100, v).r, hsvToRgb(h, 100, v).g, hsvToRgb(h, 100, v).b)})`;
   const valBg = `linear-gradient(90deg, #000, ${rgbToHex(hsvToRgb(h, s, 100).r, hsvToRgb(h, s, 100).g, hsvToRgb(h, s, 100).b)})`;
 
-  <ModalPortal>
-  return (<div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "88vh", overflowY: "auto" }}>
+  return (<ModalPortal><div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "88vh", overflowY: "auto" }}>
     <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 14 }}>เลือกสี</div>
 
     <div style={{ width: "100%", height: 56, borderRadius: 14, background: hex, border: `1px solid ${t.border}`, marginBottom: 16 }} />
@@ -11460,15 +11455,13 @@ function ColorPickerModal({ t, value, onChange, close }) {
     </div>
 
     <button onClick={() => { onChange(hex); close(); }} style={{ ...primaryBtn({ accent: hex, accent2: lightenHex(hex, 0.2), onAccent: relativeLuminance(hex) > 0.5 ? "#141414" : "#FFFFFF" }), width: "100%", padding: "12px 0", fontSize: 14 }}>ใช้สีนี้</button>
-  </div></div>);
-  </ModalPortal>
+  </div></div></ModalPortal>);
 }
 
 function ThemePicker({ t, theme, setTheme, mode, customAccent, setCustomAccent, close }) {
   const [pendingColor, setPendingColor] = useState(customAccent);
   const [pickerOpen, setPickerOpen] = useState(false);
-  <ModalPortal>
-  return (<div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
+  return (<ModalPortal><div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
     <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 4 }}>เลือกธีมสีแอป</div>
     <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>แต่ละธีมมีเวอร์ชันกลางวัน/กลางคืนของตัวเอง สลับได้อิสระจากโค้ช</div>
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -11496,9 +11489,8 @@ function ThemePicker({ t, theme, setTheme, mode, customAccent, setCustomAccent, 
         <button onClick={() => { setCustomAccent(pendingColor); setTheme("custom"); close(); }} style={{ ...primaryBtn({ accent: pendingColor, accent2: lightenHex(pendingColor, 0.2), onAccent: relativeLuminance(pendingColor) > 0.5 ? "#141414" : "#FFFFFF" }), width: "100%", padding: "10px 0", marginTop: 12, fontSize: 13 }}>ใช้สีนี้</button>
       </div>
     </div>
-    {pickerOpen && <ModalPortal><ColorPickerModal t={t} value={pendingColor} onChange={setPendingColor} close={() => setPickerOpen(false)} /></ModalPortal>}
-  </div></div>);
-  </ModalPortal>
+    {pickerOpen && <ColorPickerModal t={t} value={pendingColor} onChange={setPendingColor} close={() => setPickerOpen(false)} />}
+  </div></div></ModalPortal>);
 }
 
 // 🏠 เลือกโครงหน้า Home — 3 แบบ ชื่อออกแบบให้แปลอังกฤษได้ตรงตัวสวยๆ (Classic/Focus/Mosaic) ตามที่ขอปรับ
@@ -11538,8 +11530,7 @@ function MiniLayoutPreview({ kind, t, shp }) {
   );
 }
 function HomeLayoutPicker({ t, shp, homeLayout, setHomeLayout, close }) {
-  <ModalPortal>
-  return (<div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
+  return (<ModalPortal><div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
     <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 4 }}>โครงหน้า Home</div>
     <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>แตะตัวอย่างเพื่อเลือกได้เลย เปลี่ยนได้ตลอด</div>
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -11554,8 +11545,7 @@ function HomeLayoutPicker({ t, shp, homeLayout, setHomeLayout, close }) {
         </button>
       ); })}
     </div>
-  </div></div>);
-  </ModalPortal>
+  </div></div></ModalPortal>);
 }
 
 // 🔲 เลือกทรงกรอบการ์ด — เหลี่ยมคม/มนเบาๆ พร้อมตัวอย่างย่อให้กดเลือกได้ตรงๆ
@@ -11579,8 +11569,7 @@ function MiniShapePreview({ kind, t }) {
   );
 }
 function CardShapePicker({ t, cardShape, setCardShape, close }) {
-  <ModalPortal>
-  return (<div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
+  return (<ModalPortal><div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
     <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 4 }}>ทรงกรอบการ์ด</div>
     <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>แตะตัวอย่างเพื่อเลือกได้เลย</div>
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -11595,8 +11584,7 @@ function CardShapePicker({ t, cardShape, setCardShape, close }) {
         </button>
       ); })}
     </div>
-  </div></div>);
-  </ModalPortal>
+  </div></div></ModalPortal>);
 }
 
 // 🎨 ปรับสีหมวดหมู่การ์ด (การเงิน/ความรู้/เป้าหมาย/โน้ต) ทีละสี — เฉดอ่อน/เข้ม/ตัวอักษรคำนวณอัตโนมัติจากสีที่เลือก
@@ -11610,8 +11598,7 @@ const CAT_COLOR_META = [
   { k: "rose", label: "ข่าว" },
 ];
 function CatColorsModal({ t, catColors, setCatColors, close }) {
-  <ModalPortal>
-  return (<div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
+  return (<ModalPortal><div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
     <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 4 }}>สีหมวดหมู่การ์ด</div>
     <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 10, lineHeight: 1.6 }}>สีพวกนี้ใช้แยกประเภทวิดเจ็ตในหน้า Home (การ์ด 2x2 / วงกลมไอคอนลัด / บล็อกเล็ก) แตะวงกลมเพื่อเปลี่ยนสีแต่ละอัน เฉดอ่อน-เข้มคำนวณให้อัตโนมัติ</div>
     <div style={{ fontSize: 10.5, color: t.faint, lineHeight: 1.6, marginBottom: 16, padding: "8px 10px", background: t.inputBg, borderRadius: 10 }}>
@@ -11630,8 +11617,7 @@ function CatColorsModal({ t, catColors, setCatColors, close }) {
         </div>
       ))}
     </div>
-  </div></div>);
-  </ModalPortal>
+  </div></div></ModalPortal>);
 }
 
 function EditProfile({ t, M, profile, setProfile, userId, authProfile, setAuthProfile, close }) {
@@ -11656,8 +11642,7 @@ function EditProfile({ t, M, profile, setProfile, userId, authProfile, setAuthPr
     close();
   };
 
-  <ModalPortal>
-  return (<div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
+  return (<ModalPortal><div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
     <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 16 }}>แก้ไขโปรไฟล์</div>
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, marginBottom: 16 }}>
       <div style={{ position: "relative" }}>
@@ -11693,8 +11678,7 @@ function EditProfile({ t, M, profile, setProfile, userId, authProfile, setAuthPr
       <ImageCropModal t={t} src={cropSrc} onCancel={() => setCropSrc(null)} onConfirm={(dataUrl) => { setAvatar(dataUrl); setCropSrc(null); }} />
     </ModalPortal>
   )}
-  </div>);
-  </ModalPortal>
+  </div></ModalPortal>);
 }
 
 // 🖼️ ปรับตำแหน่ง/ซูมรูปก่อนบันทึกเป็นรูปโปรไฟล์ (ลาก = ขยับ, สไลเดอร์ = ซูม)
