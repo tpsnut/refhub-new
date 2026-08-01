@@ -9700,7 +9700,7 @@ function VocabWordModal({ t, table = "vocab_words", mode = "word", initial, user
         if (error) throw error;
         onSaved({ ...initial, ...payload });
       } else {
-        const row = { id: uid(), user_id: userId, status: "learning", review_count: 0, created_at: new Date().toISOString(), ...payload };
+        const row = { id: crypto.randomUUID(), user_id: userId, status: "learning", review_count: 0, created_at: new Date().toISOString(), ...payload };
         const { error } = await supabase.from(table).insert(row);
         if (error) throw error;
         onSaved(row);
@@ -9794,7 +9794,7 @@ function VocabBatchGenModal({ t, table = "vocab_words", mode = "word", userId, s
   const saveAll = async () => {
     if (!preview?.length || saving) return;
     setSaving(true);
-    const rows = preview.map((p) => ({ id: uid(), user_id: userId, word: p.word, pronunciation: p.pronunciation, meaning: p.meaning, example: p.example, category, level: p.level, status: "learning", review_count: 0, created_at: new Date().toISOString() }));
+    const rows = preview.map((p) => ({ id: crypto.randomUUID(), user_id: userId, word: p.word, pronunciation: p.pronunciation, meaning: p.meaning, example: p.example, category, level: p.level, status: "learning", review_count: 0, created_at: new Date().toISOString() }));
     try {
       const { error } = await supabase.from(table).insert(rows);
       if (error) throw error;
@@ -9879,7 +9879,7 @@ function VocabQuizModal({ t, mode, category, level, pool, allItems, userId, clos
       setDone(true);
       if (userId) {
         setSaving(true);
-        await supabase.from("vocab_quiz_history").insert({ id: uid(), user_id: userId, mode, category, level, score, total: questions.length, created_at: new Date().toISOString() }).then(() => {}, () => {});
+        await supabase.from("vocab_quiz_history").insert({ id: crypto.randomUUID(), user_id: userId, mode, category, level, score, total: questions.length, created_at: new Date().toISOString() }).then(() => {}, () => {});
         setSaving(false);
       }
       onFinished?.();
@@ -10004,7 +10004,7 @@ function VocabListeningModal({ t, mode, category, level, pool, userId, session, 
       setDone(true);
       if (userId) {
         setSaving(true);
-        await supabase.from("vocab_quiz_history").insert({ id: uid(), user_id: userId, mode, category, level, skill: "listening", score, total: questions.length, created_at: new Date().toISOString() }).then(() => {}, () => {});
+        await supabase.from("vocab_quiz_history").insert({ id: crypto.randomUUID(), user_id: userId, mode, category, level, skill: "listening", score, total: questions.length, created_at: new Date().toISOString() }).then(() => {}, () => {});
         setSaving(false);
       }
       onFinished?.();
@@ -10123,7 +10123,7 @@ function VocabWritingModal({ t, category, level, userId, session, close }) {
       const cm = /คอมเมนต์[:：]\s*(.+)/.exec(text);
       const fb = { score: sc ? sc[1] : "-", corrected: co ? co[1].trim() : "", comment: cm ? cm[1].trim() : text.trim() };
       setFeedback(fb);
-      if (userId) supabase.from("vocab_writing_history").insert({ id: uid(), user_id: userId, category, level, prompt, answer: answer.trim(), score: fb.score, feedback: fb.comment, created_at: new Date().toISOString() }).then(() => {}, () => {});
+      if (userId) supabase.from("vocab_writing_history").insert({ id: crypto.randomUUID(), user_id: userId, category, level, prompt, answer: answer.trim(), score: fb.score, feedback: fb.comment, created_at: new Date().toISOString() }).then(() => {}, () => {});
     } catch (e) {
       setErr("ตรวจไม่สำเร็จ: " + e.message);
     } finally { setChecking(false); }
@@ -10212,7 +10212,7 @@ function VocabSpeakingModal({ t, mode, category, level, pool, userId, close, onF
       setDone(true);
       if (userId) {
         setSaving(true);
-        await supabase.from("vocab_quiz_history").insert({ id: uid(), user_id: userId, mode, category, level, skill: "speaking", score, total: questions.length, created_at: new Date().toISOString() }).then(() => {}, () => {});
+        await supabase.from("vocab_quiz_history").insert({ id: crypto.randomUUID(), user_id: userId, mode, category, level, skill: "speaking", score, total: questions.length, created_at: new Date().toISOString() }).then(() => {}, () => {});
         setSaving(false);
       }
       onFinished?.();
