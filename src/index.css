@@ -1,9 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=Kanit:wght@600;700&family=IBM+Plex+Sans+Thai:wght@400;500&display=swap');
-
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent; /* กันไฮไลต์เขียวๆ เหลี่ยมๆ ของเบราว์เซอร์ตอนแตะปุ่ม (เห็นชัดตอนกดปุ่มเพลง) เอฟเฟกต์ในแอปเราทำเองอยู่แล้ว ไม่ต้องมีของเบราว์เซอร์ซ้อนอีกชั้น */
   min-width: 0; /* กันช่อง flex ดันขยายเกินขอบจอไม่ยอมตัดบรรทัดข้อความยาวๆ (บั๊ก flexbox คลาสสิก) */
   overflow-wrap: break-word; /* ตัดคำ/ข้อความยาวๆ ให้ขึ้นบรรทัดใหม่แทนที่จะดันขอบจอออกไปเรื่อยๆ */
 }
@@ -17,28 +16,11 @@ html, body {
 
 body {
   margin: 0;
-  font-family: 'IBM Plex Sans Thai', sans-serif;
+  font-family: sans-serif;
   background-color: #0D0C0B;
 }
 
 #root {
   height: 100%;
   overflow: hidden;
-}
-
-/* 🔲 ทรงเหลี่ยมคม — เมื่อ user เลือกทรงกรอบ "เหลี่ยมคม" (cardShape=sharp) จะใส่ class นี้ที่ <body>
-   บังคับมุมเหลี่ยม 0 ทุกจุดในแอปแบบไม่มีข้อยกเว้น (ปุ่ม การ์ด รูปโปรไฟล์ ไอคอนวงกลม ทุกหน้า)
-   ใช้ !important เพราะ inline style (React) จะแพ้ CSS !important เสมอ — ปลอดภัยกว่าไล่แก้ borderRadius
-   ทีละจุดเป็นพันจุดทั่วไฟล์ และครอบคลุมถึง modal ที่ portal ออกไปนอก DOM tree ของแอปด้วย เพราะ portal ก็ยังอยู่ใต้ body เสมอ */
-body.rh-sharp,
-body.rh-sharp * {
-  border-radius: 0 !important;
-}
-
-/* 🔲 กดแล้วเด้ง (เฉพาะโหมดเหลี่ยมคม) — ใช้ได้กับปุ่ม/การ์ดที่กดได้ทั้งหมดในแอปเพราะเกือบทั้งหมดใช้ <button> อยู่แล้ว */
-body.rh-sharp button {
-  transition: transform .1s ease;
-}
-body.rh-sharp button:active {
-  transform: scale(0.94);
 }

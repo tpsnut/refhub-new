@@ -1879,7 +1879,7 @@ export default function RefHub() {
         <div style={{ transform: `scale(${fontScale / 100})`, transformOrigin: "top left", width: `${10000 / fontScale}%` }}>
 
         {/* HEADER */}
-        <div style={{ position: "relative", zIndex: 3, padding: cardShape === "sharp" ? "8px 0 0" : `8px ${cardShape === "sharp" ? 0 : 10}px 0` }}>
+        <div style={{ position: "relative", zIndex: 3, padding: cardShape === "sharp" ? "1px 0 0" : `8px ${cardShape === "sharp" ? 0 : 10}px 0` }}>
           {cardShape === "sharp" ? (
             <div style={{ display: "flex", alignItems: "stretch", justifyContent: "space-between", borderBottom: `1px solid ${t.borderStrong}`, minHeight: 56 }}>
               {page === "home" ? (
