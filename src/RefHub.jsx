@@ -10125,6 +10125,112 @@ function VocabWritingModal({ t, category, level, userId, session, close }) {
   );
 }
 
+// 🎤 พูดตาม — ใช้ Web Speech API (ฟรี ในตัวเบราว์เซอร์) เครื่องฟังแล้วเทียบว่าตรงกับคำ/ประโยคเป้าหมายไหม ไม่รองรับทุกเบราว์เซอร์ (เช็คให้ก่อนใช้)
+function VocabSpeakingModal({ t, mode, category, level, pool, userId, close, onFinished }) {
+  const shuffle = (arr) => { const a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const [questions] = useState(() => shuffle(pool).slice(0, Math.min(8, pool.length)));
+  const [idx, setIdx] = useState(0);
+  const [listening, setListening] = useState(false);
+  const [heard, setHeard] = useState(null);
+  const [checked, setChecked] = useState(false);
+  const [correct, setCorrect] = useState(false);
+  const [score, setScore] = useState(0);
+  const [done, setDone] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+  const recogRef = useRef(null);
+  const q = questions[idx];
+
+  const SpeechRecognitionAPI = typeof window !== "undefined" ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null;
+  const normalize = (s) => (s || "").toLowerCase().replace(/[.,!?;:'"]/g, "").replace(/\s+/g, " ").trim();
+
+  const startListening = () => {
+    if (!SpeechRecognitionAPI) { setErr("เบราว์เซอร์นี้ยังไม่รองรับการฟังเสียงพูด ลองเปิดผ่าน Chrome ดูนะ"); return; }
+    setErr(""); setHeard(null); setChecked(false);
+    const r = new SpeechRecognitionAPI();
+    r.lang = "en-US"; r.interimResults = false; r.maxAlternatives = 1;
+    r.onstart = () => setListening(true);
+    r.onresult = (e) => {
+      const text = e.results[0][0].transcript;
+      setHeard(text);
+      const ok = normalize(text) === normalize(q.word);
+      setCorrect(ok);
+      setChecked(true);
+      if (ok) setScore((s) => s + 1);
+    };
+    r.onerror = () => { setListening(false); setErr("ฟังไม่สำเร็จ ลองใหม่อีกครั้ง (เช็คว่าอนุญาตไมค์แล้ว)"); };
+    r.onend = () => setListening(false);
+    recogRef.current = r;
+    r.start();
+  };
+
+  const next = async () => {
+    if (idx + 1 < questions.length) { setIdx((i) => i + 1); setHeard(null); setChecked(false); }
+    else {
+      setDone(true);
+      if (userId) {
+        setSaving(true);
+        await supabase.from("vocab_quiz_history").insert({ id: uid(), user_id: userId, mode, category, level, skill: "speaking", score, total: questions.length, created_at: new Date().toISOString() }).then(() => {}, () => {});
+        setSaving(false);
+      }
+      onFinished?.();
+    }
+  };
+
+  if (!questions.length) {
+    return (
+      <ModalPortal>
+        <div style={overlayHi} onClick={close}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
+            <div style={{ fontSize: 14, color: t.sub, textAlign: "center", marginBottom: 14 }}>หมวดนี้ยังไม่มีเนื้อหาให้ฝึกพูดเลย ลองให้ AI เจนให้ก่อนได้เลย</div>
+            <button onClick={close} style={{ ...card(t), width: "100%", padding: "11px 0", border: `1px solid ${t.border}`, cursor: "pointer", color: t.text, fontWeight: 700 }}>ปิด</button>
+          </div>
+        </div>
+      </ModalPortal>
+    );
+  }
+
+  return (
+    <ModalPortal>
+      <div style={overlayHi} onClick={done ? close : undefined}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "88vh", overflowY: "auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>🎤 พูดตาม</div>
+            <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+          </div>
+          <style>{`@keyframes rh-mic-pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.08); } }`}</style>
+
+          {!done ? (<>
+            <div style={{ fontSize: 11.5, color: t.faint, marginBottom: 10 }}>ข้อ {idx + 1}/{questions.length}</div>
+            <div style={{ ...card(t), padding: 24, textAlign: "center", marginBottom: 14 }}>
+              <div style={{ fontSize: 22, fontWeight: 800, color: t.text, marginBottom: 4 }}>{q.word}</div>
+              {q.pronunciation && <div style={{ fontSize: 12.5, color: t.faint }}>[{q.pronunciation}]</div>}
+            </div>
+            <button onClick={startListening} disabled={listening} style={{ width: 72, height: 72, borderRadius: 36, border: "none", background: listening ? "#D9534F" : t.accent, color: t.onAccent, cursor: listening ? "default" : "pointer", display: "grid", placeItems: "center", margin: "0 auto 10px", animation: listening ? "rh-mic-pulse 1s ease-in-out infinite" : "none" }}>
+              <Mic size={30} />
+            </button>
+            <div style={{ fontSize: 11.5, color: t.faint, textAlign: "center", marginBottom: 14 }}>{listening ? "กำลังฟัง พูดได้เลย..." : "แตะไมค์แล้วพูดคำนี้"}</div>
+            {err && <div style={{ fontSize: 11.5, color: "#D9534F", textAlign: "center", marginBottom: 10 }}>{err}</div>}
+            {checked && (
+              <div style={{ ...card(t), padding: 12, marginBottom: 14, border: `1px solid ${correct ? "#2E9E6B" : "#D9534F"}`, textAlign: "center" }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: correct ? "#2E9E6B" : "#D9534F", marginBottom: 4 }}>{correct ? "✓ ออกเสียงตรง!" : "✗ ยังไม่ตรงเป๊ะ"}</div>
+                <div style={{ fontSize: 11.5, color: t.faint }}>เครื่องได้ยิน: "{heard}"</div>
+              </div>
+            )}
+            {checked && <button onClick={next} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "12px 0" }}>{idx + 1 < questions.length ? "ข้อต่อไป →" : "ดูผลคะแนน"}</button>}
+          </>) : (
+            <div style={{ textAlign: "center", padding: "10px 0" }}>
+              <div style={{ fontSize: 15, color: t.sub, marginBottom: 6 }}>คะแนนของคุณ</div>
+              <div style={{ fontSize: 40, fontWeight: 800, color: t.accent, marginBottom: 4 }}>{score}/{questions.length}</div>
+              <button onClick={close} disabled={saving} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "12px 0" }}>{saving ? "กำลังบันทึก..." : "เสร็จแล้ว"}</button>
+            </div>
+          )}
+        </div>
+      </div>
+    </ModalPortal>
+  );
+}
+
 function LangPage({ t, lang, userId, session }) {
   const [askConfirm, ConfirmUI] = useConfirm(t);
   const [contentType, setContentType] = useState("word"); // "word" | "sentence" — สลับระหว่างคลังคำศัพท์กับคลังประโยค (คนละตารางกัน)
@@ -10136,6 +10242,7 @@ function LangPage({ t, lang, userId, session }) {
   const [genOpen, setGenOpen] = useState(false);
   const [quizOpen, setQuizOpen] = useState(false);
   const [listenOpen, setListenOpen] = useState(false);
+  const [speakOpen, setSpeakOpen] = useState(false);
   const [writeOpen, setWriteOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [topic, setTopic] = useState("general"); // 📚 หมวดที่กำลังโฟกัสอยู่ — คุมทั้งโหมดทบทวนและจัดการ เหมือนหมวดข่าว
@@ -10164,7 +10271,7 @@ function LangPage({ t, lang, userId, session }) {
       setHistoryLoading(false);
     });
   };
-  useEffect(() => { if (view === "history") loadHistory(); }, [view, userId]);
+  useEffect(() => { loadHistory(); }, [userId]);
 
   const onSaved = (row) => setWords((list) => { const i = list.findIndex((w) => w.id === row.id); if (i === -1) return [row, ...list]; const copy = [...list]; copy[i] = row; return copy; });
   const onSavedBatch = (rows) => setWords((list) => [...rows, ...list]);
@@ -10180,6 +10287,26 @@ function LangPage({ t, lang, userId, session }) {
   };
 
   const knownCount = words.filter((w) => w.status === "known").length;
+
+  // 🔥⭐ Gamification — คำนวณจากข้อมูลจริง ไม่มีตารางเพิ่ม (สตรีค = จำนวนวันติดต่อกันที่มีกิจกรรมอย่างน้อย 1 อย่าง, XP = สะสมจากคะแนนที่ทำได้ + จำนวนคำที่จำได้แล้ว)
+  const streakDays = (() => {
+    const days = new Set(history.map((h) => h.created_at?.slice(0, 10)));
+    let streak = 0;
+    for (let i = 0; i < 365; i++) {
+      const d = new Date(); d.setDate(d.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      if (days.has(key)) streak++;
+      else if (i > 0) break; // วันนี้ยังไม่ทำก็ไม่ตัดสตรีคเมื่อวาน แต่ถ้าขาดวันอื่นถือว่าขาด
+    }
+    return streak;
+  })();
+  const xp = history.reduce((s, h) => s + (h.score || 0), 0) * 10 + knownCount * 5;
+  const badges = [
+    streakDays >= 3 && { icon: "🔥", label: `สตรีค ${streakDays} วัน` },
+    knownCount >= 10 && { icon: "📚", label: "จำได้ 10+" },
+    knownCount >= 50 && { icon: "🏆", label: "จำได้ 50+" },
+    history.some((h) => h.total > 0 && h.score === h.total) && { icon: "💯", label: "เต็มคะแนน" },
+  ].filter(Boolean);
   const topicWords = words.filter((w) => (w.category || "general") === topic && (level === "all" || w.level === level));
   const wordCountByTopic = (id) => words.filter((w) => (w.category || "general") === id).length;
 
@@ -10212,6 +10339,16 @@ function LangPage({ t, lang, userId, session }) {
   return (<>
     <PageHead t={t} title={L(lang, "ph_lang_title")} sub={lang === "en" ? `My words ${words.length} · known ${knownCount}` : `${noun}ของฉัน ${words.length} · จำได้แล้ว ${knownCount}`} icon={<Languages size={20} color={t.accent} />} />
 
+    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, overflowX: "auto" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}><span style={{ fontSize: 15 }}>🔥</span><span style={{ fontSize: 12.5, fontWeight: 700, color: t.text }}>{streakDays} วัน</span></div>
+      <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}><span style={{ fontSize: 15 }}>⭐</span><span style={{ fontSize: 12.5, fontWeight: 700, color: t.text }}>{xp} XP</span></div>
+      {badges.map((b, i) => (
+        <div key={i} style={{ display: "flex", alignItems: "center", gap: 3, flexShrink: 0, background: `${t.accent}15`, borderRadius: 10, padding: "3px 8px" }}>
+          <span style={{ fontSize: 12 }}>{b.icon}</span><span style={{ fontSize: 10.5, fontWeight: 700, color: t.accent }}>{b.label}</span>
+        </div>
+      ))}
+    </div>
+
     {/* 📖💬 สลับคลังคำศัพท์ / คลังประโยค */}
     <div style={{ display: "flex", gap: 6, marginBottom: 8, background: t.inputBg, borderRadius: 12, padding: 4 }}>
       <button onClick={() => setContentType("word")} style={{ flex: 1, padding: "8px 0", borderRadius: 9, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 12.5, background: contentType === "word" ? t.accent : "transparent", color: contentType === "word" ? t.onAccent : t.sub }}>📖 คำศัพท์</button>
@@ -10219,7 +10356,7 @@ function LangPage({ t, lang, userId, session }) {
     </div>
 
     <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 8 }}>
-      {[["review", "🔁 ทบทวน"], ["quiz", "🧪 ทดสอบ"], ["listen", "🎧 ฟัง"], ["write", "✍️ เขียน"], ["manage", "📋 จัดการ"], ["history", "📊 ประวัติ"]].map(([id, lb]) => (
+      {[["review", "🔁 ทบทวน"], ["quiz", "🧪 ทดสอบ"], ["listen", "🎧 ฟัง"], ["speak", "🎤 พูด"], ["write", "✍️ เขียน"], ["manage", "📋 จัดการ"], ["history", "📊 ประวัติ"]].map(([id, lb]) => (
         <button key={id} onClick={() => setView(id)} style={{ flexShrink: 0, padding: "7px 14px", borderRadius: 12, cursor: "pointer", fontWeight: 700, fontSize: 12, border: `1.5px solid ${view === id ? t.accent : t.border}`, background: view === id ? t.accent : "transparent", color: view === id ? t.onAccent : t.sub }}>{lb}</button>
       ))}
     </div>
@@ -10287,6 +10424,15 @@ function LangPage({ t, lang, userId, session }) {
         <div style={{ fontSize: 14.5, fontWeight: 800, color: t.text, marginBottom: 4 }}>ฝึกฟังหมวด {currentTopicMeta?.label}</div>
         <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>ฟังเสียงแล้วพิมพ์ตามที่ได้ยิน เช็คคำตอบทันที เก็บคะแนนลงประวัติ</div>
         <button onClick={() => setListenOpen(true)} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "13px 0", fontSize: 14 }}>เริ่มฝึกฟัง</button>
+      </div>
+    )}
+
+    {!loading && view === "speak" && (
+      <div style={{ ...card(t), padding: 28, textAlign: "center" }}>
+        <div style={{ fontSize: 32, marginBottom: 10 }}>🎤</div>
+        <div style={{ fontSize: 14.5, fontWeight: 800, color: t.text, marginBottom: 4 }}>ฝึกพูดหมวด {currentTopicMeta?.label}</div>
+        <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>พูดตามคำ/ประโยค เครื่องฟังแล้วเช็คว่าตรงไหม (ต้องอนุญาตไมค์ก่อน)</div>
+        <button onClick={() => setSpeakOpen(true)} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "13px 0", fontSize: 14 }}>เริ่มฝึกพูด</button>
       </div>
     )}
 
@@ -10364,6 +10510,7 @@ function LangPage({ t, lang, userId, session }) {
     {genOpen && <VocabBatchGenModal t={t} table={table} mode={contentType} userId={userId} session={session} category={topic} level={level === "all" ? "A1" : level} close={() => setGenOpen(false)} onSaved={onSavedBatch} />}
     {quizOpen && <VocabQuizModal t={t} mode={contentType} category={topic} level={level === "all" ? "mixed" : level} pool={topicWords} allItems={words} userId={userId} close={() => setQuizOpen(false)} onFinished={loadHistory} />}
     {listenOpen && <VocabListeningModal t={t} mode={contentType} category={topic} level={level === "all" ? "mixed" : level} pool={topicWords} userId={userId} session={session} close={() => setListenOpen(false)} onFinished={loadHistory} />}
+    {speakOpen && <VocabSpeakingModal t={t} mode={contentType} category={topic} level={level === "all" ? "mixed" : level} pool={topicWords} userId={userId} close={() => setSpeakOpen(false)} onFinished={loadHistory} />}
     {writeOpen && <VocabWritingModal t={t} category={topic} level={level === "all" ? "A1" : level} userId={userId} session={session} close={() => setWriteOpen(false)} />}
     {ConfirmUI}
   </>);
