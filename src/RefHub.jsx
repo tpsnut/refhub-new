@@ -2195,6 +2195,7 @@ export default function RefHub() {
         )}
         {/* ☰ เมนูนำทาง — พาไปหน้า/ฟีเจอร์ใหญ่ๆ ที่แยกจากหน้าปัจจุบันจริงจัง จบด้วยออกจากระบบด้านล่างสุด (แยกออกมาจาก ⋮ เดิมตามที่ตกลงกันไว้) */}
         {hamburgerOpen && (
+          <ModalPortal>
           <div style={overlay} onClick={() => setHamburgerOpen(false)}>
             <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
               <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 2 }}>{L(lang, "menu_title")}</div>
@@ -2241,6 +2242,7 @@ export default function RefHub() {
               </div>
             </div>
           </div>
+          </ModalPortal>
         )}
         {langModalOpen && <LanguageModal t={t} lang={lang} setLang={setLang} close={() => setLangModalOpen(false)} />}
         {securityOpen && <SecurityModal t={t} lang={lang} userId={userId} session={session} setAccountSettingsOpen={setAccountSettingsOpen} close={() => setSecurityOpen(false)} />}
@@ -2573,6 +2575,7 @@ function MyActivityModal({ t, userId, close }) {
   logs.forEach((l) => { const d = (l.created_at || "").slice(0, 10); (groups[d] = groups[d] || []).push(l); });
 
   return (
+    <ModalPortal>
     <div style={overlay} onClick={close}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
@@ -2626,6 +2629,7 @@ function MyActivityModal({ t, userId, close }) {
         ))}
       </div>
     </div>
+    </ModalPortal>
   );
 }
 
@@ -2865,6 +2869,7 @@ function AccountSettingsModal({ t, authProfile, setAuthProfile, userId, session,
   };
 
   return (
+    <ModalPortal>
     <div style={overlay} onClick={close}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
         <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 14 }}>ตั้งค่าบัญชี</div>
@@ -2924,6 +2929,7 @@ function AccountSettingsModal({ t, authProfile, setAuthProfile, userId, session,
         )}
       </div>
     </div>
+    </ModalPortal>
   );
 }
 
@@ -3116,6 +3122,7 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
   };
 
   return (
+    <ModalPortal>
     <div style={overlay} onClick={close}>
       <div ref={scrollRef} onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: "20px 20px 28px", maxHeight: "90vh", overflowY: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
@@ -3270,6 +3277,7 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
       </div>
       {ConfirmUI}
     </div>
+    </ModalPortal>
   );
 }
 
@@ -3538,6 +3546,7 @@ function AddGoalModal({ t, userId, session, setGoals, goalTemplates, setGoalTemp
   const validSuggestions = aiSuggestions.filter((s) => s.text.trim());
 
   return (
+    <ModalPortal>
     <div style={overlay} onClick={close}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", maxHeight: "85vh", display: "flex", flexDirection: "column" }}>
         <div style={{ padding: "20px 20px 0", flexShrink: 0 }}>
@@ -3721,6 +3730,7 @@ function AddGoalModal({ t, userId, session, setGoals, goalTemplates, setGoalTemp
         )}
       </div>
     </div>
+    </ModalPortal>
   );
 }
 
@@ -3742,6 +3752,7 @@ function LeaderboardModal({ t, userId, close }) {
   const medals = ["🥇", "🥈", "🥉"];
 
   return (
+    <ModalPortal>
     <div style={overlay} onClick={close}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "80vh", overflowY: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
@@ -3772,6 +3783,7 @@ function LeaderboardModal({ t, userId, close }) {
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }
 
@@ -3790,6 +3802,7 @@ function ShareGoalModal({ t, userId, authProfile, weekPoints, bestStreak, badge,
   };
 
   return (
+    <ModalPortal>
     <div style={overlay} onClick={close}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
@@ -3800,6 +3813,7 @@ function ShareGoalModal({ t, userId, authProfile, weekPoints, bestStreak, badge,
         <button onClick={post} disabled={posting || !text.trim()} style={{ ...primaryBtn(t), width: "100%", padding: "12px 0", opacity: posting || !text.trim() ? 0.6 : 1 }}>{posting ? "กำลังโพสต์..." : "โพสต์เลย"}</button>
       </div>
     </div>
+    </ModalPortal>
   );
 }
 
@@ -3851,6 +3865,7 @@ function GoalTimerModal({ t, goal, close }) {
 
   if (ringing) {
     return (
+      <ModalPortal>
       <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", background: "radial-gradient(circle at 50% 30%, rgba(217,83,79,.35), rgba(10,14,25,.94) 70%)" }}>
         <div style={{ textAlign: "center", padding: 24, maxWidth: 340 }}>
           <div style={{ fontSize: 56, animation: "rh-timer-shake .4s infinite" }}>⏰</div>
@@ -3861,10 +3876,12 @@ function GoalTimerModal({ t, goal, close }) {
         </div>
         <style>{`@keyframes rh-timer-shake { 0%,100% { transform: rotate(-8deg); } 50% { transform: rotate(8deg); } }`}</style>
       </div>
+      </ModalPortal>
     );
   }
 
   return (
+    <ModalPortal>
     <div style={overlay} onClick={close}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
@@ -3897,6 +3914,7 @@ function GoalTimerModal({ t, goal, close }) {
         `}</style>
       </div>
     </div>
+    </ModalPortal>
   );
 }
 
@@ -3915,6 +3933,7 @@ function ScoreRulesModal({ t, close }) {
     </div>
   );
   return (
+    <ModalPortal>
     <div style={overlay} onClick={close}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", maxHeight: "85vh", overflowY: "auto", padding: 20 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
@@ -3950,6 +3969,7 @@ function ScoreRulesModal({ t, close }) {
         </RuleCard>
       </div>
     </div>
+    </ModalPortal>
   );
 }
 
@@ -4115,6 +4135,7 @@ function WidgetOrderModal({ t, title, hint, selected, setSelected, close, catCol
   const chosenShortcuts = hs.map((id) => HERO_SHORTCUTS_META.find((s) => s.id === id)).filter(Boolean);
   const availableShortcuts = HERO_SHORTCUTS_META.filter((s) => !hs.includes(s.id));
   const [colorEditKey, setColorEditKey] = useState(null); // 🎨 cat key ที่กำลังเปิด ColorPickerModal อยู่ (null = ไม่ได้เปิด)
+  <ModalPortal>
   return (<div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
     <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 4 }}>{title}</div>
     <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>{hint}</div>
@@ -4203,6 +4224,7 @@ function WidgetOrderModal({ t, title, hint, selected, setSelected, close, catCol
     </>)}
     {colorEditKey && <ModalPortal><ColorPickerModal t={t} value={catColors[colorEditKey] || "#888888"} onChange={(hex) => setCatColors((cc) => ({ ...cc, [colorEditKey]: hex }))} close={() => setColorEditKey(null)} /></ModalPortal>}
   </div></div>);
+  </ModalPortal>
 }
 
 function HomePage({ t, lang, M, quote, isNight, setMentorPick, balance, tx, goals, allGoals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, setMusicOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget, setAddGoalOpen, setScoreRulesOpen, cardShape, homeLayout, walletWidgets, setWalletWidgets, bentoWidgets, setBentoWidgets, classicWidgets, setClassicWidgets, catColors, setCatColors, heroShortcuts, setHeroShortcuts }) {
@@ -4855,6 +4877,7 @@ function ReminderModal({ t, targetType, targetId, label, existing, upsertReminde
   const remove = () => { if (existing?.id) deleteReminder(existing.id); close(); };
 
   return (
+    <ModalPortal>
     <div style={overlay} onClick={close}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: "20px 20px 28px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
@@ -4902,6 +4925,7 @@ function ReminderModal({ t, targetType, targetId, label, existing, upsertReminde
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }
 
@@ -5561,6 +5585,7 @@ function MemberDetailModal({ t, m, isSelf, isOnline, setApproved, setRole, setCa
   const selectStyle = { border: `1px solid ${t.border}`, borderRadius: 8, background: t.inputBg, color: t.text, fontWeight: 700, fontSize: 12.5, padding: "4px 8px" };
 
   return (
+    <ModalPortal>
     <div style={overlay} onClick={close}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "88vh", overflowY: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
@@ -5669,6 +5694,7 @@ function MemberDetailModal({ t, m, isSelf, isOnline, setApproved, setRole, setCa
         )}
       </div>
     </div>
+    </ModalPortal>
   );
 }
 
@@ -7618,6 +7644,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
       </div>
       {lightbox && <ImageLightbox src={lightbox} onClose={() => setLightbox(null)} />}
       {callDetail && (
+        <ModalPortal>
         <div style={overlay} onClick={() => setCallDetail(null)}>
           <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 380, background: t.page, borderRadius: 20, padding: 24, textAlign: "center" }}>
             <div style={{ width: 56, height: 56, borderRadius: 28, background: "#2E9E6B", display: "grid", placeItems: "center", margin: "0 auto 14px" }}><Phone size={26} color="#fff" /></div>
@@ -7645,6 +7672,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
             <button onClick={() => setCallDetail(null)} style={{ marginTop: 20, width: "100%", padding: "12px 0", borderRadius: 12, border: "none", background: t.accent, color: t.onAccent, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>ปิด</button>
           </div>
         </div>
+        </ModalPortal>
       )}
       {showMembers && <RoomMembersModal t={t} threadId={thread.id} session={session} close={() => setShowMembers(false)} />}
 
@@ -8157,6 +8185,7 @@ function AddTxModal({ t, tx, setTx, categories, reorderCategoriesForKind, delete
   };
 
   return (
+    <ModalPortal>
     <div style={overlay} onClick={close}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: "20px 20px 28px", maxHeight: "88vh", overflowY: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
@@ -8234,6 +8263,7 @@ function AddTxModal({ t, tx, setTx, categories, reorderCategoriesForKind, delete
       {manageOpen && <CategoryManagerModal t={t} categories={categories} reorderCategoriesForKind={reorderCategoriesForKind} deleteCategory={deleteCategory} addCategory={addCategory} close={() => setManageOpen(false)} />}
       {receiptZoom && pendingReceipt && <ImageLightbox src={pendingReceipt.dataUrl} onClose={() => setReceiptZoom(false)} />}
     </div>
+    </ModalPortal>
   );
 }
 
@@ -8315,6 +8345,7 @@ function CategoryManagerModal({ t, categories, reorderCategoriesForKind, deleteC
 
 function ExportModal({ t, text, close }) {
   return (
+    <ModalPortal>
     <div style={overlay} onClick={close}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: "20px 20px 28px", maxHeight: "88vh", overflowY: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
@@ -8326,6 +8357,7 @@ function ExportModal({ t, text, close }) {
         <button onClick={() => { navigator.clipboard?.writeText(text); }} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "11px 0", marginTop: 10 }}>คัดลอกทั้งหมด</button>
       </div>
     </div>
+    </ModalPortal>
   );
 }
 
@@ -8594,6 +8626,7 @@ function NotionSetupModal({ t, userId, close }) {
   };
 
   return (
+    <ModalPortal>
     <div style={overlay} onClick={close}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
@@ -8619,6 +8652,7 @@ function NotionSetupModal({ t, userId, close }) {
         )}
       </div>
     </div>
+    </ModalPortal>
   );
 }
 
@@ -11148,6 +11182,7 @@ function ChatModal({ t, M, mentor, setMentor, authProfile, setAuthProfile, custo
     }
   };
   return (
+    <ModalPortal>
     <div style={{ position: "fixed", inset: 0, zIndex: 100, background: t.page }}>
       <div style={{ width: "100%", maxWidth: 440, height: "100%", margin: "0 auto", background: t.page, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         <div style={{ padding: 16, display: "flex", alignItems: "center", gap: 12, background: t.hero }}>
@@ -11201,6 +11236,7 @@ function ChatModal({ t, M, mentor, setMentor, authProfile, setAuthProfile, custo
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }
 
@@ -11267,6 +11303,7 @@ function MentorPicker({ t, mentor, setMentor, authProfile, setAuthProfile, userI
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
 
+  <ModalPortal>
   return (<div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
     <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 4 }}>โค้ชของคุณ</div>
     <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>
@@ -11351,6 +11388,7 @@ function MentorPicker({ t, mentor, setMentor, authProfile, setAuthProfile, userI
       </div>
     )}
   </div></div>);
+  </ModalPortal>
 }
 
 // 🎨 Color picker แบบสร้างเอง — แทนที่ dialog ของเครื่อง (ควบคุม label ได้เต็มที่ + ใส่ hex/RGB ตรงๆ ได้)
@@ -11390,6 +11428,7 @@ function ColorPickerModal({ t, value, onChange, close }) {
   const satBg = `linear-gradient(90deg, #fff, ${rgbToHex(hsvToRgb(h, 100, v).r, hsvToRgb(h, 100, v).g, hsvToRgb(h, 100, v).b)})`;
   const valBg = `linear-gradient(90deg, #000, ${rgbToHex(hsvToRgb(h, s, 100).r, hsvToRgb(h, s, 100).g, hsvToRgb(h, s, 100).b)})`;
 
+  <ModalPortal>
   return (<div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "88vh", overflowY: "auto" }}>
     <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 14 }}>เลือกสี</div>
 
@@ -11422,11 +11461,13 @@ function ColorPickerModal({ t, value, onChange, close }) {
 
     <button onClick={() => { onChange(hex); close(); }} style={{ ...primaryBtn({ accent: hex, accent2: lightenHex(hex, 0.2), onAccent: relativeLuminance(hex) > 0.5 ? "#141414" : "#FFFFFF" }), width: "100%", padding: "12px 0", fontSize: 14 }}>ใช้สีนี้</button>
   </div></div>);
+  </ModalPortal>
 }
 
 function ThemePicker({ t, theme, setTheme, mode, customAccent, setCustomAccent, close }) {
   const [pendingColor, setPendingColor] = useState(customAccent);
   const [pickerOpen, setPickerOpen] = useState(false);
+  <ModalPortal>
   return (<div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
     <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 4 }}>เลือกธีมสีแอป</div>
     <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>แต่ละธีมมีเวอร์ชันกลางวัน/กลางคืนของตัวเอง สลับได้อิสระจากโค้ช</div>
@@ -11457,6 +11498,7 @@ function ThemePicker({ t, theme, setTheme, mode, customAccent, setCustomAccent, 
     </div>
     {pickerOpen && <ModalPortal><ColorPickerModal t={t} value={pendingColor} onChange={setPendingColor} close={() => setPickerOpen(false)} /></ModalPortal>}
   </div></div>);
+  </ModalPortal>
 }
 
 // 🏠 เลือกโครงหน้า Home — 3 แบบ ชื่อออกแบบให้แปลอังกฤษได้ตรงตัวสวยๆ (Classic/Focus/Mosaic) ตามที่ขอปรับ
@@ -11496,6 +11538,7 @@ function MiniLayoutPreview({ kind, t, shp }) {
   );
 }
 function HomeLayoutPicker({ t, shp, homeLayout, setHomeLayout, close }) {
+  <ModalPortal>
   return (<div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
     <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 4 }}>โครงหน้า Home</div>
     <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>แตะตัวอย่างเพื่อเลือกได้เลย เปลี่ยนได้ตลอด</div>
@@ -11512,6 +11555,7 @@ function HomeLayoutPicker({ t, shp, homeLayout, setHomeLayout, close }) {
       ); })}
     </div>
   </div></div>);
+  </ModalPortal>
 }
 
 // 🔲 เลือกทรงกรอบการ์ด — เหลี่ยมคม/มนเบาๆ พร้อมตัวอย่างย่อให้กดเลือกได้ตรงๆ
@@ -11535,6 +11579,7 @@ function MiniShapePreview({ kind, t }) {
   );
 }
 function CardShapePicker({ t, cardShape, setCardShape, close }) {
+  <ModalPortal>
   return (<div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
     <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 4 }}>ทรงกรอบการ์ด</div>
     <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>แตะตัวอย่างเพื่อเลือกได้เลย</div>
@@ -11551,6 +11596,7 @@ function CardShapePicker({ t, cardShape, setCardShape, close }) {
       ); })}
     </div>
   </div></div>);
+  </ModalPortal>
 }
 
 // 🎨 ปรับสีหมวดหมู่การ์ด (การเงิน/ความรู้/เป้าหมาย/โน้ต) ทีละสี — เฉดอ่อน/เข้ม/ตัวอักษรคำนวณอัตโนมัติจากสีที่เลือก
@@ -11564,6 +11610,7 @@ const CAT_COLOR_META = [
   { k: "rose", label: "ข่าว" },
 ];
 function CatColorsModal({ t, catColors, setCatColors, close }) {
+  <ModalPortal>
   return (<div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
     <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 4 }}>สีหมวดหมู่การ์ด</div>
     <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 10, lineHeight: 1.6 }}>สีพวกนี้ใช้แยกประเภทวิดเจ็ตในหน้า Home (การ์ด 2x2 / วงกลมไอคอนลัด / บล็อกเล็ก) แตะวงกลมเพื่อเปลี่ยนสีแต่ละอัน เฉดอ่อน-เข้มคำนวณให้อัตโนมัติ</div>
@@ -11584,6 +11631,7 @@ function CatColorsModal({ t, catColors, setCatColors, close }) {
       ))}
     </div>
   </div></div>);
+  </ModalPortal>
 }
 
 function EditProfile({ t, M, profile, setProfile, userId, authProfile, setAuthProfile, close }) {
@@ -11608,6 +11656,7 @@ function EditProfile({ t, M, profile, setProfile, userId, authProfile, setAuthPr
     close();
   };
 
+  <ModalPortal>
   return (<div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
     <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 16 }}>แก้ไขโปรไฟล์</div>
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, marginBottom: 16 }}>
@@ -11645,6 +11694,7 @@ function EditProfile({ t, M, profile, setProfile, userId, authProfile, setAuthPr
     </ModalPortal>
   )}
   </div>);
+  </ModalPortal>
 }
 
 // 🖼️ ปรับตำแหน่ง/ซูมรูปก่อนบันทึกเป็นรูปโปรไฟล์ (ลาก = ขยับ, สไลเดอร์ = ซูม)
@@ -11712,6 +11762,7 @@ function ImageCropModal({ t, src, onCancel, onConfirm }) {
   };
 
   return (
+    <ModalPortal>
     <div style={overlay} onClick={onCancel}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
         <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 14 }}>ปรับรูปโปรไฟล์</div>
@@ -11739,6 +11790,7 @@ function ImageCropModal({ t, src, onCancel, onConfirm }) {
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }
 
