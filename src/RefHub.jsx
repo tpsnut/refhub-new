@@ -2977,7 +2977,7 @@ function FolderManageRow({ t, folder, handleProps, priming, onRename, onDelete }
     <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 10px", borderRadius: 10, background: t.inputBg, marginBottom: 4 }}>
       <span {...handleProps}><GripVertical size={16} color={priming ? t.accent : t.faint} /></span>
       {editing ? (
-        <input value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && save()} onBlur={save} autoFocus style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 700, border: `1px solid ${t.accent}`, borderRadius: 8, padding: "3px 6px", background: t.page, color: t.text }} />
+        <input value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && save()} onBlur={save} style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 700, border: `1px solid ${t.accent}`, borderRadius: 8, padding: "3px 6px", background: t.page, color: t.text }} />
       ) : (
         <button onClick={() => { setName(folder.name); setEditing(true); }} style={{ flex: 1, textAlign: "left", background: "none", border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 700, color: t.text }} title="กดเพื่อแก้ไขชื่อ">{folder.name}</button>
       )}
@@ -3155,7 +3155,7 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
           {pendingYt && (
             <div style={{ marginTop: 10, padding: 12, borderRadius: 12, background: t.inputBg, border: `1px solid ${t.border}` }}>
               <div style={{ fontSize: 11, color: t.sub, marginBottom: 6 }}>ตั้งชื่อสื่อนี้ (แก้ได้ก่อนบันทึก):</div>
-              <input value={pendingYt.name} onChange={(e) => setPendingYt((p) => ({ ...p, name: e.target.value }))} onKeyDown={(e) => e.key === "Enter" && confirmAddYt()} style={{ ...input(t), marginBottom: 8 }} autoFocus />
+              <input value={pendingYt.name} onChange={(e) => setPendingYt((p) => ({ ...p, name: e.target.value }))} onKeyDown={(e) => e.key === "Enter" && confirmAddYt()} style={{ ...input(t), marginBottom: 8 }} />
               <div style={{ display: "flex", gap: 8 }}>
                 <button onClick={() => setPendingYt(null)} style={{ flex: 1, padding: "9px 0", borderRadius: 10, border: `1px solid ${t.border}`, background: "none", color: t.sub, cursor: "pointer", fontSize: 12.5, fontWeight: 700 }}>ยกเลิก</button>
                 <button onClick={confirmAddYt} style={{ ...primaryBtn(t), flex: 1, padding: "9px 0" }}>บันทึกสื่อนี้</button>
@@ -3221,7 +3221,7 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
 
         {addingFolder && (
           <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-            <input autoFocus value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addFolder()} placeholder="ตั้งชื่อหมวดหมู่ เช่น ชิลล์ๆ, ออกกำลังกาย" style={input(t)} />
+            <input value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addFolder()} placeholder="ตั้งชื่อหมวดหมู่ เช่น ชิลล์ๆ, ออกกำลังกาย" style={input(t)} />
             <button onClick={addFolder} style={{ ...primaryBtn(t), padding: "0 14px" }}>สร้าง</button>
           </div>
         )}
@@ -3383,7 +3383,7 @@ function TrackRow({ t, M, track, active, playing, folders, dragHandleProps, drag
         </button>
         <span style={{ flexShrink: 0 }}>{icon}</span>
         {editing ? (
-          <input value={editName} onChange={(e) => setEditName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveRename()} onBlur={saveRename} autoFocus style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, border: `1px solid ${t.accent}`, borderRadius: 8, padding: "3px 6px", background: t.inputBg, color: t.text }} />
+          <input value={editName} onChange={(e) => setEditName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveRename()} onBlur={saveRename} style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, border: `1px solid ${t.accent}`, borderRadius: 8, padding: "3px 6px", background: t.inputBg, color: t.text }} />
         ) : (
           <div onClick={() => { setEditName(track.name); setEditing(true); }} style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: t.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", cursor: "pointer" }} title="กดเพื่อแก้ชื่อ">{track.name}</div>
         )}
@@ -3567,7 +3567,7 @@ function AddGoalModal({ t, userId, session, setGoals, goalTemplates, setGoalTemp
                 ))}
               </div>
 
-              <input value={text} onChange={(e) => setText(e.target.value)} placeholder="เช่น ออกกำลังกาย 30 นาที" style={{ ...input(t), marginBottom: 12 }} autoFocus />
+              <input value={text} onChange={(e) => setText(e.target.value)} placeholder="เช่น ออกกำลังกาย 30 นาที" style={{ ...input(t), marginBottom: 12 }} />
 
               <button onClick={() => setStep("source")} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", padding: "11px 0", borderRadius: 12, border: `1.5px dashed ${t.accent}66`, background: `${t.accent}0f`, color: t.accent, fontWeight: 700, fontSize: 13, cursor: "pointer", marginBottom: 16 }}>
                 <Sparkles size={15} /> ให้ AI ช่วยคิดเป้าหมาย
@@ -3677,7 +3677,7 @@ function AddGoalModal({ t, userId, session, setGoals, goalTemplates, setGoalTemp
           {step === "topic" && (
             <div style={{ paddingBottom: 20 }}>
               <div style={{ fontSize: 12, color: t.sub, marginBottom: 12, lineHeight: 1.6 }}>เช่น "อยากลดน้ำหนัก" "อยากเก่งภาษาอังกฤษ" "อยากมีวินัยเรื่องเงิน"</div>
-              <input value={aiTopic} onChange={(e) => setAiTopic(e.target.value)} placeholder="พิมพ์สิ่งที่อยากพัฒนา..." style={{ ...input(t), marginBottom: 16 }} autoFocus />
+              <input value={aiTopic} onChange={(e) => setAiTopic(e.target.value)} placeholder="พิมพ์สิ่งที่อยากพัฒนา..." style={{ ...input(t), marginBottom: 16 }} />
               <button onClick={() => generateSuggestions("topic", aiTopic.trim())} disabled={!aiTopic.trim()} style={{ ...primaryBtn(t), width: "100%", padding: "12px 0", opacity: aiTopic.trim() ? 1 : 0.5 }}>ให้ AI ช่วยคิด →</button>
             </div>
           )}
@@ -4432,7 +4432,7 @@ function HomePage({ t, lang, M, quote, isNight, setMentorPick, balance, tx, goal
                 <div style={{ display: "flex", gap: 6, marginTop: 6, marginLeft: 32 }}>
                   <input
                     value={g.comment || ""}
-                    autoFocus
+
                     onChange={(e) => {
                       const val = e.target.value;
                       setGoals((gs) => gs.map((x) => (x.id === g.id ? { ...x, comment: val } : x)));
@@ -4806,7 +4806,7 @@ function BillManagerModal({ t, billReminders, billPayments, addBillReminder, del
           <button onClick={() => setAdding(true)} style={{ ...card(t), width: "100%", padding: "11px 0", border: `1.5px dashed ${t.border}`, cursor: "pointer", color: t.sub, fontWeight: 700, fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Plus size={16} /> เพิ่มบิลใหม่</button>
         ) : (
           <div style={{ ...card(t), padding: 14 }}>
-            <input autoFocus value={label} onChange={(e) => setLabel(e.target.value)} placeholder="ชื่อบิล เช่น บัตรเครดิตกสิกร" style={{ ...input(t), marginBottom: 10 }} />
+            <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="ชื่อบิล เช่น บัตรเครดิตกสิกร" style={{ ...input(t), marginBottom: 10 }} />
             <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="จำนวนเงินโดยประมาณ" style={{ ...input(t), marginBottom: 10 }} />
             <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
               {[[true, "ซ้ำทุกเดือน"], [false, "ครั้งเดียว"]].map(([v, lb]) => (
@@ -6058,7 +6058,7 @@ function CommunitySearch({ t, userId, onOpenProfile }) {
 
   return (
     <div>
-      <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ค้นหาชื่อคน..." autoFocus style={{ ...input(t), marginBottom: 14 }} />
+      <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ค้นหาชื่อคน..." style={{ ...input(t), marginBottom: 14 }} />
       {loading && <div style={{ textAlign: "center", padding: 20, color: t.faint, fontSize: 13 }}>กำลังค้นหา...</div>}
       {!loading && q.trim() && results.length === 0 && <div style={{ textAlign: "center", padding: 20, color: t.faint, fontSize: 13 }}>ไม่พบใครชื่อนี้</div>}
       {results.map((p) => (
@@ -6286,7 +6286,7 @@ function PostCard({ t, post, userId, onOpenProfile, onChanged, onTag }) {
                         {c.edited_at && <span style={{ fontSize: 10, color: t.faint, marginLeft: 4 }}>· แก้ไขแล้ว</span>}
                         {isEditing ? (
                           <div style={{ marginTop: 4 }}>
-                            <textarea value={editCommentText} onChange={(e) => setEditCommentText(e.target.value)} autoFocus rows={2} style={{ ...input(t), fontSize: 12.5, resize: "vertical", width: "100%" }} />
+                            <textarea value={editCommentText} onChange={(e) => setEditCommentText(e.target.value)} rows={2} style={{ ...input(t), fontSize: 12.5, resize: "vertical", width: "100%" }} />
                             <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
                               <button onClick={() => saveEditComment(c)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 10.5, color: t.accent, fontWeight: 700 }}>บันทึก</button>
                               <button onClick={() => setEditingCommentId(null)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 10.5, color: t.faint, fontWeight: 700 }}>ยกเลิก</button>
@@ -6333,7 +6333,7 @@ function PostCard({ t, post, userId, onOpenProfile, onChanged, onTag }) {
                 <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>แก้ไขโพสต์</div>
                 <button onClick={saveEdit} style={{ background: "#F2872E", border: "none", color: "#fff", fontSize: 13, fontWeight: 700, padding: "7px 16px", borderRadius: 10, cursor: "pointer" }}>บันทึก</button>
               </div>
-              <textarea value={editText} onChange={(e) => setEditText(e.target.value)} autoFocus style={{ ...input(t), minHeight: 90, resize: "vertical", lineHeight: 1.5 }} />
+              <textarea value={editText} onChange={(e) => setEditText(e.target.value)} style={{ ...input(t), minHeight: 90, resize: "vertical", lineHeight: 1.5 }} />
             </div>
           </div>
         </ModalPortal>
@@ -7033,7 +7033,7 @@ function ComposeModal({ t, userId, onDone, close }) {
             <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>โพสต์ใหม่</div>
             <button onClick={post} disabled={posting || (!text.trim() && images.length === 0)} style={{ background: "#F2872E", border: "none", color: "#fff", fontSize: 13, fontWeight: 700, padding: "7px 16px", borderRadius: 10, cursor: "pointer", opacity: posting || (!text.trim() && images.length === 0) ? 0.5 : 1 }}>{posting ? "กำลังโพสต์..." : "โพสต์"}</button>
           </div>
-          <MentionInput value={text} onChange={setText} mentioned={mentioned} setMentioned={setMentioned} t={t} placeholder="มีอะไรใหม่... (พิมพ์ @ เพื่อแท็กคน)" isTextarea autoFocus style={{ ...input(t), width: "100%", minHeight: 100, resize: "vertical", fontSize: 14, lineHeight: 1.5 }} />
+          <MentionInput value={text} onChange={setText} mentioned={mentioned} setMentioned={setMentioned} t={t} placeholder="มีอะไรใหม่... (พิมพ์ @ เพื่อแท็กคน)" isTextarea style={{ ...input(t), width: "100%", minHeight: 100, resize: "vertical", fontSize: 14, lineHeight: 1.5 }} />
           {images.length > 0 && (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
               {images.map((url, i) => (
@@ -7531,7 +7531,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
                 ))}
                 {editingId === m.id ? (
                   <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                    <input value={editText} onChange={(e) => setEditText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveEdit()} style={{ ...input(t), fontSize: 13 }} autoFocus />
+                    <input value={editText} onChange={(e) => setEditText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveEdit()} style={{ ...input(t), fontSize: 13 }} />
                     <button onClick={saveEdit} style={{ ...ghost, color: t.accent }}><Check size={16} color={t.accent} /></button>
                     <button onClick={() => setEditingId(null)} style={ghost}><X size={16} color={t.faint} /></button>
                   </div>
@@ -8289,7 +8289,7 @@ function CategoryManagerModal({ t, categories, reorderCategoriesForKind, deleteC
           <button onClick={() => setAdding(true)} style={{ ...card(t), width: "100%", padding: "11px 0", border: `1.5px dashed ${t.border}`, cursor: "pointer", color: t.sub, fontWeight: 700, fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Plus size={16} /> เพิ่มหมวดหมู่ใหม่</button>
         ) : (
           <div style={{ ...card(t), padding: 14 }}>
-            <input autoFocus value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder="ชื่อหมวดหมู่" style={{ ...input(t), marginBottom: 10 }} />
+            <input value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder="ชื่อหมวดหมู่" style={{ ...input(t), marginBottom: 10 }} />
             <div style={{ fontSize: 11, fontWeight: 700, color: t.sub, marginBottom: 6 }}>เลือกไอคอน</div>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
               {ICON_KEYS.map((k) => { const Ic = ICONS[k]; const on = newIcon === k; return (
@@ -11751,7 +11751,7 @@ function SearchOverlay({ t, notes, goals, tx, categories, setPage, close }) {
   return (<div style={{ ...overlay, alignItems: "flex-start" }} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "0 0 24px 24px", padding: 18, maxHeight: "80vh", overflowY: "auto" }}>
     <div style={{ display: "flex", alignItems: "center", gap: 10, background: t.inputBg, border: `1px solid ${t.border}`, borderRadius: 14, padding: "10px 14px" }}>
       <Search size={18} color={t.sub} />
-      <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="ค้นหาโน้ต เป้าหมาย รายการเงิน..." style={{ flex: 1, background: "none", border: "none", outline: "none", color: t.text, fontSize: 14 }} />
+      <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ค้นหาโน้ต เป้าหมาย รายการเงิน..." style={{ flex: 1, background: "none", border: "none", outline: "none", color: t.text, fontSize: 14 }} />
       <button onClick={close} style={ghost}><X size={18} color={t.sub} /></button>
     </div>
     {!ql && <div style={{ textAlign: "center", color: t.sub, fontSize: 13, padding: "30px 0" }}>พิมพ์เพื่อค้นหาทุกอย่างในแอป</div>}
