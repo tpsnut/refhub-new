@@ -5960,7 +5960,7 @@ function CommunityOverlay({ t, cardShape, userId, authProfile, session, openThre
 
   return (
     <ModalPortal>
-      <div style={{ position: "fixed", inset: 0, background: t.page, zIndex: 100, display: "flex", flexDirection: "column" }}>
+      <div style={{ position: "fixed", top: 0, left: 0, right: 0, height: "var(--vvh, 100dvh)", background: t.page, zIndex: 100, display: "flex", flexDirection: "column" }}>
         {/* หัวแถบ */}
         <div style={{ display: "flex", alignItems: "center", gap: 12, padding: `16px ${cardShape === "sharp" ? 0 : 10}px 12px`, borderBottom: `1px solid ${t.border}`, flexShrink: 0 }}>
           <button onClick={close} style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 18, width: 36, height: 36, cursor: "pointer", display: "grid", placeItems: "center" }}><ArrowLeft size={18} color={t.text} /></button>
@@ -6866,7 +6866,7 @@ function CommunityProfile({ t, cardShape, userId, profileId, session, onOpenProf
       {editing && <EditCommunityProfile t={t} userId={userId} prof={prof} onDone={() => { setEditing(false); load(); }} close={() => setEditing(false)} />}
       {showBookmarks && (
         <ModalPortal>
-          <div style={{ position: "fixed", inset: 0, background: t.page, zIndex: 110, display: "flex", flexDirection: "column" }}>
+          <div style={{ position: "fixed", top: 0, left: 0, right: 0, height: "var(--vvh, 100dvh)", background: t.page, zIndex: 110, display: "flex", flexDirection: "column" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, padding: `16px ${cardShape === "sharp" ? 0 : 10}px 12px`, borderBottom: `1px solid ${t.border}`, flexShrink: 0 }}>
               <button onClick={() => setShowBookmarks(false)} style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 18, width: 36, height: 36, cursor: "pointer", display: "grid", placeItems: "center" }}><ArrowLeft size={18} color={t.text} /></button>
               <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>🔖 โพสต์ที่บันทึกไว้</div>
@@ -11148,7 +11148,7 @@ function ChatModal({ t, M, mentor, setMentor, authProfile, setAuthProfile, custo
     }
   };
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 100, background: t.page }}>
+    <div style={{ position: "fixed", top: 0, left: 0, right: 0, height: "var(--vvh, 100dvh)", zIndex: 100, background: t.page }}>
       <div style={{ width: "100%", maxWidth: 440, height: "100%", margin: "0 auto", background: t.page, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         <div style={{ padding: 16, display: "flex", alignItems: "center", gap: 12, background: t.hero }}>
           <button onClick={() => setSwitchPick(true)} style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0, background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}>
@@ -11924,6 +11924,9 @@ const input = (t) => ({ flex: 1, background: t.inputBg, border: `1px solid ${t.b
 const primaryBtn = (M) => ({ background: `linear-gradient(135deg,${M.accent2 || M.accent},${M.accent})`, color: M.onAccent, border: "none", borderRadius: 12, fontWeight: 700, fontSize: 13.5, cursor: "pointer" });
 const navBtn = (t) => ({ width: 34, height: 34, borderRadius: 17, border: `1px solid ${t.border}`, background: "none", cursor: "pointer", fontSize: 20, color: t.text, lineHeight: 1 });
 const ghost = { background: "none", border: "none", cursor: "pointer", padding: 4 };
-const overlay = { position: "fixed", inset: 0, background: "rgba(10,14,25,.5)", zIndex: 50, display: "flex", alignItems: "flex-end", justifyContent: "center", backdropFilter: "blur(2px)" };
+// 🐛 เดิมใช้ inset:0 (position:fixed เต็มจอ) แต่ iOS Safari มีบั๊กที่รู้จักกันดี: element position:fixed จะขยับ/กระโดดตอนคีย์บอร์ดเปิด-ปิด
+// เพราะคำนวณตำแหน่งจาก layout viewport (ที่ไม่เปลี่ยนตามคีย์บอร์ด) แทนที่จะเป็นพื้นที่จอที่เห็นจริง (visual viewport ที่ย่อตอนคีย์บอร์ดเปิด)
+// แก้โดยใช้ตัวแปร --vvh (visual viewport height เป็น px) ที่ main.jsx อัปเดตให้แบบเรียลไทม์ (เฉพาะ iOS) แทนการพึ่ง inset:0 ตรงๆ
+const overlay = { position: "fixed", top: 0, left: 0, right: 0, height: "var(--vvh, 100dvh)", background: "rgba(10,14,25,.5)", zIndex: 50, display: "flex", alignItems: "flex-end", justifyContent: "center", backdropFilter: "blur(2px)" };
 // overlay สำหรับ modal ที่เปิดซ้อนบนหน้าชุมชน (หน้าชุมชนใช้ zIndex 100 ถ้าใช้ overlay ปกติจะจมอยู่ข้างหลังมองไม่เห็น)
 const overlayHi = { ...overlay, zIndex: 130 };
