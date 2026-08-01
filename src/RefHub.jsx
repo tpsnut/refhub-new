@@ -1901,9 +1901,11 @@ export default function RefHub() {
                       </div>
                     </button>
                   </div>
-                  <div style={{ display: "flex", alignItems: "stretch" }}>
-                    <button onClick={() => setSearchOpen(true)} style={{ width: 48, background: "none", border: "none", borderLeft: `1px solid ${t.borderStrong}`, cursor: "pointer", display: "grid", placeItems: "center" }}><Search size={19} color={t.text} /></button>
-                    <button onClick={() => setMoreMenuOpen(true)} style={{ width: 48, background: "none", border: "none", borderLeft: `1px solid ${t.borderStrong}`, cursor: "pointer", display: "grid", placeItems: "center" }}><MoreVertical size={19} color={t.text} /></button>
+                  <div style={{ display: "flex", alignItems: "center" }}>
+                    <span style={{ width: 1, height: 22, background: t.borderStrong, flexShrink: 0 }} />
+                    <button onClick={() => setSearchOpen(true)} style={{ width: 48, height: 56, background: "none", border: "none", cursor: "pointer", display: "grid", placeItems: "center" }}><Search size={19} color={t.text} /></button>
+                    <span style={{ width: 1, height: 22, background: t.borderStrong, flexShrink: 0 }} />
+                    <button onClick={() => setMoreMenuOpen(true)} style={{ width: 48, height: 56, background: "none", border: "none", cursor: "pointer", display: "grid", placeItems: "center" }}><MoreVertical size={19} color={t.text} /></button>
                   </div>
                 </>
               ) : (
@@ -1911,12 +1913,14 @@ export default function RefHub() {
                   <button onClick={() => setPage("home")} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", color: t.text, fontWeight: 700, fontSize: 13, padding: "0 14px" }}>
                     <ArrowLeft size={19} color={t.text} /> กลับ
                   </button>
-                  <div style={{ display: "flex", alignItems: "stretch" }}>
-                    <button onClick={() => setSearchOpen(true)} style={{ width: 48, background: "none", border: "none", borderLeft: `1px solid ${t.borderStrong}`, cursor: "pointer", display: "grid", placeItems: "center" }}><Search size={19} color={t.text} /></button>
-                    <div style={{ position: "relative", width: 48, alignSelf: "stretch" }}>
+                  <div style={{ display: "flex", alignItems: "center" }}>
+                    <span style={{ width: 1, height: 22, background: t.borderStrong, flexShrink: 0 }} />
+                    <button onClick={() => setSearchOpen(true)} style={{ width: 48, height: 56, background: "none", border: "none", cursor: "pointer", display: "grid", placeItems: "center" }}><Search size={19} color={t.text} /></button>
+                    <span style={{ width: 1, height: 22, background: t.borderStrong, flexShrink: 0 }} />
+                    <div style={{ position: "relative", width: 48, height: 56 }}>
                       {/* ✨ เอฟเฟคเดียวกับโหมดมน ย้ายมาให้โหมดเหลี่ยมด้วย กันไอคอนเพลงดูขาดๆ ตอนกำลังเล่นอยู่ */}
                       {playing && <div style={{ position: "absolute", inset: 0, animation: "rh-note-glow 1.6s ease-in-out infinite", pointerEvents: "none" }} />}
-                      <button onClick={() => setMusicOpen(true)} style={{ position: "relative", width: "100%", height: "100%", background: "none", border: "none", borderLeft: `1px solid ${t.borderStrong}`, cursor: "pointer", display: "grid", placeItems: "center" }}>
+                      <button onClick={() => setMusicOpen(true)} style={{ position: "relative", width: "100%", height: "100%", background: "none", border: "none", cursor: "pointer", display: "grid", placeItems: "center" }}>
                         <Music size={19} color={playing ? t.accent : t.text} />
                       </button>
                       {playing && (
@@ -3937,6 +3941,7 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
   const todayNet = tx.filter((x) => x.date === todayStr()).reduce((s, x) => s + (x.type === "in" ? x.amount : -x.amount), 0);
   const shp = shapeTokens(cardShape, t); // 🔲 ทรงกรอบการ์ดที่ user เลือก (sharp/soft) ใช้กับ hero/CatCard/การ์ดชุมชนในหน้านี้
   const [editWidgetsOpen, setEditWidgetsOpen] = useState(false); // 🔀 modal ปรับวิดเจ็ตของ layout โฟกัส/โมเสก (เปิดจากปุ่มดินสอในแต่ละ layout)
+  const [pinnedExpanded, setPinnedExpanded] = useState(false); // 📎 การ์ด "สื่อที่ปักหมุดไว้" — พับไว้ก่อน กดลูกศรถึงกางลงมาดู (แทนที่จะโชว์ค้างกินที่หน้าจอตลอด)
 
   // 🏆 คำนวณแต้ม + streak ที่ดีที่สุด จากข้อมูลเป้าหมายทั้งหมด (ไม่ใช่แค่วันนี้)
   const diffPoints = { easy: 1, normal: 2, hard: 3 }; // เก็บไว้เป็น fallback สำหรับเป้าหมายเก่าก่อนเปลี่ยนมาใช้ AI ประเมินคะแนน (g.points)
@@ -4198,7 +4203,11 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
 
       {pinnedMedia.length > 0 && (
         <div style={{ ...card(t), marginTop: 16, padding: 16 }}>
-          <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text, marginBottom: 10 }}>📎 สื่อที่ปักหมุดไว้</div>
+          <button onClick={() => setPinnedExpanded((v) => !v)} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", background: "none", border: "none", cursor: "pointer", padding: 0, marginBottom: pinnedExpanded ? 10 : 0 }}>
+            <span style={{ fontSize: 13.5, fontWeight: 800, color: t.text }}>📎 สื่อที่ปักหมุดไว้ ({pinnedMedia.length})</span>
+            <ChevronDown size={17} color={t.faint} style={{ transform: pinnedExpanded ? "rotate(180deg)" : "none", transition: "transform .18s" }} />
+          </button>
+          {pinnedExpanded && (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {pinnedMedia.map((m) => {
               const meta = PLATFORM_META[m.platform] || PLATFORM_META.other;
@@ -4214,6 +4223,7 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
               );
             })}
           </div>
+          )}
         </div>
       )}
       {viewingPinned && <SocialEmbedModal t={t} item={viewingPinned} close={() => setViewingPinned(null)} />}
@@ -8051,12 +8061,12 @@ const dateLabel = (d) => { const today = todayStr(); const y = new Date(Date.now
 // 📝 ตัว editor แบบ Notion — mount ใหม่ทุกครั้งที่ note เปลี่ยน (ใช้ key จากภายนอกคุมการรีเซ็ต)
 // 📝 ลำดับเครื่องมือ default ของ quick toolbar โน้ต — พี่ปรับลำดับเองได้ผ่านปุ่ม "จัดเรียง" (persist ต่อเครื่องผ่าน localStorage)
 const DEFAULT_NOTE_TOOL_ORDER = [
-  "image", "checklist", "heading2", "bulletList", // 4 ตัวแรก = โชว์เสมอ (แถวหลัก)
-  "addBlock", "attachFile", "importMd", "textColor", // ที่เหลือ = อยู่ใต้ "เพิ่มเติม"
+  "aiWrite", "image", "checklist", "heading2", // 4 ตัวแรก = โชว์เสมอ (แถวหลัก)
+  "bulletList", "addBlock", "attachFile", "importMd", "textColor", // ที่เหลือ = อยู่ใต้ "เพิ่มเติม"
   "heading1", "heading3", "numberedList", "toggleList", "quote", "codeBlock", "divider", "table", "video", "audio",
 ];
 
-function NoteEditor({ content, onChange, theme, userId, t }) {
+function NoteEditor({ content, onChange, theme, userId, session, t }) {
   const editor = useCreateBlockNote({
     initialContent: migrateBody(content),
     uploadFile: async (file) => {
@@ -8081,6 +8091,9 @@ function NoteEditor({ content, onChange, theme, userId, t }) {
   const [showColors, setShowColors] = useState(false);
   const [showMore, setShowMore] = useState(false);
   const [reorderMode, setReorderMode] = useState(false); // 🔀 โหมดจัดเรียงลำดับเครื่องมือ (ขึ้น/ลง)
+  const [showAi, setShowAi] = useState(false); // ✨ ปุ่ม "ให้ AI ช่วยเขียน" — เปิด/ปิดช่องพิมพ์หัวข้อ
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
 
   // 🔀 ลำดับเครื่องมือที่พี่จัดไว้ — เก็บต่อเครื่องผ่าน localStorage เผื่อมีเครื่องมือใหม่เพิ่มมาทีหลัง (อัปเดตแอป) ที่ยังไม่เคยบันทึกไว้ จะต่อท้ายให้ครบอัตโนมัติ ไม่หายไปจากรายการ
   const [toolOrder, setToolOrder] = useState(() => {
@@ -8131,6 +8144,33 @@ function NoteEditor({ content, onChange, theme, userId, t }) {
     }
   };
 
+  // ✨ ให้ AI ช่วยเขียนโน้ตให้ — ใช้ /api/chat ตัวเดิม (persona "none" = ผู้ช่วยทั่วไป ไม่ยึด quota function ใหม่บน Vercel) แล้วแปลง markdown ที่ได้เป็น block ด้วยกลไกเดียวกับตอนนำเข้าไฟล์ .md ด้านบน
+  const generateAiNote = async () => {
+    const topic = aiPrompt.trim();
+    if (!topic || aiLoading) return;
+    setAiLoading(true);
+    try {
+      const r = await fetch("/api/chat", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mentor: "none", userId, callerToken: session?.access_token,
+          messages: [{ who: "u", text: `ช่วยเขียนโน้ตเรื่อง "${topic}" ให้ละเอียดและมีประโยชน์ จัดรูปแบบให้อ่านง่ายสวยงามด้วย markdown (มีหัวข้อ #/##, รายการ bullet, ตัวหนาในจุดสำคัญ) ตอบเฉพาะเนื้อหาโน้ตเป็นภาษาไทยเลย ไม่ต้องทักทาย ไม่ต้องพูดนำ ไม่ต้องสรุปปิดท้ายแบบ "หวังว่าจะเป็นประโยชน์"` }],
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "เรียก AI ไม่สำเร็จ");
+      const blocks = await editor.tryParseMarkdownToBlocks(data.text || "");
+      const cursor = editor.getTextCursorPosition();
+      editor.insertBlocks(blocks, cursor.block, "after");
+      onChange(editor.document);
+      setShowAi(false); setAiPrompt("");
+    } catch (err) {
+      alert("ให้ AI เขียนโน้ตไม่สำเร็จ: " + err.message);
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   const COLOR_SWATCHES = [
     { key: "gray", hex: "#9b9a97" }, { key: "brown", hex: "#64473a" }, { key: "red", hex: "#e03e3e" },
     { key: "orange", hex: "#d9730d" }, { key: "yellow", hex: "#dfab01" }, { key: "green", hex: "#4d6461" },
@@ -8161,6 +8201,7 @@ function NoteEditor({ content, onChange, theme, userId, t }) {
     addBlock: { Icon: Plus, label: "เพิ่มบล็อกเปล่า", onClick: () => insertAtCursor({ type: "paragraph", content: "" }) },
     attachFile: { Icon: Paperclip, label: "แนบไฟล์ทั่วไป", onClick: () => fileInputRef.current?.click() },
     importMd: { Icon: FileText, label: "นำเข้าไฟล์ .md", onClick: () => mdInputRef.current?.click() },
+    aiWrite: { Icon: Sparkles, label: "AI ช่วยเขียน", onClick: () => setShowAi((v) => !v) },
     textColor: { Icon: Palette, label: "เลือกสีข้อความ", onClick: () => setShowColors((v) => !v) },
   };
   const orderedKeys = toolOrder.filter((k) => allTools[k]);
@@ -8233,6 +8274,16 @@ function NoteEditor({ content, onChange, theme, userId, t }) {
           {COLOR_SWATCHES.map((c) => (
             <button key={c.key} onClick={() => applyColor(c.key)} title={c.key} style={{ width: 24, height: 24, borderRadius: 999, background: c.hex, border: "none", cursor: "pointer" }} />
           ))}
+        </div>
+      )}
+      {showAi && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "10px", borderBottom: `1px solid ${t?.border || "#e5e5e5"}` }}>
+          <div style={{ fontSize: 10, color: t?.faint || "#999", display: "flex", alignItems: "center", gap: 4 }}><Sparkles size={11} color={t?.accent || "#333"} /> อยากให้ AI เขียนเรื่องอะไร?</div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <input value={aiPrompt} onChange={(e) => setAiPrompt(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); generateAiNote(); } }} placeholder="เช่น วิธีตั้งเป้าหมายแบบ SMART" disabled={aiLoading}
+              style={{ flex: 1, padding: "9px 11px", borderRadius: 10, border: `1px solid ${t?.border || "#e5e5e5"}`, fontSize: 12.5, background: t?.surface || "#fff", color: t?.text || "#111" }} />
+            <button onClick={generateAiNote} disabled={aiLoading || !aiPrompt.trim()} style={{ padding: "0 16px", borderRadius: 10, border: "none", background: t?.accent || "#333", color: t?.onAccent || "#fff", fontWeight: 700, fontSize: 12, cursor: aiLoading ? "default" : "pointer", opacity: aiLoading || !aiPrompt.trim() ? 0.55 : 1, flexShrink: 0 }}>{aiLoading ? "กำลังเขียน..." : "สร้าง"}</button>
+          </div>
         </div>
       )}
       <input ref={imageInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleImagePick} />
@@ -8412,7 +8463,10 @@ function NotePage({ t, notes, setNotes, isNight, userId, session, authProfile, r
   // ✅ export แบบเลือกโน้ตเองว่าจะเอาอันไหนบ้าง (ไม่ใช่แค่ "อันเดียว" หรือ "ทั้งหมด" เหมือนเดิม)
   const [exportMode, setExportMode] = useState(false);
   const [exportSel, setExportSel] = useState([]);
+  const [exportChoiceOpen, setExportChoiceOpen] = useState(false); // กด "Export .md" ครั้งแรก โผล่ตัวเลือก "ทั้งหมด" / "เลือกเอง" แทนมีปุ่มแยกข้างๆ (ปุ่มเยอะไป)
   const toggleExportSel = (id) => setExportSel((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+  const allSelected = exportSel.length > 0 && exportSel.length === notes.length;
+  const toggleSelectAll = () => setExportSel(allSelected ? [] : notes.map((n) => n.id));
   const exportSelectedMd = () => {
     const picked = notes.filter((n) => exportSel.includes(n.id));
     if (!picked.length) return;
@@ -8458,8 +8512,7 @@ function NotePage({ t, notes, setNotes, isNight, userId, session, authProfile, r
         <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
           {!exportMode ? (
             <>
-              <button onClick={exportAllMd} style={{ ...card(t), flex: 1, padding: "9px 0", border: `1px solid ${t.border}`, cursor: "pointer", color: t.text, fontWeight: 700, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><FileText size={14} color={t.accent} /> Export .md</button>
-              <button onClick={() => setExportMode(true)} style={{ ...card(t), width: 44, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }} title="เลือกโน้ตเพื่อ export"><CheckSquare size={15} color={t.sub} /></button>
+              <button onClick={() => setExportChoiceOpen(true)} style={{ ...card(t), flex: 1, padding: "9px 0", border: `1px solid ${t.border}`, cursor: "pointer", color: t.text, fontWeight: 700, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><FileText size={14} color={t.accent} /> Export .md</button>
               {authProfile?.role === "admin" && (
                 <>
                   <button onClick={syncToNotion} disabled={syncing} style={{ ...card(t), flex: 1, padding: "9px 0", border: `1px solid ${t.border}`, cursor: syncing ? "default" : "pointer", color: t.text, fontWeight: 700, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: syncing ? 0.6 : 1 }}>{syncing ? "กำลัง sync..." : "🔗 Sync Notion"}</button>
@@ -8469,7 +8522,12 @@ function NotePage({ t, notes, setNotes, isNight, userId, session, authProfile, r
             </>
           ) : (
             <div style={{ ...card(t), flex: 1, padding: "9px 12px", border: `1.5px solid ${t.accent}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-              <span style={{ fontSize: 12.5, fontWeight: 700, color: t.text }}>เลือกแล้ว {exportSel.length} โน้ต</span>
+              <button onClick={toggleSelectAll} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                <span style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${allSelected ? t.accent : t.border}`, background: allSelected ? t.accent : "transparent", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                  {allSelected && <Check size={11} color={t.onAccent} />}
+                </span>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: t.text }}>เลือกแล้ว {exportSel.length} โน้ต</span>
+              </button>
               <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                 <button onClick={() => { setExportMode(false); setExportSel([]); }} style={{ background: "none", border: "none", cursor: "pointer", color: t.sub, fontWeight: 700, fontSize: 12 }}>ยกเลิก</button>
                 <button onClick={exportSelectedMd} disabled={!exportSel.length} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), padding: "7px 16px", fontSize: 12, opacity: exportSel.length ? 1 : 0.5, cursor: exportSel.length ? "pointer" : "default" }}>Export</button>
@@ -8478,13 +8536,30 @@ function NotePage({ t, notes, setNotes, isNight, userId, session, authProfile, r
           )}
         </div>
       )}
+      {exportChoiceOpen && (
+        <ModalPortal>
+          <div style={overlay} onClick={() => setExportChoiceOpen(false)}>
+            <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: t.text, marginBottom: 14 }}>Export โน้ตเป็น .md</div>
+              <button onClick={() => { exportAllMd(); setExportChoiceOpen(false); }} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, background: t.inputBg, border: "none", borderRadius: 12, padding: "13px 14px", cursor: "pointer", textAlign: "left", marginBottom: 8 }}>
+                <FileText size={17} color={t.accent} />
+                <div><div style={{ fontSize: 13.5, fontWeight: 700, color: t.text }}>Export ทั้งหมด</div><div style={{ fontSize: 11, color: t.sub }}>รวมทุกโน้ต ({notes.length} อัน) เป็นไฟล์เดียว</div></div>
+              </button>
+              <button onClick={() => { setExportMode(true); setExportChoiceOpen(false); }} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, background: t.inputBg, border: "none", borderRadius: 12, padding: "13px 14px", cursor: "pointer", textAlign: "left" }}>
+                <CheckSquare size={17} color={t.accent} />
+                <div><div style={{ fontSize: 13.5, fontWeight: 700, color: t.text }}>เลือกเอง</div><div style={{ fontSize: 11, color: t.sub }}>ติ๊กเลือกโน้ตที่ต้องการทีละอัน</div></div>
+              </button>
+            </div>
+          </div>
+        </ModalPortal>
+      )}
       {syncMsg && <div style={{ fontSize: 11, color: t.sub, textAlign: "center", marginBottom: 12 }}>{syncMsg}</div>}
       {showNotionSetup && <NotionSetupModal t={t} userId={userId} close={() => setShowNotionSetup(false)} />}
 
       <div style={{ ...card(t), padding: 16 }}>
         <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="หัวข้อ" style={{ ...input(t), marginBottom: 8, fontWeight: 700 }} />
         <div style={{ border: `1px solid ${t.border}`, borderRadius: 12, marginBottom: 8, minHeight: 140, overflow: "hidden" }}>
-          <NoteEditor key={`new-${draftKey}`} content={null} onChange={setBody} theme={editorTheme} userId={userId} t={t} />
+          <NoteEditor key={`new-${draftKey}`} content={null} onChange={setBody} theme={editorTheme} userId={userId} session={session} t={t} />
         </div>
         <input value={tagsInput} onChange={(e) => setTagsInput(e.target.value)} placeholder="แท็ก (คั่นด้วยจุลภาค เช่น งาน, ไอเดีย)" style={{ ...input(t), marginBottom: 12, fontSize: 12.5 }} />
         <button onClick={add} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "11px 0" }}>บันทึกโน้ต</button>
@@ -8512,7 +8587,7 @@ function NotePage({ t, notes, setNotes, isNight, userId, session, authProfile, r
               <>
                 <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={{ ...input(t), marginBottom: 8, fontWeight: 700 }} />
                 <div style={{ border: `1px solid ${t.border}`, borderRadius: 12, marginBottom: 8, minHeight: 140, overflow: "hidden" }}>
-                  <NoteEditor key={`edit-${n.id}`} content={editBody} onChange={setEditBody} theme={editorTheme} userId={userId} t={t} />
+                  <NoteEditor key={`edit-${n.id}`} content={editBody} onChange={setEditBody} theme={editorTheme} userId={userId} session={session} t={t} />
                 </div>
                 <input value={editTags} onChange={(e) => setEditTags(e.target.value)} placeholder="แท็ก (คั่นด้วยจุลภาค)" style={{ ...input(t), marginBottom: 10, fontSize: 12.5 }} />
                 <div style={{ display: "flex", gap: 8 }}>
