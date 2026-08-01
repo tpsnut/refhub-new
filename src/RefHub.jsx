@@ -394,7 +394,7 @@ function startTimerAlarm(onRing, maxRings) {
 const MODE_BASE = {
   day: {
     page: "#F5F5F4", bgTop: "#F5F5F4", bgBot: "#FFFFFF", surface: "#FFFFFF",
-    text: "#1A1A1A", sub: "#6E6E6E", faint: "#A3A3A3", border: "rgba(0,0,0,0.07)",
+    text: "#1A1A1A", sub: "#6E6E6E", faint: "#A3A3A3", border: "rgba(0,0,0,0.07)", borderStrong: "rgba(0,0,0,0.16)",
     inputBg: "#F1F1F0", dock: "#FFFFFF", dockBorder: "rgba(0,0,0,0.05)", star: false,
     cat: { green: "#E7F1E9", amber: "#FBF0D6", coral: "#FBE4DC", violet: "#E9E7F4" },
     catTx: { green: "#2A3B30", amber: "#3A3320", coral: "#5A3327", violet: "#39316A" },
@@ -402,7 +402,7 @@ const MODE_BASE = {
   },
   night: {
     page: "#0D0D0D", bgTop: "#151515", bgBot: "#0D0D0D", surface: "#1C1C1C",
-    text: "#F2F2F2", sub: "#9A9A9A", faint: "#5C5C5C", border: "rgba(255,255,255,0.08)",
+    text: "#F2F2F2", sub: "#9A9A9A", faint: "#5C5C5C", border: "rgba(255,255,255,0.08)", borderStrong: "rgba(255,255,255,0.20)",
     inputBg: "rgba(255,255,255,.06)", dock: "#1C1C1C", dockBorder: "rgba(255,255,255,0.10)", star: true,
     cat: { green: "#16223C", amber: "#1E2438", coral: "#2A1C24", violet: "#201E33" },
     catTx: { green: "#EAF2EC", amber: "#F0E9D6", coral: "#F6E4DC", violet: "#E7E3F6" },
@@ -505,7 +505,7 @@ function palette(mode, themeId, customAccent, catColors) {
   return {
     ...common, page: base.page, bg: `linear-gradient(180deg,${base.bgTop} 0%,${base.bgBot} 100%)`,
     surface: base.surface, hero: `linear-gradient(135deg,${T.accent2} 0%,${T.accent} 100%)`, heroBorder: "transparent",
-    text: base.text, sub: base.sub, faint: base.faint, border: base.border,
+    text: base.text, sub: base.sub, faint: base.faint, border: base.border, borderStrong: base.borderStrong,
     dock: base.dock, dockBorder: base.dockBorder, star: base.star, inputBg: base.inputBg,
     cat: cp.cat, catTx: cp.catTx, catLb: cp.catLb, catIcBg: cp.catIcBg,
   };
@@ -943,6 +943,8 @@ const migrateBody = (body) => {
   if (typeof body === "string" && body) return [{ type: "paragraph", content: body }];
   return [{ type: "paragraph", content: "" }];
 };
+// 🎨 สีข้อความในโน้ต (BlockNote เก็บเป็นชื่อสี ไม่ใช่ hex ตรงๆ) — ใช้ตอน render โน้ตแบบอ่านอย่างเดียว (ตัวเลือกสีจริงอยู่ใน NoteEditor)
+const NOTE_COLOR_HEX = { gray: "#9b9a97", brown: "#64473a", red: "#e03e3e", orange: "#d9730d", yellow: "#dfab01", green: "#4d6461", blue: "#0b6e99", purple: "#6940a5", pink: "#ad1a72" };
 // ดึงข้อความล้วนออกจาก block ทั้งหมด (ใช้ค้นหา/export .md/แสดงตัวอย่าง)
 const blocksToPlainText = (blocks) => {
   if (typeof blocks === "string") return blocks;
@@ -1877,9 +1879,9 @@ export default function RefHub() {
         <div style={{ transform: `scale(${fontScale / 100})`, transformOrigin: "top left", width: `${10000 / fontScale}%` }}>
 
         {/* HEADER */}
-        <div style={{ position: "relative", zIndex: 3, padding: cardShape === "sharp" ? "10px 0 0" : `18px ${cardShape === "sharp" ? 0 : 10}px 0` }}>
+        <div style={{ position: "relative", zIndex: 3, padding: cardShape === "sharp" ? "8px 0 0" : `8px ${cardShape === "sharp" ? 0 : 10}px 0` }}>
           {cardShape === "sharp" ? (
-            <div style={{ display: "flex", alignItems: "stretch", justifyContent: "space-between", borderBottom: `1px solid ${t.border}`, minHeight: 56 }}>
+            <div style={{ display: "flex", alignItems: "stretch", justifyContent: "space-between", borderBottom: `1px solid ${t.borderStrong}`, minHeight: 56 }}>
               {page === "home" ? (
                 <>
                   <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
@@ -1900,8 +1902,8 @@ export default function RefHub() {
                     </button>
                   </div>
                   <div style={{ display: "flex", alignItems: "stretch" }}>
-                    <button onClick={() => setSearchOpen(true)} style={{ width: 48, background: "none", border: "none", borderLeft: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }}><Search size={19} color={t.text} /></button>
-                    <button onClick={() => setMoreMenuOpen(true)} style={{ width: 48, background: "none", border: "none", borderLeft: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }}><MoreVertical size={19} color={t.text} /></button>
+                    <button onClick={() => setSearchOpen(true)} style={{ width: 48, background: "none", border: "none", borderLeft: `1px solid ${t.borderStrong}`, cursor: "pointer", display: "grid", placeItems: "center" }}><Search size={19} color={t.text} /></button>
+                    <button onClick={() => setMoreMenuOpen(true)} style={{ width: 48, background: "none", border: "none", borderLeft: `1px solid ${t.borderStrong}`, cursor: "pointer", display: "grid", placeItems: "center" }}><MoreVertical size={19} color={t.text} /></button>
                   </div>
                 </>
               ) : (
@@ -1910,11 +1912,11 @@ export default function RefHub() {
                     <ArrowLeft size={19} color={t.text} /> กลับ
                   </button>
                   <div style={{ display: "flex", alignItems: "stretch" }}>
-                    <button onClick={() => setSearchOpen(true)} style={{ width: 48, background: "none", border: "none", borderLeft: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }}><Search size={19} color={t.text} /></button>
+                    <button onClick={() => setSearchOpen(true)} style={{ width: 48, background: "none", border: "none", borderLeft: `1px solid ${t.borderStrong}`, cursor: "pointer", display: "grid", placeItems: "center" }}><Search size={19} color={t.text} /></button>
                     <div style={{ position: "relative", width: 48, alignSelf: "stretch" }}>
                       {/* ✨ เอฟเฟคเดียวกับโหมดมน ย้ายมาให้โหมดเหลี่ยมด้วย กันไอคอนเพลงดูขาดๆ ตอนกำลังเล่นอยู่ */}
                       {playing && <div style={{ position: "absolute", inset: 0, animation: "rh-note-glow 1.6s ease-in-out infinite", pointerEvents: "none" }} />}
-                      <button onClick={() => setMusicOpen(true)} style={{ position: "relative", width: "100%", height: "100%", background: "none", border: "none", borderLeft: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }}>
+                      <button onClick={() => setMusicOpen(true)} style={{ position: "relative", width: "100%", height: "100%", background: "none", border: "none", borderLeft: `1px solid ${t.borderStrong}`, cursor: "pointer", display: "grid", placeItems: "center" }}>
                         <Music size={19} color={playing ? t.accent : t.text} />
                       </button>
                       {playing && (
@@ -8330,27 +8332,61 @@ function NotePage({ t, notes, setNotes, isNight, userId, session, authProfile, r
   };
 
   // 📤 Export เป็น Markdown — Notion ลากไฟล์ .md ไป import ตรงๆ ได้เลย (ใช้ได้ทันทีไม่ต้องรอ deploy)
-  // 👁️ render โน้ตแบบอ่านอย่างเดียว (ใช้ตอนกดดูโน้ตเฉยๆ ไม่ใช่โหมดแก้ไข)
+  // 👁️ render โน้ตแบบอ่านอย่างเดียว (ใช้ตอนกดดูโน้ตเฉยๆ ไม่ใช่โหมดแก้ไข) — ต้องโชว์ style ของแต่ละ span (สี/หนา/เอียง/ขีดเส้นใต้/ขีดฆ่า/โค้ด) ไม่ใช่แค่ text ล้วนๆ เหมือนเดิม (บั๊กเดิม: เขียนสีไว้ตอนแก้ไข พอมาดูกลายเป็นตัวดำล้วน)
+  const renderSpans = (content) => {
+    if (typeof content === "string") return content;
+    if (!Array.isArray(content)) return "";
+    return content.map((c, i) => {
+      const txt = c.text || "";
+      if (!txt) return null;
+      const st = c.styles || {};
+      const hasStyle = st.bold || st.italic || st.underline || st.strike || st.code || st.textColor || st.backgroundColor;
+      if (!hasStyle) return txt;
+      const style = {};
+      if (st.bold) style.fontWeight = 800;
+      if (st.italic) style.fontStyle = "italic";
+      if (st.underline && st.strike) style.textDecoration = "underline line-through";
+      else if (st.underline) style.textDecoration = "underline";
+      else if (st.strike) style.textDecoration = "line-through";
+      if (st.code) { style.fontFamily = "monospace"; style.background = t.inputBg; style.padding = "1px 5px"; style.borderRadius = 4; }
+      if (st.textColor) style.color = NOTE_COLOR_HEX[st.textColor] || st.textColor;
+      if (st.backgroundColor) style.background = lightenHex(NOTE_COLOR_HEX[st.backgroundColor] || "#9b9a97", 0.8);
+      return <span key={i} style={style}>{txt}</span>;
+    });
+  };
   const renderBlockView = (b, depth = 0) => {
-    const text = Array.isArray(b.content) ? b.content.map((c) => c.text || "").join("") : (typeof b.content === "string" ? b.content : "");
+    const spans = renderSpans(b.content);
     const kids = (b.children || []).length > 0 && (
       <div style={{ marginLeft: 16 }}>{b.children.map((c, i) => <div key={i}>{renderBlockView(c, depth + 1)}</div>)}</div>
     );
     let inner;
-    if (b.type === "heading") inner = <div style={{ fontSize: 22 - Math.min(Math.max(b.props?.level || 2, 1), 6) * 2, fontWeight: 800, margin: "6px 0" }}>{text}</div>;
-    else if (b.type === "bulletListItem") inner = <div style={{ display: "flex", gap: 8 }}><span>•</span><span>{text}</span></div>;
-    else if (b.type === "numberedListItem") inner = <div style={{ display: "flex", gap: 8 }}><span>·</span><span>{text}</span></div>;
-    else if (b.type === "checkListItem") inner = <div style={{ display: "flex", gap: 8 }}><span>{b.props?.checked ? "☑" : "☐"}</span><span style={{ textDecoration: b.props?.checked ? "line-through" : "none", opacity: b.props?.checked ? 0.6 : 1 }}>{text}</span></div>;
-    else if (b.type === "toggleListItem") inner = <div style={{ fontWeight: 700 }}>▸ {text}</div>;
+    if (b.type === "heading") inner = <div style={{ fontSize: 22 - Math.min(Math.max(b.props?.level || 2, 1), 6) * 2, fontWeight: 800, margin: "6px 0" }}>{spans}</div>;
+    else if (b.type === "bulletListItem") inner = <div style={{ display: "flex", gap: 8 }}><span>•</span><span>{spans}</span></div>;
+    else if (b.type === "numberedListItem") inner = <div style={{ display: "flex", gap: 8 }}><span>·</span><span>{spans}</span></div>;
+    else if (b.type === "checkListItem") inner = <div style={{ display: "flex", gap: 8 }}><span>{b.props?.checked ? "☑" : "☐"}</span><span style={{ textDecoration: b.props?.checked ? "line-through" : "none", opacity: b.props?.checked ? 0.6 : 1 }}>{spans}</span></div>;
+    else if (b.type === "toggleListItem") inner = <div style={{ fontWeight: 700 }}>▸ {spans}</div>;
     else if (b.type === "image") inner = <img src={b.props?.url} alt={b.props?.name || ""} style={{ maxWidth: "100%", borderRadius: 8, display: "block", margin: "4px 0" }} />;
     else if (b.type === "file") inner = <a href={b.props?.url} target="_blank" rel="noreferrer" style={{ color: "inherit", textDecoration: "underline" }}>📎 {b.props?.name || "ไฟล์แนบ"}</a>;
-    else inner = <div>{text}</div>;
+    else inner = <div>{spans}</div>;
     return (<>{inner}{kids}</>);
   };
 
 
+  const spansToMd = (content) => {
+    if (typeof content === "string") return content;
+    if (!Array.isArray(content)) return "";
+    return content.map((c) => {
+      let s = c.text || ""; const st = c.styles || {};
+      if (!s) return "";
+      if (st.code) s = "`" + s + "`";
+      if (st.bold) s = "**" + s + "**";
+      if (st.italic) s = "_" + s + "_";
+      if (st.strike) s = "~~" + s + "~~";
+      return s;
+    }).join("");
+  };
   const blockToMd = (b, depth) => {
-    const text = Array.isArray(b.content) ? b.content.map((c) => c.text || "").join("") : (typeof b.content === "string" ? b.content : "");
+    const text = spansToMd(b.content);
     const indent = "  ".repeat(depth);
     let line;
     if (b.type === "heading") line = `${"#".repeat(Math.min(Math.max(b.props?.level || 2, 1), 6))} ${text}`;
@@ -8373,6 +8409,16 @@ function NotePage({ t, notes, setNotes, isNight, userId, session, authProfile, r
   const downloadText = (filename, text, mime) => { try { const blob = new Blob(["\uFEFF" + text], { type: mime }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); } catch (e) {} };
   const exportAllMd = () => downloadText("refhub-notes.md", notes.map(noteToMd).join("\n---\n\n"), "text/markdown;charset=utf-8;");
   const exportOneMd = (n) => downloadText(`${(n.title || "note").slice(0, 40).replace(/[\\/:*?"<>|]/g, "")}.md`, noteToMd(n), "text/markdown;charset=utf-8;");
+  // ✅ export แบบเลือกโน้ตเองว่าจะเอาอันไหนบ้าง (ไม่ใช่แค่ "อันเดียว" หรือ "ทั้งหมด" เหมือนเดิม)
+  const [exportMode, setExportMode] = useState(false);
+  const [exportSel, setExportSel] = useState([]);
+  const toggleExportSel = (id) => setExportSel((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+  const exportSelectedMd = () => {
+    const picked = notes.filter((n) => exportSel.includes(n.id));
+    if (!picked.length) return;
+    downloadText("refhub-notes-selected.md", picked.map(noteToMd).join("\n---\n\n"), "text/markdown;charset=utf-8;");
+    setExportMode(false); setExportSel([]);
+  };
 
   // 🔗 Sync ขึ้น Notion ของตัวเอง (ต้องตั้งค่า Notion token/database ของตัวเองก่อนที่ปุ่ม ⚙️ ข้างล่างนี้)
   const [syncing, setSyncing] = useState(false);
@@ -8410,12 +8456,25 @@ function NotePage({ t, notes, setNotes, isNight, userId, session, authProfile, r
 
       {notes.length > 0 && (
         <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-          <button onClick={exportAllMd} style={{ ...card(t), flex: 1, padding: "9px 0", border: `1px solid ${t.border}`, cursor: "pointer", color: t.text, fontWeight: 700, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><FileText size={14} color={t.accent} /> Export .md</button>
-          {authProfile?.role === "admin" && (
+          {!exportMode ? (
             <>
-              <button onClick={syncToNotion} disabled={syncing} style={{ ...card(t), flex: 1, padding: "9px 0", border: `1px solid ${t.border}`, cursor: syncing ? "default" : "pointer", color: t.text, fontWeight: 700, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: syncing ? 0.6 : 1 }}>{syncing ? "กำลัง sync..." : "🔗 Sync Notion"}</button>
-              <button onClick={() => setShowNotionSetup(true)} style={{ ...card(t), width: 38, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }} title="ตั้งค่า Notion ของตัวเอง"><KeyRound size={15} color={t.sub} /></button>
+              <button onClick={exportAllMd} style={{ ...card(t), flex: 1, padding: "9px 0", border: `1px solid ${t.border}`, cursor: "pointer", color: t.text, fontWeight: 700, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><FileText size={14} color={t.accent} /> Export .md</button>
+              <button onClick={() => setExportMode(true)} style={{ ...card(t), width: 44, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }} title="เลือกโน้ตเพื่อ export"><CheckSquare size={15} color={t.sub} /></button>
+              {authProfile?.role === "admin" && (
+                <>
+                  <button onClick={syncToNotion} disabled={syncing} style={{ ...card(t), flex: 1, padding: "9px 0", border: `1px solid ${t.border}`, cursor: syncing ? "default" : "pointer", color: t.text, fontWeight: 700, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: syncing ? 0.6 : 1 }}>{syncing ? "กำลัง sync..." : "🔗 Sync Notion"}</button>
+                  <button onClick={() => setShowNotionSetup(true)} style={{ ...card(t), width: 38, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }} title="ตั้งค่า Notion ของตัวเอง"><KeyRound size={15} color={t.sub} /></button>
+                </>
+              )}
             </>
+          ) : (
+            <div style={{ ...card(t), flex: 1, padding: "9px 12px", border: `1.5px solid ${t.accent}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: t.text }}>เลือกแล้ว {exportSel.length} โน้ต</span>
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <button onClick={() => { setExportMode(false); setExportSel([]); }} style={{ background: "none", border: "none", cursor: "pointer", color: t.sub, fontWeight: 700, fontSize: 12 }}>ยกเลิก</button>
+                <button onClick={exportSelectedMd} disabled={!exportSel.length} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), padding: "7px 16px", fontSize: 12, opacity: exportSel.length ? 1 : 0.5, cursor: exportSel.length ? "pointer" : "default" }}>Export</button>
+              </div>
+            </div>
           )}
         </div>
       )}
@@ -8463,17 +8522,24 @@ function NotePage({ t, notes, setNotes, isNight, userId, session, authProfile, r
               </>
             ) : (
               <>
-                <div onClick={() => setViewingId(viewingId === n.id ? null : n.id)} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, cursor: "pointer" }}>
+                <div onClick={() => (exportMode ? toggleExportSel(n.id) : setViewingId(viewingId === n.id ? null : n.id))} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, cursor: "pointer" }}>
                   <div style={{ fontSize: 14.5, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 6 }}>
+                    {exportMode && (
+                      <span style={{ width: 18, height: 18, borderRadius: 5, border: `1.5px solid ${exportSel.includes(n.id) ? t.accent : t.border}`, background: exportSel.includes(n.id) ? t.accent : "transparent", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                        {exportSel.includes(n.id) && <Check size={12} color={t.onAccent} />}
+                      </span>
+                    )}
                     {n.pinned && <Pin size={13} color={t.accent} fill={t.accent} />}{n.title || "(ไม่มีหัวข้อ)"}
                   </div>
                   <div style={{ display: "flex", gap: 2, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+                    {!exportMode && (<>
                     {n.notionId && <span title="sync ขึ้น Notion แล้ว" style={{ display: "grid", placeItems: "center", padding: 4 }}><Check size={14} color="#2E9E6B" /></span>}
                     <button onClick={() => exportOneMd(n)} style={ghost} title="Export เป็น Markdown"><Download size={15} color={t.faint} /></button>
                     <button onClick={() => togglePin(n.id)} style={ghost} title={n.pinned ? "ปักหมุดแล้ว" : "ปักหมุด"}><Pin size={15} color={n.pinned ? t.accent : t.faint} fill={n.pinned ? t.accent : "none"} /></button>
                     <button onClick={() => openReminder("note", n.id, n.title || "โน้ตไม่มีหัวข้อ")} style={ghost} title="ตั้งเตือนโน้ตนี้"><Bell size={15} color={reminders.some((r) => r.targetType === "note" && r.targetId === n.id) ? t.accent : t.faint} fill={reminders.some((r) => r.targetType === "note" && r.targetId === n.id) ? t.accent : "none"} /></button>
                     <button onClick={() => startEdit(n)} style={ghost} title="แก้ไข"><Pencil size={15} color={t.faint} /></button>
                     <button onClick={() => askConfirm(`ลบโน้ต "${n.title || "(ไม่มีหัวข้อ)"}" เลยไหม?`, () => { setNotes((x) => x.filter((y) => y.id !== n.id)); if (userId) { supabase.from("notes").delete().eq("id", n.id).then(() => {}, () => {}); logAudit(userId, "notes", "delete", "ลบโน้ต"); } })} style={ghost} title="ลบ"><Trash2 size={15} color={t.faint} /></button>
+                    </>)}
                   </div>
                 </div>
                 {viewingId === n.id ? (
@@ -10075,7 +10141,7 @@ function Dock({ t, cardShape, page, setPage, onQuickAdd }) {
   if (sharp) {
     // 🔲 ทรงเหลี่ยมคม — แต่ละปุ่มเป็น tile แยกกันจริง คั่นด้วยช่องไฟ 1.5px โชว์พื้นหลังลอดออกมา + เส้นคั่น 1px ด้านบนจากเนื้อหา
     return (<div style={{ position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 20 }}>
-      <div style={{ borderTop: `1.5px solid ${t.dockBorder}`, background: t.page, padding: 1.5, display: "flex", gap: 1.5, boxShadow: "0 -6px 14px rgba(20,25,45,.06)" }}>
+      <div style={{ borderTop: `1.5px solid ${t.borderStrong}`, background: t.page, padding: 1.5, display: "flex", gap: 1.5, boxShadow: "0 -6px 14px rgba(20,25,45,.06)" }}>
         {items.map((it) => {
           if (it.k === "_") return (<button key="c" onClick={onQuickAdd} style={{ flex: 1.15, border: "none", cursor: "pointer", background: t.accent, color: t.onAccent, display: "grid", placeItems: "center", padding: "9px 2px" }}><Plus size={28} /></button>);
           const A = it.ic; const on = page === it.k;
