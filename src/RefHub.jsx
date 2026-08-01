@@ -10337,7 +10337,7 @@ function LangPage({ t, lang, userId, session }) {
   const [guideOpen, setGuideOpen] = useState(false);
   useEffect(() => {
     try {
-      if (!localStorage.getItem("refhub:vocabGuideSeen")) { setGuideOpen(true); localStorage.setItem("refhub:vocabGuideSeen", "1"); }
+      if (!localStorage.getItem("refhub:vocabGuideSeenV2")) { setGuideOpen(true); localStorage.setItem("refhub:vocabGuideSeenV2", "1"); }
     } catch (e) {}
   }, []);
   const [history, setHistory] = useState([]);
