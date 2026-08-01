@@ -9913,6 +9913,218 @@ function VocabQuizModal({ t, mode, category, level, pool, allItems, userId, clos
   );
 }
 
+// 🎧 ฟัง แล้วพิมพ์สิ่งที่ได้ยิน — ใช้ Azure Neural TTS ตัวเดียวกับหน้าความรู้ (fallback เสียงเครื่องอัตโนมัติถ้าใช้ไม่ได้)
+function VocabListeningModal({ t, mode, category, level, pool, userId, session, close, onFinished }) {
+  const shuffle = (arr) => { const a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const [questions] = useState(() => shuffle(pool).slice(0, Math.min(8, pool.length)));
+  const [idx, setIdx] = useState(0);
+  const [answer, setAnswer] = useState("");
+  const [checked, setChecked] = useState(false);
+  const [correct, setCorrect] = useState(false);
+  const [score, setScore] = useState(0);
+  const [done, setDone] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  const audioRef = useRef(null);
+  const q = questions[idx];
+
+  const normalize = (s) => (s || "").toLowerCase().replace(/[.,!?;:'"]/g, "").replace(/\s+/g, " ").trim();
+
+  const play = async () => {
+    if (!q) return;
+    setSpeaking(true);
+    window.speechSynthesis?.cancel();
+    audioRef.current?.pause();
+    try {
+      const r = await fetch("/api/knowledge-generate", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "tts", text: q.word, voice: "en-US-JennyNeural", callerToken: session?.access_token }),
+      });
+      if (!r.ok) throw new Error("azure_tts_failed");
+      const blob = await r.blob();
+      const audio = new Audio(URL.createObjectURL(blob));
+      audioRef.current = audio;
+      audio.onended = () => setSpeaking(false);
+      audio.onerror = () => fallbackSpeak();
+      await audio.play();
+    } catch (e) { fallbackSpeak(); }
+  };
+  const fallbackSpeak = () => {
+    if (!window.speechSynthesis) { setSpeaking(false); return; }
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(q.word);
+    u.lang = "en-US";
+    u.onend = () => setSpeaking(false);
+    u.onerror = () => setSpeaking(false);
+    window.speechSynthesis.speak(u);
+  };
+
+  useEffect(() => { if (q) play(); return () => { window.speechSynthesis?.cancel(); audioRef.current?.pause(); }; }, [idx]);
+
+  const check = () => {
+    if (checked) return;
+    const ok = normalize(answer) === normalize(q.word);
+    setCorrect(ok);
+    setChecked(true);
+    if (ok) setScore((s) => s + 1);
+  };
+  const next = async () => {
+    if (idx + 1 < questions.length) { setIdx((i) => i + 1); setAnswer(""); setChecked(false); }
+    else {
+      setDone(true);
+      if (userId) {
+        setSaving(true);
+        await supabase.from("vocab_quiz_history").insert({ id: uid(), user_id: userId, mode, category, level, skill: "listening", score, total: questions.length, created_at: new Date().toISOString() }).then(() => {}, () => {});
+        setSaving(false);
+      }
+      onFinished?.();
+    }
+  };
+
+  if (!questions.length) {
+    return (
+      <ModalPortal>
+        <div style={overlayHi} onClick={close}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
+            <div style={{ fontSize: 14, color: t.sub, textAlign: "center", marginBottom: 14 }}>หมวดนี้ยังไม่มีเนื้อหาให้ฝึกฟังเลย ลองให้ AI เจนให้ก่อนได้เลย</div>
+            <button onClick={close} style={{ ...card(t), width: "100%", padding: "11px 0", border: `1px solid ${t.border}`, cursor: "pointer", color: t.text, fontWeight: 700 }}>ปิด</button>
+          </div>
+        </div>
+      </ModalPortal>
+    );
+  }
+
+  return (
+    <ModalPortal>
+      <div style={overlayHi} onClick={done ? close : undefined}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "88vh", overflowY: "auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>🎧 ฟังแล้วพิมพ์ตาม</div>
+            <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+          </div>
+
+          {!done ? (<>
+            <div style={{ fontSize: 11.5, color: t.faint, marginBottom: 10 }}>ข้อ {idx + 1}/{questions.length}</div>
+            <div style={{ ...card(t), padding: 24, textAlign: "center", marginBottom: 14 }}>
+              <button onClick={play} disabled={speaking} style={{ width: 64, height: 64, borderRadius: 32, border: "none", background: t.accent, color: t.onAccent, cursor: "pointer", display: "grid", placeItems: "center", margin: "0 auto" }}>
+                <Volume2 size={28} />
+              </button>
+              <div style={{ fontSize: 11, color: t.faint, marginTop: 10 }}>{speaking ? "กำลังเล่น..." : "แตะเพื่อฟังอีกครั้ง"}</div>
+            </div>
+            <input value={answer} onChange={(e) => setAnswer(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") check(); }} disabled={checked} placeholder="พิมพ์สิ่งที่ได้ยิน..." style={{ ...input(t), marginBottom: 12, textAlign: "center", fontSize: 15 }} autoCapitalize="none" />
+            {checked && (
+              <div style={{ ...card(t), padding: 12, marginBottom: 14, border: `1px solid ${correct ? "#2E9E6B" : "#D9534F"}`, textAlign: "center" }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: correct ? "#2E9E6B" : "#D9534F", marginBottom: 4 }}>{correct ? "✓ ถูกต้อง!" : "✗ ยังไม่ตรง"}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{q.word}</div>
+                {q.meaning && <div style={{ fontSize: 11.5, color: t.sub, marginTop: 2 }}>{q.meaning}</div>}
+              </div>
+            )}
+            <button onClick={checked ? next : check} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "12px 0" }}>{checked ? (idx + 1 < questions.length ? "ข้อต่อไป →" : "ดูผลคะแนน") : "เช็คคำตอบ"}</button>
+          </>) : (
+            <div style={{ textAlign: "center", padding: "10px 0" }}>
+              <div style={{ fontSize: 15, color: t.sub, marginBottom: 6 }}>คะแนนของคุณ</div>
+              <div style={{ fontSize: 40, fontWeight: 800, color: t.accent, marginBottom: 4 }}>{score}/{questions.length}</div>
+              <button onClick={close} disabled={saving} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "12px 0" }}>{saving ? "กำลังบันทึก..." : "เสร็จแล้ว"}</button>
+            </div>
+          )}
+        </div>
+      </div>
+    </ModalPortal>
+  );
+}
+
+// ✍️ โจทย์เขียน — AI ตั้งโจทย์ตามหมวด+ระดับ แล้วช่วยตรวจให้คะแนน+แก้ให้
+function VocabWritingModal({ t, category, level, userId, session, close }) {
+  const topicLabel = VOCAB_TOPICS.find((c) => c.id === category)?.label || category;
+  const [prompt, setPrompt] = useState(null);
+  const [loadingPrompt, setLoadingPrompt] = useState(true);
+  const [answer, setAnswer] = useState("");
+  const [feedback, setFeedback] = useState(null); // {score, corrected, comment}
+  const [checking, setChecking] = useState(false);
+  const [err, setErr] = useState("");
+
+  const getPrompt = async () => {
+    setLoadingPrompt(true); setErr(""); setFeedback(null); setAnswer("");
+    try {
+      const r = await fetch("/api/chat", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mentor: "none", userId, callerToken: session?.access_token,
+          messages: [{ who: "u", text: `ตั้งโจทย์เขียนภาษาอังกฤษสั้นๆ 1 โจทย์ ระดับ ${level} หมวด "${topicLabel}" ให้ผู้เรียนเขียนตอบเป็นภาษาอังกฤษ 2-4 ประโยค ตอบเป็นภาษาไทยอธิบายโจทย์บรรทัดเดียว ห้ามมีข้อความอื่น` }],
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "เรียก AI ไม่สำเร็จ");
+      setPrompt((data.text || "").trim());
+    } catch (e) {
+      setErr("ตั้งโจทย์ไม่สำเร็จ: " + e.message);
+    } finally { setLoadingPrompt(false); }
+  };
+  useEffect(() => { getPrompt(); }, [category, level]);
+
+  const submit = async () => {
+    if (!answer.trim() || checking) return;
+    setChecking(true); setErr("");
+    try {
+      const r = await fetch("/api/chat", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mentor: "none", userId, callerToken: session?.access_token,
+          messages: [{ who: "u", text: `โจทย์เขียนคือ: "${prompt}"\nคำตอบของผู้เรียนคือ: "${answer.trim()}"\nช่วยตรวจให้หน่อย ตอบตามรูปแบบนี้เป๊ะๆ 3 บรรทัด ห้ามมีข้อความอื่น:\nคะแนน: (ตัวเลข 0-10)\nแก้ไข: (เวอร์ชันที่ถูกต้องขึ้น เป็นภาษาอังกฤษ)\nคอมเมนต์: (ติชมสั้นๆ เป็นภาษาไทย ให้กำลังใจด้วย)` }],
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "เรียก AI ไม่สำเร็จ");
+      const text = data.text || "";
+      const sc = /คะแนน[:：]\s*(\d+)/.exec(text);
+      const co = /แก้ไข[:：]\s*(.+)/.exec(text);
+      const cm = /คอมเมนต์[:：]\s*(.+)/.exec(text);
+      const fb = { score: sc ? sc[1] : "-", corrected: co ? co[1].trim() : "", comment: cm ? cm[1].trim() : text.trim() };
+      setFeedback(fb);
+      if (userId) supabase.from("vocab_writing_history").insert({ id: uid(), user_id: userId, category, level, prompt, answer: answer.trim(), score: fb.score, feedback: fb.comment, created_at: new Date().toISOString() }).then(() => {}, () => {});
+    } catch (e) {
+      setErr("ตรวจไม่สำเร็จ: " + e.message);
+    } finally { setChecking(false); }
+  };
+
+  return (
+    <ModalPortal>
+      <div style={overlayHi} onClick={close}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "88vh", overflowY: "auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>✍️ โจทย์เขียน</div>
+            <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+          </div>
+
+          {loadingPrompt ? <Empty t={t} text="กำลังตั้งโจทย์..." /> : (<>
+            <div style={{ ...card(t), padding: 14, marginBottom: 14, background: `${t.accent}10`, border: `1px solid ${t.accent}33` }}>
+              <div style={{ fontSize: 13, color: t.text, lineHeight: 1.6 }}>{prompt}</div>
+            </div>
+            <textarea value={answer} onChange={(e) => setAnswer(e.target.value)} disabled={!!feedback} placeholder="เขียนคำตอบเป็นภาษาอังกฤษที่นี่..." rows={4} style={{ ...input(t), marginBottom: 12, resize: "vertical", fontFamily: "inherit" }} />
+            {err && <div style={{ fontSize: 11.5, color: "#D9534F", marginBottom: 10 }}>{err}</div>}
+
+            {feedback && (
+              <div style={{ ...card(t), padding: 14, marginBottom: 14 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: t.accent }}>{feedback.score}/10</div>
+                </div>
+                {feedback.corrected && (<><div style={{ fontSize: 10.5, fontWeight: 700, color: t.faint, marginBottom: 2 }}>เวอร์ชันแก้ไข</div><div style={{ fontSize: 13, color: t.text, marginBottom: 8 }}>{feedback.corrected}</div></>)}
+                <div style={{ fontSize: 12.5, color: t.sub, lineHeight: 1.6 }}>{feedback.comment}</div>
+              </div>
+            )}
+
+            {!feedback ? (
+              <button onClick={submit} disabled={!answer.trim() || checking} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "12px 0", opacity: !answer.trim() || checking ? 0.6 : 1 }}>{checking ? "กำลังตรวจ..." : "ส่งให้ตรวจ"}</button>
+            ) : (
+              <button onClick={getPrompt} style={{ ...card(t), width: "100%", padding: "11px 0", border: `1px solid ${t.border}`, cursor: "pointer", color: t.text, fontWeight: 700 }}>โจทย์ต่อไป →</button>
+            )}
+          </>)}
+        </div>
+      </div>
+    </ModalPortal>
+  );
+}
+
 function LangPage({ t, lang, userId, session }) {
   const [askConfirm, ConfirmUI] = useConfirm(t);
   const [contentType, setContentType] = useState("word"); // "word" | "sentence" — สลับระหว่างคลังคำศัพท์กับคลังประโยค (คนละตารางกัน)
@@ -9923,6 +10135,8 @@ function LangPage({ t, lang, userId, session }) {
   const [addOpen, setAddOpen] = useState(false);
   const [genOpen, setGenOpen] = useState(false);
   const [quizOpen, setQuizOpen] = useState(false);
+  const [listenOpen, setListenOpen] = useState(false);
+  const [writeOpen, setWriteOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [topic, setTopic] = useState("general"); // 📚 หมวดที่กำลังโฟกัสอยู่ — คุมทั้งโหมดทบทวนและจัดการ เหมือนหมวดข่าว
   const [level, setLevel] = useState("all"); // ระดับ CEFR ที่กรอง — "all" = ทุกระดับ
@@ -10005,7 +10219,7 @@ function LangPage({ t, lang, userId, session }) {
     </div>
 
     <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 8 }}>
-      {[["review", "🔁 ทบทวน"], ["quiz", "🧪 ทดสอบ"], ["manage", "📋 จัดการ"], ["history", "📊 ประวัติ"]].map(([id, lb]) => (
+      {[["review", "🔁 ทบทวน"], ["quiz", "🧪 ทดสอบ"], ["listen", "🎧 ฟัง"], ["write", "✍️ เขียน"], ["manage", "📋 จัดการ"], ["history", "📊 ประวัติ"]].map(([id, lb]) => (
         <button key={id} onClick={() => setView(id)} style={{ flexShrink: 0, padding: "7px 14px", borderRadius: 12, cursor: "pointer", fontWeight: 700, fontSize: 12, border: `1.5px solid ${view === id ? t.accent : t.border}`, background: view === id ? t.accent : "transparent", color: view === id ? t.onAccent : t.sub }}>{lb}</button>
       ))}
     </div>
@@ -10067,6 +10281,24 @@ function LangPage({ t, lang, userId, session }) {
       </div>
     )}
 
+    {!loading && view === "listen" && (
+      <div style={{ ...card(t), padding: 28, textAlign: "center" }}>
+        <div style={{ fontSize: 32, marginBottom: 10 }}>🎧</div>
+        <div style={{ fontSize: 14.5, fontWeight: 800, color: t.text, marginBottom: 4 }}>ฝึกฟังหมวด {currentTopicMeta?.label}</div>
+        <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>ฟังเสียงแล้วพิมพ์ตามที่ได้ยิน เช็คคำตอบทันที เก็บคะแนนลงประวัติ</div>
+        <button onClick={() => setListenOpen(true)} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "13px 0", fontSize: 14 }}>เริ่มฝึกฟัง</button>
+      </div>
+    )}
+
+    {!loading && view === "write" && (
+      <div style={{ ...card(t), padding: 28, textAlign: "center" }}>
+        <div style={{ fontSize: 32, marginBottom: 10 }}>✍️</div>
+        <div style={{ fontSize: 14.5, fontWeight: 800, color: t.text, marginBottom: 4 }}>ฝึกเขียนหมวด {currentTopicMeta?.label}</div>
+        <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>AI ตั้งโจทย์ให้เขียนภาษาอังกฤษสั้นๆ แล้วช่วยตรวจให้คะแนน+แก้ให้</div>
+        <button onClick={() => setWriteOpen(true)} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "13px 0", fontSize: 14 }}>เริ่มฝึกเขียน</button>
+      </div>
+    )}
+
     {!loading && view === "manage" && (<>
       <button onClick={() => { setEditing(null); setAddOpen(true); }} style={{ ...card(t), width: "100%", padding: "10px 0", marginBottom: 12, border: `1px solid ${t.border}`, color: t.sub, fontWeight: 700, fontSize: 12.5, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Plus size={14} /> เพิ่ม{noun}เองทีละอัน</button>
       {topicWords.length === 0 && <Empty t={t} text={`หมวดนี้ยังไม่มี${noun} — ลองกด ✨ AI เจนให้ ด้านบนดูก่อนได้เลย`} />}
@@ -10099,7 +10331,7 @@ function LangPage({ t, lang, userId, session }) {
           {history.map((h) => (
             <div key={h.id} style={{ ...card(t), padding: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{VOCAB_TOPICS.find((c) => c.id === h.category)?.label || h.category} <span style={{ fontSize: 10.5, color: t.faint }}>· {h.mode === "word" ? "คำศัพท์" : "ประโยค"} · {h.level}</span></div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{h.skill === "listening" ? "🎧" : "🧪"} {VOCAB_TOPICS.find((c) => c.id === h.category)?.label || h.category} <span style={{ fontSize: 10.5, color: t.faint }}>· {h.mode === "word" ? "คำศัพท์" : "ประโยค"} · {h.level}</span></div>
                 <div style={{ fontSize: 10.5, color: t.faint, marginTop: 2 }}>{new Date(h.created_at).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" })}</div>
               </div>
               <div style={{ fontSize: 16, fontWeight: 800, color: h.score === h.total ? "#2E9E6B" : t.accent }}>{h.score}/{h.total}</div>
@@ -10131,6 +10363,8 @@ function LangPage({ t, lang, userId, session }) {
     {addOpen && <VocabWordModal t={t} table={table} mode={contentType} initial={editing || { category: topic }} userId={userId} session={session} close={() => setAddOpen(false)} onSaved={onSaved} />}
     {genOpen && <VocabBatchGenModal t={t} table={table} mode={contentType} userId={userId} session={session} category={topic} level={level === "all" ? "A1" : level} close={() => setGenOpen(false)} onSaved={onSavedBatch} />}
     {quizOpen && <VocabQuizModal t={t} mode={contentType} category={topic} level={level === "all" ? "mixed" : level} pool={topicWords} allItems={words} userId={userId} close={() => setQuizOpen(false)} onFinished={loadHistory} />}
+    {listenOpen && <VocabListeningModal t={t} mode={contentType} category={topic} level={level === "all" ? "mixed" : level} pool={topicWords} userId={userId} session={session} close={() => setListenOpen(false)} onFinished={loadHistory} />}
+    {writeOpen && <VocabWritingModal t={t} category={topic} level={level === "all" ? "A1" : level} userId={userId} session={session} close={() => setWriteOpen(false)} />}
     {ConfirmUI}
   </>);
 }
