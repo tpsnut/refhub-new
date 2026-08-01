@@ -6,7 +6,7 @@ import {
   Sparkles, Clock, Search, Volume2, VolumeX, Pencil, Download, ArrowLeft, Users, Camera, Phone, Mic, MicOff, PhoneOff, RefreshCw,
   Utensils, Car, ShoppingBag, Receipt, Gamepad2, HeartPulse, Briefcase, Gift, Coffee, Music,
   Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi, MessageCircle, MoreVertical, KeyRound, MapPin, Copy, LockKeyhole, LogOut, LayoutGrid, Maximize2, Volume1, Settings, Bookmark, Share2, Repeat2, Heart, User, Pin,
-  Heading1, Heading3, ListOrdered, ListTree, Quote, Code2, Minus, Table2, Video, Smile, RotateCcw, GripVertical, ChevronLeft, ChevronUp, ChevronDown, Repeat, Repeat1, Shuffle, Timer, Lock
+  Heading1, Heading3, ListOrdered, ListTree, Quote, Code2, Minus, Table2, Video, Smile, RotateCcw, GripVertical, ChevronLeft, ChevronUp, ChevronDown, Repeat, Repeat1, Shuffle, Timer, Lock, HelpCircle, Info
 } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, ResponsiveContainer, Tooltip } from "recharts";
 // 🔀 dnd-kit — ใช้ทำ "ลากวางจัดเรียงจริง" (drag & drop) ทั่วแอป แทนปุ่มขึ้น/ลง — รองรับ touch บนมือถือมาให้เลย
@@ -967,7 +967,7 @@ const STRINGS = {
     dock_home: "หน้าแรก", dock_ideas: "ไอเดีย", dock_trade: "ลงทุน", dock_news: "ข่าว", dock_lang: "ภาษา", dock_note: "โน้ต",
     menu_title: "เมนู", menu_sub: "พาไปหน้า/ฟีเจอร์ใหญ่ๆ ที่แยกจากหน้าปัจจุบัน",
     menu_admin: "หน้า Admin", menu_media: "สื่อ", menu_chat: "แชท", menu_locations: "ตำแหน่งล่าสุด",
-    menu_account: "ตั้งค่าบัญชี", menu_activity: "ประวัติการใช้งานของฉัน", menu_lang: "เปลี่ยนภาษา", menu_security: "ความปลอดภัย/ความเป็นส่วนตัว",
+    menu_account: "ตั้งค่าบัญชี", menu_activity: "ประวัติการใช้งานของฉัน", menu_lang: "เปลี่ยนภาษา", menu_security: "ความปลอดภัย/ความเป็นส่วนตัว", menu_help: "ช่วยเหลือ/FAQ", menu_about: "เกี่ยวกับแอป",
     menu_signout: "ออกจากระบบ",
     quick_theme: "ธีมสีแอป", quick_font: "ขนาดตัวอักษร", quick_daynight: "โหมดกลางวัน-กลางคืน", quick_shape: "ทรงกรอบการ์ด", quick_layout: "โครงหน้า Home",
     ph_finance_title: "การเงิน", ph_finance_sub: "รายรับ–รายจ่าย · ใช้ได้จริงทุกวัน",
@@ -992,7 +992,7 @@ const STRINGS = {
     dock_home: "Home", dock_ideas: "Ideas", dock_trade: "Trade", dock_news: "News", dock_lang: "Lang", dock_note: "Note",
     menu_title: "Menu", menu_sub: "Jump to other pages/major features",
     menu_admin: "Admin Page", menu_media: "Media", menu_chat: "Chat", menu_locations: "Recent Location",
-    menu_account: "Account Settings", menu_activity: "My Activity History", menu_lang: "Change Language", menu_security: "Security & Privacy",
+    menu_account: "Account Settings", menu_activity: "My Activity History", menu_lang: "Change Language", menu_security: "Security & Privacy", menu_help: "Help & FAQ", menu_about: "About the App",
     menu_signout: "Sign Out",
     quick_theme: "App Theme", quick_font: "Font Size", quick_daynight: "Day / Night Mode", quick_shape: "Card Shape", quick_layout: "Home Layout",
     ph_finance_title: "Finance", ph_finance_sub: "Income–expenses · for real everyday use",
@@ -1069,7 +1069,11 @@ export default function RefHub() {
   const [page, setPage] = useState(() => { try { return sessionStorage.getItem("refhub:page") || "home"; } catch (e) { return "home"; } });
   const contentScrollRef = useRef(null); // 📜 container หลักที่ scroll ของทุกหน้า — ใช้เด้งกลับขึ้นบนตอนเปลี่ยนหน้า + ปุ่มเลื่อนขึ้น/ลง
   const [atTop, setAtTop] = useState(true); // true = อยู่บนสุด (ปุ่มลอยจะเป็นลูกศรลง), false = เลื่อนลงมาแล้ว (ปุ่มลอยเป็นลูกศรขึ้น)
-  useEffect(() => { contentScrollRef.current?.scrollTo({ top: 0, behavior: "auto" }); setAtTop(true); }, [page]); // 🐛 เปลี่ยนหน้าแล้วเนื้อหาค้างตำแหน่ง scroll เดิมของหน้าก่อน ทำให้บางทีเปิดหน้าใหม่มาแล้วเจอเนื้อหาตรงกลาง/ท้ายหน้าทันที ไม่เห็นหัวข้อ
+  useEffect(() => {
+    const el = contentScrollRef.current;
+    if (el) el.scrollTop = 0; // ตั้งตรงๆ แทน scrollTo({...}) เพราะบาง Android WebView ไม่รองรับฟอร์ม object ของ scrollTo ดีนัก (เงียบๆไม่ error แต่ก็ไม่เลื่อน)
+    setAtTop(true);
+  }, [page]); // 🐛 เปลี่ยนหน้าแล้วเนื้อหาค้างตำแหน่ง scroll เดิมของหน้าก่อน ทำให้บางทีเปิดหน้าใหม่มาแล้วเจอเนื้อหาตรงกลาง/ท้ายหน้าทันที ไม่เห็นหัวข้อ
   const [notes, setNotes] = useState([]);
   const [goals, setGoals] = useState([]);
   const [goalTemplates, setGoalTemplates] = useState([]); // แม่แบบเป้าหมายประจำสัปดาห์ [{id, text, daysOfWeek, difficulty, active}]
@@ -1099,6 +1103,8 @@ export default function RefHub() {
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   const [langModalOpen, setLangModalOpen] = useState(false);
   const [securityOpen, setSecurityOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const [myActivityOpen, setMyActivityOpen] = useState(false);
   const [chatUnread, setChatUnread] = useState(0); // จำนวนข้อความแชทที่ยังไม่ได้อ่าน (คำนวณจริงในหน้าแชท)
   const [msgToast, setMsgToast] = useState(null); // ป็อปอัพแจ้งข้อความใหม่ทั่วทั้งแอป { name, text, threadId, at }
@@ -2201,6 +2207,12 @@ export default function RefHub() {
                 <button onClick={() => { setSecurityOpen(true); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
                   <ShieldCheck size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "menu_security")}</span>
                 </button>
+                <button onClick={() => { setHelpOpen(true); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
+                  <HelpCircle size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "menu_help")}</span>
+                </button>
+                <button onClick={() => { setAboutOpen(true); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
+                  <Info size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "menu_about")}</span>
+                </button>
                 <button onClick={() => supabase.auth.signOut()} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
                   <X size={18} color="#D9534F" /><span style={{ fontSize: 14, color: "#D9534F" }}>{L(lang, "menu_signout")}</span>
                 </button>
@@ -2210,6 +2222,8 @@ export default function RefHub() {
         )}
         {langModalOpen && <LanguageModal t={t} lang={lang} setLang={setLang} close={() => setLangModalOpen(false)} />}
         {securityOpen && <SecurityModal t={t} lang={lang} userId={userId} session={session} setAccountSettingsOpen={setAccountSettingsOpen} close={() => setSecurityOpen(false)} />}
+        {helpOpen && <HelpFaqModal t={t} lang={lang} close={() => setHelpOpen(false)} />}
+        {aboutOpen && <AboutAppModal t={t} lang={lang} close={() => setAboutOpen(false)} />}
         {accountSettingsOpen && <AccountSettingsModal t={t} authProfile={authProfile} setAuthProfile={setAuthProfile} userId={userId} session={session} close={() => setAccountSettingsOpen(false)} />}
         {myActivityOpen && <MyActivityModal t={t} userId={userId} close={() => setMyActivityOpen(false)} />}
         {communityOpen && <CommunityOverlay t={t} cardShape={cardShape} userId={userId} authProfile={authProfile} session={session} openThread={() => {}} close={() => setCommunityOpen(false)} />}
@@ -2683,6 +2697,82 @@ function SecurityModal({ t, lang, userId, session, setAccountSettingsOpen, close
   );
 }
 
+// ❓ ช่วยเหลือ/FAQ — accordion คำถามที่พบบ่อย ครอบคลุมฟีเจอร์หลักของแอป
+function HelpFaqModal({ t, lang, close }) {
+  const isEn = lang === "en";
+  const [openIdx, setOpenIdx] = useState(0);
+  const faqs = isEn ? [
+    { q: "How do goal points work?", a: "Complete a goal today to earn points shown on the leaderboard. Keep a daily streak for a bonus badge. Recurring goals regenerate automatically every day you've scheduled them for." },
+    { q: "Is my finance data private?", a: "Yes — protected by Row Level Security in the database. Only you can see your own transactions unless you explicitly share something." },
+    { q: "How does the Mentor chat work?", a: "Pick a coach persona (or make your own) and chat freely. Replies are generated by AI (Gemini/Groq/DeepSeek) based on your message and, when relevant, your real goals data." },
+    { q: "Can AI write my notes for me?", a: "Yes — open a note, tap the ✨ AI-write button in the toolbar, type a topic, and it drafts a nicely formatted note you can edit further." },
+    { q: "How do I export my notes?", a: "Tap \"Export .md\" on the Notes page — export everything, or switch to select mode to choose specific notes." },
+    { q: "What's the Community feed for?", a: "A shared space to post updates, follow people, comment, and bookmark posts — separate from your private notes/finance data." },
+    { q: "Can I change the app's look?", a: "Yes — tap ⋮ at the top for theme color, font size, day/night mode, card shape (sharp/soft), and Home layout (Classic/Focus/Mosaic)." },
+    { q: "Something looks broken — what do I do?", a: "Use the feedback option in Account Settings to report it directly, or let Maxnuss know so it can get fixed." },
+  ] : [
+    { q: "แต้มเป้าหมายทำงานยังไง?", a: "ทำเป้าหมายสำเร็จในแต่ละวันจะได้แต้มขึ้นกระดานผู้นำ ทำต่อเนื่องทุกวันจะได้ badge สตรีคพิเศษ ส่วนเป้าหมายแบบประจำ (recurring) จะสร้างให้ใหม่อัตโนมัติทุกวันที่ตั้งไว้" },
+    { q: "ข้อมูลการเงินของเราเป็นส่วนตัวไหม?", a: "ใช่ครับ ป้องกันด้วย Row Level Security ในฐานข้อมูล มีแค่เราเท่านั้นที่เห็นรายการของตัวเอง เว้นแต่จะแชร์เองเท่านั้น" },
+    { q: "แชทกับโค้ชทำงานยังไง?", a: "เลือกบุคลิกโค้ช (หรือสร้างเองก็ได้) แล้วคุยได้เลย คำตอบสร้างโดย AI (Gemini/Groq/DeepSeek) จากข้อความที่พิมพ์ และข้อมูลเป้าหมายจริงของเราเวลาที่เกี่ยวข้อง" },
+    { q: "ให้ AI ช่วยเขียนโน้ตได้ไหม?", a: "ได้ครับ เปิดโน้ต กดปุ่ม ✨ AI ช่วยเขียนในแถบเครื่องมือ พิมพ์หัวข้อที่อยากได้ แล้ว AI จะร่างโน้ตจัดรูปแบบสวยๆ ให้ แก้ต่อได้เลย" },
+    { q: "Export โน้ตออกมายังไง?", a: "กด \"Export .md\" ในหน้าโน้ต จะเลือก export ทั้งหมด หรือสลับเป็นโหมดเลือกเฉพาะบางอันก็ได้" },
+    { q: "หน้าชุมชนไว้ทำอะไร?", a: "เป็นพื้นที่โพสต์อัปเดต ติดตามคนอื่น คอมเมนต์ บุ๊กมาร์กโพสต์ แยกจากข้อมูลโน้ต/การเงินส่วนตัวของเรา" },
+    { q: "เปลี่ยนหน้าตาแอปได้ไหม?", a: "ได้ครับ กด ⋮ ด้านบน ปรับสีธีม ขนาดตัวอักษร โหมดกลางวัน-กลางคืน ทรงกรอบการ์ด (เหลี่ยม/มน) และโครงหน้า Home (คลาสสิก/โฟกัส/โมเสก)" },
+    { q: "เจออะไรพังในแอป ทำยังไงดี?", a: "ใช้ช่องข้อเสนอแนะในหน้าตั้งค่าบัญชีแจ้งได้เลย หรือบอก Maxnuss ให้แก้ให้" },
+  ];
+  return (
+    <ModalPortal>
+      <div style={overlayHi} onClick={close}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>{L(lang, "menu_help")}</div>
+            <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {faqs.map((f, i) => (
+              <div key={i} style={{ ...card(t), padding: 0, overflow: "hidden" }}>
+                <button onClick={() => setOpenIdx(openIdx === i ? -1 : i)} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "13px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
+                  <span style={{ fontSize: 13.5, fontWeight: 700, color: t.text }}>{f.q}</span>
+                  <ChevronDown size={16} color={t.faint} style={{ transform: openIdx === i ? "rotate(180deg)" : "none", transition: "transform .15s", flexShrink: 0 }} />
+                </button>
+                {openIdx === i && <div style={{ padding: "0 14px 14px", fontSize: 12.5, color: t.sub, lineHeight: 1.7 }}>{f.a}</div>}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </ModalPortal>
+  );
+}
+
+// ℹ️ เกี่ยวกับแอป — ข้อมูล branding + stack สั้นๆ
+function AboutAppModal({ t, lang, close }) {
+  const isEn = lang === "en";
+  return (
+    <ModalPortal>
+      <div style={overlayHi} onClick={close}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>{L(lang, "menu_about")}</div>
+            <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+          </div>
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}><PKnowMark width={140} color={t.accent} /></div>
+          <div style={{ fontSize: 12.5, color: t.sub, lineHeight: 1.8, background: t.inputBg, borderRadius: 12, padding: 14, marginBottom: 14 }}>
+            {isEn
+              ? "P..KNOW is a family productivity & social app — goals, finance tracking, notes, a community feed, AI mentor chat, and more, all in one place."
+              : "P..KNOW คือแอปโปรดักทิวิตี้และโซเชียลสำหรับครอบครัว — เป้าหมาย การเงิน โน้ต ชุมชน แชทกับโค้ช AI และอีกมากมาย รวมไว้ในที่เดียว"}
+          </div>
+          <div style={{ fontSize: 11, color: t.faint, lineHeight: 2 }}>
+            <div>{isEn ? "Built with React + Vite" : "สร้างด้วย React + Vite"}</div>
+            <div>{isEn ? "Data stored on Supabase" : "เก็บข้อมูลบน Supabase"}</div>
+            <div>{isEn ? "Deployed on Vercel" : "Deploy บน Vercel"}</div>
+          </div>
+        </div>
+      </div>
+    </ModalPortal>
+  );
+}
+
 function AccountSettingsModal({ t, authProfile, setAuthProfile, userId, session, close }) {
   const [newEmail, setNewEmail] = useState("");
   const [busy, setBusy] = useState(false);
@@ -2923,9 +3013,10 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
   };
   const confirmAddYt = () => {
     if (!pendingYt) return;
-    const track = { id: uid(), kind: pendingYt.platform === "youtube" ? "yt" : "link", platform: pendingYt.platform, name: pendingYt.name.trim() || pendingYt.url, ytId: pendingYt.id, url: pendingYt.url, favorite: false, folderId: activeFolderId, pinnedHome: false };
-    setPlaylist((p) => [...p, track]);
-    if (userId) supabase.from("playlists").insert({ id: track.id, user_id: userId, kind: track.kind, platform: track.platform, name: track.name, url: track.url, yt_id: track.ytId, persist: true }).then(({ error }) => { if (error) { console.error("บันทึกสื่อไม่สำเร็จ:", error.message); alert("บันทึกไม่สำเร็จ: " + error.message + " (เช็คว่ารัน SQL media_platforms_setup.sql แล้วหรือยัง)"); } }, () => {});
+    const sortOrder = -Date.now(); // 🔝 ให้ขึ้นอันดับแรกเสมอทั้ง session นี้และหลัง reload (ของเดิมไม่ใส่ sort_order เลย เลยตกไปท้ายแถวเพราะ fallback เป็น 9999)
+    const track = { id: uid(), kind: pendingYt.platform === "youtube" ? "yt" : "link", platform: pendingYt.platform, name: pendingYt.name.trim() || pendingYt.url, ytId: pendingYt.id, url: pendingYt.url, favorite: false, folderId: activeFolderId, pinnedHome: false, sortOrder };
+    setPlaylist((p) => [track, ...p]);
+    if (userId) supabase.from("playlists").insert({ id: track.id, user_id: userId, kind: track.kind, platform: track.platform, name: track.name, url: track.url, yt_id: track.ytId, persist: true, sort_order: sortOrder }).then(({ error }) => { if (error) { console.error("บันทึกสื่อไม่สำเร็จ:", error.message); alert("บันทึกไม่สำเร็จ: " + error.message + " (เช็คว่ารัน SQL media_platforms_setup.sql แล้วหรือยัง)"); } }, () => {});
     setYtUrl(""); setPendingYt(null); flashSaved();
   };
   const addFileInner = (e) => {
@@ -2934,15 +3025,16 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
     if (small) {
       const rd = new FileReader();
       rd.onload = () => {
-        const track = { id: uid(), kind: "file", name: f.name, src: rd.result, persist: true, favorite: false, folderId: activeFolderId };
-        setPlaylist((p) => [...p, track]);
-        if (userId) supabase.from("playlists").insert({ id: track.id, user_id: userId, kind: track.kind, name: track.name, src: track.src, persist: true }).then(() => {}, () => {});
+        const sortOrder = -Date.now(); // 🔝 ขึ้นอันดับแรกเสมอ เหมือนกัน
+        const track = { id: uid(), kind: "file", name: f.name, src: rd.result, persist: true, favorite: false, folderId: activeFolderId, sortOrder };
+        setPlaylist((p) => [track, ...p]);
+        if (userId) supabase.from("playlists").insert({ id: track.id, user_id: userId, kind: track.kind, name: track.name, src: track.src, persist: true, sort_order: sortOrder }).then(() => {}, () => {});
         flashSaved();
       };
       rd.readAsDataURL(f);
     } else {
       const url = URL.createObjectURL(f);
-      setPlaylist((p) => [...p, { id: uid(), kind: "file", name: f.name + " (ไม่บันทึกถาวร)", src: url, persist: false, favorite: false, folderId: activeFolderId }]);
+      setPlaylist((p) => [{ id: uid(), kind: "file", name: f.name + " (ไม่บันทึกถาวร)", src: url, persist: false, favorite: false, folderId: activeFolderId, sortOrder: -Date.now() }, ...p]);
       flashSaved();
     }
   };
