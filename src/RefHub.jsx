@@ -8388,6 +8388,15 @@ function NotePage({ t, notes, setNotes, isNight, userId, session, authProfile, r
     if (typeof content === "string") return content;
     if (!Array.isArray(content)) return "";
     return content.map((c, i) => {
+      if (c.type === "link") {
+        const label = (Array.isArray(c.content) ? c.content.map((cc) => cc.text || "").join("") : "") || c.href || "";
+        return (
+          <a key={i} href={c.href} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
+            style={{ display: "inline-flex", alignItems: "center", gap: 5, background: `${t.accent}18`, color: t.accent, fontWeight: 700, padding: "5px 10px 5px 8px", borderRadius: 9, textDecoration: "none", border: `1px solid ${t.accent}40`, margin: "2px 0" }}>
+            <Link2 size={12} color={t.accent} /> {label}
+          </a>
+        );
+      }
       const txt = c.text || "";
       if (!txt) return null;
       const st = c.styles || {};
@@ -8427,6 +8436,10 @@ function NotePage({ t, notes, setNotes, isNight, userId, session, authProfile, r
     if (typeof content === "string") return content;
     if (!Array.isArray(content)) return "";
     return content.map((c) => {
+      if (c.type === "link") {
+        const label = (Array.isArray(c.content) ? c.content.map((cc) => cc.text || "").join("") : "") || c.href || "";
+        return `[${label}](${c.href || ""})`;
+      }
       let s = c.text || ""; const st = c.styles || {};
       if (!s) return "";
       if (st.code) s = "`" + s + "`";
@@ -9129,7 +9142,7 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
     const body = [
       { type: "heading", props: { level: 2 }, content: x.title },
       { type: "paragraph", content: x.summary || "" },
-      { type: "paragraph", content: x.link },
+      { type: "paragraph", content: [{ type: "link", href: x.link, content: [{ type: "text", text: "🔗 อ่านข่าวต้นฉบับ", styles: {} }] }] },
     ];
     const newNote = { id: uid(), title: x.title, body, date: todayStr(), pinned: false, tags: ["ข่าว"] };
     setNotes?.((n) => [newNote, ...n]); // ⚠️ บั๊กเดิม: บันทึกลง DB จริง แต่ลืมอัปเดต state ในเครื่อง ทำให้หน้าโน้ตไม่เห็นทันที ต้องรีเฟรชทั้งแอปก่อนถึงจะเห็น
