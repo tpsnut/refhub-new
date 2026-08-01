@@ -9749,7 +9749,7 @@ function VocabWordModal({ t, table = "vocab_words", mode = "word", initial, user
 }
 
 // ✨ ให้ AI เจนคำศัพท์เป็นชุด ตามหมวด+ระดับที่เลือก — พรีวิวให้ดูก่อนค่อยกดบันทึกจริง (กันเผลอยัดคำแปลกๆเข้าคลังโดยไม่ได้เช็ค)
-function VocabBatchGenModal({ t, table = "vocab_words", mode = "word", userId, session, category, level: levelProp, close, onSaved }) {
+function VocabBatchGenModal({ t, table = "vocab_words", mode = "word", userId, session, category, level: levelProp, existingWords = [], close, onSaved }) {
   const isWord = mode === "word";
   const [count, setCount] = useState(10);
   const isMixed = levelProp === "mixed" || !levelProp; // ข้างนอกเลือก "ทุกระดับ" ไว้ — ให้ AI สุ่มคละทุกระดับมาในชุดเดียวเลย ไม่ต้องเลือกเอง
@@ -9762,17 +9762,18 @@ function VocabBatchGenModal({ t, table = "vocab_words", mode = "word", userId, s
   const generate = async () => {
     setLoading(true); setErr(""); setPreview(null);
     try {
+      const avoidText = existingWords.length ? `\nห้ามซ้ำกับ${isWord ? "คำศัพท์" : "ประโยค"}ที่มีอยู่แล้วในหมวดนี้: ${existingWords.slice(0, 60).join(", ")}` : "";
       const r = await fetch("/api/chat", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mentor: "none", userId, callerToken: session?.access_token,
-          messages: [{ who: "u", text: isMixed
+          messages: [{ who: "u", text: (isMixed
             ? (isWord
               ? `สร้างคำศัพท์ภาษาอังกฤษหมวด "${topicLabel}" จำนวน ${count} คำ ที่ยังไม่ซ้ำกัน คละระดับ CEFR ให้กระจายทั้ง A1,A2,B1,B2,C1 ปนกันไปในชุดนี้ (ไม่ต้องเรียงลำดับ) ตอบเป็นรายการบรรทัดละ 1 คำ รูปแบบเป๊ะๆ ห้ามมีเลขข้อ/เครื่องหมายนำหน้า/หัวข้ออื่นใดๆ:\nword | คำอ่านไทย | ความหมายไทย | ตัวอย่างประโยคภาษาอังกฤษสั้นๆ | ระดับ(A1/A2/B1/B2/C1)`
               : `สร้างประโยคสนทนาภาษาอังกฤษที่ใช้บ่อยในชีวิตจริง หมวด "${topicLabel}" จำนวน ${count} ประโยค ที่ยังไม่ซ้ำกัน คละระดับ CEFR ให้กระจายทั้ง A1,A2,B1,B2,C1 ปนกันไปในชุดนี้ (ไม่ต้องเรียงลำดับ) ตอบเป็นรายการบรรทัดละ 1 ประโยค รูปแบบเป๊ะๆ ห้ามมีเลขข้อ/เครื่องหมายนำหน้า/หัวข้ออื่นใดๆ:\nประโยคภาษาอังกฤษ | คำอ่านไทยทับศัพท์ | คำแปลไทย | ระดับ(A1/A2/B1/B2/C1)`)
             : (isWord
               ? `สร้างคำศัพท์ภาษาอังกฤษระดับ ${levelProp} หมวด "${topicLabel}" จำนวน ${count} คำ ที่ยังไม่ซ้ำกัน ตอบเป็นรายการบรรทัดละ 1 คำ รูปแบบเป๊ะๆ ห้ามมีเลขข้อ/เครื่องหมายนำหน้า/หัวข้ออื่นใดๆ:\nword | คำอ่านไทย | ความหมายไทย | ตัวอย่างประโยคภาษาอังกฤษสั้นๆ`
-              : `สร้างประโยคสนทนาภาษาอังกฤษที่ใช้บ่อยในชีวิตจริง ระดับ ${levelProp} หมวด "${topicLabel}" จำนวน ${count} ประโยค ที่ยังไม่ซ้ำกัน ตอบเป็นรายการบรรทัดละ 1 ประโยค รูปแบบเป๊ะๆ ห้ามมีเลขข้อ/เครื่องหมายนำหน้า/หัวข้ออื่นใดๆ:\nประโยคภาษาอังกฤษ | คำอ่านไทยทับศัพท์ | คำแปลไทย`) }],
+              : `สร้างประโยคสนทนาภาษาอังกฤษที่ใช้บ่อยในชีวิตจริง ระดับ ${levelProp} หมวด "${topicLabel}" จำนวน ${count} ประโยค ที่ยังไม่ซ้ำกัน ตอบเป็นรายการบรรทัดละ 1 ประโยค รูปแบบเป๊ะๆ ห้ามมีเลขข้อ/เครื่องหมายนำหน้า/หัวข้ออื่นใดๆ:\nประโยคภาษาอังกฤษ | คำอ่านไทยทับศัพท์ | คำแปลไทย`)) + avoidText }],
         }),
       });
       const data = await r.json();
@@ -10279,14 +10280,14 @@ function VocabGuideModal({ t, lang, close }) {
     { icon: "📖💬", title: "Words or Sentences", text: "Switch between a vocabulary bank and a conversation-sentence bank at the top." },
     { icon: "📚", title: "Pick a topic", text: "Tap the topic button (with the ▾ arrow) to choose a category like Self, School, Work, Travel, Food... or swipe left/right to switch. Not sure where to start? Try \"General\" first." },
     { icon: "✨", title: "Let AI build the lesson", text: "If a topic is empty, tap \"Let AI create a lesson\" — pick \"all levels\" for a random mix of A1-C1, or a specific level for that level only." },
-    { icon: "🔁🧪🎧🎤✍️", title: "5 practice modes", text: "Review (flashcards), Quiz (multiple choice, scored), Listen (type what you hear), Speak (say it, mic checks you), Write (AI grades your writing)." },
+    { icon: "📖🧪🎧🎤✍️", title: "6 modes", text: "Learn (new flashcards — start here!), Review (words you've already learned, for reinforcement), Quiz (multiple choice, scored), Listen (type what you hear), Speak (say it, mic checks you), Write (AI grades your writing)." },
     { icon: "📋📊", title: "Manage & History", text: "Manage lets you add/edit/delete your own entries. History shows every quiz/listening/speaking score you've ever gotten." },
     { icon: "🔥⭐", title: "Streak & XP", text: "Practice daily to build your streak, earn XP, and unlock badges — shown right under the page title." },
   ] : [
     { icon: "📖💬", title: "คำศัพท์ หรือ ประโยค", text: "สลับได้ที่แถบด้านบนสุด — คนละคลังกัน แยกเก็บอิสระ" },
     { icon: "📚", title: "เลือกหมวด", text: "กดปุ่มหมวด (มีลูกศร ▾) เพื่อเลือกหัวข้อ เช่น ตัวเอง โรงเรียน งาน ท่องเที่ยว อาหาร... หรือปัดซ้าย-ขวาเพื่อเปลี่ยนหมวดก็ได้ ยังไม่รู้จะเริ่มไหน? เริ่มที่ \"ทั่วไป\" ก่อนได้เลย" },
     { icon: "✨", title: "ให้ AI สร้างบทเรียนให้", text: "ถ้าหมวดไหนยังว่าง กดปุ่ม \"AI สร้างบทเรียนให้เลย\" — เลือก \"ทุกระดับ\" จะได้คละ A1-C1 มาปนกัน หรือเลือกระดับเฉพาะก็ได้" },
-    { icon: "🔁🧪🎧🎤✍️", title: "5 โหมดฝึก", text: "ทบทวน (flashcard พลิกดู), ทดสอบ (เลือกตอบ ให้คะแนน), ฟัง (พิมพ์ตามที่ได้ยิน), พูด (พูดใส่ไมค์ เครื่องเช็คให้), เขียน (AI ตรวจให้คะแนน)" },
+    { icon: "📖🧪🎧🎤✍️", title: "6 โหมด", text: "เรียนรู้ (การ์ดคำใหม่ที่ยังไม่จำ — เริ่มตรงนี้!), ทบทวน (คำที่จำได้แล้ว เอาไว้ทวนซ้ำกันลืม), ทดสอบ (เลือกตอบ ให้คะแนน), ฟัง (พิมพ์ตามที่ได้ยิน), พูด (พูดใส่ไมค์ เครื่องเช็คให้), เขียน (AI ตรวจให้คะแนน)" },
     { icon: "📋📊", title: "จัดการ & ประวัติ", text: "แท็บจัดการไว้เพิ่ม/แก้/ลบเองได้ ส่วนประวัติเก็บคะแนนทุกครั้งที่ทำแบบทดสอบ/ฟัง/พูดไว้ดูย้อนหลัง" },
     { icon: "🔥⭐", title: "สตรีค & XP", text: "ฝึกทุกวันจะได้สตรีคต่อเนื่อง สะสม XP และปลดล็อก badge โชว์อยู่ใต้หัวข้อหน้าเลย" },
   ];
@@ -10322,7 +10323,7 @@ function LangPage({ t, lang, userId, session }) {
   const table = contentType === "word" ? "vocab_words" : "vocab_sentences";
   const [words, setWords] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState("review"); // "review" | "quiz" | "manage" | "history"
+  const [view, setView] = useState("learn"); // "review" | "learn" | "quiz" | "listen" | "speak" | "write" | "manage" | "history" — เข้ามาครั้งแรก default ที่ "learn" (เรียนรู้) เพราะคนใหม่ต้องมาเรียนก่อน ส่วน "review" (ทบทวน) คือของที่เรียนจบแล้ว (จำได้แล้ว) เก็บไว้ทบทวนซ้ำ
   const [addOpen, setAddOpen] = useState(false);
   const [genOpen, setGenOpen] = useState(false);
   const [quizOpen, setQuizOpen] = useState(false);
@@ -10436,14 +10437,15 @@ function LangPage({ t, lang, userId, session }) {
   const topicWords = words.filter((w) => (w.category || "general") === topic && (level === "all" || w.level === level));
   const wordCountByTopic = (id) => words.filter((w) => (w.category || "general") === id).length;
 
-  // 🔀 โหมดทบทวน — ให้คำที่ยังไม่คล่อง (learning) ขึ้นก่อนเสมอ ถ้าคล่องหมดแล้วค่อยวนทบทวนคำทั้งหมดอีกที
+  // 🎓🔁 แยกกองชัดเจน: "เรียนรู้" = คำที่ยังไม่จำ (สถานะ learning) ให้มาเรียนก่อน, "ทบทวน" = คำที่จำได้แล้ว (สถานะ known) เอาไว้ทบทวนซ้ำกันลืม
   const [reviewIdx, setReviewIdx] = useState(0);
   const [flipped, setFlipped] = useState(false);
-  const reviewPool = topicWords.filter((w) => w.status !== "known");
-  const reviewQueue = reviewPool.length ? reviewPool : topicWords;
-  const current = reviewQueue.length ? reviewQueue[reviewIdx % reviewQueue.length] : null;
+  const learnPool = topicWords.filter((w) => w.status !== "known");
+  const reviewOnlyPool = topicWords.filter((w) => w.status === "known");
+  const activePool = view === "review" ? reviewOnlyPool : learnPool;
+  const current = activePool.length ? activePool[reviewIdx % activePool.length] : null;
   const nextCard = () => { setReviewIdx((i) => i + 1); setFlipped(false); };
-  useEffect(() => { setReviewIdx(0); setFlipped(false); }, [topic, level, contentType]);
+  useEffect(() => { setReviewIdx(0); setFlipped(false); }, [topic, level, contentType, view]);
 
   // ปัดซ้าย/ขวา เปลี่ยนหมวด เหมือนหน้าข่าว
   const touchStartRef = useRef(null);
@@ -10486,7 +10488,7 @@ function LangPage({ t, lang, userId, session }) {
     </div>
 
     <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 8 }}>
-      {[["review", "🔁 ทบทวน"], ["quiz", "🧪 ทดสอบ"], ["listen", "🎧 ฟัง"], ["speak", "🎤 พูด"], ["write", "✍️ เขียน"], ["manage", "📋 จัดการ"], ["history", "📊 ประวัติ"]].map(([id, lb]) => (
+      {[["review", "🔁 ทบทวน"], ["learn", "🎓 เรียนรู้"], ["quiz", "🧪 ทดสอบ"], ["listen", "🎧 ฟัง"], ["speak", "🎤 พูด"], ["write", "✍️ เขียน"], ["manage", "📋 จัดการ"], ["history", "📊 ประวัติ"]].map(([id, lb]) => (
         <button key={id} onClick={() => setView(id)} style={{ flexShrink: 0, padding: "7px 14px", borderRadius: 12, cursor: "pointer", fontWeight: 700, fontSize: 12, border: `1.5px solid ${view === id ? t.accent : t.border}`, background: view === id ? t.accent : "transparent", color: view === id ? t.onAccent : t.sub }}>{lb}</button>
       ))}
     </div>
@@ -10511,14 +10513,24 @@ function LangPage({ t, lang, userId, session }) {
     {loading && view !== "history" && <Empty t={t} text="กำลังโหลด..." />}
 
     <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
-    {!loading && view === "review" && (
+    {!loading && (view === "learn" || view === "review") && (
       !current ? (
         <div style={{ ...card(t), padding: 28, textAlign: "center" }}>
           <Sparkles size={28} color={t.accent} style={{ marginBottom: 10 }} />
-          <div style={{ fontSize: 14.5, fontWeight: 800, color: t.text, marginBottom: 4 }}>หมวดนี้ยังไม่มีบทเรียน</div>
-          <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>{topic === "general" ? "หมวด \"ทั่วไป\" นี้เหมาะกับทุกคนเลย เริ่มตรงนี้ก่อนได้ ไม่ต้องคิดเยอะ" : `ให้ AI สร้าง${noun}หมวดนี้ให้พร้อมเรียนได้เลย`}</div>
-          <button onClick={() => setGenOpen(true)} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "13px 0", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14 }}><Sparkles size={16} /> ให้ AI สร้างบทเรียนให้เลย</button>
-          <button onClick={() => setAddOpen(true)} style={{ background: "none", border: "none", cursor: "pointer", color: t.faint, fontSize: 11.5, marginTop: 12, textDecoration: "underline" }}>หรือเพิ่ม{noun}เองทีละอัน</button>
+          {view === "learn" && topicWords.length === 0 ? (<>
+            <div style={{ fontSize: 14.5, fontWeight: 800, color: t.text, marginBottom: 4 }}>หมวดนี้ยังไม่มีบทเรียน</div>
+            <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>{topic === "general" ? "หมวด \"ทั่วไป\" นี้เหมาะกับทุกคนเลย เริ่มตรงนี้ก่อนได้ ไม่ต้องคิดเยอะ" : `ให้ AI สร้าง${noun}หมวดนี้ให้พร้อมเรียนได้เลย`}</div>
+            <button onClick={() => setGenOpen(true)} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "13px 0", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14 }}><Sparkles size={16} /> ให้ AI สร้างบทเรียนให้เลย</button>
+            <button onClick={() => setAddOpen(true)} style={{ background: "none", border: "none", cursor: "pointer", color: t.faint, fontSize: 11.5, marginTop: 12, textDecoration: "underline" }}>หรือเพิ่ม{noun}เองทีละอัน</button>
+          </>) : view === "learn" ? (<>
+            <div style={{ fontSize: 14.5, fontWeight: 800, color: t.text, marginBottom: 4 }}>เก่งมาก! จำได้หมดหมวดนี้แล้ว 🎉</div>
+            <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>ลองไปที่แท็บ "ทบทวน" เพื่อทวนซ้ำกันลืม หรือ "ทดสอบ" วัดความแม่นดูได้เลย</div>
+            <button onClick={() => setGenOpen(true)} style={{ ...card(t), width: "100%", padding: "11px 0", border: `1px solid ${t.border}`, cursor: "pointer", color: t.text, fontWeight: 700, fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Sparkles size={14} /> เจน{noun}เพิ่มอีก</button>
+          </>) : (<>
+            <div style={{ fontSize: 14.5, fontWeight: 800, color: t.text, marginBottom: 4 }}>ยังไม่มีอะไรให้ทบทวน</div>
+            <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>ไปเรียนที่แท็บ "เรียนรู้" ก่อนนะ พอกด "จำได้แล้ว" คำนั้นจะมาโผล่ที่นี่เอง</div>
+            <button onClick={() => setView("learn")} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "13px 0", fontSize: 14 }}>ไปเรียนรู้เลย</button>
+          </>)}
         </div>
       ) : (<>
         <div onClick={() => setFlipped((v) => !v)} style={{ ...card(t), padding: 24, textAlign: "center", minHeight: 200, display: "flex", flexDirection: "column", justifyContent: "center", cursor: "pointer", position: "relative" }}>
@@ -10646,7 +10658,7 @@ function LangPage({ t, lang, userId, session }) {
     )}
 
     {addOpen && <VocabWordModal t={t} table={table} mode={contentType} initial={editing || { category: topic }} userId={userId} session={session} close={() => setAddOpen(false)} onSaved={onSaved} />}
-    {genOpen && <VocabBatchGenModal t={t} table={table} mode={contentType} userId={userId} session={session} category={topic} level={level === "all" ? "A1" : level} close={() => setGenOpen(false)} onSaved={onSavedBatch} />}
+    {genOpen && <VocabBatchGenModal t={t} table={table} mode={contentType} userId={userId} session={session} category={topic} level={level === "all" ? "A1" : level} existingWords={topicWords.map((w) => w.word)} close={() => setGenOpen(false)} onSaved={onSavedBatch} />}
     {guideOpen && <VocabGuideModal t={t} lang={lang} close={() => setGuideOpen(false)} />}
     {quizOpen && <VocabQuizModal t={t} mode={contentType} category={topic} level={level === "all" ? "mixed" : level} pool={topicWords} allItems={words} userId={userId} close={() => setQuizOpen(false)} onFinished={loadHistory} />}
     {listenOpen && <VocabListeningModal t={t} mode={contentType} category={topic} level={level === "all" ? "mixed" : level} pool={topicWords} userId={userId} session={session} close={() => setListenOpen(false)} onFinished={loadHistory} />}
