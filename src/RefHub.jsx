@@ -911,6 +911,28 @@ function ModalPortal({ children }) {
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 
+// 🔀🚫 เลือกคำ/ประโยคมาฝึก (ทดสอบ/ฟัง/พูด) แบบไม่ซ้ำของเดิมจนกว่าจะครบรอบ — ต่างจากโหมดทบทวนที่ตั้งใจให้วนซ้ำได้ตามปกติ
+// เก็บ id ที่ใช้ไปแล้วต่อ (คำ/ประโยค × หมวด × ระดับ × โหมดฝึก) แยกกันผ่าน localStorage ต่อเครื่อง ถ้าใช้ครบทุกอันในหมวดนั้นแล้วค่อยเริ่มรอบใหม่อัตโนมัติ
+function pickFreshItems(key, pool, count) {
+  const shuffle = (arr) => { const a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  if (!pool.length) return [];
+  let usedIds = [];
+  try { usedIds = JSON.parse(localStorage.getItem(key) || "[]"); } catch (e) {}
+  const unseen = pool.filter((x) => !usedIds.includes(x.id));
+  let chosen;
+  if (unseen.length >= count) {
+    chosen = shuffle(unseen).slice(0, count);
+  } else {
+    // ไม่พอ = ใช้ของเก่าครบรอบแล้ว เอาที่เหลือทั้งหมดมาก่อน แล้วเริ่มรอบใหม่เติมให้ครบจำนวนที่ขอ
+    const rest = shuffle(pool.filter((x) => !unseen.some((u) => u.id === x.id))).slice(0, count - unseen.length);
+    chosen = [...unseen, ...rest];
+    usedIds = [];
+  }
+  const newUsed = [...new Set([...usedIds, ...chosen.map((x) => x.id)])];
+  try { localStorage.setItem(key, JSON.stringify(newUsed)); } catch (e) {}
+  return shuffle(chosen);
+}
+
 // 🔔 Push Notification — กุญแจสาธารณะ (ปลอดภัยที่จะฝังตรงนี้ ไม่ใช่ความลับ ต่างจาก private key ที่อยู่ฝั่งเซิร์ฟเวอร์เท่านั้น)
 const VAPID_PUBLIC_KEY = "BFy33ifhVn7LbyBEss6YmzFys3ycPicm2QVblaxb7BOBTkpQoWDuihkoz0l7ZSeQvZpdUl5JfWgvvCzt24IFm4Y";
 const urlBase64ToUint8Array = (base64String) => {
@@ -9832,7 +9854,7 @@ function VocabBatchGenModal({ t, table = "vocab_words", mode = "word", userId, s
 function VocabQuizModal({ t, mode, category, level, pool, allItems, userId, close, onFinished }) {
   const isWord = mode === "word";
   const shuffle = (arr) => { const a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
-  const [questions] = useState(() => shuffle(pool).slice(0, Math.min(10, pool.length)).map((item) => {
+  const [questions] = useState(() => pickFreshItems(`refhub:vocabFresh:quiz:${mode}:${category}:${level}`, pool, Math.min(10, pool.length)).map((item) => {
     const wrongPool = allItems.filter((x) => x.id !== item.id && x.meaning && x.meaning !== item.meaning);
     const wrongs = shuffle(wrongPool).slice(0, 3).map((x) => x.meaning);
     const choices = shuffle([item.meaning, ...wrongs].filter(Boolean));
@@ -9923,7 +9945,7 @@ function VocabQuizModal({ t, mode, category, level, pool, allItems, userId, clos
 // 🎧 ฟัง แล้วพิมพ์สิ่งที่ได้ยิน — ใช้ Azure Neural TTS ตัวเดียวกับหน้าความรู้ (fallback เสียงเครื่องอัตโนมัติถ้าใช้ไม่ได้)
 function VocabListeningModal({ t, mode, category, level, pool, userId, session, close, onFinished }) {
   const shuffle = (arr) => { const a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
-  const [questions] = useState(() => shuffle(pool).slice(0, Math.min(8, pool.length)));
+  const [questions] = useState(() => pickFreshItems(`refhub:vocabFresh:listening:${mode}:${category}:${level}`, pool, Math.min(8, pool.length)));
   const [idx, setIdx] = useState(0);
   const [answer, setAnswer] = useState("");
   const [checked, setChecked] = useState(false);
@@ -10049,25 +10071,37 @@ function VocabWritingModal({ t, category, level, userId, session, close }) {
   const [feedback, setFeedback] = useState(null); // {score, corrected, comment}
   const [checking, setChecking] = useState(false);
   const [err, setErr] = useState("");
+  const seenPromptsRef = useRef([]); // 🚫 กันโจทย์ซ้ำ — รวมทั้งที่เจอในเซสชันนี้ + ประวัติเก่าจาก DB
 
   const getPrompt = async () => {
     setLoadingPrompt(true); setErr(""); setFeedback(null); setAnswer("");
     try {
+      const avoidText = seenPromptsRef.current.length ? `\nห้ามซ้ำกับโจทย์เหล่านี้ที่เคยให้ไปแล้ว:\n${seenPromptsRef.current.map((p) => "- " + p).join("\n")}` : "";
       const r = await fetch("/api/chat", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mentor: "none", userId, callerToken: session?.access_token,
-          messages: [{ who: "u", text: `ตั้งโจทย์เขียนภาษาอังกฤษสั้นๆ 1 โจทย์ ระดับ ${level} หมวด "${topicLabel}" ให้ผู้เรียนเขียนตอบเป็นภาษาอังกฤษ 2-4 ประโยค ตอบเป็นภาษาไทยอธิบายโจทย์บรรทัดเดียว ห้ามมีข้อความอื่น` }],
+          messages: [{ who: "u", text: `ตั้งโจทย์เขียนภาษาอังกฤษสั้นๆ 1 โจทย์ ระดับ ${level} หมวด "${topicLabel}" ให้ผู้เรียนเขียนตอบเป็นภาษาอังกฤษ 2-4 ประโยค ตอบเป็นภาษาไทยอธิบายโจทย์บรรทัดเดียว ห้ามมีข้อความอื่น${avoidText}` }],
         }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "เรียก AI ไม่สำเร็จ");
-      setPrompt((data.text || "").trim());
+      const newPrompt = (data.text || "").trim();
+      setPrompt(newPrompt);
+      seenPromptsRef.current = [...seenPromptsRef.current, newPrompt].slice(-15); // เก็บแค่ 15 อันล่าสุดพอ กันข้อความยาวเกิน
     } catch (e) {
       setErr("ตั้งโจทย์ไม่สำเร็จ: " + e.message);
     } finally { setLoadingPrompt(false); }
   };
-  useEffect(() => { getPrompt(); }, [category, level]);
+
+  useEffect(() => {
+    if (!userId) { getPrompt(); return; }
+    // ดึงโจทย์เก่าจาก DB มากันซ้ำตั้งแต่โจทย์แรกของเซสชันนี้ด้วย ไม่ใช่แค่ในเซสชันนี้เอง
+    supabase.from("vocab_writing_history").select("prompt").eq("user_id", userId).eq("category", category).eq("level", level).order("created_at", { ascending: false }).limit(10).then(({ data }) => {
+      seenPromptsRef.current = (data || []).map((r) => r.prompt).filter(Boolean);
+      getPrompt();
+    }, () => getPrompt());
+  }, []);
 
   const submit = async () => {
     if (!answer.trim() || checking) return;
@@ -10135,7 +10169,7 @@ function VocabWritingModal({ t, category, level, userId, session, close }) {
 // 🎤 พูดตาม — ใช้ Web Speech API (ฟรี ในตัวเบราว์เซอร์) เครื่องฟังแล้วเทียบว่าตรงกับคำ/ประโยคเป้าหมายไหม ไม่รองรับทุกเบราว์เซอร์ (เช็คให้ก่อนใช้)
 function VocabSpeakingModal({ t, mode, category, level, pool, userId, close, onFinished }) {
   const shuffle = (arr) => { const a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
-  const [questions] = useState(() => shuffle(pool).slice(0, Math.min(8, pool.length)));
+  const [questions] = useState(() => pickFreshItems(`refhub:vocabFresh:speaking:${mode}:${category}:${level}`, pool, Math.min(8, pool.length)));
   const [idx, setIdx] = useState(0);
   const [listening, setListening] = useState(false);
   const [heard, setHeard] = useState(null);
