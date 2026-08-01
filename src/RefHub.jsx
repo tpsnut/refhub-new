@@ -9628,7 +9628,8 @@ const VOCAB_TOPICS = [
 ];
 const CEFR_LEVELS = ["A1", "A2", "B1", "B2", "C1"];
 
-function VocabWordModal({ t, initial, userId, session, close, onSaved }) {
+function VocabWordModal({ t, table = "vocab_words", mode = "word", initial, userId, session, close, onSaved }) {
+  const isWord = mode === "word";
   const [word, setWord] = useState(initial?.word || "");
   const [pronunciation, setPronunciation] = useState(initial?.pronunciation || "");
   const [meaning, setMeaning] = useState(initial?.meaning || "");
@@ -9646,7 +9647,9 @@ function VocabWordModal({ t, initial, userId, session, close, onSaved }) {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mentor: "none", userId, callerToken: session?.access_token,
-          messages: [{ who: "u", text: `ช่วยเติมคำอ่านไทย ความหมายไทย และตัวอย่างประโยคให้คำศัพท์ภาษาอังกฤษคำว่า "${word.trim()}" ตอบตามรูปแบบนี้เป๊ะๆ 3 บรรทัด ห้ามมีข้อความอื่นเพิ่มเติม:\nคำอ่าน: (คำอ่านไทยของคำนี้ เช่น รี-ซิล-เยินซ์)\nความหมาย: (คำแปล/ความหมายสั้นๆ เป็นภาษาไทย)\nตัวอย่าง: (ประโยคภาษาอังกฤษสั้นๆ ที่ใช้คำนี้)` }],
+          messages: [{ who: "u", text: isWord
+            ? `ช่วยเติมคำอ่านไทย ความหมายไทย และตัวอย่างประโยคให้คำศัพท์ภาษาอังกฤษคำว่า "${word.trim()}" ตอบตามรูปแบบนี้เป๊ะๆ 3 บรรทัด ห้ามมีข้อความอื่นเพิ่มเติม:\nคำอ่าน: (คำอ่านไทยของคำนี้ เช่น รี-ซิล-เยินซ์)\nความหมาย: (คำแปล/ความหมายสั้นๆ เป็นภาษาไทย)\nตัวอย่าง: (ประโยคภาษาอังกฤษสั้นๆ ที่ใช้คำนี้)`
+            : `ช่วยเติมคำอ่านไทยและคำแปลไทยให้ประโยคภาษาอังกฤษ "${word.trim()}" ตอบตามรูปแบบนี้เป๊ะๆ 2 บรรทัด ห้ามมีข้อความอื่นเพิ่มเติม:\nคำอ่าน: (คำอ่านไทยทับศัพท์ทั้งประโยค)\nความหมาย: (คำแปลไทยของประโยคนี้)` }],
         }),
       });
       const data = await r.json();
@@ -9670,18 +9673,18 @@ function VocabWordModal({ t, initial, userId, session, close, onSaved }) {
     const payload = { word: word.trim(), pronunciation: pronunciation.trim(), meaning: meaning.trim(), example: example.trim(), category };
     try {
       if (initial?.id) {
-        const { error } = await supabase.from("vocab_words").update(payload).eq("id", initial.id);
+        const { error } = await supabase.from(table).update(payload).eq("id", initial.id);
         if (error) throw error;
         onSaved({ ...initial, ...payload });
       } else {
         const row = { id: uid(), user_id: userId, status: "learning", review_count: 0, created_at: new Date().toISOString(), ...payload };
-        const { error } = await supabase.from("vocab_words").insert(row);
+        const { error } = await supabase.from(table).insert(row);
         if (error) throw error;
         onSaved(row);
       }
       close();
     } catch (e) {
-      setErr("บันทึกไม่สำเร็จ: " + e.message + " (เช็คว่ารัน SQL เพิ่มคอลัมน์ level/pronunciation ใน vocab_words แล้วหรือยัง)");
+      setErr("บันทึกไม่สำเร็จ: " + e.message + ` (เช็คว่ารัน SQL สร้างตาราง ${table} แล้วหรือยัง)`);
     } finally { setSaving(false); }
   };
 
@@ -9690,20 +9693,24 @@ function VocabWordModal({ t, initial, userId, session, close, onSaved }) {
       <div style={overlayHi} onClick={close}>
         <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-            <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>{initial?.id ? "แก้ไขคำศัพท์" : "เพิ่มคำศัพท์"}</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>{initial?.id ? `แก้ไข${isWord ? "คำศัพท์" : "ประโยค"}` : `เพิ่ม${isWord ? "คำศัพท์" : "ประโยค"}`}</div>
             <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
           </div>
-          <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>คำศัพท์</div>
-          <input value={word} onChange={(e) => setWord(e.target.value)} placeholder="เช่น Resilience" style={{ ...input(t), marginBottom: 10 }} />
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>{isWord ? "คำศัพท์" : "ประโยคภาษาอังกฤษ"}</div>
+          {isWord
+            ? <input value={word} onChange={(e) => setWord(e.target.value)} placeholder="เช่น Resilience" style={{ ...input(t), marginBottom: 10 }} />
+            : <textarea value={word} onChange={(e) => setWord(e.target.value)} placeholder="เช่น Could you tell me the way to the station?" rows={2} style={{ ...input(t), marginBottom: 10, resize: "vertical", fontFamily: "inherit" }} />}
           <button onClick={aiFill} disabled={!word.trim() || aiLoading} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", padding: "9px 0", borderRadius: 10, border: `1px solid ${t.accent}55`, background: `${t.accent}15`, color: t.accent, fontWeight: 700, fontSize: 12.5, cursor: !word.trim() || aiLoading ? "default" : "pointer", opacity: !word.trim() || aiLoading ? 0.6 : 1, marginBottom: 12 }}>
-            <Sparkles size={14} /> {aiLoading ? "กำลังคิด..." : "ให้ AI ช่วยเติมคำอ่าน/ความหมาย/ตัวอย่าง"}
+            <Sparkles size={14} /> {aiLoading ? "กำลังคิด..." : `ให้ AI ช่วยเติมคำอ่าน/ความหมาย${isWord ? "/ตัวอย่าง" : ""}`}
           </button>
           <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>คำอ่านไทย</div>
-          <input value={pronunciation} onChange={(e) => setPronunciation(e.target.value)} placeholder="เช่น รี-ซิล-เยินซ์" style={{ ...input(t), marginBottom: 10 }} />
+          <input value={pronunciation} onChange={(e) => setPronunciation(e.target.value)} placeholder={isWord ? "เช่น รี-ซิล-เยินซ์" : "คำอ่านไทยทับศัพท์ทั้งประโยค"} style={{ ...input(t), marginBottom: 10 }} />
           <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>ความหมาย</div>
           <input value={meaning} onChange={(e) => setMeaning(e.target.value)} placeholder="ความหมายเป็นภาษาไทย" style={{ ...input(t), marginBottom: 10 }} />
-          <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>ตัวอย่างประโยค</div>
-          <input value={example} onChange={(e) => setExample(e.target.value)} placeholder="ตัวอย่างประโยคภาษาอังกฤษ" style={{ ...input(t), marginBottom: 14 }} />
+          {isWord && (<>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>ตัวอย่างประโยค</div>
+            <input value={example} onChange={(e) => setExample(e.target.value)} placeholder="ตัวอย่างประโยคภาษาอังกฤษ" style={{ ...input(t), marginBottom: 14 }} />
+          </>)}
           <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>หมวดหมู่</div>
           <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4, marginBottom: 14 }}>
             {VOCAB_TOPICS.map((c) => (
@@ -9719,7 +9726,8 @@ function VocabWordModal({ t, initial, userId, session, close, onSaved }) {
 }
 
 // ✨ ให้ AI เจนคำศัพท์เป็นชุด ตามหมวด+ระดับที่เลือก — พรีวิวให้ดูก่อนค่อยกดบันทึกจริง (กันเผลอยัดคำแปลกๆเข้าคลังโดยไม่ได้เช็ค)
-function VocabBatchGenModal({ t, userId, session, category, level, close, onSaved }) {
+function VocabBatchGenModal({ t, table = "vocab_words", mode = "word", userId, session, category, level, close, onSaved }) {
+  const isWord = mode === "word";
   const [count, setCount] = useState(10);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
@@ -9734,7 +9742,9 @@ function VocabBatchGenModal({ t, userId, session, category, level, close, onSave
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mentor: "none", userId, callerToken: session?.access_token,
-          messages: [{ who: "u", text: `สร้างคำศัพท์ภาษาอังกฤษระดับ ${level} หมวด "${topicLabel}" จำนวน ${count} คำ ที่ยังไม่ซ้ำกัน ตอบเป็นรายการบรรทัดละ 1 คำ รูปแบบเป๊ะๆ ห้ามมีเลขข้อ/เครื่องหมายนำหน้า/หัวข้ออื่นใดๆ:\nword | คำอ่านไทย | ความหมายไทย | ตัวอย่างประโยคภาษาอังกฤษสั้นๆ` }],
+          messages: [{ who: "u", text: isWord
+            ? `สร้างคำศัพท์ภาษาอังกฤษระดับ ${level} หมวด "${topicLabel}" จำนวน ${count} คำ ที่ยังไม่ซ้ำกัน ตอบเป็นรายการบรรทัดละ 1 คำ รูปแบบเป๊ะๆ ห้ามมีเลขข้อ/เครื่องหมายนำหน้า/หัวข้ออื่นใดๆ:\nword | คำอ่านไทย | ความหมายไทย | ตัวอย่างประโยคภาษาอังกฤษสั้นๆ`
+            : `สร้างประโยคสนทนาภาษาอังกฤษที่ใช้บ่อยในชีวิตจริง ระดับ ${level} หมวด "${topicLabel}" จำนวน ${count} ประโยค ที่ยังไม่ซ้ำกัน ตอบเป็นรายการบรรทัดละ 1 ประโยค รูปแบบเป๊ะๆ ห้ามมีเลขข้อ/เครื่องหมายนำหน้า/หัวข้ออื่นใดๆ:\nประโยคภาษาอังกฤษ | คำอ่านไทยทับศัพท์ | คำแปลไทย` }],
         }),
       });
       const data = await r.json();
@@ -9744,7 +9754,7 @@ function VocabBatchGenModal({ t, userId, session, category, level, close, onSave
         if (parts.length < 2 || !parts[0]) return null;
         return { word: parts[0].replace(/^[-•\d.)\s]+/, ""), pronunciation: parts[1] || "", meaning: parts[2] || "", example: parts[3] || "" };
       }).filter(Boolean);
-      if (!rows.length) throw new Error("AI ไม่ได้ส่งรายการคำศัพท์กลับมาในรูปแบบที่อ่านได้ ลองใหม่อีกครั้ง");
+      if (!rows.length) throw new Error(`AI ไม่ได้ส่งรายการ${isWord ? "คำศัพท์" : "ประโยค"}กลับมาในรูปแบบที่อ่านได้ ลองใหม่อีกครั้ง`);
       setPreview(rows);
     } catch (e) {
       setErr("สร้างไม่สำเร็จ: " + e.message);
@@ -9756,7 +9766,7 @@ function VocabBatchGenModal({ t, userId, session, category, level, close, onSave
     setSaving(true);
     const rows = preview.map((p) => ({ id: uid(), user_id: userId, word: p.word, pronunciation: p.pronunciation, meaning: p.meaning, example: p.example, category, level, status: "learning", review_count: 0, created_at: new Date().toISOString() }));
     try {
-      const { error } = await supabase.from("vocab_words").insert(rows);
+      const { error } = await supabase.from(table).insert(rows);
       if (error) throw error;
       onSaved(rows);
       close();
@@ -9770,16 +9780,16 @@ function VocabBatchGenModal({ t, userId, session, category, level, close, onSave
       <div style={overlayHi} onClick={close}>
         <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "88vh", overflowY: "auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-            <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>✨ AI เจนคำศัพท์ให้</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>✨ AI เจน{isWord ? "คำศัพท์" : "ประโยค"}ให้</div>
             <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
           </div>
           <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 14 }}>หมวด {topicLabel} · ระดับ {level}</div>
 
           {!preview && (<>
-            <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>จำนวนคำ</div>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>จำนวน{isWord ? "คำ" : "ประโยค"}</div>
             <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
               {[5, 10, 20].map((n) => (
-                <button key={n} onClick={() => setCount(n)} style={{ flex: 1, padding: "9px 0", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 700, border: `1.5px solid ${count === n ? t.accent : t.border}`, background: count === n ? t.accent : "transparent", color: count === n ? t.onAccent : t.sub }}>{n} คำ</button>
+                <button key={n} onClick={() => setCount(n)} style={{ flex: 1, padding: "9px 0", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 700, border: `1.5px solid ${count === n ? t.accent : t.border}`, background: count === n ? t.accent : "transparent", color: count === n ? t.onAccent : t.sub }}>{n} {isWord ? "คำ" : "ประโยค"}</button>
               ))}
             </div>
             {err && <div style={{ fontSize: 11.5, color: "#D9534F", marginBottom: 10 }}>{err}</div>}
@@ -9789,7 +9799,7 @@ function VocabBatchGenModal({ t, userId, session, category, level, close, onSave
           </>)}
 
           {preview && (<>
-            <div style={{ fontSize: 12, color: t.sub, marginBottom: 8 }}>ได้ {preview.length} คำ — เช็คดูก่อนกดบันทึก</div>
+            <div style={{ fontSize: 12, color: t.sub, marginBottom: 8 }}>ได้ {preview.length} {isWord ? "คำ" : "ประโยค"} — เช็คดูก่อนกดบันทึก</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14, maxHeight: "45vh", overflowY: "auto" }}>
               {preview.map((p, i) => (
                 <div key={i} style={{ ...card(t), padding: 10 }}>
@@ -9811,40 +9821,148 @@ function VocabBatchGenModal({ t, userId, session, category, level, close, onSave
   );
 }
 
+// 🧪 แบบทดสอบให้คะแนน — เลือกความหมายที่ถูกต้อง 4 ตัวเลือก จบแล้วเก็บผลลง vocab_quiz_history
+function VocabQuizModal({ t, mode, category, level, pool, allItems, userId, close, onFinished }) {
+  const isWord = mode === "word";
+  const shuffle = (arr) => { const a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const [questions] = useState(() => shuffle(pool).slice(0, Math.min(10, pool.length)).map((item) => {
+    const wrongPool = allItems.filter((x) => x.id !== item.id && x.meaning && x.meaning !== item.meaning);
+    const wrongs = shuffle(wrongPool).slice(0, 3).map((x) => x.meaning);
+    const choices = shuffle([item.meaning, ...wrongs].filter(Boolean));
+    return { item, choices };
+  }));
+  const [idx, setIdx] = useState(0);
+  const [picked, setPicked] = useState(null);
+  const [score, setScore] = useState(0);
+  const [done, setDone] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const q = questions[idx];
+
+  const pick = (choice) => {
+    if (picked) return;
+    setPicked(choice);
+    if (choice === q.item.meaning) setScore((s) => s + 1);
+  };
+  const next = async () => {
+    if (idx + 1 < questions.length) { setIdx((i) => i + 1); setPicked(null); }
+    else {
+      setDone(true);
+      if (userId) {
+        setSaving(true);
+        await supabase.from("vocab_quiz_history").insert({ id: uid(), user_id: userId, mode, category, level, score, total: questions.length, created_at: new Date().toISOString() }).then(() => {}, () => {});
+        setSaving(false);
+      }
+      onFinished?.();
+    }
+  };
+
+  if (!questions.length) {
+    return (
+      <ModalPortal>
+        <div style={overlayHi} onClick={close}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
+            <div style={{ fontSize: 14, color: t.sub, textAlign: "center", marginBottom: 14 }}>ต้องมีอย่างน้อย 4 {isWord ? "คำ" : "ประโยค"}ในหมวดนี้ถึงจะทำแบบทดสอบได้ (มีตัวเลือกให้เดา 4 ข้อ)</div>
+            <button onClick={close} style={{ ...card(t), width: "100%", padding: "11px 0", border: `1px solid ${t.border}`, cursor: "pointer", color: t.text, fontWeight: 700 }}>ปิด</button>
+          </div>
+        </div>
+      </ModalPortal>
+    );
+  }
+
+  return (
+    <ModalPortal>
+      <div style={overlayHi} onClick={done ? close : undefined}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "88vh", overflowY: "auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>🧪 แบบทดสอบ</div>
+            <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+          </div>
+
+          {!done ? (<>
+            <div style={{ fontSize: 11.5, color: t.faint, marginBottom: 10 }}>ข้อ {idx + 1}/{questions.length}</div>
+            <div style={{ ...card(t), padding: 22, textAlign: "center", marginBottom: 14 }}>
+              <div style={{ fontSize: 24, fontWeight: 800, color: t.text }}>{q.item.word}</div>
+              {q.item.pronunciation && <div style={{ fontSize: 12.5, color: t.faint, marginTop: 4 }}>[{q.item.pronunciation}]</div>}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
+              {q.choices.map((c, i) => {
+                const isCorrect = c === q.item.meaning;
+                const isPicked = c === picked;
+                let bg = t.surface, border = t.border, color = t.text;
+                if (picked) {
+                  if (isCorrect) { bg = "#2E9E6B18"; border = "#2E9E6B"; color = "#2E9E6B"; }
+                  else if (isPicked) { bg = "#D9534F18"; border = "#D9534F"; color = "#D9534F"; }
+                }
+                return (
+                  <button key={i} onClick={() => pick(c)} disabled={!!picked} style={{ padding: "13px 14px", borderRadius: 12, border: `1.5px solid ${border}`, background: bg, color, fontWeight: 700, fontSize: 13.5, textAlign: "left", cursor: picked ? "default" : "pointer" }}>{c}</button>
+                );
+              })}
+            </div>
+            {picked && <button onClick={next} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "12px 0" }}>{idx + 1 < questions.length ? "ข้อต่อไป →" : "ดูผลคะแนน"}</button>}
+          </>) : (
+            <div style={{ textAlign: "center", padding: "10px 0" }}>
+              <div style={{ fontSize: 15, color: t.sub, marginBottom: 6 }}>คะแนนของคุณ</div>
+              <div style={{ fontSize: 40, fontWeight: 800, color: t.accent, marginBottom: 4 }}>{score}/{questions.length}</div>
+              <div style={{ fontSize: 12.5, color: t.faint, marginBottom: 20 }}>{score === questions.length ? "เต็มเลย เก่งมาก! 🎉" : score >= questions.length / 2 ? "ทำได้ดี ทบทวนอีกนิดจะเป๊ะเลย 👍" : "ลองทบทวนเพิ่มแล้วมาทำใหม่นะ 💪"}</div>
+              <button onClick={close} disabled={saving} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "12px 0" }}>{saving ? "กำลังบันทึก..." : "เสร็จแล้ว"}</button>
+            </div>
+          )}
+        </div>
+      </div>
+    </ModalPortal>
+  );
+}
+
 function LangPage({ t, lang, userId, session }) {
   const [askConfirm, ConfirmUI] = useConfirm(t);
+  const [contentType, setContentType] = useState("word"); // "word" | "sentence" — สลับระหว่างคลังคำศัพท์กับคลังประโยค (คนละตารางกัน)
+  const table = contentType === "word" ? "vocab_words" : "vocab_sentences";
   const [words, setWords] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState("review"); // "review" | "manage" — สลับในหน้าเดียวกันเอง (ไม่เกี่ยวกับเมนู ☰/⋮ ของแอป)
+  const [view, setView] = useState("review"); // "review" | "quiz" | "manage" | "history"
   const [addOpen, setAddOpen] = useState(false);
   const [genOpen, setGenOpen] = useState(false);
+  const [quizOpen, setQuizOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [topic, setTopic] = useState("general"); // 📚 หมวดที่กำลังโฟกัสอยู่ — คุมทั้งโหมดทบทวนและจัดการ เหมือนหมวดข่าว
   const [level, setLevel] = useState("all"); // ระดับ CEFR ที่กรอง — "all" = ทุกระดับ
   const [menuOpen, setMenuOpen] = useState(false); // เมนูเลือกหมวดแบบเดียวกับหน้าข่าว
+  const [history, setHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
 
   const load = () => {
     if (!userId) { setLoading(false); return; }
     setLoading(true);
-    supabase.from("vocab_words").select("*").eq("user_id", userId).order("created_at", { ascending: false }).then(({ data, error }) => {
-      if (error) console.error("โหลดคำศัพท์ไม่สำเร็จ:", error.message);
+    supabase.from(table).select("*").eq("user_id", userId).order("created_at", { ascending: false }).then(({ data, error }) => {
+      if (error) console.error(`โหลด${contentType === "word" ? "คำศัพท์" : "ประโยค"}ไม่สำเร็จ:`, error.message);
       setWords(data || []);
       setLoading(false);
     });
   };
-  useEffect(() => { load(); }, [userId]);
+  useEffect(() => { load(); }, [userId, contentType]);
+
+  const loadHistory = () => {
+    if (!userId) { setHistoryLoading(false); return; }
+    setHistoryLoading(true);
+    supabase.from("vocab_quiz_history").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(30).then(({ data, error }) => {
+      if (error) console.error("โหลดประวัติแบบทดสอบไม่สำเร็จ:", error.message);
+      setHistory(data || []);
+      setHistoryLoading(false);
+    });
+  };
+  useEffect(() => { if (view === "history") loadHistory(); }, [view, userId]);
 
   const onSaved = (row) => setWords((list) => { const i = list.findIndex((w) => w.id === row.id); if (i === -1) return [row, ...list]; const copy = [...list]; copy[i] = row; return copy; });
   const onSavedBatch = (rows) => setWords((list) => [...rows, ...list]);
 
   const delWord = async (w) => {
     setWords((list) => list.filter((x) => x.id !== w.id));
-    if (userId) await supabase.from("vocab_words").delete().eq("id", w.id);
+    if (userId) await supabase.from(table).delete().eq("id", w.id);
   };
 
   const setStatus = async (w, status) => {
     setWords((list) => list.map((x) => (x.id === w.id ? { ...x, status, review_count: (x.review_count || 0) + 1 } : x)));
-    if (userId) await supabase.from("vocab_words").update({ status, review_count: (w.review_count || 0) + 1 }).eq("id", w.id);
+    if (userId) await supabase.from(table).update({ status, review_count: (w.review_count || 0) + 1 }).eq("id", w.id);
   };
 
   const knownCount = words.filter((w) => w.status === "known").length;
@@ -9858,7 +9976,7 @@ function LangPage({ t, lang, userId, session }) {
   const reviewQueue = reviewPool.length ? reviewPool : topicWords;
   const current = reviewQueue.length ? reviewQueue[reviewIdx % reviewQueue.length] : null;
   const nextCard = () => { setReviewIdx((i) => i + 1); setFlipped(false); };
-  useEffect(() => { setReviewIdx(0); setFlipped(false); }, [topic, level]);
+  useEffect(() => { setReviewIdx(0); setFlipped(false); }, [topic, level, contentType]);
 
   // ปัดซ้าย/ขวา เปลี่ยนหมวด เหมือนหน้าข่าว
   const touchStartRef = useRef(null);
@@ -9874,13 +9992,22 @@ function LangPage({ t, lang, userId, session }) {
   };
 
   const currentTopicMeta = VOCAB_TOPICS.find((c) => c.id === topic);
+  const isWord = contentType === "word";
+  const noun = isWord ? "คำศัพท์" : "ประโยค";
 
   return (<>
-    <PageHead t={t} title={L(lang, "ph_lang_title")} sub={lang === "en" ? `My words ${words.length} · known ${knownCount}` : `คำศัพท์ของฉัน ${words.length} คำ · จำได้แล้ว ${knownCount} คำ`} icon={<Languages size={20} color={t.accent} />} />
+    <PageHead t={t} title={L(lang, "ph_lang_title")} sub={lang === "en" ? `My words ${words.length} · known ${knownCount}` : `${noun}ของฉัน ${words.length} · จำได้แล้ว ${knownCount}`} icon={<Languages size={20} color={t.accent} />} />
 
-    <div style={{ display: "flex", gap: 6, marginBottom: 10, background: t.inputBg, borderRadius: 12, padding: 4 }}>
-      <button onClick={() => setView("review")} style={{ flex: 1, padding: "8px 0", borderRadius: 9, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 12.5, background: view === "review" ? t.accent : "transparent", color: view === "review" ? t.onAccent : t.sub }}>🔁 ทบทวน</button>
-      <button onClick={() => setView("manage")} style={{ flex: 1, padding: "8px 0", borderRadius: 9, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 12.5, background: view === "manage" ? t.accent : "transparent", color: view === "manage" ? t.onAccent : t.sub }}>📋 จัดการคำศัพท์</button>
+    {/* 📖💬 สลับคลังคำศัพท์ / คลังประโยค */}
+    <div style={{ display: "flex", gap: 6, marginBottom: 8, background: t.inputBg, borderRadius: 12, padding: 4 }}>
+      <button onClick={() => setContentType("word")} style={{ flex: 1, padding: "8px 0", borderRadius: 9, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 12.5, background: contentType === "word" ? t.accent : "transparent", color: contentType === "word" ? t.onAccent : t.sub }}>📖 คำศัพท์</button>
+      <button onClick={() => setContentType("sentence")} style={{ flex: 1, padding: "8px 0", borderRadius: 9, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 12.5, background: contentType === "sentence" ? t.accent : "transparent", color: contentType === "sentence" ? t.onAccent : t.sub }}>💬 ประโยค</button>
+    </div>
+
+    <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 8 }}>
+      {[["review", "🔁 ทบทวน"], ["quiz", "🧪 ทดสอบ"], ["manage", "📋 จัดการ"], ["history", "📊 ประวัติ"]].map(([id, lb]) => (
+        <button key={id} onClick={() => setView(id)} style={{ flexShrink: 0, padding: "7px 14px", borderRadius: 12, cursor: "pointer", fontWeight: 700, fontSize: 12, border: `1.5px solid ${view === id ? t.accent : t.border}`, background: view === id ? t.accent : "transparent", color: view === id ? t.onAccent : t.sub }}>{lb}</button>
+      ))}
     </div>
 
     {/* 📚 ตัวเลือกหมวด + ระดับ — แบบเดียวกับหน้าข่าว */}
@@ -9899,7 +10026,7 @@ function LangPage({ t, lang, userId, session }) {
       ))}
     </div>
 
-    {loading && <Empty t={t} text="กำลังโหลด..." />}
+    {loading && view !== "history" && <Empty t={t} text="กำลังโหลด..." />}
 
     <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
     {!loading && view === "review" && (
@@ -9907,14 +10034,14 @@ function LangPage({ t, lang, userId, session }) {
         <div style={{ ...card(t), padding: 28, textAlign: "center" }}>
           <Sparkles size={28} color={t.accent} style={{ marginBottom: 10 }} />
           <div style={{ fontSize: 14.5, fontWeight: 800, color: t.text, marginBottom: 4 }}>หมวดนี้ยังไม่มีบทเรียน</div>
-          <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>ให้ AI สร้างคำศัพท์หมวดนี้ให้พร้อมเรียนได้เลย</div>
+          <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>ให้ AI สร้าง{noun}หมวดนี้ให้พร้อมเรียนได้เลย</div>
           <button onClick={() => setGenOpen(true)} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "13px 0", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14 }}><Sparkles size={16} /> ให้ AI สร้างบทเรียนให้เลย</button>
-          <button onClick={() => setAddOpen(true)} style={{ background: "none", border: "none", cursor: "pointer", color: t.faint, fontSize: 11.5, marginTop: 12, textDecoration: "underline" }}>หรือเพิ่มคำศัพท์เองทีละคำ</button>
+          <button onClick={() => setAddOpen(true)} style={{ background: "none", border: "none", cursor: "pointer", color: t.faint, fontSize: 11.5, marginTop: 12, textDecoration: "underline" }}>หรือเพิ่ม{noun}เองทีละอัน</button>
         </div>
       ) : (<>
         <div onClick={() => setFlipped((v) => !v)} style={{ ...card(t), padding: 24, textAlign: "center", minHeight: 200, display: "flex", flexDirection: "column", justifyContent: "center", cursor: "pointer" }}>
           {current.level && <div style={{ fontSize: 10.5, fontWeight: 700, color: t.accent, marginBottom: 8 }}>{current.level}</div>}
-          <div style={{ fontSize: 30, fontWeight: 800, color: t.text }}>{current.word}</div>
+          <div style={{ fontSize: isWord ? 30 : 20, fontWeight: 800, color: t.text, lineHeight: 1.4 }}>{current.word}</div>
           {current.pronunciation && <div style={{ fontSize: 13, color: t.faint, marginTop: 4 }}>[{current.pronunciation}]</div>}
           {flipped ? (<>
             {current.meaning && <div style={{ fontSize: 15, color: t.accent, fontWeight: 700, marginTop: 12 }}>{current.meaning}</div>}
@@ -9927,19 +10054,28 @@ function LangPage({ t, lang, userId, session }) {
           <button onClick={() => { setStatus(current, "learning"); nextCard(); }} style={{ ...card(t), flex: 1, padding: "12px 0", fontSize: 13, fontWeight: 700, color: t.sub, cursor: "pointer" }}>ยังไม่ชิน</button>
           <button onClick={() => { setStatus(current, "known"); nextCard(); }} style={{ ...card(t), flex: 1, padding: "12px 0", fontSize: 13, fontWeight: 700, color: "#2E9E6B", cursor: "pointer", border: `1px solid #2E9E6B55` }}>จำได้แล้ว ✓</button>
         </div>
-        <button onClick={nextCard} style={{ ...card(t), width: "100%", marginTop: 8, padding: "11px 0", fontSize: 13, fontWeight: 700, color: t.text, cursor: "pointer" }}>ข้ามคำนี้ →</button>
+        <button onClick={nextCard} style={{ ...card(t), width: "100%", marginTop: 8, padding: "11px 0", fontSize: 13, fontWeight: 700, color: t.text, cursor: "pointer" }}>ข้ามอันนี้ →</button>
       </>)
     )}
 
+    {!loading && view === "quiz" && (
+      <div style={{ ...card(t), padding: 28, textAlign: "center" }}>
+        <div style={{ fontSize: 32, marginBottom: 10 }}>🧪</div>
+        <div style={{ fontSize: 14.5, fontWeight: 800, color: t.text, marginBottom: 4 }}>แบบทดสอบหมวด {currentTopicMeta?.label}</div>
+        <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>เลือกความหมายที่ถูกต้อง มีคะแนนให้เมื่อจบ เก็บลงประวัติอัตโนมัติ</div>
+        <button onClick={() => setQuizOpen(true)} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "13px 0", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14 }}>เริ่มทำแบบทดสอบ</button>
+      </div>
+    )}
+
     {!loading && view === "manage" && (<>
-      <button onClick={() => { setEditing(null); setAddOpen(true); }} style={{ ...card(t), width: "100%", padding: "10px 0", marginBottom: 12, border: `1px solid ${t.border}`, color: t.sub, fontWeight: 700, fontSize: 12.5, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Plus size={14} /> เพิ่มคำศัพท์เองทีละคำ</button>
-      {topicWords.length === 0 && <Empty t={t} text="หมวดนี้ยังไม่มีคำศัพท์ — ลองกด ✨ AI เจนให้ ด้านบนดูก่อนได้เลย" />}
+      <button onClick={() => { setEditing(null); setAddOpen(true); }} style={{ ...card(t), width: "100%", padding: "10px 0", marginBottom: 12, border: `1px solid ${t.border}`, color: t.sub, fontWeight: 700, fontSize: 12.5, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Plus size={14} /> เพิ่ม{noun}เองทีละอัน</button>
+      {topicWords.length === 0 && <Empty t={t} text={`หมวดนี้ยังไม่มี${noun} — ลองกด ✨ AI เจนให้ ด้านบนดูก่อนได้เลย`} />}
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {topicWords.map((w) => (
           <div key={w.id} style={{ ...card(t), padding: 12 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 6 }}>
+                <div style={{ fontSize: 14, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                   {w.word} {w.level && <span style={{ fontSize: 9.5, fontWeight: 700, color: t.accent, background: `${t.accent}18`, padding: "1px 6px", borderRadius: 8 }}>{w.level}</span>}
                   {w.status === "known" && <Check size={13} color="#2E9E6B" />}
                 </div>
@@ -9949,25 +10085,41 @@ function LangPage({ t, lang, userId, session }) {
               </div>
               <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
                 <button onClick={() => { setEditing(w); setAddOpen(true); }} style={ghost}><Pencil size={15} color={t.faint} /></button>
-                <button onClick={() => askConfirm(`ลบคำว่า "${w.word}" เลยไหม?`, () => delWord(w))} style={ghost}><Trash2 size={15} color={t.faint} /></button>
+                <button onClick={() => askConfirm(`ลบ "${w.word}" เลยไหม?`, () => delWord(w))} style={ghost}><Trash2 size={15} color={t.faint} /></button>
               </div>
             </div>
           </div>
         ))}
       </div>
     </>)}
+
+    {view === "history" && (
+      historyLoading ? <Empty t={t} text="กำลังโหลด..." /> : history.length === 0 ? <Empty t={t} text="ยังไม่เคยทำแบบทดสอบเลย ลองแท็บ 🧪 ทดสอบดูได้เลย" /> : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {history.map((h) => (
+            <div key={h.id} style={{ ...card(t), padding: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{VOCAB_TOPICS.find((c) => c.id === h.category)?.label || h.category} <span style={{ fontSize: 10.5, color: t.faint }}>· {h.mode === "word" ? "คำศัพท์" : "ประโยค"} · {h.level}</span></div>
+                <div style={{ fontSize: 10.5, color: t.faint, marginTop: 2 }}>{new Date(h.created_at).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" })}</div>
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: h.score === h.total ? "#2E9E6B" : t.accent }}>{h.score}/{h.total}</div>
+            </div>
+          ))}
+        </div>
+      )
+    )}
     </div>
 
     {menuOpen && (
       <ModalPortal>
         <div style={overlayHi} onClick={() => setMenuOpen(false)}>
           <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "75vh", overflowY: "auto" }}>
-            <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 14 }}>เลือกหมวดคำศัพท์</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 14 }}>เลือกหมวด{noun}</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {VOCAB_TOPICS.map((c) => (
                 <button key={c.id} onClick={() => { setTopic(c.id); setMenuOpen(false); }} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px", borderRadius: 12, border: "none", cursor: "pointer", background: topic === c.id ? `${t.accent}18` : "none", textAlign: "left" }}>
                   <span style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{c.label}</span>
-                  <span style={{ fontSize: 11.5, color: t.faint }}>{wordCountByTopic(c.id)} คำ</span>
+                  <span style={{ fontSize: 11.5, color: t.faint }}>{wordCountByTopic(c.id)}</span>
                 </button>
               ))}
             </div>
@@ -9976,8 +10128,9 @@ function LangPage({ t, lang, userId, session }) {
       </ModalPortal>
     )}
 
-    {addOpen && <VocabWordModal t={t} initial={editing || { category: topic, level: level === "all" ? "A1" : level }} userId={userId} session={session} close={() => setAddOpen(false)} onSaved={onSaved} />}
-    {genOpen && <VocabBatchGenModal t={t} userId={userId} session={session} category={topic} level={level === "all" ? "A1" : level} close={() => setGenOpen(false)} onSaved={onSavedBatch} />}
+    {addOpen && <VocabWordModal t={t} table={table} mode={contentType} initial={editing || { category: topic }} userId={userId} session={session} close={() => setAddOpen(false)} onSaved={onSaved} />}
+    {genOpen && <VocabBatchGenModal t={t} table={table} mode={contentType} userId={userId} session={session} category={topic} level={level === "all" ? "A1" : level} close={() => setGenOpen(false)} onSaved={onSavedBatch} />}
+    {quizOpen && <VocabQuizModal t={t} mode={contentType} category={topic} level={level === "all" ? "mixed" : level} pool={topicWords} allItems={words} userId={userId} close={() => setQuizOpen(false)} onFinished={loadHistory} />}
     {ConfirmUI}
   </>);
 }
