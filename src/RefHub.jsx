@@ -3956,7 +3956,7 @@ function widgetBentoData(id, t, { balance, todayNet, goalDone, goals, todayArtic
 }
 
 // 🏠 โครง Home แบบ "โฟกัส" — ยอดเงินตัวใหญ่บนสุด + แถวไอคอนฟังก์ชันลัด (ปรับ/ลบ/เพิ่ม/ลากสลับลำดับเองได้) + list เรียบ
-function HomeWidgetsWallet({ t, shp, M, isNight, setMentorPick, setChatOpen, setMusicOpen, balance, todayNet, goalDone, goals, todayArticles, latestNote, setPage, setCommunityOpen, commPreview, walletWidgets, onEditWidgets, heroShortcuts }) {
+function HomeWidgetsWallet({ t, lang, shp, M, isNight, setMentorPick, setChatOpen, setMusicOpen, balance, todayNet, goalDone, goals, todayArticles, latestNote, setPage, setCommunityOpen, commPreview, walletWidgets, onEditWidgets, heroShortcuts }) {
   const sharp = shp.radius === 0;
   return (
     <>
@@ -4021,7 +4021,7 @@ function WalletRow({ t, shp, icon, title, sub, onClick }) {
 }
 
 // 🧱 โครง Home แบบ "โมเสก" — บล็อกยอดเงินใหญ่เด่น + บล็อกเล็กล้อมรอบ (ปรับ/ลบ/เพิ่ม/ลากสลับลำดับเองได้ ใช้สี solid ไม่จางแล้ว)
-function HomeWidgetsBento({ t, shp, M, isNight, setMentorPick, setChatOpen, setMusicOpen, balance, todayNet, goalDone, goals, todayArticles, latestNote, setPage, setCommunityOpen, commPreview, bentoWidgets, onEditWidgets, heroShortcuts }) {
+function HomeWidgetsBento({ t, lang, shp, M, isNight, setMentorPick, setChatOpen, setMusicOpen, balance, todayNet, goalDone, goals, todayArticles, latestNote, setPage, setCommunityOpen, commPreview, bentoWidgets, onEditWidgets, heroShortcuts }) {
   const sharp = shp.radius === 0;
   const data = { balance, todayNet, goalDone, goals, todayArticles, latestNote, commPreview };
   const resolve = (id) => {
@@ -4275,9 +4275,9 @@ function HomePage({ t, lang, M, quote, isNight, setMentorPick, balance, tx, goal
       ))}
       <div style={{ margin: cardShape === "sharp" ? "0 -10px" : 0 }}>
       {homeLayout === "wallet" ? (
-        <HomeWidgetsWallet t={t} shp={shp} M={M} isNight={isNight} setMentorPick={setMentorPick} setChatOpen={setChatOpen} setMusicOpen={setMusicOpen} balance={balance} todayNet={todayNet} goalDone={goalDone} goals={goals} todayArticles={todayArticles} latestNote={latestNote} setPage={setPage} setCommunityOpen={setCommunityOpen} commPreview={commPreview} walletWidgets={walletWidgets} onEditWidgets={() => setEditWidgetsOpen(true)} heroShortcuts={heroShortcuts} />
+        <HomeWidgetsWallet t={t} lang={lang} shp={shp} M={M} isNight={isNight} setMentorPick={setMentorPick} setChatOpen={setChatOpen} setMusicOpen={setMusicOpen} balance={balance} todayNet={todayNet} goalDone={goalDone} goals={goals} todayArticles={todayArticles} latestNote={latestNote} setPage={setPage} setCommunityOpen={setCommunityOpen} commPreview={commPreview} walletWidgets={walletWidgets} onEditWidgets={() => setEditWidgetsOpen(true)} heroShortcuts={heroShortcuts} />
       ) : homeLayout === "bento" ? (
-        <HomeWidgetsBento t={t} shp={shp} M={M} isNight={isNight} setMentorPick={setMentorPick} setChatOpen={setChatOpen} setMusicOpen={setMusicOpen} balance={balance} todayNet={todayNet} goalDone={goalDone} goals={goals} todayArticles={todayArticles} latestNote={latestNote} setPage={setPage} setCommunityOpen={setCommunityOpen} commPreview={commPreview} bentoWidgets={bentoWidgets} onEditWidgets={() => setEditWidgetsOpen(true)} heroShortcuts={heroShortcuts} />
+        <HomeWidgetsBento t={t} lang={lang} shp={shp} M={M} isNight={isNight} setMentorPick={setMentorPick} setChatOpen={setChatOpen} setMusicOpen={setMusicOpen} balance={balance} todayNet={todayNet} goalDone={goalDone} goals={goals} todayArticles={todayArticles} latestNote={latestNote} setPage={setPage} setCommunityOpen={setCommunityOpen} commPreview={commPreview} bentoWidgets={bentoWidgets} onEditWidgets={() => setEditWidgetsOpen(true)} heroShortcuts={heroShortcuts} />
       ) : (
         <>
       <div style={{ marginTop: 8, background: t.hero, border: `1px solid ${t.heroBorder}`, borderRadius: shp.radius, padding: shp.radius === 0 ? 30 : 20, position: "relative", overflow: "hidden", boxShadow: isNight ? "none" : "0 10px 24px rgba(30,40,70,.18)" }}>
