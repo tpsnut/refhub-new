@@ -10277,14 +10277,14 @@ function VocabGuideModal({ t, lang, close }) {
   const isEn = lang === "en";
   const steps = isEn ? [
     { icon: "📖💬", title: "Words or Sentences", text: "Switch between a vocabulary bank and a conversation-sentence bank at the top." },
-    { icon: "📚", title: "Pick a topic", text: "Tap the topic button (with the ▾ arrow) to choose a category like Self, School, Work, Travel, Food... or swipe left/right to switch." },
+    { icon: "📚", title: "Pick a topic", text: "Tap the topic button (with the ▾ arrow) to choose a category like Self, School, Work, Travel, Food... or swipe left/right to switch. Not sure where to start? Try \"General\" first." },
     { icon: "✨", title: "Let AI build the lesson", text: "If a topic is empty, tap \"Let AI create a lesson\" — pick \"all levels\" for a random mix of A1-C1, or a specific level for that level only." },
     { icon: "🔁🧪🎧🎤✍️", title: "5 practice modes", text: "Review (flashcards), Quiz (multiple choice, scored), Listen (type what you hear), Speak (say it, mic checks you), Write (AI grades your writing)." },
     { icon: "📋📊", title: "Manage & History", text: "Manage lets you add/edit/delete your own entries. History shows every quiz/listening/speaking score you've ever gotten." },
     { icon: "🔥⭐", title: "Streak & XP", text: "Practice daily to build your streak, earn XP, and unlock badges — shown right under the page title." },
   ] : [
     { icon: "📖💬", title: "คำศัพท์ หรือ ประโยค", text: "สลับได้ที่แถบด้านบนสุด — คนละคลังกัน แยกเก็บอิสระ" },
-    { icon: "📚", title: "เลือกหมวด", text: "กดปุ่มหมวด (มีลูกศร ▾) เพื่อเลือกหัวข้อ เช่น ตัวเอง โรงเรียน งาน ท่องเที่ยว อาหาร... หรือปัดซ้าย-ขวาเพื่อเปลี่ยนหมวดก็ได้" },
+    { icon: "📚", title: "เลือกหมวด", text: "กดปุ่มหมวด (มีลูกศร ▾) เพื่อเลือกหัวข้อ เช่น ตัวเอง โรงเรียน งาน ท่องเที่ยว อาหาร... หรือปัดซ้าย-ขวาเพื่อเปลี่ยนหมวดก็ได้ ยังไม่รู้จะเริ่มไหน? เริ่มที่ \"ทั่วไป\" ก่อนได้เลย" },
     { icon: "✨", title: "ให้ AI สร้างบทเรียนให้", text: "ถ้าหมวดไหนยังว่าง กดปุ่ม \"AI สร้างบทเรียนให้เลย\" — เลือก \"ทุกระดับ\" จะได้คละ A1-C1 มาปนกัน หรือเลือกระดับเฉพาะก็ได้" },
     { icon: "🔁🧪🎧🎤✍️", title: "5 โหมดฝึก", text: "ทบทวน (flashcard พลิกดู), ทดสอบ (เลือกตอบ ให้คะแนน), ฟัง (พิมพ์ตามที่ได้ยิน), พูด (พูดใส่ไมค์ เครื่องเช็คให้), เขียน (AI ตรวจให้คะแนน)" },
     { icon: "📋📊", title: "จัดการ & ประวัติ", text: "แท็บจัดการไว้เพิ่ม/แก้/ลบเองได้ ส่วนประวัติเก็บคะแนนทุกครั้งที่ทำแบบทดสอบ/ฟัง/พูดไว้ดูย้อนหลัง" },
@@ -10516,7 +10516,7 @@ function LangPage({ t, lang, userId, session }) {
         <div style={{ ...card(t), padding: 28, textAlign: "center" }}>
           <Sparkles size={28} color={t.accent} style={{ marginBottom: 10 }} />
           <div style={{ fontSize: 14.5, fontWeight: 800, color: t.text, marginBottom: 4 }}>หมวดนี้ยังไม่มีบทเรียน</div>
-          <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>ให้ AI สร้าง{noun}หมวดนี้ให้พร้อมเรียนได้เลย</div>
+          <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>{topic === "general" ? "หมวด \"ทั่วไป\" นี้เหมาะกับทุกคนเลย เริ่มตรงนี้ก่อนได้ ไม่ต้องคิดเยอะ" : `ให้ AI สร้าง${noun}หมวดนี้ให้พร้อมเรียนได้เลย`}</div>
           <button onClick={() => setGenOpen(true)} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "13px 0", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14 }}><Sparkles size={16} /> ให้ AI สร้างบทเรียนให้เลย</button>
           <button onClick={() => setAddOpen(true)} style={{ background: "none", border: "none", cursor: "pointer", color: t.faint, fontSize: 11.5, marginTop: 12, textDecoration: "underline" }}>หรือเพิ่ม{noun}เองทีละอัน</button>
         </div>
@@ -10627,11 +10627,15 @@ function LangPage({ t, lang, userId, session }) {
       <ModalPortal>
         <div style={overlayHi} onClick={() => setMenuOpen(false)}>
           <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "75vh", overflowY: "auto" }}>
-            <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 14 }}>เลือกหมวด{noun}</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 2 }}>เลือกหมวด{noun}</div>
+            <div style={{ fontSize: 11, color: t.sub, marginBottom: 14 }}>ยังไม่รู้จะเริ่มไหน? เริ่มที่ "ทั่วไป" ก่อนได้เลย เหมาะกับทุกคน</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {VOCAB_TOPICS.map((c) => (
-                <button key={c.id} onClick={() => { setTopic(c.id); setMenuOpen(false); }} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px", borderRadius: 12, border: "none", cursor: "pointer", background: topic === c.id ? `${t.accent}18` : "none", textAlign: "left" }}>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{c.label}</span>
+                <button key={c.id} onClick={() => { setTopic(c.id); setMenuOpen(false); }} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px", borderRadius: 12, border: c.id === "general" ? `1.5px solid ${t.accent}` : "none", cursor: "pointer", background: topic === c.id ? `${t.accent}18` : "none", textAlign: "left" }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: t.text, display: "flex", alignItems: "center", gap: 6 }}>
+                    {c.label}
+                    {c.id === "general" && <span style={{ fontSize: 9.5, fontWeight: 700, color: t.accent, background: `${t.accent}18`, padding: "1px 6px", borderRadius: 8 }}>เริ่มตรงนี้ 👍</span>}
+                  </span>
                   <span style={{ fontSize: 11.5, color: t.faint }}>{wordCountByTopic(c.id)}</span>
                 </button>
               ))}
