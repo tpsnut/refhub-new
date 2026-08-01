@@ -9729,10 +9729,10 @@ function VocabWordModal({ t, table = "vocab_words", mode = "word", initial, user
 function VocabBatchGenModal({ t, table = "vocab_words", mode = "word", userId, session, category, level: levelProp, close, onSaved }) {
   const isWord = mode === "word";
   const [count, setCount] = useState(10);
-  const [level, setLevel] = useState(levelProp === "mixed" || !levelProp ? "A1" : levelProp);
+  const isMixed = levelProp === "mixed" || !levelProp; // ข้างนอกเลือก "ทุกระดับ" ไว้ — ให้ AI สุ่มคละทุกระดับมาในชุดเดียวเลย ไม่ต้องเลือกเอง
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
-  const [preview, setPreview] = useState(null); // [{word,pronunciation,meaning,example}]
+  const [preview, setPreview] = useState(null); // [{word,pronunciation,meaning,example,level}]
   const [saving, setSaving] = useState(false);
   const topicLabel = VOCAB_TOPICS.find((c) => c.id === category)?.label || category;
 
@@ -9743,9 +9743,13 @@ function VocabBatchGenModal({ t, table = "vocab_words", mode = "word", userId, s
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mentor: "none", userId, callerToken: session?.access_token,
-          messages: [{ who: "u", text: isWord
-            ? `สร้างคำศัพท์ภาษาอังกฤษระดับ ${level} หมวด "${topicLabel}" จำนวน ${count} คำ ที่ยังไม่ซ้ำกัน ตอบเป็นรายการบรรทัดละ 1 คำ รูปแบบเป๊ะๆ ห้ามมีเลขข้อ/เครื่องหมายนำหน้า/หัวข้ออื่นใดๆ:\nword | คำอ่านไทย | ความหมายไทย | ตัวอย่างประโยคภาษาอังกฤษสั้นๆ`
-            : `สร้างประโยคสนทนาภาษาอังกฤษที่ใช้บ่อยในชีวิตจริง ระดับ ${level} หมวด "${topicLabel}" จำนวน ${count} ประโยค ที่ยังไม่ซ้ำกัน ตอบเป็นรายการบรรทัดละ 1 ประโยค รูปแบบเป๊ะๆ ห้ามมีเลขข้อ/เครื่องหมายนำหน้า/หัวข้ออื่นใดๆ:\nประโยคภาษาอังกฤษ | คำอ่านไทยทับศัพท์ | คำแปลไทย` }],
+          messages: [{ who: "u", text: isMixed
+            ? (isWord
+              ? `สร้างคำศัพท์ภาษาอังกฤษหมวด "${topicLabel}" จำนวน ${count} คำ ที่ยังไม่ซ้ำกัน คละระดับ CEFR ให้กระจายทั้ง A1,A2,B1,B2,C1 ปนกันไปในชุดนี้ (ไม่ต้องเรียงลำดับ) ตอบเป็นรายการบรรทัดละ 1 คำ รูปแบบเป๊ะๆ ห้ามมีเลขข้อ/เครื่องหมายนำหน้า/หัวข้ออื่นใดๆ:\nword | คำอ่านไทย | ความหมายไทย | ตัวอย่างประโยคภาษาอังกฤษสั้นๆ | ระดับ(A1/A2/B1/B2/C1)`
+              : `สร้างประโยคสนทนาภาษาอังกฤษที่ใช้บ่อยในชีวิตจริง หมวด "${topicLabel}" จำนวน ${count} ประโยค ที่ยังไม่ซ้ำกัน คละระดับ CEFR ให้กระจายทั้ง A1,A2,B1,B2,C1 ปนกันไปในชุดนี้ (ไม่ต้องเรียงลำดับ) ตอบเป็นรายการบรรทัดละ 1 ประโยค รูปแบบเป๊ะๆ ห้ามมีเลขข้อ/เครื่องหมายนำหน้า/หัวข้ออื่นใดๆ:\nประโยคภาษาอังกฤษ | คำอ่านไทยทับศัพท์ | คำแปลไทย | ระดับ(A1/A2/B1/B2/C1)`)
+            : (isWord
+              ? `สร้างคำศัพท์ภาษาอังกฤษระดับ ${levelProp} หมวด "${topicLabel}" จำนวน ${count} คำ ที่ยังไม่ซ้ำกัน ตอบเป็นรายการบรรทัดละ 1 คำ รูปแบบเป๊ะๆ ห้ามมีเลขข้อ/เครื่องหมายนำหน้า/หัวข้ออื่นใดๆ:\nword | คำอ่านไทย | ความหมายไทย | ตัวอย่างประโยคภาษาอังกฤษสั้นๆ`
+              : `สร้างประโยคสนทนาภาษาอังกฤษที่ใช้บ่อยในชีวิตจริง ระดับ ${levelProp} หมวด "${topicLabel}" จำนวน ${count} ประโยค ที่ยังไม่ซ้ำกัน ตอบเป็นรายการบรรทัดละ 1 ประโยค รูปแบบเป๊ะๆ ห้ามมีเลขข้อ/เครื่องหมายนำหน้า/หัวข้ออื่นใดๆ:\nประโยคภาษาอังกฤษ | คำอ่านไทยทับศัพท์ | คำแปลไทย`) }],
         }),
       });
       const data = await r.json();
@@ -9753,7 +9757,8 @@ function VocabBatchGenModal({ t, table = "vocab_words", mode = "word", userId, s
       const rows = (data.text || "").split("\n").map((line) => {
         const parts = line.split("|").map((s) => s.trim());
         if (parts.length < 2 || !parts[0]) return null;
-        return { word: parts[0].replace(/^[-•\d.)\s]+/, ""), pronunciation: parts[1] || "", meaning: parts[2] || "", example: parts[3] || "" };
+        const lvlRaw = isMixed ? (parts[4] || "").toUpperCase().match(/A1|A2|B1|B2|C1/)?.[0] : levelProp;
+        return { word: parts[0].replace(/^[-•\d.)\s]+/, ""), pronunciation: parts[1] || "", meaning: parts[2] || "", example: parts[3] || "", level: lvlRaw || "A1" };
       }).filter(Boolean);
       if (!rows.length) throw new Error(`AI ไม่ได้ส่งรายการ${isWord ? "คำศัพท์" : "ประโยค"}กลับมาในรูปแบบที่อ่านได้ ลองใหม่อีกครั้ง`);
       setPreview(rows);
@@ -9765,7 +9770,7 @@ function VocabBatchGenModal({ t, table = "vocab_words", mode = "word", userId, s
   const saveAll = async () => {
     if (!preview?.length || saving) return;
     setSaving(true);
-    const rows = preview.map((p) => ({ id: uid(), user_id: userId, word: p.word, pronunciation: p.pronunciation, meaning: p.meaning, example: p.example, category, level, status: "learning", review_count: 0, created_at: new Date().toISOString() }));
+    const rows = preview.map((p) => ({ id: uid(), user_id: userId, word: p.word, pronunciation: p.pronunciation, meaning: p.meaning, example: p.example, category, level: p.level, status: "learning", review_count: 0, created_at: new Date().toISOString() }));
     try {
       const { error } = await supabase.from(table).insert(rows);
       if (error) throw error;
@@ -9784,15 +9789,9 @@ function VocabBatchGenModal({ t, table = "vocab_words", mode = "word", userId, s
             <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>✨ AI เจน{isWord ? "คำศัพท์" : "ประโยค"}ให้</div>
             <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
           </div>
-          <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 14 }}>หมวด {topicLabel}</div>
+          <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 14 }}>หมวด {topicLabel} · ระดับ {isMixed ? "คละทุกระดับ 🎲" : levelProp}</div>
 
           {!preview && (<>
-            <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>ระดับ (CEFR)</div>
-            <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
-              {CEFR_LEVELS.map((lv) => (
-                <button key={lv} onClick={() => setLevel(lv)} style={{ flex: 1, padding: "8px 0", borderRadius: 10, cursor: "pointer", fontSize: 12.5, fontWeight: 700, border: `1.5px solid ${level === lv ? t.accent : t.border}`, background: level === lv ? t.accent : "transparent", color: level === lv ? t.onAccent : t.sub }}>{lv}</button>
-              ))}
-            </div>
             <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>จำนวน{isWord ? "คำ" : "ประโยค"}</div>
             <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
               {[5, 10, 20].map((n) => (
@@ -9810,7 +9809,7 @@ function VocabBatchGenModal({ t, table = "vocab_words", mode = "word", userId, s
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14, maxHeight: "45vh", overflowY: "auto" }}>
               {preview.map((p, i) => (
                 <div key={i} style={{ ...card(t), padding: 10 }}>
-                  <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text }}>{p.word} <span style={{ fontSize: 11, color: t.faint, fontWeight: 400 }}>({p.pronunciation})</span></div>
+                  <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text }}>{p.word} <span style={{ fontSize: 11, color: t.faint, fontWeight: 400 }}>({p.pronunciation})</span> <span style={{ fontSize: 9.5, fontWeight: 700, color: t.accent, background: `${t.accent}18`, padding: "1px 6px", borderRadius: 8 }}>{p.level}</span></div>
                   <div style={{ fontSize: 12, color: t.sub }}>{p.meaning}</div>
                   {p.example && <div style={{ fontSize: 11, color: t.faint, fontStyle: "italic" }}>"{p.example}"</div>}
                 </div>
