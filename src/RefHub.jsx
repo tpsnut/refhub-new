@@ -960,6 +960,62 @@ const fmt = (n) => "฿" + Math.round(n).toLocaleString("en-US");
 const toDateStr = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const todayStr = () => toDateStr(new Date());
 
+// 🌐 พจนานุกรมแปลภาษา — ครอบคลุมโครงหลัก (เมนู/Dock/หัวข้อแต่ละหน้า/หน้าแรก) ก่อน เนื้อหาลึกในแต่ละฟีเจอร์จะทยอยแปลเพิ่มต่อไป
+// ใช้ผ่าน L(lang, key) — ถ้าไม่เจอ key จะ fallback กลับไทยเสมอ กันจอว่างเปล่าเวลาเพิ่ม key ใหม่ยังไม่ครบ 2 ภาษา
+const STRINGS = {
+  th: {
+    dock_home: "หน้าแรก", dock_ideas: "ไอเดีย", dock_trade: "ลงทุน", dock_news: "ข่าว", dock_lang: "ภาษา", dock_note: "โน้ต",
+    menu_title: "เมนู", menu_sub: "พาไปหน้า/ฟีเจอร์ใหญ่ๆ ที่แยกจากหน้าปัจจุบัน",
+    menu_admin: "หน้า Admin", menu_media: "สื่อ", menu_chat: "แชท", menu_locations: "ตำแหน่งล่าสุด",
+    menu_account: "ตั้งค่าบัญชี", menu_activity: "ประวัติการใช้งานของฉัน", menu_lang: "เปลี่ยนภาษา", menu_security: "ความปลอดภัย/ความเป็นส่วนตัว",
+    menu_signout: "ออกจากระบบ",
+    quick_theme: "ธีมสีแอป", quick_font: "ขนาดตัวอักษร", quick_daynight: "โหมดกลางวัน-กลางคืน", quick_shape: "ทรงกรอบการ์ด", quick_layout: "โครงหน้า Home",
+    ph_finance_title: "การเงิน", ph_finance_sub: "รายรับ–รายจ่าย · ใช้ได้จริงทุกวัน",
+    ph_admin_title: "Admin", ph_admin_sub: "จัดการสมาชิกและดูความเคลื่อนไหวของแอป",
+    ph_chat_title: "แชท", ph_chat_sub1: "คุยกับคนในครอบครัว", ph_chat_sub2: "สร้างห้องเองหรือแลกโค้ดกับเพื่อน",
+    ph_locations_title: "ตำแหน่งล่าสุด", ph_locations_sub: "เห็นเฉพาะคนที่แชร์ไว้และแอดมินอนุญาตให้คุณดู",
+    ph_goalsreport_title: "รายงานเป้าหมาย", ph_goalsreport_sub: "ย้อนดูว่าแต่ละวันทำอะไรไปบ้าง ทำบ่อยแค่ไหน",
+    ph_note_title: "โน้ต", ph_note_sub: "จดไอเดีย บันทึกการเรียนรู้ · แนบรูป/ไฟล์ได้",
+    ph_ideas_title: "คลังความรู้", ph_ideas_sub_pick: "เลือกความสนใจของคุณก่อนเริ่มได้เลย",
+    ph_trade_title: "ตลาด & การลงทุน", ph_trade_sub: "ทอง หุ้น คริปโต",
+    ph_news_title: "ข่าวสาร", ph_news_sub: "อัปเดตสถานการณ์โลก",
+    ph_lang_title: "ฝึกภาษา",
+    greet_night: "ดึกแล้ว พักบ้างนะ 🌙", greet_morning: "สวัสดีตอนเช้า ☀️", greet_afternoon: "สวัสดีตอนบ่าย 🌤️", greet_evening: "ค่ำแล้ว วันนี้เป็นไงบ้าง 🌙",
+    home_talk_coach: "คุยกับโค้ช", home_today_goal: "เป้าหมายวันนี้", home_view_history: "ดูย้อนหลัง", home_add_goal: "เพิ่มเป้าหมาย",
+    btn_save: "บันทึก", btn_cancel: "ยกเลิก", btn_delete: "ลบ", btn_edit: "แก้ไข", btn_add: "เพิ่ม", btn_close: "ปิด",
+    quick_title: "การแสดงผล", quick_title_sub: "ของที่มักปรับบ่อยๆ ระหว่างใช้งาน",
+    mode_auto: "อัตโนมัติ", mode_day: "กลางวัน", mode_night: "กลางคืน",
+    shape_sharp: "เหลี่ยมคม", shape_soft: "มนเบาๆ",
+    layout_wallet: "โฟกัส", layout_bento: "โมเสก", layout_classic: "คลาสสิก",
+  },
+  en: {
+    dock_home: "Home", dock_ideas: "Ideas", dock_trade: "Trade", dock_news: "News", dock_lang: "Lang", dock_note: "Note",
+    menu_title: "Menu", menu_sub: "Jump to other pages/major features",
+    menu_admin: "Admin Page", menu_media: "Media", menu_chat: "Chat", menu_locations: "Recent Location",
+    menu_account: "Account Settings", menu_activity: "My Activity History", menu_lang: "Change Language", menu_security: "Security & Privacy",
+    menu_signout: "Sign Out",
+    quick_theme: "App Theme", quick_font: "Font Size", quick_daynight: "Day / Night Mode", quick_shape: "Card Shape", quick_layout: "Home Layout",
+    ph_finance_title: "Finance", ph_finance_sub: "Income–expenses · for real everyday use",
+    ph_admin_title: "Admin", ph_admin_sub: "Manage members and view app activity",
+    ph_chat_title: "Chat", ph_chat_sub1: "Talk with your family", ph_chat_sub2: "Create your own room or trade codes with friends",
+    ph_locations_title: "Recent Location", ph_locations_sub: "Only visible to people who shared it and admins who allow you to see it",
+    ph_goalsreport_title: "Goals Report", ph_goalsreport_sub: "Look back at what you did each day and how often",
+    ph_note_title: "Notes", ph_note_sub: "Jot ideas, save learnings · attach images/files",
+    ph_ideas_title: "Knowledge Hub", ph_ideas_sub_pick: "Pick your interests to get started",
+    ph_trade_title: "Markets & Investing", ph_trade_sub: "Gold, stocks, crypto",
+    ph_news_title: "News", ph_news_sub: "Stay updated on world events",
+    ph_lang_title: "Vocabulary",
+    greet_night: "It's late, get some rest 🌙", greet_morning: "Good morning ☀️", greet_afternoon: "Good afternoon 🌤️", greet_evening: "Good evening, how was your day 🌙",
+    home_talk_coach: "Talk to Coach", home_today_goal: "Today's Goals", home_view_history: "View History", home_add_goal: "Add Goal",
+    btn_save: "Save", btn_cancel: "Cancel", btn_delete: "Delete", btn_edit: "Edit", btn_add: "Add", btn_close: "Close",
+    quick_title: "Display", quick_title_sub: "Things you adjust often",
+    mode_auto: "Auto", mode_day: "Day", mode_night: "Night",
+    shape_sharp: "Sharp", shape_soft: "Soft",
+    layout_wallet: "Focus", layout_bento: "Mosaic", layout_classic: "Classic",
+  },
+};
+const L = (lang, key) => STRINGS[lang]?.[key] ?? STRINGS.th[key] ?? key;
+
 // 🎯 สร้างบทสรุปเป้าหมายของ user ให้โค้ช AI อ่านและวิเคราะห์ได้ (ทำวันนี้ + แนวโน้มย้อนหลัง)
 const buildGoalsContext = (goals) => {
   if (!goals || !goals.length) return "ผู้ใช้ยังไม่เคยตั้งเป้าหมายในแอปเลยสักครั้ง";
@@ -1001,6 +1057,7 @@ export default function RefHub() {
   const [catColors, setCatColors] = useState(DEFAULT_CAT_COLORS); // 🎨 สีหมวดหมู่ (การเงิน/ความรู้/เป้าหมาย/โน้ต) ที่ user ปรับเองได้ทีละสี
   const [cardShape, setCardShape] = useState("soft"); // 🔲 ทรงกรอบการ์ด: sharp (เหลี่ยมคมแบบ SCB ไม่มีเงา) | soft (มนเบาๆ ใกล้ตัวอักษร) — default soft ตามที่ตกลง
   const [homeLayout, setHomeLayout] = useState("original"); // 🏠 โครงหน้า Home: original (ของเดิม) | wallet (แนววอลเล็ต) | bento (บล็อกผสม) — default original ตามที่ตกลง
+  const [lang, setLang] = useState("th"); // 🌐 ภาษาแอป: th | en — แปลจริง ไม่ใช่แค่ป้ายๆ, sync ข้ามอุปกรณ์เหมือน cardShape/homeLayout
   const [walletWidgets, setWalletWidgets] = useState(["finance", "knowledge", "goals", "notes"]); // 🔘 วิดเจ็ตในแถวไอคอนลัดของ layout วอลเล็ต (โฟกัส) — user ปรับ/ลบ/เพิ่ม/สลับลำดับเองได้ ("community" เอาออกแล้ว ซ้ำกับทางลัดเสริม)
   const [bentoWidgets, setBentoWidgets] = useState(["goals", "knowledge", "notes"]); // 🧱 วิดเจ็ตในบล็อกเล็กของ layout เบนโต (โมเสก) — user ปรับ/ลบ/เพิ่ม/สลับลำดับเองได้ ("community" เอาออกแล้ว ซ้ำกับทางลัดเสริม)
   const [classicWidgets, setClassicWidgets] = useState(["finance", "knowledge", "goals", "notes"]); // 🏛️ วิดเจ็ตในการ์ด 2x2 ของ layout คลาสสิก — user ปรับ/ลบ/เพิ่ม/สลับลำดับเองได้เหมือนกัน
@@ -1040,6 +1097,8 @@ export default function RefHub() {
   const [hamburgerOpen, setHamburgerOpen] = useState(false); // ☰ เมนูนำทางไปหน้าใหญ่ๆ แยกจาก ⋮ ที่เหลือแค่ปรับหน้าตาด่วน
   const [communityOpen, setCommunityOpen] = useState(false); // เปิดหน้า Community (โลกใน navbar)
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
+  const [langModalOpen, setLangModalOpen] = useState(false);
+  const [securityOpen, setSecurityOpen] = useState(false);
   const [myActivityOpen, setMyActivityOpen] = useState(false);
   const [chatUnread, setChatUnread] = useState(0); // จำนวนข้อความแชทที่ยังไม่ได้อ่าน (คำนวณจริงในหน้าแชท)
   const [msgToast, setMsgToast] = useState(null); // ป็อปอัพแจ้งข้อความใหม่ทั่วทั้งแอป { name, text, threadId, at }
@@ -1127,6 +1186,7 @@ export default function RefHub() {
           if (uSettings.cat_colors) setCatColors({ ...DEFAULT_CAT_COLORS, ...uSettings.cat_colors });
           if (uSettings.card_shape) setCardShape(uSettings.card_shape);
           if (uSettings.home_layout) setHomeLayout(uSettings.home_layout);
+          if (uSettings.lang) setLang(uSettings.lang);
           if (Array.isArray(uSettings.wallet_widgets)) setWalletWidgets(uSettings.wallet_widgets);
           if (Array.isArray(uSettings.bento_widgets)) setBentoWidgets(uSettings.bento_widgets);
           if (Array.isArray(uSettings.classic_widgets)) setClassicWidgets(uSettings.classic_widgets);
@@ -1404,6 +1464,7 @@ export default function RefHub() {
             cat_colors: catColors, // ต้องมีคอลัมน์ "cat_colors" (jsonb) เก็บสีหมวดหมู่ 4 สีที่ user ปรับเอง
             card_shape: cardShape, // เช่นกัน ต้องมีคอลัมน์ "card_shape" (text) ถึงจะ sync ข้ามอุปกรณ์ได้ ไม่งั้น error เงียบๆ เหมือนกัน
             home_layout: homeLayout, // ต้องมีคอลัมน์ "home_layout" (text) เช่นกัน
+            lang: lang, // ต้องมีคอลัมน์ "lang" (text) เช่นกัน — ค่า "th" หรือ "en"
             wallet_widgets: walletWidgets, // ต้องมีคอลัมน์ "wallet_widgets" (jsonb)
             bento_widgets: bentoWidgets, // ต้องมีคอลัมน์ "bento_widgets" (jsonb)
             classic_widgets: classicWidgets, // ต้องมีคอลัมน์ "classic_widgets" (jsonb)
@@ -1894,7 +1955,7 @@ export default function RefHub() {
                     </button>
                     <button onClick={() => setEditProfile(true)} style={{ display: "flex", alignItems: "center", background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left", marginLeft: 8 }}>
                       <div>
-                        <div style={{ fontSize: 11, color: t.sub }}>{greet(isNight)}</div>
+                        <div style={{ fontSize: 11, color: t.sub }}>{greet(lang)}</div>
                         <div style={{ fontSize: 15.5, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 5 }}>
                           {profile.name || (loaded ? "ผู้ใช้ใหม่" : "กำลังโหลด...")} <Pencil size={12} color={t.faint} />
                         </div>
@@ -1949,7 +2010,7 @@ export default function RefHub() {
                 </button>
                 <button onClick={() => setEditProfile(true)} style={{ display: "flex", alignItems: "center", background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left", marginLeft: 10 }}>
                   <div>
-                    <div style={{ fontSize: 11.5, color: t.sub }}>{greet(isNight)}</div>
+                    <div style={{ fontSize: 11.5, color: t.sub }}>{greet(lang)}</div>
                     <div style={{ fontSize: 17, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 5 }}>
                       {profile.name || (loaded ? "ผู้ใช้ใหม่" : "กำลังโหลด...")} <Pencil size={12} color={t.faint} />
                     </div>
@@ -2007,17 +2068,17 @@ export default function RefHub() {
 
         {/* CONTENT — ความสูงหารด้วยสเกลชดเชย transform:scale ข้างบน กันตอนขยายฟอนต์แล้วท้ายเนื้อหาจมใต้ Dock */}
         <div ref={contentScrollRef} onScroll={(e) => setAtTop(e.currentTarget.scrollTop < 80)} style={{ position: "relative", zIndex: 2, padding: `8px 10px ${page === "chat" || page === "chatRoom" ? 16 : 120}px`, height: `calc(${(10000 / fontScale).toFixed(2)}vh - 76px)`, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
-          {page === "home" && <ErrorCatcher t={t}><HomePage {...{ t, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, allGoals: goals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, setMusicOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget, setAddGoalOpen, setScoreRulesOpen, cardShape, homeLayout, walletWidgets, setWalletWidgets, bentoWidgets, setBentoWidgets, classicWidgets, setClassicWidgets, catColors, setCatColors, heroShortcuts, setHeroShortcuts }} /></ErrorCatcher>}
-          {page === "ledger" && <FinancePage {...{ t, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt), userId, billReminders, billPayments, markBillPaid, setBillManagerOpen }} />}
-          {page === "note" && <NotePage {...{ t, notes, setNotes, isNight, userId, session, authProfile, reminders, openReminder }} />}
-          {page === "ideas" && <IdeasPage t={t} M={M} userId={userId} session={session} authProfile={authProfile} setAuthProfile={setAuthProfile} setNotes={setNotes} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} />}
-          {page === "trade" && <TradePage t={t} />}
-          {page === "news" && <NewsPage t={t} userId={userId} authProfile={authProfile} setAuthProfile={setAuthProfile} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} hintDefs={hintDefs} seenHintKeys={seenHintKeys} dismissHint={dismissHint} setNotes={setNotes} />}
-          {page === "lang" && <LangPage t={t} userId={userId} session={session} />}
-          {page === "goalsReport" && <GoalsReportPage t={t} goals={goals} setGoals={setGoals} userId={userId} />}
-          {page === "admin" && <AdminPage t={t} session={session} userId={userId} adminAlerts={adminAlerts} setAdminAlerts={setAdminAlerts} authProfile={authProfile} setAuthProfile={setAuthProfile} />}
-          {page === "locations" && <LocationsPage t={t} userId={userId} />}
-          {page === "chat" && <ChatEntryPage t={t} M={M} userId={userId} authProfile={authProfile} session={session} openThread={(id, name, isGroup, avatarUrl, createdBy) => { setActiveThread({ id, name, isGroup: !!isGroup, avatarUrl: avatarUrl || null, createdBy: createdBy || null }); setPage("chatRoom"); }} />}
+          {page === "home" && <ErrorCatcher t={t}><HomePage {...{ t, lang, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, allGoals: goals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, setMusicOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget, setAddGoalOpen, setScoreRulesOpen, cardShape, homeLayout, walletWidgets, setWalletWidgets, bentoWidgets, setBentoWidgets, classicWidgets, setClassicWidgets, catColors, setCatColors, heroShortcuts, setHeroShortcuts }} /></ErrorCatcher>}
+          {page === "ledger" && <FinancePage {...{ t, lang, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt), userId, billReminders, billPayments, markBillPaid, setBillManagerOpen }} />}
+          {page === "note" && <NotePage {...{ t, lang, notes, setNotes, isNight, userId, session, authProfile, reminders, openReminder }} />}
+          {page === "ideas" && <IdeasPage t={t} lang={lang} M={M} userId={userId} session={session} authProfile={authProfile} setAuthProfile={setAuthProfile} setNotes={setNotes} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} />}
+          {page === "trade" && <TradePage t={t} lang={lang} />}
+          {page === "news" && <NewsPage t={t} lang={lang} userId={userId} authProfile={authProfile} setAuthProfile={setAuthProfile} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} hintDefs={hintDefs} seenHintKeys={seenHintKeys} dismissHint={dismissHint} setNotes={setNotes} />}
+          {page === "lang" && <LangPage t={t} lang={lang} userId={userId} session={session} />}
+          {page === "goalsReport" && <GoalsReportPage t={t} lang={lang} goals={goals} setGoals={setGoals} userId={userId} />}
+          {page === "admin" && <AdminPage t={t} lang={lang} session={session} userId={userId} adminAlerts={adminAlerts} setAdminAlerts={setAdminAlerts} authProfile={authProfile} setAuthProfile={setAuthProfile} />}
+          {page === "locations" && <LocationsPage t={t} lang={lang} userId={userId} />}
+          {page === "chat" && <ChatEntryPage t={t} lang={lang} M={M} userId={userId} authProfile={authProfile} session={session} openThread={(id, name, isGroup, avatarUrl, createdBy) => { setActiveThread({ id, name, isGroup: !!isGroup, avatarUrl: avatarUrl || null, createdBy: createdBy || null }); setPage("chatRoom"); }} />}
           {page === "chatRoom" && activeThread && <ChatRoomPage t={t} userId={userId} thread={activeThread} profile={profile} session={session} onLeave={() => { setActiveThread(null); setPage("chat"); }} onBack={() => { setActiveThread(null); setPage("chat"); }} activeCall={activeCall} setActiveCall={setActiveCall} setCallMinimized={setCallMinimized} />}
 
           {/* 🎵 การ์ด "กำลังเล่น" ต่อท้ายเนื้อหาหน้า Home (ใต้เป้าหมาย) — div#yt-mini-player mount ค้างตลอด
@@ -2060,7 +2121,7 @@ export default function RefHub() {
 
         </div>
 
-        {page !== "chat" && page !== "chatRoom" && <Dock t={t} cardShape={cardShape} page={page} setPage={setPage} onQuickAdd={() => setAddOpen(true)} />}
+        {page !== "chat" && page !== "chatRoom" && <Dock t={t} lang={lang} cardShape={cardShape} page={page} setPage={setPage} onQuickAdd={() => setAddOpen(true)} />}
 
         {page !== "chat" && page !== "chatRoom" && (
           <button
@@ -2083,22 +2144,22 @@ export default function RefHub() {
         {moreMenuOpen && (
           <div style={overlay} onClick={() => setMoreMenuOpen(false)}>
             <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
-              <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 2 }}>การแสดงผล</div>
-              <div style={{ fontSize: 11, color: t.sub, marginBottom: 12 }}>ของที่มักปรับบ่อยๆ ระหว่างใช้งาน</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 2 }}>{L(lang, "quick_title")}</div>
+              <div style={{ fontSize: 11, color: t.sub, marginBottom: 12 }}>{L(lang, "quick_title_sub")}</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <button onClick={() => { setThemePick(true); setMoreMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}><Palette size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>ธีมสีแอป</span></button>
-                <button onClick={() => setFontScale((s) => (s === 100 ? 115 : s === 115 ? 130 : 100))} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}><ALargeSmall size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>ขนาดตัวอักษร ({fontScale}%)</span></button>
+                <button onClick={() => { setThemePick(true); setMoreMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}><Palette size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "quick_theme")}</span></button>
+                <button onClick={() => setFontScale((s) => (s === 100 ? 115 : s === 115 ? 130 : 100))} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}><ALargeSmall size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "quick_font")} ({fontScale}%)</span></button>
                 <button onClick={() => setThemeMode(themeMode === "auto" ? "day" : themeMode === "day" ? "night" : "auto")} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
                   {isNight ? <Moon size={18} color={t.sub} /> : <Sun size={18} color={t.sub} />}
-                  <span style={{ fontSize: 14, color: t.text }}>โหมด: {themeMode === "auto" ? "อัตโนมัติ" : themeMode === "day" ? "กลางวัน" : "กลางคืน"}</span>
+                  <span style={{ fontSize: 14, color: t.text }}>{L(lang, "quick_daynight")}: {themeMode === "auto" ? L(lang, "mode_auto") : themeMode === "day" ? L(lang, "mode_day") : L(lang, "mode_night")}</span>
                 </button>
                 <button onClick={() => { setCardShapePick(true); setMoreMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
                   <LayoutGrid size={18} color={t.sub} />
-                  <span style={{ fontSize: 14, color: t.text }}>ทรงกรอบการ์ด: {cardShape === "sharp" ? "เหลี่ยมคม" : "มนเบาๆ"}</span>
+                  <span style={{ fontSize: 14, color: t.text }}>{L(lang, "quick_shape")}: {cardShape === "sharp" ? L(lang, "shape_sharp") : L(lang, "shape_soft")}</span>
                 </button>
                 <button onClick={() => { setHomeLayoutPick(true); setMoreMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
                   <Home size={18} color={t.sub} />
-                  <span style={{ fontSize: 14, color: t.text }}>โครงหน้า Home: {homeLayout === "wallet" ? "โฟกัส" : homeLayout === "bento" ? "โมเสก" : "คลาสสิก"}</span>
+                  <span style={{ fontSize: 14, color: t.text }}>{L(lang, "quick_layout")}: {homeLayout === "wallet" ? L(lang, "layout_wallet") : homeLayout === "bento" ? L(lang, "layout_bento") : L(lang, "layout_classic")}</span>
                 </button>
               </div>
             </div>
@@ -2108,38 +2169,47 @@ export default function RefHub() {
         {hamburgerOpen && (
           <div style={overlay} onClick={() => setHamburgerOpen(false)}>
             <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
-              <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 2 }}>เมนู</div>
-              <div style={{ fontSize: 11, color: t.sub, marginBottom: 12 }}>พาไปหน้า/ฟีเจอร์ใหญ่ๆ ที่แยกจากหน้าปัจจุบัน</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 2 }}>{L(lang, "menu_title")}</div>
+              <div style={{ fontSize: 11, color: t.sub, marginBottom: 12 }}>{L(lang, "menu_sub")}</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {authProfile?.role === "admin" && (
                   <button onClick={() => { setPage("admin"); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
-                    <ShieldCheck size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>หน้า Admin</span>
+                    <ShieldCheck size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "menu_admin")}</span>
                     {adminAlerts.length > 0 && <span style={{ marginLeft: "auto", width: 8, height: 8, borderRadius: 4, background: "#D9534F" }} />}
                   </button>
                 )}
-                <button onClick={() => { setMusicOpen(true); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}><Music size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>สื่อ</span></button>
+                <button onClick={() => { setMusicOpen(true); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}><Music size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "menu_media")}</span></button>
                 <button onClick={() => { setPage("chat"); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
-                  <MessageCircle size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>แชท</span>
+                  <MessageCircle size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "menu_chat")}</span>
                   {chatUnread > 0 && <span style={{ marginLeft: "auto", width: 8, height: 8, borderRadius: 4, background: "#D9534F" }} />}
                 </button>
                 {(authProfile?.can_view_locations || authProfile?.role === "admin") && (
                   <button onClick={() => { setPage("locations"); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
-                    <MapPin size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>ตำแหน่งล่าสุด</span>
+                    <MapPin size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "menu_locations")}</span>
                   </button>
                 )}
                 <button onClick={() => { setAccountSettingsOpen(true); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
-                  <KeyRound size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>ตั้งค่าบัญชี</span>
+                  <KeyRound size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "menu_account")}</span>
                 </button>
                 <button onClick={() => { setMyActivityOpen(true); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
-                  <Clock size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>ประวัติการใช้งานของฉัน</span>
+                  <Clock size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "menu_activity")}</span>
+                </button>
+                <button onClick={() => { setLangModalOpen(true); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
+                  <Languages size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "menu_lang")}</span>
+                  <span style={{ marginLeft: "auto", fontSize: 11, color: t.faint, fontWeight: 700 }}>{lang === "th" ? "ไทย" : "EN"}</span>
+                </button>
+                <button onClick={() => { setSecurityOpen(true); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
+                  <ShieldCheck size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "menu_security")}</span>
                 </button>
                 <button onClick={() => supabase.auth.signOut()} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
-                  <X size={18} color="#D9534F" /><span style={{ fontSize: 14, color: "#D9534F" }}>ออกจากระบบ</span>
+                  <X size={18} color="#D9534F" /><span style={{ fontSize: 14, color: "#D9534F" }}>{L(lang, "menu_signout")}</span>
                 </button>
               </div>
             </div>
           </div>
         )}
+        {langModalOpen && <LanguageModal t={t} lang={lang} setLang={setLang} close={() => setLangModalOpen(false)} />}
+        {securityOpen && <SecurityModal t={t} lang={lang} userId={userId} session={session} setAccountSettingsOpen={setAccountSettingsOpen} close={() => setSecurityOpen(false)} />}
         {accountSettingsOpen && <AccountSettingsModal t={t} authProfile={authProfile} setAuthProfile={setAuthProfile} userId={userId} session={session} close={() => setAccountSettingsOpen(false)} />}
         {myActivityOpen && <MyActivityModal t={t} userId={userId} close={() => setMyActivityOpen(false)} />}
         {communityOpen && <CommunityOverlay t={t} cardShape={cardShape} userId={userId} authProfile={authProfile} session={session} openThread={() => {}} close={() => setCommunityOpen(false)} />}
@@ -2520,6 +2590,96 @@ function MyActivityModal({ t, userId, close }) {
         ))}
       </div>
     </div>
+  );
+}
+
+// 🌐 เปลี่ยนภาษาแอป — บันทึกลง user_settings (sync ข้ามอุปกรณ์เหมือน cardShape/homeLayout) แปลจริงในส่วนโครงหลัก (Dock/เมนู/หัวข้อหน้า) ส่วนเนื้อหาลึกในแต่ละฟีเจอร์กำลังทยอยแปลเพิ่ม
+function LanguageModal({ t, lang, setLang, close }) {
+  const options = [
+    { id: "th", label: "ไทย", sub: "Thai" },
+    { id: "en", label: "English", sub: "อังกฤษ" },
+  ];
+  return (
+    <ModalPortal>
+      <div style={overlayHi} onClick={close}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>{L(lang, "menu_lang")}</div>
+            <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {options.map((o) => (
+              <button key={o.id} onClick={() => { setLang(o.id); close(); }} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", borderRadius: 14, cursor: "pointer", border: `1.5px solid ${lang === o.id ? t.accent : t.border}`, background: lang === o.id ? `${t.accent}15` : "none", textAlign: "left" }}>
+                <div>
+                  <div style={{ fontSize: 14.5, fontWeight: 700, color: t.text }}>{o.label}</div>
+                  <div style={{ fontSize: 11, color: t.sub }}>{o.sub}</div>
+                </div>
+                {lang === o.id && <Check size={18} color={t.accent} />}
+              </button>
+            ))}
+          </div>
+          <div style={{ fontSize: 10.5, color: t.faint, marginTop: 12, lineHeight: 1.6 }}>{lang === "th" ? "ตอนนี้แปลครบเมนูหลัก/หัวข้อแต่ละหน้าแล้ว ส่วนเนื้อหาลึกในแต่ละฟีเจอร์กำลังทยอยแปลเพิ่มต่อไป" : "Core menus and page headers are translated. Deeper content inside each feature is being translated progressively."}</div>
+        </div>
+      </div>
+    </ModalPortal>
+  );
+}
+
+// 🔒 ความปลอดภัย/ความเป็นส่วนตัว — นโยบายอ่านอย่างเดียว + จัดการความปลอดภัยบัญชีจริง (ลิงก์ไปเปลี่ยนรหัสผ่าน/PIN ที่มีอยู่แล้ว + ออกจากระบบทุกอุปกรณ์)
+function SecurityModal({ t, lang, userId, session, setAccountSettingsOpen, close }) {
+  const [signingOutAll, setSigningOutAll] = useState(false);
+  const [msg, setMsg] = useState("");
+  const signOutAllDevices = async () => {
+    setSigningOutAll(true); setMsg("");
+    try {
+      const { error } = await supabase.auth.signOut({ scope: "global" });
+      if (error) throw error;
+      // signOut(global) เพิกถอน session ทุกเครื่อง รวมเครื่องนี้ด้วย — แอปจะพากลับไปหน้า login เองตาม auth listener ที่มีอยู่แล้ว
+    } catch (e) {
+      setMsg("ไม่สำเร็จ: " + e.message);
+      setSigningOutAll(false);
+    }
+  };
+  const isEn = lang === "en";
+  return (
+    <ModalPortal>
+      <div style={overlayHi} onClick={close}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>{L(lang, "menu_security")}</div>
+            <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+          </div>
+
+          <div style={{ fontSize: 13, fontWeight: 800, color: t.text, marginBottom: 8 }}>{isEn ? "🔧 Account Security" : "🔧 ความปลอดภัยบัญชี"}</div>
+          <button onClick={() => { setAccountSettingsOpen(true); close(); }} style={{ ...card(t), width: "100%", padding: "13px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", marginBottom: 8, textAlign: "left" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 10 }}><KeyRound size={16} color={t.sub} /><span style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{isEn ? "Change password / PIN" : "เปลี่ยนรหัสผ่าน / PIN"}</span></span>
+            <ChevronRight size={16} color={t.faint} />
+          </button>
+          <button onClick={signOutAllDevices} disabled={signingOutAll} style={{ ...card(t), width: "100%", padding: "13px 14px", display: "flex", alignItems: "center", gap: 10, cursor: signingOutAll ? "default" : "pointer", marginBottom: 6, textAlign: "left", border: `1px solid #D9534F55` }}>
+            <LogOut size={16} color="#D9534F" /><span style={{ fontSize: 13, fontWeight: 700, color: "#D9534F" }}>{signingOutAll ? (isEn ? "Signing out..." : "กำลังออกจากระบบ...") : (isEn ? "Sign out of all devices" : "ออกจากระบบทุกอุปกรณ์")}</span>
+          </button>
+          {msg && <div style={{ fontSize: 11.5, color: "#D9534F", marginBottom: 8 }}>{msg}</div>}
+          <div style={{ fontSize: 10.5, color: t.faint, marginBottom: 20, lineHeight: 1.6 }}>{isEn ? "Use this if you logged in on a device that isn't yours, or think someone else has access." : "ใช้ตอนเผลอล็อกอินทิ้งไว้ในเครื่องที่ไม่ใช่ของตัวเอง หรือสงสัยว่ามีคนอื่นเข้าถึงบัญชีได้"}</div>
+
+          <div style={{ fontSize: 13, fontWeight: 800, color: t.text, marginBottom: 8 }}>{isEn ? "📄 Privacy Policy" : "📄 นโยบายความเป็นส่วนตัว"}</div>
+          <div style={{ fontSize: 12, color: t.sub, lineHeight: 1.8, background: t.inputBg, borderRadius: 12, padding: 14 }}>
+            {isEn ? (<>
+              <b>What we collect:</b> your profile info, notes, goals, finance entries, and chat messages you create in the app — all to run the features you use.<br /><br />
+              <b>Where it's stored:</b> Supabase (Postgres), protected by Row Level Security — only you (and admins you've granted access to) can read your own data.<br /><br />
+              <b>Third parties:</b> AI replies are generated via Gemini/Groq/DeepSeek APIs; we send only what's needed to answer your message, nothing is used to train those providers' models by default.<br /><br />
+              <b>Your controls:</b> export or delete your notes/data anytime from the relevant page, or sign out of all devices above.<br /><br />
+              <i>This is a working draft written for a small family app — not formal legal text. Edit it in the codebase to fit your needs.</i>
+            </>) : (<>
+              <b>เก็บข้อมูลอะไรบ้าง:</b> ข้อมูลโปรไฟล์ โน้ต เป้าหมาย รายการการเงิน และข้อความแชทที่พี่สร้างในแอป เพื่อใช้รันฟีเจอร์ต่างๆ ที่พี่ใช้งาน<br /><br />
+              <b>เก็บไว้ที่ไหน:</b> Supabase (Postgres) ป้องกันด้วย Row Level Security เฉพาะพี่เท่านั้น (และแอดมินที่พี่อนุญาต) ที่อ่านข้อมูลของตัวเองได้<br /><br />
+              <b>บุคคลที่สาม:</b> คำตอบ AI สร้างผ่าน API ของ Gemini/Groq/DeepSeek ส่งแค่ข้อความที่จำเป็นไปตอบ ไม่ได้เอาไปเทรนโมเดลของผู้ให้บริการเหล่านั้นโดยดีฟอลต์<br /><br />
+              <b>สิทธิ์ของพี่:</b> ส่งออก/ลบโน้ตหรือข้อมูลได้ทุกเมื่อจากหน้าที่เกี่ยวข้อง หรือกดออกจากระบบทุกอุปกรณ์ด้านบนได้เลย<br /><br />
+              <i>นี่คือฉบับร่างใช้งานจริงสำหรับแอปครอบครัวขนาดเล็ก ไม่ใช่ข้อความกฎหมายทางการ แก้ไขในโค้ดได้ตามต้องการ</i>
+            </>)}
+          </div>
+        </div>
+      </div>
+    </ModalPortal>
   );
 }
 
@@ -3135,7 +3295,7 @@ function TrackRow({ t, M, track, active, playing, folders, dragHandleProps, drag
   );
 }
 
-const greet = (night) => { const h = new Date().getHours(); return h < 6 ? "ดึกแล้ว พักบ้างนะ 🌙" : h < 12 ? "สวัสดีตอนเช้า ☀️" : h < 18 ? "สวัสดีตอนบ่าย 🌤️" : "ค่ำแล้ว วันนี้เป็นไงบ้าง 🌙"; };
+const greet = (lang) => { const h = new Date().getHours(); return h < 6 ? L(lang, "greet_night") : h < 12 ? L(lang, "greet_morning") : h < 18 ? L(lang, "greet_afternoon") : L(lang, "greet_evening"); };
 
 // ---------------- Home ----------------
 // 🎯 เพิ่มเป้าหมาย — เลือกได้ว่าทำครั้งเดียววันนี้ หรือ ตั้งเป็นตารางประจำสัปดาห์ (เลือกวันเองหรือทุกวัน) + ระดับความหิน
@@ -3715,7 +3875,7 @@ function HomeWidgetsWallet({ t, shp, M, isNight, setMentorPick, setChatOpen, set
         </button>
         <div style={{ fontSize: 30, fontWeight: 800, color: t.onAccent, marginTop: 8, letterSpacing: -0.5 }}>{fmt(balance)}</div>
         <div style={{ fontSize: 11, color: `${t.onAccent}CC`, marginTop: 6 }}>{todayNet >= 0 ? "▲ +" : "▼ "}{Math.abs(todayNet).toLocaleString()} วันนี้ · เป้าหมายสำเร็จ {goalDone}/{goals.length || 0}</div>
-        <button onClick={() => setChatOpen(true)} style={{ marginTop: 12, border: "none", cursor: "pointer", background: `${t.onAccent}2E`, color: t.onAccent, fontWeight: 700, fontSize: 12.5, padding: "8px 14px", borderRadius: shp.radius === 0 ? 0 : 18, display: "inline-flex", alignItems: "center", gap: 6 }}>คุยกับโค้ช <ChevronRight size={14} /></button>
+        <button onClick={() => setChatOpen(true)} style={{ marginTop: 12, border: "none", cursor: "pointer", background: `${t.onAccent}2E`, color: t.onAccent, fontWeight: 700, fontSize: 12.5, padding: "8px 14px", borderRadius: shp.radius === 0 ? 0 : 18, display: "inline-flex", alignItems: "center", gap: 6 }}>{L(lang, "home_talk_coach")} <ChevronRight size={14} /></button>
         {heroShortcuts.length > 0 && (
           <div style={{ display: "flex", gap: 10, marginTop: 14, paddingTop: 12, borderTop: `1px solid ${t.onAccent}22` }}>
             {heroShortcuts.map((sid) => {
@@ -3792,7 +3952,7 @@ function HomeWidgetsBento({ t, shp, M, isNight, setMentorPick, setChatOpen, setM
           </button>
           <div style={{ fontSize: 22, fontWeight: 800, color: t.onAccent, marginTop: 6 }}>{fmt(balance)}</div>
           <div style={{ fontSize: 10.5, color: `${t.onAccent}CC`, marginTop: 4 }}>{todayNet >= 0 ? "▲ +" : "▼ "}{Math.abs(todayNet).toLocaleString()} วันนี้</div>
-          <button onClick={() => setChatOpen(true)} style={{ marginTop: 10, border: "none", cursor: "pointer", background: `${t.onAccent}2E`, color: t.onAccent, fontWeight: 700, fontSize: 11, padding: "6px 11px", borderRadius: shp.radius === 0 ? 0 : 14, display: "inline-flex", alignItems: "center", gap: 4 }}>คุยกับโค้ช <ChevronRight size={12} /></button>
+          <button onClick={() => setChatOpen(true)} style={{ marginTop: 10, border: "none", cursor: "pointer", background: `${t.onAccent}2E`, color: t.onAccent, fontWeight: 700, fontSize: 11, padding: "6px 11px", borderRadius: shp.radius === 0 ? 0 : 14, display: "inline-flex", alignItems: "center", gap: 4 }}>{L(lang, "home_talk_coach")} <ChevronRight size={12} /></button>
           {heroShortcuts.length > 0 && (
             <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
               {heroShortcuts.map((sid) => {
@@ -3931,7 +4091,7 @@ function WidgetOrderModal({ t, title, hint, selected, setSelected, close, catCol
   </div></div>);
 }
 
-function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, allGoals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, setMusicOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget, setAddGoalOpen, setScoreRulesOpen, cardShape, homeLayout, walletWidgets, setWalletWidgets, bentoWidgets, setBentoWidgets, classicWidgets, setClassicWidgets, catColors, setCatColors, heroShortcuts, setHeroShortcuts }) {
+function HomePage({ t, lang, M, quote, isNight, setMentorPick, balance, tx, goals, allGoals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, setMusicOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget, setAddGoalOpen, setScoreRulesOpen, cardShape, homeLayout, walletWidgets, setWalletWidgets, bentoWidgets, setBentoWidgets, classicWidgets, setClassicWidgets, catColors, setCatColors, heroShortcuts, setHeroShortcuts }) {
   const [askConfirm, ConfirmUI] = useConfirm(t);
   const [viewingPinned, setViewingPinned] = useState(null);
   const [commentingId, setCommentingId] = useState(null);
@@ -4041,7 +4201,7 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 16.5, fontWeight: 700, color: t.onAccent, lineHeight: 1.4, minHeight: 46 }}>“{quote}”</div>
               <style>{`@keyframes rh-coach-nudge { 0%,88%,100% { transform: translateX(0) rotate(0); } 90% { transform: translateX(-2px) rotate(-1.5deg); } 92% { transform: translateX(2px) rotate(1.5deg); } 94% { transform: translateX(-2px) rotate(-1deg); } 96% { transform: translateX(2px) rotate(1deg); } 98% { transform: translateX(0) rotate(0); } }`}</style>
-              <button onClick={() => setChatOpen(true)} style={{ marginTop: 14, border: "none", cursor: "pointer", background: `${t.onAccent}2E`, color: t.onAccent, fontWeight: 700, fontSize: 13, padding: "9px 16px", borderRadius: shp.radius === 0 ? 0 : 18, display: "inline-flex", alignItems: "center", gap: 6, animation: "rh-coach-nudge 3s ease-in-out infinite" }}>คุยกับโค้ช <ChevronRight size={15} /></button>
+              <button onClick={() => setChatOpen(true)} style={{ marginTop: 14, border: "none", cursor: "pointer", background: `${t.onAccent}2E`, color: t.onAccent, fontWeight: 700, fontSize: 13, padding: "9px 16px", borderRadius: shp.radius === 0 ? 0 : 18, display: "inline-flex", alignItems: "center", gap: 6, animation: "rh-coach-nudge 3s ease-in-out infinite" }}>{L(lang, "home_talk_coach")} <ChevronRight size={15} /></button>
             </div>
             <Ring pct={goalPct} color={t.onAccent} label="เป้าหมาย" />
           </div>
@@ -4087,7 +4247,7 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
             </CatCard>
           );
           if (wid === "goals") return (
-            <CatCard key={wid} t={t} shp={shp} k="coral" icon={<Icon size={15} color="#fff" />} label="เป้าหมายวันนี้" onClick={onClick}>
+            <CatCard key={wid} t={t} shp={shp} k="coral" icon={<Icon size={15} color="#fff" />} label={L(lang, "home_today_goal")} onClick={onClick}>
               <div style={{ fontSize: 16, fontWeight: 800, color: t.catTx.coral }}>{goalDone} / {goals.length || 0} สำเร็จ</div>
               <div style={{ height: 7, borderRadius: 4, background: "rgba(0,0,0,.1)", marginTop: 8, overflow: "hidden" }}><div style={{ width: `${goalPct}%`, height: "100%", background: "#E07B57" }} /></div>
             </CatCard>
@@ -4115,8 +4275,8 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
 
       <div style={{ ...card(t), marginTop: 16, padding: 16 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text }}>เป้าหมายวันนี้</div>
-          <button onClick={() => setPage("goalsReport")} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, color: t.accent, fontSize: 11, fontWeight: 700 }}>ดูย้อนหลัง <ChevronRight size={13} /></button>
+          <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text }}>{L(lang, "home_today_goal")}</div>
+          <button onClick={() => setPage("goalsReport")} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, color: t.accent, fontSize: 11, fontWeight: 700 }}>{L(lang, "home_view_history")} <ChevronRight size={13} /></button>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, padding: "10px 12px", borderRadius: 12, background: `${t.accent}10` }}>
@@ -4185,7 +4345,7 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
           ))}
         </div>
         <div style={{ marginTop: 12 }}>
-          <button onClick={() => setAddGoalOpen(true)} style={{ ...primaryBtn(t), width: "100%", padding: "11px 0", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Plus size={16} /> เพิ่มเป้าหมาย</button>
+          <button onClick={() => setAddGoalOpen(true)} style={{ ...primaryBtn(t), width: "100%", padding: "11px 0", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Plus size={16} /> {L(lang, "home_add_goal")}</button>
         </div>
       </div>
       {shareGoalOpen && <ShareGoalModal t={t} userId={userId} authProfile={authProfile} weekPoints={weekPoints} bestStreak={bestStreak} badge={badge} close={() => setShareGoalOpen(false)} />}
@@ -4233,7 +4393,7 @@ function HomePage({ t, M, quote, isNight, setMentorPick, balance, tx, goals, all
 }
 
 // ---------------- Finance (full) ----------------
-function FinancePage({ t, tx, setTx, categories, openAdd, openExport, userId, billReminders, billPayments, markBillPaid, setBillManagerOpen }) {
+function FinancePage({ t, lang, tx, setTx, categories, openAdd, openExport, userId, billReminders, billPayments, markBillPaid, setBillManagerOpen }) {
   const [askConfirm, ConfirmUI] = useConfirm(t);
   const [editingTx, setEditingTx] = useState(null);
   const [viewReceipt, setViewReceipt] = useState(null); // signed url ของรูปสลิป/ใบเสร็จที่กำลังดู
@@ -4333,7 +4493,7 @@ function FinancePage({ t, tx, setTx, categories, openAdd, openExport, userId, bi
 
   return (
     <>
-      <PageHead t={t} title="การเงิน" sub="รายรับ–รายจ่าย · ใช้ได้จริงทุกวัน" icon={<Wallet size={20} color={t.accent} />} />
+      <PageHead t={t} title={L(lang, "ph_finance_title")} sub={L(lang, "ph_finance_sub")} icon={<Wallet size={20} color={t.accent} />} />
 
       {/* 💳 เตือนจ่ายบิล — โชว์เฉพาะบิลที่ถึงกำหนด/เลยกำหนดแล้วยังไม่กดจ่าย */}
       {dueBills.length > 0 && (
@@ -5074,7 +5234,7 @@ function AdminHintsPanel({ t, totalMembers }) {
   );
 }
 
-function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts, authProfile, setAuthProfile }) {
+function AdminPage({ t, lang, session, userId, adminAlerts, setAdminAlerts, authProfile, setAuthProfile }) {
   const [tab, setTab] = useState("overview"); // overview | members | add
   const [members, setMembers] = useState([]);
   const [loadingList, setLoadingList] = useState(true);
@@ -5137,7 +5297,7 @@ function AdminPage({ t, session, userId, adminAlerts, setAdminAlerts, authProfil
 
   return (
     <>
-      <PageHead t={t} title="Admin" sub="จัดการสมาชิกและดูความเคลื่อนไหวของแอป" icon={<ShieldCheck size={20} color={t.accent} />} />
+      <PageHead t={t} title={L(lang, "ph_admin_title")} sub={L(lang, "ph_admin_sub")} icon={<ShieldCheck size={20} color={t.accent} />} />
 
       {adminAlerts.length > 0 && (
         <div style={{ ...card(t), padding: 14, marginBottom: 14, border: `1px solid ${t.accent}55` }}>
@@ -6788,7 +6948,7 @@ function ComposeModal({ t, userId, onDone, close }) {
   );
 }
 
-function ChatEntryPage({ t, M, userId, authProfile, session, openThread }) {
+function ChatEntryPage({ t, lang, M, userId, authProfile, session, openThread }) {
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sheet, setSheet] = useState(null); // null | "menu" | "create" | "join" | "direct"
@@ -6913,7 +7073,7 @@ function ChatEntryPage({ t, M, userId, authProfile, session, openThread }) {
   if (!authProfile?.can_chat && !hasFullAccess) {
     return (
       <>
-        <PageHead t={t} title="แชท" sub="คุยกับคนในครอบครัว" icon={<MessageCircle size={20} color={t.accent} />} />
+        <PageHead t={t} title={L(lang, "ph_chat_title")} sub={L(lang, "ph_chat_sub1")} icon={<MessageCircle size={20} color={t.accent} />} />
         <Empty t={t} text="คุณยังไม่ได้รับสิทธิ์ใช้งานแชท — ให้แอดมินเปิดสิทธิ์ให้ที่หน้า Admin ก่อนนะ" />
       </>
     );
@@ -6921,7 +7081,7 @@ function ChatEntryPage({ t, M, userId, authProfile, session, openThread }) {
 
   return (
     <>
-      <PageHead t={t} title="แชท" sub="สร้างห้องเองหรือแลกโค้ดกับเพื่อน" icon={<MessageCircle size={20} color={t.accent} />} />
+      <PageHead t={t} title={L(lang, "ph_chat_title")} sub={L(lang, "ph_chat_sub2")} icon={<MessageCircle size={20} color={t.accent} />} />
 
       <>
       {authProfile.chat_code && (
@@ -7448,7 +7608,7 @@ function RoomMembersModal({ t, threadId, session, close }) {
   );
 }
 
-function LocationsPage({ t, userId }) {
+function LocationsPage({ t, lang, userId }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -7473,7 +7633,7 @@ function LocationsPage({ t, userId }) {
 
   return (
     <>
-      <PageHead t={t} title="ตำแหน่งล่าสุด" sub="เห็นเฉพาะคนที่แชร์ไว้และแอดมินอนุญาตให้คุณดู" icon={<MapPin size={20} color={t.accent} />} />
+      <PageHead t={t} title={L(lang, "ph_locations_title")} sub={L(lang, "ph_locations_sub")} icon={<MapPin size={20} color={t.accent} />} />
       {loading && <Empty t={t} text="กำลังโหลด..." />}
       {!loading && rows.length === 0 && <Empty t={t} text="ยังไม่มีใครแชร์ตำแหน่งให้คุณเห็น (หรือคุณยังไม่ได้รับสิทธิ์ดูจากแอดมิน)" />}
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -7494,7 +7654,7 @@ function LocationsPage({ t, userId }) {
   );
 }
 
-function GoalsReportPage({ t, goals, setGoals, userId }) {
+function GoalsReportPage({ t, lang, goals, setGoals, userId }) {
   const [expandedGroup, setExpandedGroup] = useState(null); // label ของกลุ่มที่กำลังขยายดู log อยู่
   const dated = goals.filter((g) => g.date);
 
@@ -7602,7 +7762,7 @@ function GoalsReportPage({ t, goals, setGoals, userId }) {
 
   return (
     <div style={{ paddingBottom: 130 }}>
-      <PageHead t={t} title="รายงานเป้าหมาย" sub="ย้อนดูว่าแต่ละวันทำอะไรไปบ้าง ทำบ่อยแค่ไหน" icon={<Target size={20} color={t.accent} />} />
+      <PageHead t={t} title={L(lang, "ph_goalsreport_title")} sub={L(lang, "ph_goalsreport_sub")} icon={<Target size={20} color={t.accent} />} />
 
       {dated.length === 0 ? (
         <Empty t={t} text="ยังไม่มีข้อมูลเป้าหมายให้ดูย้อนหลัง ลองเพิ่ม/ติ๊กเป้าหมายที่หน้า Home ก่อนนะ" />
@@ -8348,7 +8508,7 @@ function NotionSetupModal({ t, userId, close }) {
   );
 }
 
-function NotePage({ t, notes, setNotes, isNight, userId, session, authProfile, reminders, openReminder }) {
+function NotePage({ t, lang, notes, setNotes, isNight, userId, session, authProfile, reminders, openReminder }) {
   const [askConfirm, ConfirmUI] = useConfirm(t);
   const [title, setTitle] = useState(""); const [body, setBody] = useState(null); const [tagsInput, setTagsInput] = useState("");
   const [draftKey, setDraftKey] = useState(0); // เปลี่ยนค่านี้เพื่อบังคับให้ NoteEditor ตัวเพิ่มโน้ตใหม่รีเซ็ตเนื้อหาว่าง
@@ -8519,7 +8679,7 @@ function NotePage({ t, notes, setNotes, isNight, userId, session, authProfile, r
 
   return (
     <>
-      <PageHead t={t} title="โน้ต" sub="จดไอเดีย บันทึกการเรียนรู้ · แนบรูป/ไฟล์ได้" icon={<StickyNote size={20} color={t.accent} />} />
+      <PageHead t={t} title={L(lang, "ph_note_title")} sub={L(lang, "ph_note_sub")} icon={<StickyNote size={20} color={t.accent} />} />
 
       {notes.length > 0 && (
         <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
@@ -8664,7 +8824,7 @@ const KNOWLEDGE_TOPICS = [
 ];
 const topicLabel = (id) => KNOWLEDGE_TOPICS.find((t) => t.id === id)?.label || id;
 
-function IdeasPage({ t, M, userId, session, authProfile, setAuthProfile, setNotes, setChatOpen, setAskAiTopic }) {
+function IdeasPage({ t, lang, M, userId, session, authProfile, setAuthProfile, setNotes, setChatOpen, setAskAiTopic }) {
   const [notedIds, setNotedIds] = useState({}); // article.id -> true ถ้าเพิ่งส่งเข้าโน้ตไปแล้ว (โชว์ปุ่มเขียวชั่วคราว)
   const notedTo = (article) => {
     sendToNotes(article);
@@ -8827,7 +8987,7 @@ function IdeasPage({ t, M, userId, session, authProfile, setAuthProfile, setNote
   if (!interests.length || editingInterests) {
     return (
       <>
-        <PageHead t={t} title="คลังความรู้" sub="เลือกความสนใจของคุณก่อนเริ่มได้เลย" icon={<Lightbulb size={20} color={t.accent} />} />
+        <PageHead t={t} title={L(lang, "ph_ideas_title")} sub={L(lang, "ph_ideas_sub_pick")} icon={<Lightbulb size={20} color={t.accent} />} />
         <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 14 }}>เลือกได้สูงสุด {topicLimit} หมวด (ให้แอดมินเพิ่มโควตาได้ถ้าอยากได้มากกว่านี้)</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
           {[...KNOWLEDGE_TOPICS, ...pickedInterests.filter((id) => !KNOWLEDGE_TOPICS.some((k) => k.id === id)).map((id) => ({ id, label: id, custom: true }))].map((k) => {
@@ -8856,7 +9016,7 @@ function IdeasPage({ t, M, userId, session, authProfile, setAuthProfile, setNote
   return (
     <>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 16 }}>
-        <PageHead t={t} title="คลังความรู้" sub={`AI คัดให้ทุกวันตามความสนใจ (${interests.map(topicLabel).join(", ")})`} icon={<Lightbulb size={20} color={t.accent} />} />
+        <PageHead t={t} title={L(lang, "ph_ideas_title")} sub={(lang === "en" ? "AI curated daily based on your interests (" : "AI คัดให้ทุกวันตามความสนใจ (") + interests.map(topicLabel).join(", ") + ")"} icon={<Lightbulb size={20} color={t.accent} />} />
         <button onClick={openEditInterests} style={{ ...card(t), flexShrink: 0, width: 38, height: 38, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }} title="แก้ไขหมวดสนใจ"><Pencil size={15} color={t.sub} /></button>
       </div>
       <style>{`@keyframes rh-spin { to { transform: rotate(360deg); } } .rh-spin { animation: rh-spin .8s linear infinite; }`}</style>
@@ -8945,10 +9105,10 @@ function IdeasPage({ t, M, userId, session, authProfile, setAuthProfile, setNote
     </>
   );
 }
-function TradePage({ t }) {
+function TradePage({ t, lang }) {
   const rows = [{ n: "ทองคำ (Gold Spot)", p: "฿52,400", c: +0.8 }, { n: "SET Index", p: "1,342.50", c: -0.4 }, { n: "Bitcoin", p: "฿2,380,000", c: +2.1 }, { n: "กองทุน SSF/RMF", p: "฿75,025", c: +0.6 }];
   return (<>
-    <PageHead t={t} title="ตลาด & การลงทุน" sub="ทอง หุ้น คริปโต" icon={<TrendingUp size={20} color={t.accent} />} />
+    <PageHead t={t} title={L(lang, "ph_trade_title")} sub={L(lang, "ph_trade_sub")} icon={<TrendingUp size={20} color={t.accent} />} />
     <MockBanner t={t} text="ตัวอย่าง — ต่อ API ราคาจริง (ฟรี) ภายหลัง" />
     <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
       {rows.map((x, i) => (<div key={i} style={{ ...card(t), padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -8976,7 +9136,7 @@ const NEWS_CATEGORY_GROUPS = [
   { id: "lifestyle", label: "🎨 ไลฟ์สไตล์", catIds: ["tech", "life"] },
 ];
 
-function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskAiTopic, hintDefs, seenHintKeys, dismissHint, setNotes }) {
+function NewsPage({ t, lang, userId, authProfile, setAuthProfile, setChatOpen, setAskAiTopic, hintDefs, seenHintKeys, dismissHint, setNotes }) {
   const [category, setCategory] = useState(authProfile?.news_category || "tech");
   const [notedIds, setNotedIds] = useState({}); // article.link -> true ชั่วคราวหลังส่งเข้าโน้ตสำเร็จ (โชว์ติ๊กถูกเขียว เหมือนหน้าความรู้)
   const [showArrowHint, arrowHintText, dismissArrowHint] = useHint("news_category_arrows", hintDefs, seenHintKeys, dismissHint); // 💡 แนะนำครั้งแรกว่าปัด/กดลูกศรเปลี่ยนหมวดได้ (ข้อความแก้ได้จากหน้าแอดมิน)
@@ -9281,7 +9441,7 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
         </div>
       </ModalPortal>
     )}
-    <PageHead t={t} title="ข่าวสาร" sub={category !== "saved" && lastFetchedAt ? `อัปเดตล่าสุด ${new Date(lastFetchedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.` : "อัปเดตสถานการณ์โลก"} icon={<Newspaper size={20} color={t.accent} />} right={
+    <PageHead t={t} title={L(lang, "ph_news_title")} sub={category !== "saved" && lastFetchedAt ? (lang === "en" ? `Last updated ${new Date(lastFetchedAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}` : `อัปเดตล่าสุด ${new Date(lastFetchedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.`) : L(lang, "ph_news_sub")} icon={<Newspaper size={20} color={t.accent} />} right={
       <div style={{ position: "relative", display: "flex", gap: 4, flexShrink: 0 }}>
         {category !== "saved" && (
           <button onClick={() => load(category, true)} disabled={loading} style={{ width: 34, height: 34, borderRadius: 10, border: `1px solid ${t.border}`, background: t.inputBg, display: "grid", placeItems: "center", cursor: "pointer" }} title="รีเฟรชข่าวล่าสุด">
@@ -9443,7 +9603,7 @@ function VocabWordModal({ t, initial, userId, session, close, onSaved }) {
   );
 }
 
-function LangPage({ t, userId, session }) {
+function LangPage({ t, lang, userId, session }) {
   const [askConfirm, ConfirmUI] = useConfirm(t);
   const [words, setWords] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -9487,7 +9647,7 @@ function LangPage({ t, userId, session }) {
   const nextCard = () => { setReviewIdx((i) => i + 1); setFlipped(false); };
 
   return (<>
-    <PageHead t={t} title="ฝึกภาษา" sub={`คำศัพท์ของฉัน ${words.length} คำ · จำได้แล้ว ${knownCount} คำ`} icon={<Languages size={20} color={t.accent} />} />
+    <PageHead t={t} title={L(lang, "ph_lang_title")} sub={lang === "en" ? `My words ${words.length} · known ${knownCount}` : `คำศัพท์ของฉัน ${words.length} คำ · จำได้แล้ว ${knownCount} คำ`} icon={<Languages size={20} color={t.accent} />} />
 
     <div style={{ display: "flex", gap: 6, marginBottom: 14, background: t.inputBg, borderRadius: 12, padding: 4 }}>
       <button onClick={() => setView("review")} style={{ flex: 1, padding: "8px 0", borderRadius: 9, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 12.5, background: view === "review" ? t.accent : "transparent", color: view === "review" ? t.onAccent : t.sub }}>🔁 ทบทวน</button>
@@ -10407,9 +10567,9 @@ function IncomingCallWatcher({ t, userId, onAccept }) {
 }
 
 // ---------------- Dock ----------------
-function Dock({ t, cardShape, page, setPage, onQuickAdd }) {
+function Dock({ t, lang, cardShape, page, setPage, onQuickAdd }) {
   const sharp = cardShape === "sharp";
-  const items = [{ k: "home", ic: Home, lb: "Home" }, { k: "ideas", ic: Lightbulb, lb: "Ideas" }, { k: "trade", ic: TrendingUp, lb: "Trade" }, { k: "_", ic: Plus, lb: "" }, { k: "news", ic: Newspaper, lb: "News" }, { k: "lang", ic: Languages, lb: "Lang" }, { k: "note", ic: StickyNote, lb: "Note" }];
+  const items = [{ k: "home", ic: Home, lb: L(lang, "dock_home") }, { k: "ideas", ic: Lightbulb, lb: L(lang, "dock_ideas") }, { k: "trade", ic: TrendingUp, lb: L(lang, "dock_trade") }, { k: "_", ic: Plus, lb: "" }, { k: "news", ic: Newspaper, lb: L(lang, "dock_news") }, { k: "lang", ic: Languages, lb: L(lang, "dock_lang") }, { k: "note", ic: StickyNote, lb: L(lang, "dock_note") }];
   if (sharp) {
     // 🔲 ทรงเหลี่ยมคม — แต่ละปุ่มเป็น tile แยกกันจริง คั่นด้วยช่องไฟ 1.5px โชว์พื้นหลังลอดออกมา + เส้นคั่น 1px ด้านบนจากเนื้อหา
     return (<div style={{ position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 20 }}>
