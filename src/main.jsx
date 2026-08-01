@@ -7,12 +7,6 @@ import App from './App.jsx'
 // โดยไม่กระทบ Android เลย (CSS ที่ผูกกับ class นี้จะไม่ทำงานถ้าไม่ใช่ iOS)
 if (/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream) {
   document.documentElement.classList.add('ios-device');
-  // 🍎🐛 ตัวจริงของบั๊กจอกระโดด คือตอนคีย์บอร์ดเปิด/ปิด (โฟกัส input) iOS Safari จะย่อ "visual viewport" แล้วพยายามเลื่อนหน้าตาม
-  // position:fixed อย่างเดียวไม่พอกันสิ่งนี้ ต้องดัก event นี้ตรงๆ แล้วบังคับ scrollTo(0,0) ทับกลับทันที ให้ layout ข้างในแอปที่คุมเองอยู่แล้วทำงานแทน
-  if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', () => window.scrollTo(0, 0));
-    window.visualViewport.addEventListener('scroll', () => window.scrollTo(0, 0));
-  }
 }
 
 // 🐛 ตัวดักจับ error ชั่วคราว กันหน้าดำแบบเงียบๆ — เวลามี error ขึ้นจริงจะเด้ง alert โชว์ข้อความเลย ดีบักบนมือถือได้โดยไม่ต้องง้อ DevTools (เอาออกทีหลังเจอต้นตอครบแล้ว)
