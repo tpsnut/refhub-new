@@ -2101,8 +2101,8 @@ export default function RefHub() {
           {page === "note" && <NotePage {...{ t, lang, notes, setNotes, isNight, userId, session, authProfile, reminders, openReminder }} />}
           {page === "ideas" && <IdeasPage t={t} lang={lang} M={M} userId={userId} session={session} authProfile={authProfile} setAuthProfile={setAuthProfile} setNotes={setNotes} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} />}
           {page === "trade" && <TradePage t={t} lang={lang} />}
-          {page === "news" && <NewsPage t={t} lang={lang} userId={userId} authProfile={authProfile} setAuthProfile={setAuthProfile} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} hintDefs={hintDefs} seenHintKeys={seenHintKeys} dismissHint={dismissHint} setNotes={setNotes} />}
-          {page === "lang" && <LangPage t={t} lang={lang} userId={userId} session={session} />}
+          {page === "news" && <NewsPage t={t} lang={lang} userId={userId} authProfile={authProfile} setAuthProfile={setAuthProfile} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} hintDefs={hintDefs} seenHintKeys={seenHintKeys} dismissHint={dismissHint} setNotes={setNotes} scrollToTop={() => { if (contentScrollRef.current) contentScrollRef.current.scrollTop = 0; }} />}
+          {page === "lang" && <LangPage t={t} lang={lang} userId={userId} session={session} scrollToTop={() => { if (contentScrollRef.current) contentScrollRef.current.scrollTop = 0; }} />}
           {page === "goalsReport" && <GoalsReportPage t={t} lang={lang} goals={goals} setGoals={setGoals} userId={userId} />}
           {page === "admin" && <AdminPage t={t} lang={lang} session={session} userId={userId} adminAlerts={adminAlerts} setAdminAlerts={setAdminAlerts} authProfile={authProfile} setAuthProfile={setAuthProfile} />}
           {page === "locations" && <LocationsPage t={t} lang={lang} userId={userId} />}
@@ -3104,7 +3104,7 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
     return tr.folderId === tab;
   });
   // 📄 แบ่งหน้าจริง (เลขหน้า) — ลากจัดเรียงยังทำได้ปกติ แต่ลากได้แค่ภายในหน้าเดียวกันเท่านั้น (ลากข้ามหน้าไม่ได้ ต้องเปลี่ยนหน้าก่อน)
-  const mediaPagination = usePagination(shown, 10);
+  const mediaPagination = usePagination(shown, 10, shown[0]?.id); // resetKey = id ของอันแรกสุด — เปลี่ยนทุกครั้งที่มีสื่อใหม่ขึ้นเป็นอันดับแรก จะได้กลับไปหน้าแรกให้เห็นของใหม่ทันที ไม่ค้างหน้าเดิม
   useEffect(() => { mediaPagination.setPage(0); }, [tab]); // เปลี่ยนแท็บ -> กลับไปหน้าแรก
   const visibleShown = mediaPagination.pageItems;
   // 🔀 จัดเรียงเฉพาะรายการที่กำลังโชว์อยู่ในหน้านี้ของ tab ปัจจุบัน — ไม่ไปยุ่งตำแหน่งของสื่ออื่นนอก tab/นอกหน้านี้
@@ -9282,11 +9282,12 @@ const NEWS_CATEGORY_GROUPS = [
   { id: "lifestyle", label: "🎨 ไลฟ์สไตล์", catIds: ["tech", "life"] },
 ];
 
-function NewsPage({ t, lang, userId, authProfile, setAuthProfile, setChatOpen, setAskAiTopic, hintDefs, seenHintKeys, dismissHint, setNotes }) {
+function NewsPage({ t, lang, userId, authProfile, setAuthProfile, setChatOpen, setAskAiTopic, hintDefs, seenHintKeys, dismissHint, setNotes, scrollToTop }) {
   const [category, setCategory] = useState(authProfile?.news_category || "tech");
   const [notedIds, setNotedIds] = useState({}); // article.link -> true ชั่วคราวหลังส่งเข้าโน้ตสำเร็จ (โชว์ติ๊กถูกเขียว เหมือนหน้าความรู้)
   const [showArrowHint, arrowHintText, dismissArrowHint] = useHint("news_category_arrows", hintDefs, seenHintKeys, dismissHint); // 💡 แนะนำครั้งแรกว่าปัด/กดลูกศรเปลี่ยนหมวดได้ (ข้อความแก้ได้จากหน้าแอดมิน)
   const [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => { scrollToTop?.(); }, [category]);
   const [expandedGroups, setExpandedGroups] = useState(() => new Set(
     NEWS_CATEGORY_GROUPS.filter((g) => g.catIds.includes(category)).map((g) => g.id)
   ));
@@ -10578,7 +10579,7 @@ function VocabGuideModal({ t, lang, close }) {
   );
 }
 
-function LangPage({ t, lang, userId, session }) {
+function LangPage({ t, lang, userId, session, scrollToTop }) {
   const [askConfirm, ConfirmUI] = useConfirm(t);
   const [contentType, setContentType] = useState("word"); // "word" | "sentence" — สลับระหว่างคลังคำศัพท์กับคลังประโยค (คนละตารางกัน)
   const table = contentType === "word" ? "vocab_words" : "vocab_sentences";
@@ -10737,7 +10738,7 @@ function LangPage({ t, lang, userId, session }) {
   const activePool = view === "review" ? reviewOnlyPool : learnPool;
   const current = activePool.length ? activePool[reviewIdx % activePool.length] : null;
   const nextCard = () => { setReviewIdx((i) => i + 1); setFlipped(false); };
-  useEffect(() => { setReviewIdx(0); setFlipped(false); }, [topic, level, contentType, view]);
+  useEffect(() => { setReviewIdx(0); setFlipped(false); scrollToTop?.(); }, [topic, level, contentType, view]);
 
   // ปัดซ้าย/ขวา เปลี่ยนหมวด เหมือนหน้าข่าว
   const touchStartRef = useRef(null);
