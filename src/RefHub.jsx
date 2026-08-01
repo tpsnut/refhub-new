@@ -9656,7 +9656,9 @@ function VocabWordModal({ t, table = "vocab_words", mode = "word", initial, user
   const [word, setWord] = useState(initial?.word || "");
   const [pronunciation, setPronunciation] = useState(initial?.pronunciation || "");
   const [meaning, setMeaning] = useState(initial?.meaning || "");
-  const [example, setExample] = useState(initial?.example || "");
+  const firstEx = initial?.examples?.[0] || (initial?.example ? { en: initial.example, th: "" } : null);
+  const [example, setExample] = useState(firstEx?.en || "");
+  const [exampleTh, setExampleTh] = useState(firstEx?.th || "");
   const [category, setCategory] = useState(initial?.category || "general");
   const [saving, setSaving] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
@@ -9671,7 +9673,7 @@ function VocabWordModal({ t, table = "vocab_words", mode = "word", initial, user
         body: JSON.stringify({
           mentor: "none", userId, callerToken: session?.access_token,
           messages: [{ who: "u", text: isWord
-            ? `ช่วยเติมคำอ่านไทย ความหมายไทย และตัวอย่างประโยคให้คำศัพท์ภาษาอังกฤษคำว่า "${word.trim()}" ตอบตามรูปแบบนี้เป๊ะๆ 3 บรรทัด ห้ามมีข้อความอื่นเพิ่มเติม:\nคำอ่าน: (คำอ่านไทยของคำนี้ เช่น รี-ซิล-เยินซ์)\nความหมาย: (คำแปล/ความหมายสั้นๆ เป็นภาษาไทย)\nตัวอย่าง: (ประโยคภาษาอังกฤษสั้นๆ ที่ใช้คำนี้)`
+            ? `ช่วยเติมคำอ่านไทย ความหมายไทย ตัวอย่างประโยค และคำแปลไทยของตัวอย่างนั้น ให้คำศัพท์ภาษาอังกฤษคำว่า "${word.trim()}" ตอบตามรูปแบบนี้เป๊ะๆ 4 บรรทัด ห้ามมีข้อความอื่นเพิ่มเติม:\nคำอ่าน: (คำอ่านไทยของคำนี้ เช่น รี-ซิล-เยินซ์)\nความหมาย: (คำแปล/ความหมายสั้นๆ เป็นภาษาไทย)\nตัวอย่าง: (ประโยคภาษาอังกฤษสั้นๆ ที่ใช้คำนี้)\nแปลตัวอย่าง: (คำแปลไทยของประโยคตัวอย่างนั้น)`
             : `ช่วยเติมคำอ่านไทยและคำแปลไทยให้ประโยคภาษาอังกฤษ "${word.trim()}" ตอบตามรูปแบบนี้เป๊ะๆ 2 บรรทัด ห้ามมีข้อความอื่นเพิ่มเติม:\nคำอ่าน: (คำอ่านไทยทับศัพท์ทั้งประโยค)\nความหมาย: (คำแปลไทยของประโยคนี้)` }],
         }),
       });
@@ -9681,9 +9683,11 @@ function VocabWordModal({ t, table = "vocab_words", mode = "word", initial, user
       const p = /คำอ่าน[:：]\s*(.+)/.exec(text);
       const m = /ความหมาย[:：]\s*(.+)/.exec(text);
       const e = /ตัวอย่าง[:：]\s*(.+)/.exec(text);
+      const et = /แปลตัวอย่าง[:：]\s*(.+)/.exec(text);
       if (p) setPronunciation(p[1].trim());
       if (m) setMeaning(m[1].trim());
       if (e) setExample(e[1].trim());
+      if (et) setExampleTh(et[1].trim());
       if (!p && !m && !e) setMeaning(text.trim());
     } catch (e) {
       setErr("AI ช่วยไม่สำเร็จ: " + e.message);
@@ -9693,7 +9697,10 @@ function VocabWordModal({ t, table = "vocab_words", mode = "word", initial, user
   const save = async () => {
     if (!word.trim() || saving) return;
     setSaving(true); setErr("");
-    const payload = { word: word.trim(), pronunciation: pronunciation.trim(), meaning: meaning.trim(), example: example.trim(), category, level: initial?.level ?? null };
+    const examples = isWord
+      ? (example.trim() ? [{ en: example.trim(), th: exampleTh.trim() }, ...(initial?.examples || []).slice(1)] : (initial?.examples || []).slice(1))
+      : [];
+    const payload = { word: word.trim(), pronunciation: pronunciation.trim(), meaning: meaning.trim(), examples, category, level: initial?.level ?? null };
     try {
       if (initial?.id) {
         const { error } = await supabase.from(table).update(payload).eq("id", initial.id);
@@ -9732,7 +9739,9 @@ function VocabWordModal({ t, table = "vocab_words", mode = "word", initial, user
           <input value={meaning} onChange={(e) => setMeaning(e.target.value)} placeholder="ความหมายเป็นภาษาไทย" style={{ ...input(t), marginBottom: 10 }} />
           {isWord && (<>
             <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>ตัวอย่างประโยค</div>
-            <input value={example} onChange={(e) => setExample(e.target.value)} placeholder="ตัวอย่างประโยคภาษาอังกฤษ" style={{ ...input(t), marginBottom: 14 }} />
+            <input value={example} onChange={(e) => setExample(e.target.value)} placeholder="ตัวอย่างประโยคภาษาอังกฤษ" style={{ ...input(t), marginBottom: 10 }} />
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>คำแปลตัวอย่าง</div>
+            <input value={exampleTh} onChange={(e) => setExampleTh(e.target.value)} placeholder="คำแปลไทยของตัวอย่างข้างบน" style={{ ...input(t), marginBottom: 14 }} />
           </>)}
           <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>หมวดหมู่</div>
           <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4, marginBottom: 14 }}>
@@ -9769,10 +9778,10 @@ function VocabBatchGenModal({ t, table = "vocab_words", mode = "word", userId, s
           mentor: "none", userId, callerToken: session?.access_token,
           messages: [{ who: "u", text: (isMixed
             ? (isWord
-              ? `สร้างคำศัพท์ภาษาอังกฤษหมวด "${topicLabel}" จำนวน ${count} คำ ที่ยังไม่ซ้ำกัน คละระดับ CEFR ให้กระจายทั้ง A1,A2,B1,B2,C1 ปนกันไปในชุดนี้ (ไม่ต้องเรียงลำดับ) ตอบเป็นรายการบรรทัดละ 1 คำ รูปแบบเป๊ะๆ ห้ามมีเลขข้อ/เครื่องหมายนำหน้า/หัวข้ออื่นใดๆ:\nword | คำอ่านไทย | ความหมายไทย | ตัวอย่างประโยคภาษาอังกฤษสั้นๆ | ระดับ(A1/A2/B1/B2/C1)`
+              ? `สร้างคำศัพท์ภาษาอังกฤษหมวด "${topicLabel}" จำนวน ${count} คำ ที่ยังไม่ซ้ำกัน คละระดับ CEFR ให้กระจายทั้ง A1,A2,B1,B2,C1 ปนกันไปในชุดนี้ (ไม่ต้องเรียงลำดับ) ตอบเป็นรายการบรรทัดละ 1 คำ รูปแบบเป๊ะๆ ห้ามมีเลขข้อ/เครื่องหมายนำหน้า/หัวข้ออื่นใดๆ:\nword | คำอ่านไทย | ความหมายไทย | ตัวอย่างประโยคภาษาอังกฤษสั้นๆ | คำแปลไทยของตัวอย่างนั้น | ระดับ(A1/A2/B1/B2/C1)`
               : `สร้างประโยคสนทนาภาษาอังกฤษที่ใช้บ่อยในชีวิตจริง หมวด "${topicLabel}" จำนวน ${count} ประโยค ที่ยังไม่ซ้ำกัน คละระดับ CEFR ให้กระจายทั้ง A1,A2,B1,B2,C1 ปนกันไปในชุดนี้ (ไม่ต้องเรียงลำดับ) ตอบเป็นรายการบรรทัดละ 1 ประโยค รูปแบบเป๊ะๆ ห้ามมีเลขข้อ/เครื่องหมายนำหน้า/หัวข้ออื่นใดๆ:\nประโยคภาษาอังกฤษ | คำอ่านไทยทับศัพท์ | คำแปลไทย | ระดับ(A1/A2/B1/B2/C1)`)
             : (isWord
-              ? `สร้างคำศัพท์ภาษาอังกฤษระดับ ${levelProp} หมวด "${topicLabel}" จำนวน ${count} คำ ที่ยังไม่ซ้ำกัน ตอบเป็นรายการบรรทัดละ 1 คำ รูปแบบเป๊ะๆ ห้ามมีเลขข้อ/เครื่องหมายนำหน้า/หัวข้ออื่นใดๆ:\nword | คำอ่านไทย | ความหมายไทย | ตัวอย่างประโยคภาษาอังกฤษสั้นๆ`
+              ? `สร้างคำศัพท์ภาษาอังกฤษระดับ ${levelProp} หมวด "${topicLabel}" จำนวน ${count} คำ ที่ยังไม่ซ้ำกัน ตอบเป็นรายการบรรทัดละ 1 คำ รูปแบบเป๊ะๆ ห้ามมีเลขข้อ/เครื่องหมายนำหน้า/หัวข้ออื่นใดๆ:\nword | คำอ่านไทย | ความหมายไทย | ตัวอย่างประโยคภาษาอังกฤษสั้นๆ | คำแปลไทยของตัวอย่างนั้น`
               : `สร้างประโยคสนทนาภาษาอังกฤษที่ใช้บ่อยในชีวิตจริง ระดับ ${levelProp} หมวด "${topicLabel}" จำนวน ${count} ประโยค ที่ยังไม่ซ้ำกัน ตอบเป็นรายการบรรทัดละ 1 ประโยค รูปแบบเป๊ะๆ ห้ามมีเลขข้อ/เครื่องหมายนำหน้า/หัวข้ออื่นใดๆ:\nประโยคภาษาอังกฤษ | คำอ่านไทยทับศัพท์ | คำแปลไทย`)) + avoidText }],
         }),
       });
@@ -9781,8 +9790,14 @@ function VocabBatchGenModal({ t, table = "vocab_words", mode = "word", userId, s
       const rows = (data.text || "").split("\n").map((line) => {
         const parts = line.split("|").map((s) => s.trim());
         if (parts.length < 2 || !parts[0]) return null;
-        const lvlRaw = isMixed ? (parts[4] || "").toUpperCase().match(/A1|A2|B1|B2|C1/)?.[0] : levelProp;
-        return { word: parts[0].replace(/^[-•\d.)\s]+/, ""), pronunciation: parts[1] || "", meaning: parts[2] || "", example: parts[3] || "", level: lvlRaw || "A1" };
+        const word = parts[0].replace(/^[-•\d.)\s]+/, "");
+        if (isWord) {
+          const lvlRaw = isMixed ? (parts[5] || "").toUpperCase().match(/A1|A2|B1|B2|C1/)?.[0] : levelProp;
+          return { word, pronunciation: parts[1] || "", meaning: parts[2] || "", exampleEn: parts[3] || "", exampleTh: parts[4] || "", level: lvlRaw || "A1" };
+        }
+        // 🐛 แก้บั๊ก: โหมดประโยค + คละทุกระดับ เดิมอ่านระดับจาก parts[4] แต่ประโยคมีแค่ 4 คอลัมน์ (index 0-3) ระดับอยู่ index 3 ทำให้อ่านไม่เจอ ได้ A1 default เสมอ
+        const lvlRaw = isMixed ? (parts[3] || "").toUpperCase().match(/A1|A2|B1|B2|C1/)?.[0] : levelProp;
+        return { word, pronunciation: parts[1] || "", meaning: parts[2] || "", level: lvlRaw || "A1" };
       }).filter(Boolean);
       if (!rows.length) throw new Error(`AI ไม่ได้ส่งรายการ${isWord ? "คำศัพท์" : "ประโยค"}กลับมาในรูปแบบที่อ่านได้ ลองใหม่อีกครั้ง`);
       setPreview(rows);
@@ -9794,7 +9809,7 @@ function VocabBatchGenModal({ t, table = "vocab_words", mode = "word", userId, s
   const saveAll = async () => {
     if (!preview?.length || saving) return;
     setSaving(true);
-    const rows = preview.map((p) => ({ id: crypto.randomUUID(), user_id: userId, word: p.word, pronunciation: p.pronunciation, meaning: p.meaning, example: p.example, category, level: p.level, status: "learning", review_count: 0, created_at: new Date().toISOString() }));
+    const rows = preview.map((p) => ({ id: crypto.randomUUID(), user_id: userId, word: p.word, pronunciation: p.pronunciation, meaning: p.meaning, examples: isWord && p.exampleEn ? [{ en: p.exampleEn, th: p.exampleTh }] : [], category, level: p.level, status: "learning", review_count: 0, created_at: new Date().toISOString() }));
     try {
       const { error } = await supabase.from(table).insert(rows);
       if (error) throw error;
@@ -9835,7 +9850,7 @@ function VocabBatchGenModal({ t, table = "vocab_words", mode = "word", userId, s
                 <div key={i} style={{ ...card(t), padding: 10 }}>
                   <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text }}>{p.word} <span style={{ fontSize: 11, color: t.faint, fontWeight: 400 }}>({p.pronunciation})</span> <span style={{ fontSize: 9.5, fontWeight: 700, color: t.accent, background: `${t.accent}18`, padding: "1px 6px", borderRadius: 8 }}>{p.level}</span></div>
                   <div style={{ fontSize: 12, color: t.sub }}>{p.meaning}</div>
-                  {p.example && <div style={{ fontSize: 11, color: t.faint, fontStyle: "italic" }}>"{p.example}"</div>}
+                  {p.exampleEn && <div style={{ fontSize: 11, color: t.faint, fontStyle: "italic" }}>"{p.exampleEn}"{p.exampleTh && ` (${p.exampleTh})`}</div>}
                 </div>
               ))}
             </div>
@@ -10335,6 +10350,7 @@ function LangPage({ t, lang, userId, session }) {
   const [level, setLevel] = useState("all"); // ระดับ CEFR ที่กรอง — "all" = ทุกระดับ
   const [menuOpen, setMenuOpen] = useState(false); // เมนูเลือกหมวดแบบเดียวกับหน้าข่าว
   const [guideOpen, setGuideOpen] = useState(false);
+  const [cardViewMode, setCardViewMode] = useState("card"); // "card" | "list" — มุมมองของแท็บเรียนรู้/ทบทวน
   useEffect(() => {
     try {
       if (!localStorage.getItem("refhub:vocabGuideSeenV2")) { setGuideOpen(true); localStorage.setItem("refhub:vocabGuideSeenV2", "1"); }
@@ -10411,6 +10427,35 @@ function LangPage({ t, lang, userId, session }) {
   const setStatus = async (w, status) => {
     setWords((list) => list.map((x) => (x.id === w.id ? { ...x, status, review_count: (x.review_count || 0) + 1 } : x)));
     if (userId) await supabase.from(table).update({ status, review_count: (w.review_count || 0) + 1 }).eq("id", w.id);
+  };
+
+  // ➕ ขอตัวอย่างเพิ่มสำหรับคำนี้ — ต่อท้ายของเดิมที่มีอยู่แล้ว ไม่ทับของเก่า
+  const [addingExampleFor, setAddingExampleFor] = useState(null);
+  const addExample = async (item) => {
+    if (addingExampleFor) return;
+    setAddingExampleFor(item.id);
+    try {
+      const existing = (item.examples || []).map((ex) => ex.en);
+      const avoidText = existing.length ? ` ห้ามซ้ำกับตัวอย่างที่มีอยู่แล้ว: ${existing.join(" / ")}` : "";
+      const r = await fetch("/api/chat", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mentor: "none", userId, callerToken: session?.access_token,
+          messages: [{ who: "u", text: `ช่วยแต่งตัวอย่างประโยคภาษาอังกฤษสั้นๆ อีก 1 ประโยคที่ใช้คำว่า "${item.word}"${avoidText} ตอบตามรูปแบบนี้เป๊ะๆ 2 บรรทัด ห้ามมีข้อความอื่น:\nประโยค: (ตัวอย่างประโยคภาษาอังกฤษ)\nแปล: (คำแปลไทยของประโยคนั้น)` }],
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "เรียก AI ไม่สำเร็จ");
+      const text = data.text || "";
+      const en = /ประโยค[:：]\s*(.+)/.exec(text)?.[1]?.trim();
+      const th = /แปล[:：]\s*(.+)/.exec(text)?.[1]?.trim();
+      if (!en) throw new Error("AI ไม่ได้ส่งตัวอย่างกลับมา ลองใหม่อีกครั้ง");
+      const newExamples = [...(item.examples || []), { en, th: th || "" }];
+      setWords((list) => list.map((x) => (x.id === item.id ? { ...x, examples: newExamples } : x)));
+      if (userId) await supabase.from(table).update({ examples: newExamples }).eq("id", item.id);
+    } catch (e) {
+      alert("ขอตัวอย่างเพิ่มไม่สำเร็จ: " + e.message);
+    } finally { setAddingExampleFor(null); }
   };
 
   const knownCount = words.filter((w) => w.status === "known").length;
@@ -10510,10 +10555,44 @@ function LangPage({ t, lang, userId, session }) {
       ))}
     </div>
 
+    {(view === "learn" || view === "review") && (
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginBottom: 8 }}>
+        <button onClick={() => setCardViewMode("card")} style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 10px", borderRadius: 10, cursor: "pointer", fontSize: 11, fontWeight: 700, border: `1.5px solid ${cardViewMode === "card" ? t.accent : t.border}`, background: cardViewMode === "card" ? t.accent : "transparent", color: cardViewMode === "card" ? t.onAccent : t.sub }}><LayoutGrid size={12} /> การ์ด</button>
+        <button onClick={() => setCardViewMode("list")} style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 10px", borderRadius: 10, cursor: "pointer", fontSize: 11, fontWeight: 700, border: `1.5px solid ${cardViewMode === "list" ? t.accent : t.border}`, background: cardViewMode === "list" ? t.accent : "transparent", color: cardViewMode === "list" ? t.onAccent : t.sub }}><List size={12} /> ลิสต์</button>
+      </div>
+    )}
+
     {loading && view !== "history" && <Empty t={t} text="กำลังโหลด..." />}
 
     <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
     {!loading && (view === "learn" || view === "review") && (
+      cardViewMode === "list" ? (
+        activePool.length === 0 ? (
+          <Empty t={t} text={view === "learn" ? `หมวดนี้ยังไม่มี${noun}เลย ลองกด ✨ AI เจนให้ ด้านบนดูก่อนได้เลย` : "ยังไม่มีอะไรให้ทบทวน ไปเรียนที่แท็บ \"เรียนรู้\" ก่อนนะ"} />
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {activePool.map((w) => (
+              <div key={w.id} style={{ ...card(t), padding: 12 }}>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                  <button onClick={() => speak(w)} style={{ flexShrink: 0, width: 32, height: 32, borderRadius: 16, border: "none", background: speakingId === w.id ? t.accent : t.inputBg, display: "grid", placeItems: "center", cursor: "pointer" }}>
+                    <Volume2 size={14} color={speakingId === w.id ? t.onAccent : t.sub} />
+                  </button>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: isWord ? 15 : 13, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                      {w.word} {w.level && <span style={{ fontSize: 9.5, fontWeight: 700, color: t.accent, background: `${t.accent}18`, padding: "1px 6px", borderRadius: 8 }}>{w.level}</span>}
+                    </div>
+                    {w.pronunciation && <div style={{ fontSize: 11, color: t.faint, marginTop: 1 }}>[{w.pronunciation}]</div>}
+                    {w.meaning && <div style={{ fontSize: 12.5, color: t.sub, marginTop: 2 }}>{w.meaning}</div>}
+                  </div>
+                  <button onClick={() => setStatus(w, view === "learn" ? "known" : "learning")} style={{ flexShrink: 0, padding: "6px 10px", borderRadius: 10, border: `1px solid ${view === "learn" ? "#2E9E6B" : t.border}`, background: "none", cursor: "pointer", fontSize: 10.5, fontWeight: 700, color: view === "learn" ? "#2E9E6B" : t.sub, whiteSpace: "nowrap" }}>
+                    {view === "learn" ? "จำแล้ว ✓" : "ลืมแล้ว"}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      ) : (
       !current ? (
         <div style={{ ...card(t), padding: 28, textAlign: "center" }}>
           <Sparkles size={28} color={t.accent} style={{ marginBottom: 10 }} />
@@ -10542,7 +10621,17 @@ function LangPage({ t, lang, userId, session }) {
           {current.pronunciation && <div style={{ fontSize: 13, color: t.faint, marginTop: 4 }}>[{current.pronunciation}]</div>}
           {flipped ? (<>
             {current.meaning && <div style={{ fontSize: 15, color: t.accent, fontWeight: 700, marginTop: 12 }}>{current.meaning}</div>}
-            {current.example && <div style={{ fontSize: 13, color: t.sub, marginTop: 10, fontStyle: "italic" }}>"{current.example}"</div>}
+            {(current.examples && current.examples.length > 0 ? current.examples : current.example ? [{ en: current.example, th: "" }] : []).map((ex, i) => (
+              <div key={i} style={{ marginTop: 10, paddingTop: i > 0 ? 10 : 0, borderTop: i > 0 ? `1px solid ${t.border}` : "none" }}>
+                <div style={{ fontSize: 13, color: t.sub, fontStyle: "italic" }}>"{ex.en}"</div>
+                {ex.th && <div style={{ fontSize: 12, color: t.faint, marginTop: 2 }}>{ex.th}</div>}
+              </div>
+            ))}
+            {isWord && (
+              <button onClick={(e) => { e.stopPropagation(); addExample(current); }} disabled={addingExampleFor === current.id} style={{ display: "flex", alignItems: "center", gap: 5, margin: "12px auto 0", background: "none", border: "none", cursor: "pointer", color: t.accent, fontSize: 11.5, fontWeight: 700 }}>
+                <Plus size={13} /> {addingExampleFor === current.id ? "กำลังคิด..." : "ขอตัวอย่างเพิ่ม"}
+              </button>
+            )}
           </>) : (
             <div style={{ fontSize: 11.5, color: t.faint, marginTop: 14 }}>แตะเพื่อดูความหมาย</div>
           )}
@@ -10553,6 +10642,7 @@ function LangPage({ t, lang, userId, session }) {
         </div>
         <button onClick={nextCard} style={{ ...card(t), width: "100%", marginTop: 8, padding: "11px 0", fontSize: 13, fontWeight: 700, color: t.text, cursor: "pointer" }}>ข้ามอันนี้ →</button>
       </>)
+      )
     )}
 
     {!loading && view === "quiz" && (
@@ -10605,7 +10695,12 @@ function LangPage({ t, lang, userId, session }) {
                 </div>
                 {w.pronunciation && <div style={{ fontSize: 11, color: t.faint, marginTop: 1 }}>[{w.pronunciation}]</div>}
                 {w.meaning && <div style={{ fontSize: 12.5, color: t.sub, marginTop: 2 }}>{w.meaning}</div>}
-                {w.example && <div style={{ fontSize: 11.5, color: t.faint, marginTop: 2, fontStyle: "italic" }}>"{w.example}"</div>}
+                {(w.examples?.[0] || w.example) && (
+                  <div style={{ fontSize: 11.5, color: t.faint, marginTop: 2, fontStyle: "italic" }}>
+                    "{w.examples?.[0]?.en || w.example}"{w.examples?.[0]?.th && ` (${w.examples[0].th})`}
+                    {w.examples?.length > 1 && <span style={{ fontStyle: "normal", color: t.accent, fontWeight: 700 }}> +{w.examples.length - 1}</span>}
+                  </div>
+                )}
               </div>
               <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
                 <button onClick={() => speak(w)} style={ghost}><Volume2 size={15} color={speakingId === w.id ? t.accent : t.faint} /></button>
