@@ -9634,7 +9634,6 @@ function VocabWordModal({ t, initial, userId, session, close, onSaved }) {
   const [meaning, setMeaning] = useState(initial?.meaning || "");
   const [example, setExample] = useState(initial?.example || "");
   const [category, setCategory] = useState(initial?.category || "general");
-  const [level, setLevel] = useState(initial?.level || "A1");
   const [saving, setSaving] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [err, setErr] = useState("");
@@ -9668,7 +9667,7 @@ function VocabWordModal({ t, initial, userId, session, close, onSaved }) {
   const save = async () => {
     if (!word.trim() || saving) return;
     setSaving(true); setErr("");
-    const payload = { word: word.trim(), pronunciation: pronunciation.trim(), meaning: meaning.trim(), example: example.trim(), category, level };
+    const payload = { word: word.trim(), pronunciation: pronunciation.trim(), meaning: meaning.trim(), example: example.trim(), category };
     try {
       if (initial?.id) {
         const { error } = await supabase.from("vocab_words").update(payload).eq("id", initial.id);
@@ -9706,15 +9705,9 @@ function VocabWordModal({ t, initial, userId, session, close, onSaved }) {
           <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>ตัวอย่างประโยค</div>
           <input value={example} onChange={(e) => setExample(e.target.value)} placeholder="ตัวอย่างประโยคภาษาอังกฤษ" style={{ ...input(t), marginBottom: 14 }} />
           <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>หมวดหมู่</div>
-          <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4, marginBottom: 12 }}>
+          <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4, marginBottom: 14 }}>
             {VOCAB_TOPICS.map((c) => (
               <button key={c.id} onClick={() => setCategory(c.id)} style={{ flexShrink: 0, padding: "6px 12px", borderRadius: 14, cursor: "pointer", fontSize: 11.5, fontWeight: 700, border: `1.5px solid ${category === c.id ? t.accent : t.border}`, background: category === c.id ? t.accent : "transparent", color: category === c.id ? t.onAccent : t.sub }}>{c.label}</button>
-            ))}
-          </div>
-          <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>ระดับ (CEFR)</div>
-          <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
-            {CEFR_LEVELS.map((lv) => (
-              <button key={lv} onClick={() => setLevel(lv)} style={{ flex: 1, padding: "8px 0", borderRadius: 10, cursor: "pointer", fontSize: 12.5, fontWeight: 700, border: `1.5px solid ${level === lv ? t.accent : t.border}`, background: level === lv ? t.accent : "transparent", color: level === lv ? t.onAccent : t.sub }}>{lv}</button>
             ))}
           </div>
           {err && <div style={{ fontSize: 11.5, color: "#D9534F", marginBottom: 10 }}>{err}</div>}
@@ -9911,12 +9904,12 @@ function LangPage({ t, lang, userId, session }) {
     <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
     {!loading && view === "review" && (
       !current ? (
-        <div style={{ ...card(t), padding: 24, textAlign: "center" }}>
-          <div style={{ fontSize: 13.5, color: t.sub, marginBottom: 12 }}>หมวดนี้ยังไม่มีคำศัพท์เลย เพิ่มเองหรือให้ AI เจนให้ก็ได้</div>
-          <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
-            <button onClick={() => setAddOpen(true)} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), padding: "10px 18px" }}>+ เพิ่มเอง</button>
-            <button onClick={() => setGenOpen(true)} style={{ ...card(t), padding: "10px 18px", border: `1px solid ${t.accent}`, color: t.accent, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}><Sparkles size={14} /> AI เจนให้</button>
-          </div>
+        <div style={{ ...card(t), padding: 28, textAlign: "center" }}>
+          <Sparkles size={28} color={t.accent} style={{ marginBottom: 10 }} />
+          <div style={{ fontSize: 14.5, fontWeight: 800, color: t.text, marginBottom: 4 }}>หมวดนี้ยังไม่มีบทเรียน</div>
+          <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>ให้ AI สร้างคำศัพท์หมวดนี้ให้พร้อมเรียนได้เลย</div>
+          <button onClick={() => setGenOpen(true)} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "13px 0", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14 }}><Sparkles size={16} /> ให้ AI สร้างบทเรียนให้เลย</button>
+          <button onClick={() => setAddOpen(true)} style={{ background: "none", border: "none", cursor: "pointer", color: t.faint, fontSize: 11.5, marginTop: 12, textDecoration: "underline" }}>หรือเพิ่มคำศัพท์เองทีละคำ</button>
         </div>
       ) : (<>
         <div onClick={() => setFlipped((v) => !v)} style={{ ...card(t), padding: 24, textAlign: "center", minHeight: 200, display: "flex", flexDirection: "column", justifyContent: "center", cursor: "pointer" }}>
@@ -9939,8 +9932,8 @@ function LangPage({ t, lang, userId, session }) {
     )}
 
     {!loading && view === "manage" && (<>
-      <button onClick={() => { setEditing(null); setAddOpen(true); }} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "11px 0", marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Plus size={15} /> เพิ่มคำศัพท์</button>
-      {topicWords.length === 0 && <Empty t={t} text="หมวดนี้ยังไม่มีคำศัพท์" />}
+      <button onClick={() => { setEditing(null); setAddOpen(true); }} style={{ ...card(t), width: "100%", padding: "10px 0", marginBottom: 12, border: `1px solid ${t.border}`, color: t.sub, fontWeight: 700, fontSize: 12.5, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Plus size={14} /> เพิ่มคำศัพท์เองทีละคำ</button>
+      {topicWords.length === 0 && <Empty t={t} text="หมวดนี้ยังไม่มีคำศัพท์ — ลองกด ✨ AI เจนให้ ด้านบนดูก่อนได้เลย" />}
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {topicWords.map((w) => (
           <div key={w.id} style={{ ...card(t), padding: 12 }}>
