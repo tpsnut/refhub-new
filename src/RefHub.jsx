@@ -10288,6 +10288,220 @@ function VocabSpeakingModal({ t, mode, category, level, pool, userId, close, onF
   );
 }
 
+// 🔁🎯 ทบทวนแบบ active recall — เลือกได้ว่าอยากฝึกแบบไหน: เห็นคำ→พิมพ์แปล, เห็นคำแปล→เขียนคำศัพท์, ออกเสียง+แปล, หรือสุ่ม
+function VocabRecallModal({ t, mode, category, level, pool, userId, session, close, onFinished }) {
+  const isWord = mode === "word";
+  const [subMode, setSubMode] = useState(null); // null = หน้าเลือกโหมดก่อน
+  const RECALL_TYPES = ["word2meaning", "meaning2word", "speak"];
+  const [questions] = useState(() => pickFreshItems(`refhub:vocabFresh:recall:${mode}:${category}:${level}`, pool, Math.min(10, pool.length)).map((item) => ({
+    item, type: subMode === "random" || !subMode ? null : subMode, // เดี๋ยวเซ็ตจริงตอนเลือก subMode
+  })));
+  const [idx, setIdx] = useState(0);
+  const [answer, setAnswer] = useState("");
+  const [answer2, setAnswer2] = useState(""); // ใช้กับโหมด speak (ช่องแปล คู่กับพูด)
+  const [checked, setChecked] = useState(false);
+  const [correct, setCorrect] = useState(false);
+  const [heard, setHeard] = useState(null);
+  const [pronOk, setPronOk] = useState(null);
+  const [listening, setListening] = useState(false);
+  const [score, setScore] = useState(0);
+  const [done, setDone] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  const audioRef = useRef(null);
+  const [qTypes] = useState(() => questions.map(() => RECALL_TYPES[Math.floor(Math.random() * RECALL_TYPES.length)]));
+  const q = questions[idx];
+  const qType = subMode === "random" ? qTypes[idx] : subMode;
+
+  const normalize = (s) => (s || "").toLowerCase().replace(/[.,!?;:'"]/g, "").replace(/\s+/g, " ").trim();
+
+  const play = async () => {
+    if (!q) return;
+    setSpeaking(true);
+    window.speechSynthesis?.cancel();
+    audioRef.current?.pause();
+    try {
+      const r = await fetch("/api/knowledge-generate", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "tts", text: q.item.word, voice: "en-US-JennyNeural", callerToken: session?.access_token }),
+      });
+      if (!r.ok) throw new Error("azure_tts_failed");
+      const blob = await r.blob();
+      const audio = new Audio(URL.createObjectURL(blob));
+      audioRef.current = audio;
+      audio.onended = () => setSpeaking(false);
+      audio.onerror = () => fallbackSpeak();
+      await audio.play();
+    } catch (e) { fallbackSpeak(); }
+  };
+  const fallbackSpeak = () => {
+    if (!window.speechSynthesis) { setSpeaking(false); return; }
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(q.item.word);
+    u.lang = "en-US";
+    u.onend = () => setSpeaking(false);
+    u.onerror = () => setSpeaking(false);
+    window.speechSynthesis.speak(u);
+  };
+
+  const SpeechRecognitionAPI = typeof window !== "undefined" ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null;
+  const startListening = () => {
+    if (!SpeechRecognitionAPI) { alert("เบราว์เซอร์นี้ยังไม่รองรับการฟังเสียงพูด ลองเปิดผ่าน Chrome ดูนะ"); return; }
+    const r = new SpeechRecognitionAPI();
+    r.lang = "en-US"; r.interimResults = false; r.maxAlternatives = 1;
+    r.onstart = () => setListening(true);
+    r.onresult = (e) => { setHeard(e.results[0][0].transcript); setPronOk(normalize(e.results[0][0].transcript) === normalize(q.item.word)); };
+    r.onerror = () => setListening(false);
+    r.onend = () => setListening(false);
+    r.start();
+  };
+
+  const check = () => {
+    if (checked) return;
+    let ok;
+    if (qType === "word2meaning") ok = answer.trim().length > 0 && (normalize(answer).includes(normalize(q.item.meaning)) || normalize(q.item.meaning).includes(normalize(answer)));
+    else if (qType === "meaning2word") ok = normalize(answer) === normalize(q.item.word);
+    else ok = !!pronOk && answer2.trim().length > 0 && (normalize(answer2).includes(normalize(q.item.meaning)) || normalize(q.item.meaning).includes(normalize(answer2)));
+    setCorrect(ok);
+    setChecked(true);
+    if (ok) setScore((s) => s + 1);
+  };
+  const next = async () => {
+    if (idx + 1 < questions.length) { setIdx((i) => i + 1); setAnswer(""); setAnswer2(""); setChecked(false); setHeard(null); setPronOk(null); }
+    else {
+      setDone(true);
+      if (userId) {
+        setSaving(true);
+        await supabase.from("vocab_quiz_history").insert({ id: crypto.randomUUID(), user_id: userId, mode, category, level, skill: "recall", score, total: questions.length, created_at: new Date().toISOString() }).then(() => {}, () => {});
+        setSaving(false);
+      }
+      onFinished?.();
+    }
+  };
+
+  // 🐛 useEffect ต้องอยู่ก่อน early return เสมอ (Rules of Hooks) — ย้ายมาไว้ตรงนี้ ไม่งั้น React error ตอน subMode/questions เปลี่ยนสถานะ
+  useEffect(() => {
+    if (subMode && questions.length && qType === "speak") play();
+    return () => { window.speechSynthesis?.cancel(); audioRef.current?.pause(); };
+  }, [idx, subMode]);
+
+  if (!subMode) {
+    return (
+      <ModalPortal>
+        <div style={overlayHi} onClick={close}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>🔁 อยากฝึกแบบไหน?</div>
+              <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <button onClick={() => setSubMode("word2meaning")} style={{ ...card(t), padding: "14px 16px", border: `1px solid ${t.border}`, cursor: "pointer", textAlign: "left" }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>🔤 เห็นคำศัพท์ → พิมพ์คำแปล</div>
+                <div style={{ fontSize: 11.5, color: t.sub, marginTop: 2 }}>โชว์คำศัพท์ภาษาอังกฤษ ให้พิมพ์ความหมายไทยเอง</div>
+              </button>
+              <button onClick={() => setSubMode("meaning2word")} style={{ ...card(t), padding: "14px 16px", border: `1px solid ${t.border}`, cursor: "pointer", textAlign: "left" }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>📝 เห็นคำแปล → เขียนคำศัพท์</div>
+                <div style={{ fontSize: 11.5, color: t.sub, marginTop: 2 }}>โชว์ความหมายไทย ให้พิมพ์คำศัพท์ภาษาอังกฤษเอง</div>
+              </button>
+              <button onClick={() => setSubMode("speak")} style={{ ...card(t), padding: "14px 16px", border: `1px solid ${t.border}`, cursor: "pointer", textAlign: "left" }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>🎤 ออกเสียง + แปล</div>
+                <div style={{ fontSize: 11.5, color: t.sub, marginTop: 2 }}>พูดออกเสียงคำนั้น พร้อมพิมพ์ความหมายไทยด้วย</div>
+              </button>
+              <button onClick={() => setSubMode("random")} style={{ ...card(t), padding: "14px 16px", border: `1px solid ${t.accent}`, cursor: "pointer", textAlign: "left" }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: t.accent }}>🎲 สุ่มทั้งหมด</div>
+                <div style={{ fontSize: 11.5, color: t.sub, marginTop: 2 }}>สลับทั้ง 3 แบบไปเรื่อยๆ ในชุดเดียวกัน</div>
+              </button>
+            </div>
+          </div>
+        </div>
+      </ModalPortal>
+    );
+  }
+
+  if (!questions.length) {
+    return (
+      <ModalPortal>
+        <div style={overlayHi} onClick={close}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
+            <div style={{ fontSize: 14, color: t.sub, textAlign: "center", marginBottom: 14 }}>ยังไม่มี{isWord ? "คำศัพท์" : "ประโยค"}ที่จำได้แล้วในหมวดนี้เลย ไปเรียนที่แท็บ "เรียนรู้" ก่อนนะ</div>
+            <button onClick={close} style={{ ...card(t), width: "100%", padding: "11px 0", border: `1px solid ${t.border}`, cursor: "pointer", color: t.text, fontWeight: 700 }}>ปิด</button>
+          </div>
+        </div>
+      </ModalPortal>
+    );
+  }
+
+  return (
+    <ModalPortal>
+      <div style={overlayHi} onClick={done ? close : undefined}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "88vh", overflowY: "auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>🔁 ทบทวน</div>
+            <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+          </div>
+
+          {!done ? (<>
+            <div style={{ fontSize: 11.5, color: t.faint, marginBottom: 10 }}>ข้อ {idx + 1}/{questions.length}</div>
+
+            {qType === "word2meaning" && (<>
+              <div style={{ ...card(t), padding: 24, textAlign: "center", marginBottom: 14 }}>
+                <div style={{ fontSize: 24, fontWeight: 800, color: t.text }}>{q.item.word}</div>
+                {q.item.pronunciation && <div style={{ fontSize: 12.5, color: t.faint, marginTop: 4 }}>[{q.item.pronunciation}]</div>}
+              </div>
+              <input value={answer} onChange={(e) => setAnswer(e.target.value)} onKeyDown={(e) => e.key === "Enter" && check()} disabled={checked} placeholder="พิมพ์คำแปลไทย..." style={{ ...input(t), marginBottom: 12, textAlign: "center", fontSize: 15 }} />
+              {checked && (
+                <div style={{ ...card(t), padding: 12, marginBottom: 14, border: `1px solid ${correct ? "#2E9E6B" : "#D9534F"}`, textAlign: "center" }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: correct ? "#2E9E6B" : "#D9534F" }}>{correct ? "✓ ถูกต้อง!" : "✗ ยังไม่ตรง"}</div>
+                  <div style={{ fontSize: 13, color: t.text, marginTop: 4 }}>{q.item.meaning}</div>
+                </div>
+              )}
+            </>)}
+
+            {qType === "meaning2word" && (<>
+              <div style={{ ...card(t), padding: 24, textAlign: "center", marginBottom: 14 }}>
+                <div style={{ fontSize: 20, fontWeight: 800, color: t.text }}>{q.item.meaning}</div>
+              </div>
+              <input value={answer} onChange={(e) => setAnswer(e.target.value)} onKeyDown={(e) => e.key === "Enter" && check()} disabled={checked} placeholder="Type the English word..." style={{ ...input(t), marginBottom: 12, textAlign: "center", fontSize: 15 }} autoCapitalize="none" />
+              {checked && (
+                <div style={{ ...card(t), padding: 12, marginBottom: 14, border: `1px solid ${correct ? "#2E9E6B" : "#D9534F"}`, textAlign: "center" }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: correct ? "#2E9E6B" : "#D9534F" }}>{correct ? "✓ ถูกต้อง!" : "✗ ยังไม่ตรง"}</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginTop: 4 }}>{q.item.word}</div>
+                </div>
+              )}
+            </>)}
+
+            {qType === "speak" && (<>
+              <div style={{ ...card(t), padding: 20, textAlign: "center", marginBottom: 12 }}>
+                <div style={{ fontSize: 22, fontWeight: 800, color: t.text, marginBottom: 4 }}>{q.item.word}</div>
+                {q.item.pronunciation && <div style={{ fontSize: 12, color: t.faint, marginBottom: 10 }}>[{q.item.pronunciation}]</div>}
+                <button onClick={startListening} disabled={listening || checked} style={{ width: 60, height: 60, borderRadius: 30, border: "none", background: listening ? "#D9534F" : t.accent, color: t.onAccent, cursor: "pointer", display: "grid", placeItems: "center", margin: "0 auto" }}>
+                  <Mic size={26} />
+                </button>
+                {heard && <div style={{ fontSize: 11, color: pronOk ? "#2E9E6B" : "#D9534F", marginTop: 8 }}>ได้ยิน: "{heard}" {pronOk ? "✓" : "✗"}</div>}
+              </div>
+              <input value={answer2} onChange={(e) => setAnswer2(e.target.value)} onKeyDown={(e) => e.key === "Enter" && check()} disabled={checked} placeholder="พิมพ์คำแปลไทยด้วย..." style={{ ...input(t), marginBottom: 12, textAlign: "center", fontSize: 15 }} />
+              {checked && (
+                <div style={{ ...card(t), padding: 12, marginBottom: 14, border: `1px solid ${correct ? "#2E9E6B" : "#D9534F"}`, textAlign: "center" }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: correct ? "#2E9E6B" : "#D9534F" }}>{correct ? "✓ ถูกต้อง!" : "✗ ยังไม่ตรง (ต้องออกเสียงตรง + แปลถูกด้วย)"}</div>
+                  <div style={{ fontSize: 13, color: t.text, marginTop: 4 }}>{q.item.meaning}</div>
+                </div>
+              )}
+            </>)}
+
+            <button onClick={checked ? next : check} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "12px 0" }}>{checked ? (idx + 1 < questions.length ? "ข้อต่อไป →" : "ดูผลคะแนน") : "เช็คคำตอบ"}</button>
+          </>) : (
+            <div style={{ textAlign: "center", padding: "10px 0" }}>
+              <div style={{ fontSize: 15, color: t.sub, marginBottom: 6 }}>คะแนนของคุณ</div>
+              <div style={{ fontSize: 40, fontWeight: 800, color: t.accent, marginBottom: 4 }}>{score}/{questions.length}</div>
+              <button onClick={close} disabled={saving} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "12px 0" }}>{saving ? "กำลังบันทึก..." : "เสร็จแล้ว"}</button>
+            </div>
+          )}
+        </div>
+      </div>
+    </ModalPortal>
+  );
+}
+
 // 📖 ไกด์วิธีใช้งานหน้าฝึกภาษา — โผล่อัตโนมัติครั้งแรก + กดปุ่ม ❓ ดูซ้ำได้ทุกเมื่อ
 function VocabGuideModal({ t, lang, close }) {
   const isEn = lang === "en";
@@ -10344,6 +10558,7 @@ function LangPage({ t, lang, userId, session }) {
   const [quizOpen, setQuizOpen] = useState(false);
   const [listenOpen, setListenOpen] = useState(false);
   const [speakOpen, setSpeakOpen] = useState(false);
+  const [recallOpen, setRecallOpen] = useState(false);
   const [writeOpen, setWriteOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [topic, setTopic] = useState("general"); // 📚 หมวดที่กำลังโฟกัสอยู่ — คุมทั้งโหมดทบทวนและจัดการ เหมือนหมวดข่าว
@@ -10555,6 +10770,12 @@ function LangPage({ t, lang, userId, session }) {
       ))}
     </div>
 
+    {view === "review" && reviewOnlyPool.length > 0 && (
+      <button onClick={() => setRecallOpen(true)} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "13px 0", marginBottom: 10, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14 }}>
+        ▶️ เริ่มทบทวน ({reviewOnlyPool.length})
+      </button>
+    )}
+
     {(view === "learn" || view === "review") && (
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginBottom: 8 }}>
         <button onClick={() => setCardViewMode("card")} style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 10px", borderRadius: 10, cursor: "pointer", fontSize: 11, fontWeight: 700, border: `1.5px solid ${cardViewMode === "card" ? t.accent : t.border}`, background: cardViewMode === "card" ? t.accent : "transparent", color: cardViewMode === "card" ? t.onAccent : t.sub }}><LayoutGrid size={12} /> การ์ด</button>
@@ -10584,9 +10805,11 @@ function LangPage({ t, lang, userId, session }) {
                     {w.pronunciation && <div style={{ fontSize: 11, color: t.faint, marginTop: 1 }}>[{w.pronunciation}]</div>}
                     {w.meaning && <div style={{ fontSize: 12.5, color: t.sub, marginTop: 2 }}>{w.meaning}</div>}
                   </div>
-                  <button onClick={() => setStatus(w, view === "learn" ? "known" : "learning")} style={{ flexShrink: 0, padding: "6px 10px", borderRadius: 10, border: `1px solid ${view === "learn" ? "#2E9E6B" : t.border}`, background: "none", cursor: "pointer", fontSize: 10.5, fontWeight: 700, color: view === "learn" ? "#2E9E6B" : t.sub, whiteSpace: "nowrap" }}>
-                    {view === "learn" ? "จำแล้ว ✓" : "ลืมแล้ว"}
-                  </button>
+                  {view === "learn" && (
+                    <button onClick={() => setStatus(w, "known")} style={{ flexShrink: 0, padding: "6px 10px", borderRadius: 10, border: "1px solid #2E9E6B", background: "none", cursor: "pointer", fontSize: 10.5, fontWeight: 700, color: "#2E9E6B", whiteSpace: "nowrap" }}>
+                      จำแล้ว ✓
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -10636,10 +10859,12 @@ function LangPage({ t, lang, userId, session }) {
             <div style={{ fontSize: 11.5, color: t.faint, marginTop: 14 }}>แตะเพื่อดูความหมาย</div>
           )}
         </div>
-        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-          <button onClick={() => { setStatus(current, "learning"); nextCard(); }} style={{ ...card(t), flex: 1, padding: "12px 0", fontSize: 13, fontWeight: 700, color: t.sub, cursor: "pointer" }}>ยังไม่ชิน</button>
-          <button onClick={() => { setStatus(current, "known"); nextCard(); }} style={{ ...card(t), flex: 1, padding: "12px 0", fontSize: 13, fontWeight: 700, color: "#2E9E6B", cursor: "pointer", border: `1px solid #2E9E6B55` }}>จำได้แล้ว ✓</button>
-        </div>
+        {view === "learn" && (
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <button onClick={() => { setStatus(current, "learning"); nextCard(); }} style={{ ...card(t), flex: 1, padding: "12px 0", fontSize: 13, fontWeight: 700, color: t.sub, cursor: "pointer" }}>ยังไม่ชิน</button>
+            <button onClick={() => { setStatus(current, "known"); nextCard(); }} style={{ ...card(t), flex: 1, padding: "12px 0", fontSize: 13, fontWeight: 700, color: "#2E9E6B", cursor: "pointer", border: `1px solid #2E9E6B55` }}>จำได้แล้ว ✓</button>
+          </div>
+        )}
         <button onClick={nextCard} style={{ ...card(t), width: "100%", marginTop: 8, padding: "11px 0", fontSize: 13, fontWeight: 700, color: t.text, cursor: "pointer" }}>ข้ามอันนี้ →</button>
       </>)
       )
@@ -10758,6 +10983,7 @@ function LangPage({ t, lang, userId, session }) {
     {quizOpen && <VocabQuizModal t={t} mode={contentType} category={topic} level={level === "all" ? "mixed" : level} pool={topicWords} allItems={words} userId={userId} close={() => setQuizOpen(false)} onFinished={loadHistory} />}
     {listenOpen && <VocabListeningModal t={t} mode={contentType} category={topic} level={level === "all" ? "mixed" : level} pool={topicWords} userId={userId} session={session} close={() => setListenOpen(false)} onFinished={loadHistory} />}
     {speakOpen && <VocabSpeakingModal t={t} mode={contentType} category={topic} level={level === "all" ? "mixed" : level} pool={topicWords} userId={userId} close={() => setSpeakOpen(false)} onFinished={loadHistory} />}
+    {recallOpen && <VocabRecallModal t={t} mode={contentType} category={topic} level={level === "all" ? "mixed" : level} pool={reviewOnlyPool} userId={userId} session={session} close={() => setRecallOpen(false)} onFinished={loadHistory} />}
     {writeOpen && <VocabWritingModal t={t} category={topic} level={level === "all" ? "A1" : level} userId={userId} session={session} close={() => setWriteOpen(false)} />}
     {ConfirmUI}
   </>);
