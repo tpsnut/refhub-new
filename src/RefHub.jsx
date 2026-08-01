@@ -9670,7 +9670,7 @@ function VocabWordModal({ t, table = "vocab_words", mode = "word", initial, user
   const save = async () => {
     if (!word.trim() || saving) return;
     setSaving(true); setErr("");
-    const payload = { word: word.trim(), pronunciation: pronunciation.trim(), meaning: meaning.trim(), example: example.trim(), category };
+    const payload = { word: word.trim(), pronunciation: pronunciation.trim(), meaning: meaning.trim(), example: example.trim(), category, level: initial?.level ?? null };
     try {
       if (initial?.id) {
         const { error } = await supabase.from(table).update(payload).eq("id", initial.id);
@@ -9726,9 +9726,10 @@ function VocabWordModal({ t, table = "vocab_words", mode = "word", initial, user
 }
 
 // ✨ ให้ AI เจนคำศัพท์เป็นชุด ตามหมวด+ระดับที่เลือก — พรีวิวให้ดูก่อนค่อยกดบันทึกจริง (กันเผลอยัดคำแปลกๆเข้าคลังโดยไม่ได้เช็ค)
-function VocabBatchGenModal({ t, table = "vocab_words", mode = "word", userId, session, category, level, close, onSaved }) {
+function VocabBatchGenModal({ t, table = "vocab_words", mode = "word", userId, session, category, level: levelProp, close, onSaved }) {
   const isWord = mode === "word";
   const [count, setCount] = useState(10);
+  const [level, setLevel] = useState(levelProp === "mixed" || !levelProp ? "A1" : levelProp);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const [preview, setPreview] = useState(null); // [{word,pronunciation,meaning,example}]
@@ -9783,9 +9784,15 @@ function VocabBatchGenModal({ t, table = "vocab_words", mode = "word", userId, s
             <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>✨ AI เจน{isWord ? "คำศัพท์" : "ประโยค"}ให้</div>
             <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
           </div>
-          <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 14 }}>หมวด {topicLabel} · ระดับ {level}</div>
+          <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 14 }}>หมวด {topicLabel}</div>
 
           {!preview && (<>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>ระดับ (CEFR)</div>
+            <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
+              {CEFR_LEVELS.map((lv) => (
+                <button key={lv} onClick={() => setLevel(lv)} style={{ flex: 1, padding: "8px 0", borderRadius: 10, cursor: "pointer", fontSize: 12.5, fontWeight: 700, border: `1.5px solid ${level === lv ? t.accent : t.border}`, background: level === lv ? t.accent : "transparent", color: level === lv ? t.onAccent : t.sub }}>{lv}</button>
+              ))}
+            </div>
             <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>จำนวน{isWord ? "คำ" : "ประโยค"}</div>
             <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
               {[5, 10, 20].map((n) => (
@@ -10250,6 +10257,41 @@ function LangPage({ t, lang, userId, session }) {
   const [menuOpen, setMenuOpen] = useState(false); // เมนูเลือกหมวดแบบเดียวกับหน้าข่าว
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(true);
+  const [speakingId, setSpeakingId] = useState(null); // 🔊 id ของคำ/ประโยคที่กำลังเล่นเสียงอยู่ (ใช้โชว์สถานะปุ่ม)
+  const speakAudioRef = useRef(null);
+  const speak = async (item) => {
+    if (speakingId === item.id) { // กดซ้ำ = หยุด
+      window.speechSynthesis?.cancel();
+      speakAudioRef.current?.pause();
+      setSpeakingId(null);
+      return;
+    }
+    window.speechSynthesis?.cancel();
+    speakAudioRef.current?.pause();
+    setSpeakingId(item.id);
+    try {
+      const r = await fetch("/api/knowledge-generate", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "tts", text: item.word, voice: "en-US-JennyNeural", callerToken: session?.access_token }),
+      });
+      if (!r.ok) throw new Error("azure_tts_failed");
+      const blob = await r.blob();
+      const audio = new Audio(URL.createObjectURL(blob));
+      speakAudioRef.current = audio;
+      audio.onended = () => setSpeakingId(null);
+      audio.onerror = () => speakFallback(item);
+      await audio.play();
+    } catch (e) { speakFallback(item); }
+  };
+  const speakFallback = (item) => {
+    if (!window.speechSynthesis) { setSpeakingId(null); return; }
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(item.word);
+    u.lang = "en-US";
+    u.onend = () => setSpeakingId(null);
+    u.onerror = () => setSpeakingId(null);
+    window.speechSynthesis.speak(u);
+  };
 
   const load = () => {
     if (!userId) { setLoading(false); return; }
@@ -10390,8 +10432,11 @@ function LangPage({ t, lang, userId, session }) {
           <button onClick={() => setAddOpen(true)} style={{ background: "none", border: "none", cursor: "pointer", color: t.faint, fontSize: 11.5, marginTop: 12, textDecoration: "underline" }}>หรือเพิ่ม{noun}เองทีละอัน</button>
         </div>
       ) : (<>
-        <div onClick={() => setFlipped((v) => !v)} style={{ ...card(t), padding: 24, textAlign: "center", minHeight: 200, display: "flex", flexDirection: "column", justifyContent: "center", cursor: "pointer" }}>
+        <div onClick={() => setFlipped((v) => !v)} style={{ ...card(t), padding: 24, textAlign: "center", minHeight: 200, display: "flex", flexDirection: "column", justifyContent: "center", cursor: "pointer", position: "relative" }}>
           {current.level && <div style={{ fontSize: 10.5, fontWeight: 700, color: t.accent, marginBottom: 8 }}>{current.level}</div>}
+          <button onClick={(e) => { e.stopPropagation(); speak(current); }} style={{ position: "absolute", top: 14, right: 14, background: speakingId === current.id ? t.accent : t.inputBg, border: "none", borderRadius: 20, width: 36, height: 36, display: "grid", placeItems: "center", cursor: "pointer" }}>
+            <Volume2 size={17} color={speakingId === current.id ? t.onAccent : t.sub} />
+          </button>
           <div style={{ fontSize: isWord ? 30 : 20, fontWeight: 800, color: t.text, lineHeight: 1.4 }}>{current.word}</div>
           {current.pronunciation && <div style={{ fontSize: 13, color: t.faint, marginTop: 4 }}>[{current.pronunciation}]</div>}
           {flipped ? (<>
@@ -10462,6 +10507,7 @@ function LangPage({ t, lang, userId, session }) {
                 {w.example && <div style={{ fontSize: 11.5, color: t.faint, marginTop: 2, fontStyle: "italic" }}>"{w.example}"</div>}
               </div>
               <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
+                <button onClick={() => speak(w)} style={ghost}><Volume2 size={15} color={speakingId === w.id ? t.accent : t.faint} /></button>
                 <button onClick={() => { setEditing(w); setAddOpen(true); }} style={ghost}><Pencil size={15} color={t.faint} /></button>
                 <button onClick={() => askConfirm(`ลบ "${w.word}" เลยไหม?`, () => delWord(w))} style={ghost}><Trash2 size={15} color={t.faint} /></button>
               </div>
