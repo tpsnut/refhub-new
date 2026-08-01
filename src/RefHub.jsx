@@ -2592,9 +2592,9 @@ function MyActivityModal({ t, userId, close }) {
 
         {periodMode === "range" ? (
           <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 14 }}>
-            <input type="date" value={rangeStart} onChange={(e) => setRangeStart(e.target.value)} style={{ ...input(t), fontSize: 12 }} />
+            <input type="date" value={rangeStart} onChange={(e) => setRangeStart(e.target.value)} style={{ ...input(t), fontSize: 16 }} />
             <span style={{ color: t.faint }}>–</span>
-            <input type="date" value={rangeEnd} onChange={(e) => setRangeEnd(e.target.value)} style={{ ...input(t), fontSize: 12 }} />
+            <input type="date" value={rangeEnd} onChange={(e) => setRangeEnd(e.target.value)} style={{ ...input(t), fontSize: 16 }} />
           </div>
         ) : (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
@@ -4473,7 +4473,7 @@ function HomePage({ t, lang, M, quote, isNight, setMentorPick, balance, tx, goal
                       }
                     }}
                     placeholder="คอมเมนต์/สถานะเล็กๆ เช่น 'ทำได้ครึ่งทาง'..."
-                    style={{ ...input(t), fontSize: 12, padding: "6px 10px" }}
+                    style={{ ...input(t), fontSize: 16, padding: "6px 10px" }}
                   />
                 </div>
               )}
@@ -4661,9 +4661,9 @@ function FinancePage({ t, lang, tx, setTx, categories, openAdd, openExport, user
       <div style={{ ...card(t), padding: 16 }}>
         {periodMode === "range" ? (
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <input type="date" value={rangeStart} onChange={(e) => setRangeStart(e.target.value)} style={{ ...input(t), fontSize: 12 }} />
+            <input type="date" value={rangeStart} onChange={(e) => setRangeStart(e.target.value)} style={{ ...input(t), fontSize: 16 }} />
             <span style={{ color: t.faint }}>–</span>
-            <input type="date" value={rangeEnd} onChange={(e) => setRangeEnd(e.target.value)} style={{ ...input(t), fontSize: 12 }} />
+            <input type="date" value={rangeEnd} onChange={(e) => setRangeEnd(e.target.value)} style={{ ...input(t), fontSize: 16 }} />
           </div>
         ) : (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -6312,7 +6312,7 @@ function PostCard({ t, post, userId, onOpenProfile, onChanged, onTag }) {
                         {c.edited_at && <span style={{ fontSize: 10, color: t.faint, marginLeft: 4 }}>· แก้ไขแล้ว</span>}
                         {isEditing ? (
                           <div style={{ marginTop: 4 }}>
-                            <textarea value={editCommentText} onChange={(e) => setEditCommentText(e.target.value)} rows={2} style={{ ...input(t), fontSize: 12.5, resize: "vertical", width: "100%" }} />
+                            <textarea value={editCommentText} onChange={(e) => setEditCommentText(e.target.value)} rows={2} style={{ ...input(t), fontSize: 16, resize: "vertical", width: "100%" }} />
                             <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
                               <button onClick={() => saveEditComment(c)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 10.5, color: t.accent, fontWeight: 700 }}>บันทึก</button>
                               <button onClick={() => setEditingCommentId(null)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 10.5, color: t.faint, fontWeight: 700 }}>ยกเลิก</button>
@@ -6344,7 +6344,7 @@ function PostCard({ t, post, userId, onOpenProfile, onChanged, onTag }) {
             </div>
           )}
           <div style={{ display: "flex", gap: 6, marginTop: 8, alignItems: "flex-start" }}>
-            <MentionInput value={commentText} onChange={setCommentText} onSend={sendComment} mentioned={commentMentioned} setMentioned={setCommentMentioned} t={t} placeholder={replyTo ? `ตอบกลับ ${replyTo.name}...` : "แสดงความเห็น... (พิมพ์ @ เพื่อแท็ก)"} style={{ ...input(t), fontSize: 12.5 }} />
+            <MentionInput value={commentText} onChange={setCommentText} onSend={sendComment} mentioned={commentMentioned} setMentioned={setCommentMentioned} t={t} placeholder={replyTo ? `ตอบกลับ ${replyTo.name}...` : "แสดงความเห็น... (พิมพ์ @ เพื่อแท็ก)"} style={{ ...input(t), fontSize: 16 }} />
             <button onClick={sendComment} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), padding: "0 14px", height: 38 }}>ส่ง</button>
           </div>
         </div>
@@ -7557,7 +7557,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
                 ))}
                 {editingId === m.id ? (
                   <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                    <input value={editText} onChange={(e) => setEditText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveEdit()} style={{ ...input(t), fontSize: 13 }} />
+                    <input value={editText} onChange={(e) => setEditText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveEdit()} style={{ ...input(t), fontSize: 16 }} />
                     <button onClick={saveEdit} style={{ ...ghost, color: t.accent }}><Check size={16} color={t.accent} /></button>
                     <button onClick={() => setEditingId(null)} style={ghost}><X size={16} color={t.faint} /></button>
                   </div>
@@ -11972,7 +11972,7 @@ function Stars() { const s = Array.from({ length: 26 }).map(() => ({ x: Math.ran
 
 // styles
 const card = (t) => ({ background: t.surface, borderRadius: t.cardRadius ?? 20, border: t.cardBorderStyle ?? `1px solid ${t.border}`, boxShadow: t.cardShadow ?? (t.star ? "none" : "0 4px 12px rgba(40,50,70,.05)") });
-const input = (t) => ({ flex: 1, background: t.inputBg, border: `1px solid ${t.border}`, borderRadius: 12, padding: "11px 14px", fontSize: 13.5, color: t.text, outline: "none", width: "100%", boxSizing: "border-box" });
+const input = (t) => ({ flex: 1, background: t.inputBg, border: `1px solid ${t.border}`, borderRadius: 12, padding: "11px 14px", fontSize: 16, color: t.text, outline: "none", width: "100%", boxSizing: "border-box" });
 const primaryBtn = (M) => ({ background: `linear-gradient(135deg,${M.accent2 || M.accent},${M.accent})`, color: M.onAccent, border: "none", borderRadius: 12, fontWeight: 700, fontSize: 13.5, cursor: "pointer" });
 const navBtn = (t) => ({ width: 34, height: 34, borderRadius: 17, border: `1px solid ${t.border}`, background: "none", cursor: "pointer", fontSize: 20, color: t.text, lineHeight: 1 });
 const ghost = { background: "none", border: "none", cursor: "pointer", padding: 4 };
