@@ -10,7 +10,10 @@
 }
 
 html, body {
+  position: fixed; /* 🐛 แก้บั๊กจอกระโดดตอนกดปุ่ม/แตะอินพุตบน iOS Safari — overflow:hidden อย่างเดียวยังกันไม่พอ เพราะ Safari ยังพยายาม scrollIntoView() ตัว body เวลา element ข้างในโฟกัส (เช่น กดปุ่มที่มีอินพุตซ่อนอยู่ หรือเปิด modal ที่มีช่องพิมพ์) ทำให้เห็นจอ "เด้ง/เลื่อน" แวบหนึ่งทั้งที่ตัวแอปเองไม่ได้สั่งเลื่อน ต้อง position:fixed ให้ body หลุดจาก scroll flow ไปเลยถึงจะกันได้เด็ดขาดจริง (overflow:hidden เป็นแค่การ "ซ่อน" ส่วนเกิน แต่ยังนับเป็น scrollable ในสายตา Safari)
+  top: 0; left: 0; right: 0; bottom: 0;
   height: 100%;
+  width: 100%;
   overflow: hidden; /* กัน scroll เด้ง (rubber-band) ของ iOS Safari — เนื้อหาจริงเลื่อนในกล่องข้างในของแอปแทน */
   overscroll-behavior: none; /* กัน scroll เด้งเวลาเลื่อนสุดขอบ (ผลข้างเคียง: android จะดึงลง refresh ไม่ได้ ซึ่งตั้งใจแบบนี้) */
   touch-action: pan-y; /* อนุญาตแค่เลื่อนขึ้น-ลงปกติ ปิดซูมนิ้ว (pinch-zoom) จริงๆ ทั้งสองระบบ (manipulation เดิมไม่ได้ปิดซูมนิ้ว เป็นความเข้าใจผิดของรอบก่อน) */
