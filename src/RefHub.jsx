@@ -2013,7 +2013,7 @@ export default function RefHub() {
           {page === "ideas" && <IdeasPage t={t} M={M} userId={userId} session={session} authProfile={authProfile} setAuthProfile={setAuthProfile} setNotes={setNotes} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} />}
           {page === "trade" && <TradePage t={t} />}
           {page === "news" && <NewsPage t={t} userId={userId} authProfile={authProfile} setAuthProfile={setAuthProfile} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} hintDefs={hintDefs} seenHintKeys={seenHintKeys} dismissHint={dismissHint} setNotes={setNotes} />}
-          {page === "lang" && <LangPage t={t} />}
+          {page === "lang" && <LangPage t={t} userId={userId} session={session} />}
           {page === "goalsReport" && <GoalsReportPage t={t} goals={goals} setGoals={setGoals} userId={userId} />}
           {page === "admin" && <AdminPage t={t} session={session} userId={userId} adminAlerts={adminAlerts} setAdminAlerts={setAdminAlerts} authProfile={authProfile} setAuthProfile={setAuthProfile} />}
           {page === "locations" && <LocationsPage t={t} userId={userId} />}
@@ -9362,16 +9362,200 @@ function NewsPage({ t, userId, authProfile, setAuthProfile, setChatOpen, setAskA
     </div>
   </>);
 }
-function LangPage({ t }) {
-  const vocab = [{ w: "Resilience", m: "ความสามารถในการฟื้นตัวจากความยากลำบาก", ex: "Her resilience helped her overcome failure." }, { w: "Leverage", m: "ใช้ประโยชน์ / งัดให้เกิดผลสูงสุด", ex: "Leverage your skills to grow." }, { w: "Consistency", m: "ความสม่ำเสมอ", ex: "Consistency beats talent over time." }, { w: "Momentum", m: "แรงส่ง / โมเมนตัม", ex: "Small wins build momentum." }];
-  const [i, setI] = useState(0); const [show, setShow] = useState(false); const v = vocab[i % vocab.length];
+function VocabWordModal({ t, initial, userId, session, close, onSaved }) {
+  const [word, setWord] = useState(initial?.word || "");
+  const [meaning, setMeaning] = useState(initial?.meaning || "");
+  const [example, setExample] = useState(initial?.example || "");
+  const [category, setCategory] = useState(initial?.category || "");
+  const [saving, setSaving] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [err, setErr] = useState("");
+
+  const aiFill = async () => {
+    if (!word.trim() || aiLoading) return;
+    setAiLoading(true); setErr("");
+    try {
+      const r = await fetch("/api/chat", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mentor: "none", userId, callerToken: session?.access_token,
+          messages: [{ who: "u", text: `ช่วยเติมความหมายและตัวอย่างประโยคให้คำศัพท์ภาษาอังกฤษคำว่า "${word.trim()}" ตอบตามรูปแบบนี้เป๊ะๆ 2 บรรทัด ห้ามมีข้อความอื่นเพิ่มเติม:\nความหมาย: (คำแปล/ความหมายสั้นๆ เป็นภาษาไทย)\nตัวอย่าง: (ประโยคภาษาอังกฤษสั้นๆ ที่ใช้คำนี้)` }],
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "เรียก AI ไม่สำเร็จ");
+      const text = data.text || "";
+      const m = /ความหมาย[:：]\s*(.+)/.exec(text);
+      const e = /ตัวอย่าง[:：]\s*(.+)/.exec(text);
+      if (m) setMeaning(m[1].trim());
+      if (e) setExample(e[1].trim());
+      if (!m && !e) setMeaning(text.trim());
+    } catch (e) {
+      setErr("AI ช่วยไม่สำเร็จ: " + e.message);
+    } finally { setAiLoading(false); }
+  };
+
+  const save = async () => {
+    if (!word.trim() || saving) return;
+    setSaving(true); setErr("");
+    const payload = { word: word.trim(), meaning: meaning.trim(), example: example.trim(), category: category.trim() || null };
+    try {
+      if (initial?.id) {
+        const { error } = await supabase.from("vocab_words").update(payload).eq("id", initial.id);
+        if (error) throw error;
+        onSaved({ ...initial, ...payload });
+      } else {
+        const row = { id: uid(), user_id: userId, status: "learning", review_count: 0, created_at: new Date().toISOString(), ...payload };
+        const { error } = await supabase.from("vocab_words").insert(row);
+        if (error) throw error;
+        onSaved(row);
+      }
+      close();
+    } catch (e) {
+      setErr("บันทึกไม่สำเร็จ: " + e.message + " (เช็คว่าสร้างตาราง vocab_words ใน Supabase แล้วหรือยัง)");
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <ModalPortal>
+      <div style={overlayHi} onClick={close}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>{initial?.id ? "แก้ไขคำศัพท์" : "เพิ่มคำศัพท์"}</div>
+            <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+          </div>
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>คำศัพท์</div>
+          <input value={word} onChange={(e) => setWord(e.target.value)} placeholder="เช่น Resilience" style={{ ...input(t), marginBottom: 10 }} />
+          <button onClick={aiFill} disabled={!word.trim() || aiLoading} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", padding: "9px 0", borderRadius: 10, border: `1px solid ${t.accent}55`, background: `${t.accent}15`, color: t.accent, fontWeight: 700, fontSize: 12.5, cursor: !word.trim() || aiLoading ? "default" : "pointer", opacity: !word.trim() || aiLoading ? 0.6 : 1, marginBottom: 12 }}>
+            <Sparkles size={14} /> {aiLoading ? "กำลังคิด..." : "ให้ AI ช่วยเติมความหมาย/ตัวอย่าง"}
+          </button>
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>ความหมาย</div>
+          <input value={meaning} onChange={(e) => setMeaning(e.target.value)} placeholder="ความหมายเป็นภาษาไทย" style={{ ...input(t), marginBottom: 10 }} />
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>ตัวอย่างประโยค</div>
+          <input value={example} onChange={(e) => setExample(e.target.value)} placeholder="ตัวอย่างประโยคภาษาอังกฤษ" style={{ ...input(t), marginBottom: 10 }} />
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>หมวดหมู่ (ไม่บังคับ)</div>
+          <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="เช่น งาน, เรียน, ทั่วไป" style={{ ...input(t), marginBottom: 14 }} />
+          {err && <div style={{ fontSize: 11.5, color: "#D9534F", marginBottom: 10 }}>{err}</div>}
+          <button onClick={save} disabled={!word.trim() || saving} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "12px 0", opacity: !word.trim() || saving ? 0.6 : 1 }}>{saving ? "กำลังบันทึก..." : "บันทึก"}</button>
+        </div>
+      </div>
+    </ModalPortal>
+  );
+}
+
+function LangPage({ t, userId, session }) {
+  const [askConfirm, ConfirmUI] = useConfirm(t);
+  const [words, setWords] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [view, setView] = useState("review"); // "review" | "manage" — สลับในหน้าเดียวกันเอง (ไม่เกี่ยวกับเมนู ☰/⋮ ของแอป)
+  const [addOpen, setAddOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [catFilter, setCatFilter] = useState(null);
+
+  const load = () => {
+    if (!userId) { setLoading(false); return; }
+    setLoading(true);
+    supabase.from("vocab_words").select("*").eq("user_id", userId).order("created_at", { ascending: false }).then(({ data, error }) => {
+      if (error) console.error("โหลดคำศัพท์ไม่สำเร็จ:", error.message);
+      setWords(data || []);
+      setLoading(false);
+    });
+  };
+  useEffect(() => { load(); }, [userId]);
+
+  const onSaved = (row) => setWords((list) => { const i = list.findIndex((w) => w.id === row.id); if (i === -1) return [row, ...list]; const copy = [...list]; copy[i] = row; return copy; });
+
+  const delWord = async (w) => {
+    setWords((list) => list.filter((x) => x.id !== w.id));
+    if (userId) await supabase.from("vocab_words").delete().eq("id", w.id);
+  };
+
+  const setStatus = async (w, status) => {
+    setWords((list) => list.map((x) => (x.id === w.id ? { ...x, status, review_count: (x.review_count || 0) + 1 } : x)));
+    if (userId) await supabase.from("vocab_words").update({ status, review_count: (w.review_count || 0) + 1 }).eq("id", w.id);
+  };
+
+  const categories = [...new Set(words.map((w) => w.category).filter(Boolean))];
+  const knownCount = words.filter((w) => w.status === "known").length;
+
+  // 🔀 โหมดทบทวน — ให้คำที่ยังไม่คล่อง (learning) ขึ้นก่อนเสมอ ถ้าคล่องหมดแล้วค่อยวนทบทวนคำทั้งหมดอีกที
+  const [reviewIdx, setReviewIdx] = useState(0);
+  const [flipped, setFlipped] = useState(false);
+  const reviewPool = words.filter((w) => w.status !== "known");
+  const reviewQueue = reviewPool.length ? reviewPool : words;
+  const current = reviewQueue.length ? reviewQueue[reviewIdx % reviewQueue.length] : null;
+  const nextCard = () => { setReviewIdx((i) => i + 1); setFlipped(false); };
+
   return (<>
-    <PageHead t={t} title="ฝึกภาษา" sub="ท่องศัพท์วันละคำ" icon={<Languages size={20} color={t.accent} />} />
-    <div style={{ ...card(t), padding: 24, textAlign: "center", minHeight: 200, display: "flex", flexDirection: "column", justifyContent: "center" }}>
-      <div style={{ fontSize: 30, fontWeight: 800, color: t.text }}>{v.w}</div>
-      {show ? (<><div style={{ fontSize: 15, color: t.accent, fontWeight: 700, marginTop: 12 }}>{v.m}</div><div style={{ fontSize: 13, color: t.sub, marginTop: 10, fontStyle: "italic" }}>“{v.ex}”</div></>) : (<button onClick={() => setShow(true)} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), margin: "18px auto 0", padding: "9px 22px" }}>เฉลยความหมาย</button>)}
+    <PageHead t={t} title="ฝึกภาษา" sub={`คำศัพท์ของฉัน ${words.length} คำ · จำได้แล้ว ${knownCount} คำ`} icon={<Languages size={20} color={t.accent} />} />
+
+    <div style={{ display: "flex", gap: 6, marginBottom: 14, background: t.inputBg, borderRadius: 12, padding: 4 }}>
+      <button onClick={() => setView("review")} style={{ flex: 1, padding: "8px 0", borderRadius: 9, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 12.5, background: view === "review" ? t.accent : "transparent", color: view === "review" ? t.onAccent : t.sub }}>🔁 ทบทวน</button>
+      <button onClick={() => setView("manage")} style={{ flex: 1, padding: "8px 0", borderRadius: 9, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 12.5, background: view === "manage" ? t.accent : "transparent", color: view === "manage" ? t.onAccent : t.sub }}>📋 จัดการคำศัพท์</button>
     </div>
-    <button onClick={() => { setI((x) => x + 1); setShow(false); }} style={{ ...card(t), width: "100%", marginTop: 12, padding: "13px 0", fontSize: 14, fontWeight: 700, color: t.text, cursor: "pointer" }}>คำต่อไป →</button>
+
+    {loading && <Empty t={t} text="กำลังโหลด..." />}
+
+    {!loading && view === "review" && (
+      !current ? (
+        <div style={{ ...card(t), padding: 24, textAlign: "center" }}>
+          <div style={{ fontSize: 13.5, color: t.sub, marginBottom: 12 }}>ยังไม่มีคำศัพท์เลย เพิ่มคำแรกกันเถอะ</div>
+          <button onClick={() => setAddOpen(true)} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), padding: "10px 22px" }}>+ เพิ่มคำศัพท์</button>
+        </div>
+      ) : (<>
+        <div onClick={() => setFlipped((v) => !v)} style={{ ...card(t), padding: 24, textAlign: "center", minHeight: 200, display: "flex", flexDirection: "column", justifyContent: "center", cursor: "pointer" }}>
+          {current.category && <div style={{ fontSize: 10.5, fontWeight: 700, color: t.accent, marginBottom: 8 }}>#{current.category}</div>}
+          <div style={{ fontSize: 30, fontWeight: 800, color: t.text }}>{current.word}</div>
+          {flipped ? (<>
+            {current.meaning && <div style={{ fontSize: 15, color: t.accent, fontWeight: 700, marginTop: 12 }}>{current.meaning}</div>}
+            {current.example && <div style={{ fontSize: 13, color: t.sub, marginTop: 10, fontStyle: "italic" }}>"{current.example}"</div>}
+          </>) : (
+            <div style={{ fontSize: 11.5, color: t.faint, marginTop: 14 }}>แตะเพื่อดูความหมาย</div>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+          <button onClick={() => { setStatus(current, "learning"); nextCard(); }} style={{ ...card(t), flex: 1, padding: "12px 0", fontSize: 13, fontWeight: 700, color: t.sub, cursor: "pointer" }}>ยังไม่ชิน</button>
+          <button onClick={() => { setStatus(current, "known"); nextCard(); }} style={{ ...card(t), flex: 1, padding: "12px 0", fontSize: 13, fontWeight: 700, color: "#2E9E6B", cursor: "pointer", border: `1px solid #2E9E6B55` }}>จำได้แล้ว ✓</button>
+        </div>
+        <button onClick={nextCard} style={{ ...card(t), width: "100%", marginTop: 8, padding: "11px 0", fontSize: 13, fontWeight: 700, color: t.text, cursor: "pointer" }}>ข้ามคำนี้ →</button>
+      </>)
+    )}
+
+    {!loading && view === "manage" && (<>
+      <button onClick={() => { setEditing(null); setAddOpen(true); }} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "11px 0", marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Plus size={15} /> เพิ่มคำศัพท์</button>
+      {categories.length > 0 && (
+        <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6, marginBottom: 8 }}>
+          <button onClick={() => setCatFilter(null)} style={{ flexShrink: 0, padding: "6px 12px", borderRadius: 14, cursor: "pointer", fontSize: 11.5, fontWeight: 700, border: `1.5px solid ${!catFilter ? t.accent : t.border}`, background: !catFilter ? t.accent : "transparent", color: !catFilter ? t.onAccent : t.sub }}>ทั้งหมด</button>
+          {categories.map((c) => (
+            <button key={c} onClick={() => setCatFilter(c)} style={{ flexShrink: 0, padding: "6px 12px", borderRadius: 14, cursor: "pointer", fontSize: 11.5, fontWeight: 700, border: `1.5px solid ${catFilter === c ? t.accent : t.border}`, background: catFilter === c ? t.accent : "transparent", color: catFilter === c ? t.onAccent : t.sub }}>#{c}</button>
+          ))}
+        </div>
+      )}
+      {words.length === 0 && <Empty t={t} text="ยังไม่มีคำศัพท์ กดปุ่มด้านบนเพื่อเพิ่มคำแรก" />}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {words.filter((w) => !catFilter || w.category === catFilter).map((w) => (
+          <div key={w.id} style={{ ...card(t), padding: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 6 }}>
+                  {w.word}
+                  {w.status === "known" && <Check size={13} color="#2E9E6B" />}
+                </div>
+                {w.meaning && <div style={{ fontSize: 12.5, color: t.sub, marginTop: 2 }}>{w.meaning}</div>}
+                {w.example && <div style={{ fontSize: 11.5, color: t.faint, marginTop: 2, fontStyle: "italic" }}>"{w.example}"</div>}
+              </div>
+              <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
+                <button onClick={() => { setEditing(w); setAddOpen(true); }} style={ghost}><Pencil size={15} color={t.faint} /></button>
+                <button onClick={() => askConfirm(`ลบคำว่า "${w.word}" เลยไหม?`, () => delWord(w))} style={ghost}><Trash2 size={15} color={t.faint} /></button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>)}
+
+    {addOpen && <VocabWordModal t={t} initial={editing} userId={userId} session={session} close={() => setAddOpen(false)} onSaved={onSaved} />}
+    {ConfirmUI}
   </>);
 }
 
