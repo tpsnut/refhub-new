@@ -9554,8 +9554,9 @@ function NewsPage({ t, lang, userId, authProfile, setAuthProfile, setChatOpen, s
       <button onClick={() => setMenuOpen(true)} style={{ flexShrink: 0, width: 38, height: 38, borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, display: "grid", placeItems: "center", cursor: "pointer" }} title="เลือกหมวดหมู่">
         <Menu size={18} color={t.text} />
       </button>
-      <button onClick={() => setMenuOpen(true)} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "9px 14px", borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, cursor: "pointer", textAlign: "center" }}>
+      <button onClick={() => setMenuOpen(true)} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 14px", borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, cursor: "pointer", textAlign: "center" }}>
         <span style={{ fontSize: 14, fontWeight: 800, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{currentCat?.label}</span>
+        <ChevronDown size={15} color={t.faint} style={{ flexShrink: 0 }} />
       </button>
       <PageJumpChip t={t} page={newsPagination.page} setPage={newsPagination.setPage} totalPages={newsPagination.totalPages} />
     </div>
@@ -10237,6 +10238,50 @@ function VocabSpeakingModal({ t, mode, category, level, pool, userId, close, onF
   );
 }
 
+// 📖 ไกด์วิธีใช้งานหน้าฝึกภาษา — โผล่อัตโนมัติครั้งแรก + กดปุ่ม ❓ ดูซ้ำได้ทุกเมื่อ
+function VocabGuideModal({ t, lang, close }) {
+  const isEn = lang === "en";
+  const steps = isEn ? [
+    { icon: "📖💬", title: "Words or Sentences", text: "Switch between a vocabulary bank and a conversation-sentence bank at the top." },
+    { icon: "📚", title: "Pick a topic", text: "Tap the topic button (with the ▾ arrow) to choose a category like Self, School, Work, Travel, Food... or swipe left/right to switch." },
+    { icon: "✨", title: "Let AI build the lesson", text: "If a topic is empty, tap \"Let AI create a lesson\" — pick \"all levels\" for a random mix of A1-C1, or a specific level for that level only." },
+    { icon: "🔁🧪🎧🎤✍️", title: "5 practice modes", text: "Review (flashcards), Quiz (multiple choice, scored), Listen (type what you hear), Speak (say it, mic checks you), Write (AI grades your writing)." },
+    { icon: "📋📊", title: "Manage & History", text: "Manage lets you add/edit/delete your own entries. History shows every quiz/listening/speaking score you've ever gotten." },
+    { icon: "🔥⭐", title: "Streak & XP", text: "Practice daily to build your streak, earn XP, and unlock badges — shown right under the page title." },
+  ] : [
+    { icon: "📖💬", title: "คำศัพท์ หรือ ประโยค", text: "สลับได้ที่แถบด้านบนสุด — คนละคลังกัน แยกเก็บอิสระ" },
+    { icon: "📚", title: "เลือกหมวด", text: "กดปุ่มหมวด (มีลูกศร ▾) เพื่อเลือกหัวข้อ เช่น ตัวเอง โรงเรียน งาน ท่องเที่ยว อาหาร... หรือปัดซ้าย-ขวาเพื่อเปลี่ยนหมวดก็ได้" },
+    { icon: "✨", title: "ให้ AI สร้างบทเรียนให้", text: "ถ้าหมวดไหนยังว่าง กดปุ่ม \"AI สร้างบทเรียนให้เลย\" — เลือก \"ทุกระดับ\" จะได้คละ A1-C1 มาปนกัน หรือเลือกระดับเฉพาะก็ได้" },
+    { icon: "🔁🧪🎧🎤✍️", title: "5 โหมดฝึก", text: "ทบทวน (flashcard พลิกดู), ทดสอบ (เลือกตอบ ให้คะแนน), ฟัง (พิมพ์ตามที่ได้ยิน), พูด (พูดใส่ไมค์ เครื่องเช็คให้), เขียน (AI ตรวจให้คะแนน)" },
+    { icon: "📋📊", title: "จัดการ & ประวัติ", text: "แท็บจัดการไว้เพิ่ม/แก้/ลบเองได้ ส่วนประวัติเก็บคะแนนทุกครั้งที่ทำแบบทดสอบ/ฟัง/พูดไว้ดูย้อนหลัง" },
+    { icon: "🔥⭐", title: "สตรีค & XP", text: "ฝึกทุกวันจะได้สตรีคต่อเนื่อง สะสม XP และปลดล็อก badge โชว์อยู่ใต้หัวข้อหน้าเลย" },
+  ];
+  return (
+    <ModalPortal>
+      <div style={overlayHi} onClick={close}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>{isEn ? "📖 How this page works" : "📖 วิธีใช้งานหน้านี้"}</div>
+            <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 16 }}>
+            {steps.map((s, i) => (
+              <div key={i} style={{ display: "flex", gap: 12 }}>
+                <div style={{ fontSize: 18, flexShrink: 0, width: 32, textAlign: "center" }}>{s.icon.slice(0, 2)}</div>
+                <div>
+                  <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text, marginBottom: 2 }}>{s.title}</div>
+                  <div style={{ fontSize: 12, color: t.sub, lineHeight: 1.6 }}>{s.text}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <button onClick={close} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "12px 0" }}>{isEn ? "Got it, let's start" : "เข้าใจแล้ว เริ่มเลย"}</button>
+        </div>
+      </div>
+    </ModalPortal>
+  );
+}
+
 function LangPage({ t, lang, userId, session }) {
   const [askConfirm, ConfirmUI] = useConfirm(t);
   const [contentType, setContentType] = useState("word"); // "word" | "sentence" — สลับระหว่างคลังคำศัพท์กับคลังประโยค (คนละตารางกัน)
@@ -10254,6 +10299,12 @@ function LangPage({ t, lang, userId, session }) {
   const [topic, setTopic] = useState("general"); // 📚 หมวดที่กำลังโฟกัสอยู่ — คุมทั้งโหมดทบทวนและจัดการ เหมือนหมวดข่าว
   const [level, setLevel] = useState("all"); // ระดับ CEFR ที่กรอง — "all" = ทุกระดับ
   const [menuOpen, setMenuOpen] = useState(false); // เมนูเลือกหมวดแบบเดียวกับหน้าข่าว
+  const [guideOpen, setGuideOpen] = useState(false);
+  useEffect(() => {
+    try {
+      if (!localStorage.getItem("refhub:vocabGuideSeen")) { setGuideOpen(true); localStorage.setItem("refhub:vocabGuideSeen", "1"); }
+    } catch (e) {}
+  }, []);
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [speakingId, setSpeakingId] = useState(null); // 🔊 id ของคำ/ประโยคที่กำลังเล่นเสียงอยู่ (ใช้โชว์สถานะปุ่ม)
@@ -10378,7 +10429,11 @@ function LangPage({ t, lang, userId, session }) {
   const noun = isWord ? "คำศัพท์" : "ประโยค";
 
   return (<>
-    <PageHead t={t} title={L(lang, "ph_lang_title")} sub={lang === "en" ? `My words ${words.length} · known ${knownCount}` : `${noun}ของฉัน ${words.length} · จำได้แล้ว ${knownCount}`} icon={<Languages size={20} color={t.accent} />} />
+    <PageHead t={t} title={L(lang, "ph_lang_title")} sub={lang === "en" ? `My words ${words.length} · known ${knownCount}` : `${noun}ของฉัน ${words.length} · จำได้แล้ว ${knownCount}`} icon={<Languages size={20} color={t.accent} />} right={
+      <button onClick={() => setGuideOpen(true)} style={{ width: 34, height: 34, borderRadius: 17, border: `1px solid ${t.border}`, background: t.inputBg, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }} title="วิธีใช้งาน">
+        <HelpCircle size={16} color={t.sub} />
+      </button>
+    } />
 
     <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, overflowX: "auto" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}><span style={{ fontSize: 15 }}>🔥</span><span style={{ fontSize: 12.5, fontWeight: 700, color: t.text }}>{streakDays} วัน</span></div>
@@ -10404,8 +10459,9 @@ function LangPage({ t, lang, userId, session }) {
 
     {/* 📚 ตัวเลือกหมวด + ระดับ — แบบเดียวกับหน้าข่าว */}
     <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-      <button onClick={() => setMenuOpen(true)} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "9px 14px", borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, cursor: "pointer" }}>
+      <button onClick={() => setMenuOpen(true)} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 14px", borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, cursor: "pointer" }}>
         <span style={{ fontSize: 13.5, fontWeight: 800, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{currentTopicMeta?.label} ({wordCountByTopic(topic)})</span>
+        <ChevronDown size={15} color={t.faint} style={{ flexShrink: 0 }} />
       </button>
       <button onClick={() => setGenOpen(true)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 14px", borderRadius: 12, border: "none", background: t.accent, color: t.onAccent, cursor: "pointer", fontWeight: 700, fontSize: 12.5, flexShrink: 0 }}>
         <Sparkles size={14} /> AI เจนให้
@@ -10553,6 +10609,7 @@ function LangPage({ t, lang, userId, session }) {
 
     {addOpen && <VocabWordModal t={t} table={table} mode={contentType} initial={editing || { category: topic }} userId={userId} session={session} close={() => setAddOpen(false)} onSaved={onSaved} />}
     {genOpen && <VocabBatchGenModal t={t} table={table} mode={contentType} userId={userId} session={session} category={topic} level={level === "all" ? "A1" : level} close={() => setGenOpen(false)} onSaved={onSavedBatch} />}
+    {guideOpen && <VocabGuideModal t={t} lang={lang} close={() => setGuideOpen(false)} />}
     {quizOpen && <VocabQuizModal t={t} mode={contentType} category={topic} level={level === "all" ? "mixed" : level} pool={topicWords} allItems={words} userId={userId} close={() => setQuizOpen(false)} onFinished={loadHistory} />}
     {listenOpen && <VocabListeningModal t={t} mode={contentType} category={topic} level={level === "all" ? "mixed" : level} pool={topicWords} userId={userId} session={session} close={() => setListenOpen(false)} onFinished={loadHistory} />}
     {speakOpen && <VocabSpeakingModal t={t} mode={contentType} category={topic} level={level === "all" ? "mixed" : level} pool={topicWords} userId={userId} close={() => setSpeakOpen(false)} onFinished={loadHistory} />}
