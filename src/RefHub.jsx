@@ -10658,7 +10658,7 @@ function LangPage({ t, lang, userId, session }) {
     )}
 
     {addOpen && <VocabWordModal t={t} table={table} mode={contentType} initial={editing || { category: topic }} userId={userId} session={session} close={() => setAddOpen(false)} onSaved={onSaved} />}
-    {genOpen && <VocabBatchGenModal t={t} table={table} mode={contentType} userId={userId} session={session} category={topic} level={level === "all" ? "A1" : level} existingWords={topicWords.map((w) => w.word)} close={() => setGenOpen(false)} onSaved={onSavedBatch} />}
+    {genOpen && <VocabBatchGenModal t={t} table={table} mode={contentType} userId={userId} session={session} category={topic} level={level === "all" ? "mixed" : level} existingWords={topicWords.map((w) => w.word)} close={() => setGenOpen(false)} onSaved={onSavedBatch} />}
     {guideOpen && <VocabGuideModal t={t} lang={lang} close={() => setGuideOpen(false)} />}
     {quizOpen && <VocabQuizModal t={t} mode={contentType} category={topic} level={level === "all" ? "mixed" : level} pool={topicWords} allItems={words} userId={userId} close={() => setQuizOpen(false)} onFinished={loadHistory} />}
     {listenOpen && <VocabListeningModal t={t} mode={contentType} category={topic} level={level === "all" ? "mixed" : level} pool={topicWords} userId={userId} session={session} close={() => setListenOpen(false)} onFinished={loadHistory} />}
