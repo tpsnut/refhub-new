@@ -5920,9 +5920,36 @@ function MemberDetailModal({ t, m, isSelf, isOnline, setApproved, setRole, setCa
 function AdminBillingPanel({ t }) {
   const [families, setFamilies] = useState([]);
   const [membersByFamily, setMembersByFamily] = useState({}); // { [family_id]: [profiles...] }
+  const [noFamilyProfiles, setNoFamilyProfiles] = useState([]); // คนที่ยังไม่มีครอบครัว — ไว้เลือกเป็นเจ้าของตอนสร้างใหม่
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(null); // family_id ที่กางรายละเอียดอยู่
   const [busyId, setBusyId] = useState(null);
+
+  // ➕ สร้างครอบครัวใหม่ด้วยมือ (เช่น ลูกค้าโอนเงินตรงนอกแอปแล้วให้แอดมินตั้งให้)
+  const [creatingOpen, setCreatingOpen] = useState(false);
+  const [newFamName, setNewFamName] = useState("");
+  const [newOwnerId, setNewOwnerId] = useState("");
+  const [newPlan, setNewPlan] = useState("solo");
+  const [creatingBusy, setCreatingBusy] = useState(false);
+
+  // ✏️ แก้ชื่อครอบครัว
+  const [editingId, setEditingId] = useState(null);
+  const [editingName, setEditingName] = useState("");
+
+  // 🔄 โอนความเป็นเจ้าของ
+  const [transferOpenId, setTransferOpenId] = useState(null);
+  const [transferTarget, setTransferTarget] = useState("");
+
+  // 🗑️ ลบครอบครัว (ยืนยัน 2 ครั้ง)
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+
+  // 💰 เครดิตสะสม (proration แบบแมนนวล)
+  const [creditsOpenId, setCreditsOpenId] = useState(null);
+  const [credits, setCredits] = useState([]);
+  const [creditsLoading, setCreditsLoading] = useState(false);
+  const [creditAmount, setCreditAmount] = useState("");
+  const [creditReason, setCreditReason] = useState("manual_adjust");
+  const [creditNote, setCreditNote] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -5933,6 +5960,7 @@ function AdminBillingPanel({ t }) {
       (profs || []).forEach((p) => { if (p.family_id) { (grouped[p.family_id] = grouped[p.family_id] || []).push(p); } });
       setFamilies(fams || []);
       setMembersByFamily(grouped);
+      setNoFamilyProfiles((profs || []).filter((p) => !p.family_id));
     } catch (e) { console.error("โหลดข้อมูลแพ็กเกจ (แอดมิน) ไม่สำเร็จ:", e.message); }
     setLoading(false);
   };
@@ -5953,29 +5981,144 @@ function AdminBillingPanel({ t }) {
     setBusyId(null);
   };
 
+  const createFamily = async () => {
+    if (!newFamName.trim() || !newOwnerId) { alert("กรอกชื่อครอบครัวและเลือกเจ้าของก่อน"); return; }
+    setCreatingBusy(true);
+    try {
+      const info = PLAN_INFO[newPlan];
+      const { data: created, error } = await supabase.from("families").insert({
+        name: newFamName.trim(), owner_id: newOwnerId, plan: newPlan, max_seats: info.seats, payment_status: "active",
+      }).select().single();
+      if (error) throw error;
+      const { error: profErr } = await supabase.from("profiles").update({ family_id: created.id, family_role: "owner" }).eq("id", newOwnerId);
+      if (profErr) throw profErr;
+      setCreatingOpen(false); setNewFamName(""); setNewOwnerId(""); setNewPlan("solo");
+      await load();
+    } catch (e) { alert("สร้างครอบครัวไม่สำเร็จ: " + e.message); }
+    setCreatingBusy(false);
+  };
+
+  const saveRename = async (id) => {
+    if (!editingName.trim()) { setEditingId(null); return; }
+    setBusyId(id);
+    await supabase.from("families").update({ name: editingName.trim() }).eq("id", id);
+    setEditingId(null);
+    await load();
+    setBusyId(null);
+  };
+
+  const transferOwnership = async (familyId, oldOwnerId) => {
+    if (!transferTarget) return;
+    setBusyId(familyId);
+    try {
+      await supabase.from("families").update({ owner_id: transferTarget }).eq("id", familyId);
+      await supabase.from("profiles").update({ family_role: "owner" }).eq("id", transferTarget);
+      if (oldOwnerId) await supabase.from("profiles").update({ family_role: "member" }).eq("id", oldOwnerId);
+      setTransferOpenId(null); setTransferTarget("");
+      await load();
+    } catch (e) { alert("โอนเจ้าของไม่สำเร็จ: " + e.message); }
+    setBusyId(null);
+  };
+
+  const deleteFamily = async (id) => {
+    setBusyId(id);
+    // profiles.family_id ตั้งเป็น "on delete set null" ไว้แล้วในฐานข้อมูล — ลบแถวนี้แล้วสมาชิกจะหลุดออกมาเป็น "ยังไม่มีครอบครัว" ให้เองอัตโนมัติ
+    const { error } = await supabase.from("families").delete().eq("id", id);
+    if (error) alert("ลบไม่สำเร็จ: " + error.message);
+    setConfirmDeleteId(null);
+    await load();
+    setBusyId(null);
+  };
+
+  const loadCredits = async (familyId) => {
+    if (creditsOpenId === familyId) { setCreditsOpenId(null); return; } // กดซ้ำ = ปิด
+    setCreditsOpenId(familyId);
+    setCreditsLoading(true);
+    const { data } = await supabase.from("family_credits").select("*").eq("family_id", familyId).order("created_at", { ascending: false });
+    setCredits(data || []);
+    setCreditsLoading(false);
+  };
+
+  const addCredit = async (familyId) => {
+    const amt = parseFloat(creditAmount);
+    if (!amt) { alert("กรอกจำนวนเงินก่อน (ใส่ค่าลบได้ถ้าจะหักออก)"); return; }
+    setCreditsLoading(true);
+    const { error } = await supabase.from("family_credits").insert({ family_id: familyId, amount: amt, reason: creditReason, note: creditNote.trim() || null });
+    if (error) { alert("เพิ่มเครดิตไม่สำเร็จ: " + error.message); }
+    setCreditAmount(""); setCreditNote("");
+    const { data } = await supabase.from("family_credits").select("*").eq("family_id", familyId).order("created_at", { ascending: false });
+    setCredits(data || []);
+    setCreditsLoading(false);
+  };
+
   const selectStyle = { border: `1px solid ${t.border}`, borderRadius: 8, background: t.inputBg, color: t.text, fontWeight: 700, fontSize: 12, padding: "5px 8px" };
   const numInputStyle = { ...selectStyle, width: 56, textAlign: "center" };
 
   if (loading) return <Empty t={t} text="กำลังโหลด..." />;
-  if (families.length === 0) return <Empty t={t} text="ยังไม่มีครอบครัวในระบบ" />;
+
+  // 📊 สรุปภาพรวมคร่าวๆ (คำนวณฝั่ง client จากข้อมูลที่โหลดมาแล้ว ไม่ต้อง query เพิ่ม)
+  const totalFamilies = families.length;
+  const payingFamilies = families.filter((f) => !f.bypass_billing && f.plan !== "trial").length;
+  const estRevenue = families.reduce((sum, f) => sum + (!f.bypass_billing && f.payment_status === "active" ? (PLAN_INFO[f.plan]?.price || 0) : 0), 0);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 2 }}>ตั้งค่าแพ็กเกจ/สิทธิ์แต่ละครอบครัวด้วยมือได้ตรงนี้ — ไม่ต้องรอระบบจ่ายเงินจริง เหมาะกับตอนเทสต์และตอนต้องให้ใช้ฟรีเป็นกรณีพิเศษ</div>
+
+      <div style={{ ...card(t), padding: 14, display: "flex", gap: 14 }}>
+        <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 800, color: t.text }}>{totalFamilies}</div><div style={{ fontSize: 10.5, color: t.sub }}>ครอบครัวทั้งหมด</div></div>
+        <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 800, color: t.text }}>{payingFamilies}</div><div style={{ fontSize: 10.5, color: t.sub }}>จ่ายเงินจริง</div></div>
+        <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 800, color: "#2E9E6B" }}>~{estRevenue.toLocaleString()}฿</div><div style={{ fontSize: 10.5, color: t.sub }}>ประมาณการ/เดือน</div></div>
+      </div>
+
+      {!creatingOpen ? (
+        <button onClick={() => setCreatingOpen(true)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", padding: "11px 0", borderRadius: 12, border: `1px dashed ${t.accent}`, background: `${t.accent}10`, color: t.accent, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>
+          <Plus size={14} /> สร้างครอบครัวใหม่ด้วยมือ
+        </button>
+      ) : (
+        <div style={{ ...card(t), padding: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 800, color: t.text }}>สร้างครอบครัวใหม่</div>
+          <input value={newFamName} onChange={(e) => setNewFamName(e.target.value)} placeholder="ชื่อครอบครัว" style={input(t)} />
+          <select value={newOwnerId} onChange={(e) => setNewOwnerId(e.target.value)} style={{ ...selectStyle, width: "100%" }}>
+            <option value="">— เลือกเจ้าของ (ต้องยังไม่มีครอบครัว) —</option>
+            {noFamilyProfiles.map((p) => <option key={p.id} value={p.id}>{p.name || p.email}</option>)}
+          </select>
+          {noFamilyProfiles.length === 0 && <div style={{ fontSize: 11, color: "#E8894A" }}>ตอนนี้ไม่มีใครที่ยังไม่มีครอบครัวเลย — ให้คนนั้นสมัครสมาชิกใหม่ก่อน หรือถอดออกจากครอบครัวเดิมก่อน</div>}
+          <select value={newPlan} onChange={(e) => setNewPlan(e.target.value)} style={{ ...selectStyle, width: "100%" }}>
+            {Object.entries(PLAN_INFO).filter(([k]) => k !== "trial").map(([k, v]) => <option key={k} value={k}>{v.label} ({v.price}฿ · {v.seats} ที่นั่ง)</option>)}
+          </select>
+          <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+            <button onClick={createFamily} disabled={creatingBusy} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), flex: 1, padding: "10px 0" }}>{creatingBusy ? "กำลังสร้าง..." : "สร้าง"}</button>
+            <button onClick={() => setCreatingOpen(false)} style={{ padding: "10px 16px", borderRadius: 12, border: `1px solid ${t.border}`, background: "none", color: t.sub, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>ยกเลิก</button>
+          </div>
+        </div>
+      )}
+
+      {families.length === 0 && <Empty t={t} text="ยังไม่มีครอบครัวในระบบ" />}
       {families.map((f) => {
         const mem = membersByFamily[f.id] || [];
         const isOpen = expanded === f.id;
         const busy = busyId === f.id;
+        const creditTotal = creditsOpenId === f.id ? credits.reduce((s, c) => s + Number(c.amount), 0) : null;
         return (
           <div key={f.id} style={{ ...card(t), padding: 14 }}>
             <button onClick={() => setExpanded(isOpen ? null : f.id)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
               <div>
-                <div style={{ fontSize: 14, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 6 }}>
-                  {f.name} {f.bypass_billing && <Crown size={13} color="#F2872E" />}
-                </div>
+                {editingId === f.id ? (
+                  <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", gap: 6, marginBottom: 4 }}>
+                    <input autoFocus value={editingName} onChange={(e) => setEditingName(e.target.value)} style={{ ...input(t), padding: "5px 8px", fontSize: 13 }} />
+                    <button onClick={() => saveRename(f.id)} style={{ ...ghost, color: t.accent }}><Check size={16} /></button>
+                    <button onClick={() => setEditingId(null)} style={ghost}><X size={16} color={t.sub} /></button>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 14, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 6 }}>
+                    {f.name} {f.bypass_billing && <Crown size={13} color="#F2872E" />}
+                    <span role="button" onClick={(e) => { e.stopPropagation(); setEditingId(f.id); setEditingName(f.name); }} style={{ cursor: "pointer" }}><Pencil size={11} color={t.faint} /></span>
+                  </div>
+                )}
                 <div style={{ fontSize: 11.5, color: t.sub }}>{PLAN_INFO[f.plan]?.label || f.plan} · {mem.length}/{f.max_seats} ที่นั่ง · โค้ด {f.family_code}</div>
               </div>
-              <ChevronDown size={16} color={t.faint} style={{ transform: isOpen ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
+              <ChevronDown size={16} color={t.faint} style={{ transform: isOpen ? "rotate(180deg)" : "none", transition: "transform .15s", flexShrink: 0 }} />
             </button>
 
             {isOpen && (
@@ -6015,6 +6158,59 @@ function AdminBillingPanel({ t }) {
                     )}
                   </div>
                 ))}
+
+                {mem.length > 1 && (
+                  transferOpenId === f.id ? (
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <select value={transferTarget} onChange={(e) => setTransferTarget(e.target.value)} style={{ ...selectStyle, flex: 1 }}>
+                        <option value="">— เลือกเจ้าของใหม่ —</option>
+                        {mem.filter((m) => m.family_role !== "owner").map((m) => <option key={m.id} value={m.id}>{m.name || m.email}</option>)}
+                      </select>
+                      <button onClick={() => transferOwnership(f.id, f.owner_id)} disabled={busy || !transferTarget} style={{ padding: "6px 10px", borderRadius: 8, border: "none", background: t.accent, color: t.onAccent, fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>ยืนยัน</button>
+                      <button onClick={() => { setTransferOpenId(null); setTransferTarget(""); }} style={ghost}><X size={15} color={t.sub} /></button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setTransferOpenId(f.id)} style={{ display: "flex", alignItems: "center", gap: 5, background: "none", border: "none", cursor: "pointer", fontSize: 11.5, color: t.sub, fontWeight: 700, padding: 0 }}><RefreshCw size={12} /> โอนความเป็นเจ้าของ</button>
+                  )
+                )}
+
+                <button onClick={() => loadCredits(f.id)} style={{ display: "flex", alignItems: "center", gap: 5, background: "none", border: "none", cursor: "pointer", fontSize: 11.5, color: t.sub, fontWeight: 700, padding: 0, marginTop: 4 }}>
+                  <Wallet size={12} /> เครดิตสะสม (proration แบบแมนนวล) {creditsOpenId === f.id ? "▲" : "▼"}
+                </button>
+                {creditsOpenId === f.id && (
+                  <div style={{ ...card(t), padding: 10, background: t.inputBg }}>
+                    {creditsLoading ? <div style={{ fontSize: 11.5, color: t.sub }}>กำลังโหลด...</div> : (
+                      <>
+                        <div style={{ fontSize: 12.5, fontWeight: 800, color: t.text, marginBottom: 6 }}>ยอดคงเหลือ: {creditTotal?.toLocaleString()}฿</div>
+                        {credits.length === 0 && <div style={{ fontSize: 11, color: t.faint, marginBottom: 6 }}>ยังไม่มีประวัติเครดิต</div>}
+                        {credits.map((c) => (
+                          <div key={c.id} style={{ fontSize: 11, color: t.sub, display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                            <span>{c.reason} {c.note ? `· ${c.note}` : ""}</span>
+                            <span style={{ color: c.amount >= 0 ? "#2E9E6B" : "#D9534F", fontWeight: 700 }}>{c.amount >= 0 ? "+" : ""}{c.amount}฿</span>
+                          </div>
+                        ))}
+                        <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                          <input type="number" value={creditAmount} onChange={(e) => setCreditAmount(e.target.value)} placeholder="+/-จำนวน" style={{ ...input(t), padding: "6px 8px", fontSize: 12, width: 90, flex: "none" }} />
+                          <select value={creditReason} onChange={(e) => setCreditReason(e.target.value)} style={{ ...selectStyle, flex: 1 }}>
+                            <option value="manual_adjust">ปรับด้วยมือ</option>
+                            <option value="merge_proration">รวมครอบครัว (proration)</option>
+                            <option value="redeemed">ใช้เครดิตแล้ว</option>
+                          </select>
+                        </div>
+                        <input value={creditNote} onChange={(e) => setCreditNote(e.target.value)} placeholder="โน้ต (ถ้ามี)" style={{ ...input(t), padding: "6px 8px", fontSize: 12, marginTop: 6 }} />
+                        <button onClick={() => addCredit(f.id)} style={{ width: "100%", marginTop: 6, padding: "8px 0", borderRadius: 8, border: "none", background: t.accent, color: t.onAccent, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>บันทึกเครดิต</button>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${t.border}` }}>
+                  {confirmDeleteId === f.id ? (
+                    <button onClick={() => deleteFamily(f.id)} disabled={busy} style={{ width: "100%", padding: "10px 0", borderRadius: 10, border: "none", background: "#D9534F", color: "#fff", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>ยืนยันลบครอบครัวนี้จริงๆ? (สมาชิกจะหลุดออกมาไม่มีครอบครัว)</button>
+                  ) : (
+                    <button onClick={() => setConfirmDeleteId(f.id)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", padding: "9px 0", borderRadius: 10, border: "1px solid #D9534F55", background: "none", color: "#D9534F", fontSize: 12, fontWeight: 700, cursor: "pointer" }}><Trash2 size={13} /> ลบครอบครัวนี้</button>
+                  )}
+                </div>
               </div>
             )}
           </div>
