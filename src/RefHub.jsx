@@ -9833,10 +9833,12 @@ function VocabBatchGenModal({ t, table = "vocab_words", mode = "word", topics = 
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "เรียก AI ไม่สำเร็จ");
+      const isThai = (s) => /[\u0E00-\u0E7F]/.test(s); // 🐛 ตรวจจับ AI ตอบผิดฟอร์แมต — บางครั้ง AI สลับเอาคำแปลไทยมาใส่ช่องคำศัพท์/ประโยคอังกฤษแทน (เจอจริงจากรูปที่ user ส่งมา) ถ้าเจอให้ทิ้งแถวนั้นทิ้งเลย ดีกว่าปล่อยข้อมูลเพี้ยนเข้าคลัง
       const rows = (data.text || "").split("\n").map((line) => {
         const parts = line.split("|").map((s) => s.trim());
         if (parts.length < 2 || !parts[0]) return null;
         const word = parts[0].replace(/^[-•\d.)\s]+/, "");
+        if (!word || isThai(word)) return null; // ช่องคำศัพท์/ประโยคภาษาอังกฤษ ไม่ควรมีอักษรไทยปนเลย
         if (isWord) {
           const lvlRaw = isMixed ? (parts[5] || "").toUpperCase().match(/A1|A2|B1|B2|C1/)?.[0] : levelProp;
           return { word, pronunciation: parts[1] || "", meaning: parts[2] || "", exampleEn: parts[3] || "", exampleTh: parts[4] || "", level: lvlRaw || "A1" };
@@ -10834,7 +10836,7 @@ function LangPage({ t, lang, userId, session, authProfile, scrollToTop }) {
       const text = data.text || "";
       const en = /ประโยค[:：]\s*(.+)/.exec(text)?.[1]?.trim();
       const th = /แปล[:：]\s*(.+)/.exec(text)?.[1]?.trim();
-      if (!en) throw new Error("AI ไม่ได้ส่งตัวอย่างกลับมา ลองใหม่อีกครั้ง");
+      if (!en || /[\u0E00-\u0E7F]/.test(en)) throw new Error("AI ตอบผิดรูปแบบ (ประโยคตัวอย่างกลายเป็นภาษาไทย) ลองใหม่อีกครั้ง");
       const newExamples = [...(item.examples || []), { en, th: th || "" }];
       setWords((list) => list.map((x) => (x.id === item.id ? { ...x, examples: newExamples } : x)));
       if (userId) await supabase.from(table).update({ examples: newExamples }).eq("id", item.id);
@@ -11057,6 +11059,15 @@ function LangPage({ t, lang, userId, session, authProfile, scrollToTop }) {
     {!loading && view === "manage" && (<>
       <button onClick={() => { setEditing(null); setAddOpen(true); }} style={{ ...card(t), width: "100%", padding: "10px 0", marginBottom: 12, border: `1px solid ${t.border}`, color: t.sub, fontWeight: 700, fontSize: 12.5, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Plus size={14} /> เพิ่ม{noun}เองทีละอัน</button>
       {topicWords.length === 0 && <Empty t={t} text={`หมวดนี้ยังไม่มี${noun} — ลองกด ✨ AI เจนให้ ด้านบนดูก่อนได้เลย`} />}
+      {isWord && topicWords.some((w) => /[\u0E00-\u0E7F]/.test(w.word)) && (
+        <button onClick={() => askConfirm(`ลบ${noun}ที่เพี้ยนทั้งหมดในหมวดนี้เลยไหม?`, async () => {
+          const bad = topicWords.filter((w) => /[\u0E00-\u0E7F]/.test(w.word));
+          setWords((list) => list.filter((w) => !bad.some((b) => b.id === w.id)));
+          if (userId) await supabase.from(table).delete().in("id", bad.map((b) => b.id));
+        })} style={{ width: "100%", padding: "9px 0", marginBottom: 10, borderRadius: 10, border: "1px solid #D9534F55", background: "#D9534F10", color: "#D9534F", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
+          ⚠️ เจอ{noun}ที่เพี้ยน {topicWords.filter((w) => /[\u0E00-\u0E7F]/.test(w.word)).length} คำ — กดลบทั้งหมด
+        </button>
+      )}
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {topicWords.map((w) => (
           <div key={w.id} style={{ ...card(t), padding: 12 }}>
@@ -11064,6 +11075,7 @@ function LangPage({ t, lang, userId, session, authProfile, scrollToTop }) {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                   {w.word} {w.level && <span style={{ fontSize: 9.5, fontWeight: 700, color: t.accent, background: `${t.accent}18`, padding: "1px 6px", borderRadius: 8 }}>{w.level}</span>}
+                  {isWord && /[\u0E00-\u0E7F]/.test(w.word) && <span style={{ fontSize: 9.5, fontWeight: 700, color: "#D9534F", background: "#D9534F18", padding: "1px 6px", borderRadius: 8 }}>⚠️ ผิดปกติ ลบทิ้งได้เลย</span>}
                   {w.status === "known" && <Check size={13} color="#2E9E6B" />}
                 </div>
                 {w.pronunciation && <div style={{ fontSize: 11, color: t.faint, marginTop: 1 }}>[{w.pronunciation}]</div>}
