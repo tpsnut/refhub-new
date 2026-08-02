@@ -9361,16 +9361,25 @@ function NotePage({ t, lang, notes, setNotes, isNight, userId, session, authProf
   const [viewingId, setViewingId] = useState(null); // โน้ตที่กำลังกางดูเต็มๆ (อ่านอย่างเดียว แยกจากโหมดแก้ไข)
   const [editTitle, setEditTitle] = useState(""); const [editBody, setEditBody] = useState(null); const [editTags, setEditTags] = useState("");
   const [tagFilter, setTagFilter] = useState(null);
+  const [tagSheetOpen, setTagSheetOpen] = useState(false); // 🏷️ กางดูแท็กทั้งหมดแบบค้นหาได้ (เผื่อมีแท็กเยอะๆ ในอนาคต)
+  const [tagSheetSearch, setTagSheetSearch] = useState("");
+  const [copiedNoteId, setCopiedNoteId] = useState(null); // 📋 โชว์ ✓ ชั่วคราวตอนกด copy โน้ต
 
   const parseTags = (str) => str.split(",").map((s) => s.trim()).filter(Boolean);
 
   const add = () => {
     const plain = blocksToPlainText(body).trim();
     if (!title.trim() && !plain) return;
-    const newNote = { id: uid(), title: title.trim(), body: body || migrateBody(""), date: todayStr(), pinned: false, tags: parseTags(tagsInput) };
+    const nowIso = new Date().toISOString();
+    const newNote = { id: uid(), title: title.trim(), body: body || migrateBody(""), date: todayStr(), created_at: nowIso, pinned: false, tags: parseTags(tagsInput) };
     setNotes((n) => [newNote, ...n]);
-    if (userId) { supabase.from("notes").insert({ id: newNote.id, user_id: userId, title: newNote.title, body: newNote.body, date: newNote.date, pinned: newNote.pinned, tags: newNote.tags }).then(() => {}, () => {}); logAudit(userId, "notes", "add", "เพิ่มโน้ต"); }
+    if (userId) { supabase.from("notes").insert({ id: newNote.id, user_id: userId, title: newNote.title, body: newNote.body, date: newNote.date, created_at: nowIso, pinned: newNote.pinned, tags: newNote.tags }).then(() => {}, () => {}); logAudit(userId, "notes", "add", "เพิ่มโน้ต"); }
     setTitle(""); setBody(null); setTagsInput(""); setDraftKey((k) => k + 1);
+  };
+  // 📋 คัดลอกเนื้อหาโน้ต (หัวข้อ + เนื้อหาล้วน) ไปคลิปบอร์ด
+  const copyNote = async (n) => {
+    const text = `${n.title || ""}${n.title ? "\n\n" : ""}${blocksToPlainText(n.body)}`.trim();
+    try { await navigator.clipboard.writeText(text); setCopiedNoteId(n.id); setTimeout(() => setCopiedNoteId(null), 1500); } catch (e) {}
   };
   const startEdit = (n) => { setEditingId(n.id); setEditTitle(n.title); setEditBody(migrateBody(n.body)); setEditTags((n.tags || []).join(", ")); };
   const saveEdit = () => {
@@ -9514,7 +9523,11 @@ function NotePage({ t, lang, notes, setNotes, isNight, userId, session, authProf
     } finally { setSyncing(false); }
   };
 
-  const allTags = [...new Set(notes.flatMap((n) => n.tags || []))];
+  // 🏷️ นับความถี่ของแต่ละแท็ก เรียงจากที่ใช้บ่อยสุด — ไว้โชว์เป็นปุ่มด่วนไม่กี่อันแทนที่จะเลื่อนยาวเป็นสิบๆแท็ก
+  const tagCounts = notes.flatMap((n) => n.tags || []).reduce((acc, tag) => { acc[tag] = (acc[tag] || 0) + 1; return acc; }, {});
+  const allTags = Object.keys(tagCounts).sort((a, b) => tagCounts[b] - tagCounts[a]);
+  const topTags = allTags.slice(0, 8);
+  const hasMoreTags = allTags.length > 8;
   const shown = [...notes]
     .filter((n) => !tagFilter || (n.tags || []).includes(tagFilter))
     .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
@@ -9588,12 +9601,39 @@ function NotePage({ t, lang, notes, setNotes, isNight, userId, session, authProf
         <div style={{ position: "relative", marginTop: 14 }}>
           <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6 }}>
             <button onClick={() => setTagFilter(null)} style={{ flexShrink: 0, padding: "6px 12px", borderRadius: 14, cursor: "pointer", fontSize: 11.5, fontWeight: 700, border: `1.5px solid ${!tagFilter ? t.accent : t.border}`, background: !tagFilter ? t.accent : "transparent", color: !tagFilter ? t.onAccent : t.sub }}>ทั้งหมด</button>
-            {allTags.map((tag) => (
+            {topTags.map((tag) => (
               <button key={tag} onClick={() => setTagFilter(tag)} style={{ flexShrink: 0, padding: "6px 12px", borderRadius: 14, cursor: "pointer", fontSize: 11.5, fontWeight: 700, border: `1.5px solid ${tagFilter === tag ? t.accent : t.border}`, background: tagFilter === tag ? t.accent : "transparent", color: tagFilter === tag ? t.onAccent : t.sub }}>#{tag}</button>
             ))}
+            {hasMoreTags && (
+              <button onClick={() => setTagSheetOpen(true)} style={{ flexShrink: 0, padding: "6px 12px", borderRadius: 14, cursor: "pointer", fontSize: 11.5, fontWeight: 700, border: `1.5px dashed ${t.border}`, background: "transparent", color: t.sub, display: "flex", alignItems: "center", gap: 4 }}>
+                ดูทั้งหมด ({allTags.length}) <ChevronRight size={12} />
+              </button>
+            )}
           </div>
           <div style={{ position: "absolute", right: 0, top: 0, bottom: 6, width: 28, pointerEvents: "none", background: `linear-gradient(to right, transparent, ${t.bg})` }} />
         </div>
+      )}
+
+      {tagSheetOpen && (
+        <ModalPortal>
+          <div style={overlay} onClick={() => setTagSheetOpen(false)}>
+            <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "75vh", display: "flex", flexDirection: "column" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>แท็กทั้งหมด ({allTags.length})</div>
+                <button onClick={() => setTagSheetOpen(false)} style={ghost}><X size={20} color={t.sub} /></button>
+              </div>
+              <input value={tagSheetSearch} onChange={(e) => setTagSheetSearch(e.target.value)} placeholder="ค้นหาแท็ก..." style={{ ...input(t), marginBottom: 12 }} autoFocus />
+              <div style={{ overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
+                {allTags.filter((tag) => tag.toLowerCase().includes(tagSheetSearch.trim().toLowerCase())).map((tag) => (
+                  <button key={tag} onClick={() => { setTagFilter(tag); setTagSheetOpen(false); setTagSheetSearch(""); }} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", padding: "11px 12px", borderRadius: 12, border: "none", background: tagFilter === tag ? `${t.accent}18` : "none", cursor: "pointer", textAlign: "left" }}>
+                    <span style={{ fontSize: 13.5, fontWeight: 700, color: tagFilter === tag ? t.accent : t.text }}>#{tag}</span>
+                    <span style={{ fontSize: 11.5, color: t.faint }}>{tagCounts[tag]} โน้ต</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </ModalPortal>
       )}
 
       <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
@@ -9627,6 +9667,7 @@ function NotePage({ t, lang, notes, setNotes, isNight, userId, session, authProf
                   <div style={{ display: "flex", gap: 2, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
                     {!exportMode && (<>
                     {n.notionId && <span title="sync ขึ้น Notion แล้ว" style={{ display: "grid", placeItems: "center", padding: 4 }}><Check size={14} color="#2E9E6B" /></span>}
+                    <button onClick={() => copyNote(n)} style={ghost} title="คัดลอกเนื้อหาโน้ต">{copiedNoteId === n.id ? <Check size={15} color="#2E9E6B" /> : <Copy size={15} color={t.faint} />}</button>
                     <button onClick={() => exportOneMd(n)} style={ghost} title="Export เป็น Markdown"><Download size={15} color={t.faint} /></button>
                     <button onClick={() => togglePin(n.id)} style={ghost} title={n.pinned ? "ปักหมุดแล้ว" : "ปักหมุด"}><Pin size={15} color={n.pinned ? t.accent : t.faint} fill={n.pinned ? t.accent : "none"} /></button>
                     <button onClick={() => openReminder("note", n.id, n.title || "โน้ตไม่มีหัวข้อ")} style={ghost} title="ตั้งเตือนโน้ตนี้"><Bell size={15} color={reminders.some((r) => r.targetType === "note" && r.targetId === n.id) ? t.accent : t.faint} fill={reminders.some((r) => r.targetType === "note" && r.targetId === n.id) ? t.accent : "none"} /></button>
@@ -9647,7 +9688,7 @@ function NotePage({ t, lang, notes, setNotes, isNight, userId, session, authProf
                     {n.tags.map((tag) => <span key={tag} style={{ fontSize: 10, fontWeight: 700, color: t.accent, background: `${t.accent}18`, padding: "2px 8px", borderRadius: 10 }}>#{tag}</span>)}
                   </div>
                 )}
-                <div style={{ fontSize: 10.5, color: t.faint, marginTop: 8 }}>{n.date}</div>
+                <div style={{ fontSize: 10.5, color: t.faint, marginTop: 8 }}>{n.created_at ? new Date(n.created_at).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" }) : n.date}</div>
               </>
             )}
           </div>
@@ -9823,9 +9864,9 @@ function IdeasPage({ t, lang, M, userId, session, authProfile, setAuthProfile, s
       { type: "heading", props: { level: 2 }, content: article.title },
       ...(article.bullets || []).map((b) => ({ type: "bulletListItem", content: b })),
     ];
-    const newNote = { id: uid(), title: article.title, body, date: todayStr(), pinned: false, tags: [topicLabel(article.topic)] };
+    const newNote = { id: uid(), title: article.title, body, date: todayStr(), created_at: new Date().toISOString(), pinned: false, tags: [topicLabel(article.topic)] };
     setNotes((n) => [newNote, ...n]);
-    if (userId) supabase.from("notes").insert({ id: newNote.id, user_id: userId, title: newNote.title, body: newNote.body, date: newNote.date, pinned: newNote.pinned, tags: newNote.tags }).then(() => {}, () => {});
+    if (userId) supabase.from("notes").insert({ id: newNote.id, user_id: userId, title: newNote.title, body: newNote.body, date: newNote.date, created_at: newNote.created_at, pinned: newNote.pinned, tags: newNote.tags }).then(() => {}, () => {});
   };
 
   // ยังไม่ได้เลือกความสนใจ (ครั้งแรก) หรือกำลังกดแก้ไขอยู่ -> หน้าตั้งค่าความสนใจ
@@ -10150,12 +10191,12 @@ function NewsPage({ t, lang, userId, authProfile, setAuthProfile, setChatOpen, s
       { type: "paragraph", content: x.summary || "" },
       { type: "paragraph", content: [{ type: "link", href: x.link, content: [{ type: "text", text: "🔗 อ่านข่าวต้นฉบับ", styles: {} }] }] },
     ];
-    const newNote = { id: uid(), title: x.title, body, date: todayStr(), pinned: false, tags: ["ข่าว"] };
+    const newNote = { id: uid(), title: x.title, body, date: todayStr(), created_at: new Date().toISOString(), pinned: false, tags: ["ข่าว"] };
     setNotes?.((n) => [newNote, ...n]); // ⚠️ บั๊กเดิม: บันทึกลง DB จริง แต่ลืมอัปเดต state ในเครื่อง ทำให้หน้าโน้ตไม่เห็นทันที ต้องรีเฟรชทั้งแอปก่อนถึงจะเห็น
     setNotedIds((m) => ({ ...m, [x.link]: true }));
     setTimeout(() => setNotedIds((m) => ({ ...m, [x.link]: false })), 2500);
     if (userId) {
-      await supabase.from("notes").insert({ id: newNote.id, user_id: userId, title: newNote.title, body: newNote.body, date: newNote.date, pinned: newNote.pinned, tags: newNote.tags });
+      await supabase.from("notes").insert({ id: newNote.id, user_id: userId, title: newNote.title, body: newNote.body, date: newNote.date, created_at: newNote.created_at, pinned: newNote.pinned, tags: newNote.tags });
       logAudit(userId, "notes", "add", "ส่งข่าวเข้าโน้ต: " + x.title);
     }
   };
