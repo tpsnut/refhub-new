@@ -9683,6 +9683,16 @@ const VOCAB_TOPICS = [
   { id: "tech", label: "💻 เทคโนโลยี" },
 ];
 const CEFR_LEVELS = ["A1", "A2", "B1", "B2", "C1"];
+const DOCK_MODES = [
+  { id: "learn", icon: "🎓", label: "เรียนรู้" },
+  { id: "review", icon: "🔁", label: "ทบทวน" },
+  { id: "quiz", icon: "🧪", label: "ทดสอบ" },
+  { id: "listen", icon: "🎧", label: "ฟัง" },
+  { id: "speak", icon: "🎤", label: "พูด" },
+  { id: "write", icon: "✍️", label: "เขียน" },
+  { id: "manage", icon: "📋", label: "จัดการ" },
+  { id: "history", icon: "📊", label: "ประวัติ" },
+];
 
 function VocabWordModal({ t, table = "vocab_words", mode = "word", topics = VOCAB_TOPICS, initial, userId, session, close, onSaved }) {
   const isWord = mode === "word";
@@ -10660,11 +10670,17 @@ function LangPage({ t, lang, userId, session, authProfile, scrollToTop }) {
   const [addTopicOpen, setAddTopicOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false); // ⚙️ แผงระดับ + ประเภทเนื้อหา (คำศัพท์/ประโยค) รวมไว้ที่เดียว
   const [bouncingView, setBouncingView] = useState(null); // 🎾 id ของไอคอนมินิด็อกที่กำลังเล่นเอฟเฟกต์เด้งอยู่
+  const [wheelOpen, setWheelOpen] = useState(false); // 🎡 วงล้อเลือกโหมด — ปกติเก็บเป็นปุ่มเล็ก กดถึงโผล่ขึ้นมา
 
   // 🎡 วงล้อเลื่อนมินิด็อก — เลื่อนนิ้วแล้ว snap ตัวกึ่งกลางเปลี่ยนโหมดให้เองอัตโนมัติ (debounce กันเปลี่ยนถี่ระหว่างเลื่อนผ่าน)
   const dockScrollRef = useRef(null);
   const dockScrollTimeoutRef = useRef(null);
   const playBounce = (id) => { setBouncingView(id); setTimeout(() => setBouncingView((b) => (b === id ? null : b)), 320); };
+  const closeWheelTimeoutRef = useRef(null);
+  const scheduleWheelClose = () => {
+    if (closeWheelTimeoutRef.current) clearTimeout(closeWheelTimeoutRef.current);
+    closeWheelTimeoutRef.current = setTimeout(() => setWheelOpen(false), 480); // หน่วงนิดให้เห็นเอฟเฟกต์เด้งยืนยันตัวที่เลือกก่อน ค่อยเลื่อนหายลงไปเป็นปุ่มเล็ก
+  };
   const handleDockScroll = () => {
     if (dockScrollTimeoutRef.current) clearTimeout(dockScrollTimeoutRef.current);
     dockScrollTimeoutRef.current = setTimeout(() => {
@@ -10680,6 +10696,7 @@ function LangPage({ t, lang, userId, session, authProfile, scrollToTop }) {
         if (dist < closestDist) { closestDist = dist; closestId = id; }
       });
       if (closestId && closestId !== view) { setView(closestId); playBounce(closestId); }
+      scheduleWheelClose();
     }, 120); // รอเลื่อนนิ่งก่อนค่อยตัดสินใจ กันกระตุกตอนไถผ่านหลายอันรวด
   };
   const selectDockView = (id) => {
@@ -10688,6 +10705,7 @@ function LangPage({ t, lang, userId, session, authProfile, scrollToTop }) {
     child?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
     setView(id);
     playBounce(id);
+    scheduleWheelClose();
   };
   useEffect(() => {
     const el = dockScrollRef.current;
@@ -11136,25 +11154,36 @@ function LangPage({ t, lang, userId, session, authProfile, scrollToTop }) {
       </ModalPortal>
     )}
 
-    {/* 🎯 มินิด็อกลอย — แบบวงล้อเลื่อน (carousel) เลื่อนนิ้วแล้ว snap ให้ตัวกลางเด่นขึ้นเองอัตโนมัติ กดอันไหนก็เลื่อนไปกึ่งกลางให้ทันที ต้องครอบด้วย ModalPortal เพราะ position:fixed ที่อยู่ในกล่อง transform:scale (ปรับขนาดตัวอักษร) จะเพี้ยน ไม่งั้น (บทเรียนราคาแพงจากบั๊กก่อนหน้า) */}
+    {/* 🎯 ตัวเลือกโหมด — ปกติเก็บเป็นปุ่มเล็กๆ กดถึงโผล่วงล้อขึ้นมาให้เลือก เลือกเสร็จเลื่อนหายกลับไปเป็นปุ่มเล็กอัตโนมัติ ต้องครอบด้วย ModalPortal เพราะ position:fixed ที่อยู่ในกล่อง transform:scale (ปรับขนาดตัวอักษร) จะเพี้ยน ไม่งั้น (บทเรียนราคาแพงจากบั๊กก่อนหน้า) */}
     <ModalPortal>
       <style>{`
         @keyframes rh-dock-bounce { 0% { transform: scale(1); } 35% { transform: scale(1.32); } 60% { transform: scale(0.92); } 100% { transform: scale(1); } }
         .rh-wheel::-webkit-scrollbar { display: none; }
       `}</style>
-      <div style={{ position: "fixed", left: 0, right: 0, bottom: 88, zIndex: 45, display: "flex", justifyContent: "center", pointerEvents: "none" }}>
-        <div style={{ position: "relative", width: "100%", maxWidth: 440, pointerEvents: "auto" }}>
+
+      {/* ปุ่มเล็กแบบเก็บ — โชว์โหมดปัจจุบัน กดเพื่อเปิดวงล้อ */}
+      <div style={{ position: "fixed", left: 0, right: 0, bottom: 88, zIndex: 45, display: "flex", justifyContent: "center", opacity: wheelOpen ? 0 : 1, transform: `translateY(${wheelOpen ? 10 : 0}px)`, pointerEvents: wheelOpen ? "none" : "auto", transition: "opacity .25s, transform .25s" }}>
+        <button onClick={() => setWheelOpen(true)} style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 18px", borderRadius: 22, border: "none", background: t.page, boxShadow: "0 6px 18px rgba(0,0,0,.15)", cursor: "pointer" }}>
+          <span style={{ fontSize: 16 }}>{DOCK_MODES.find((m) => m.id === view)?.icon}</span>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: t.text }}>{DOCK_MODES.find((m) => m.id === view)?.label}</span>
+          <ChevronDown size={13} color={t.faint} style={{ transform: "rotate(180deg)" }} />
+        </button>
+      </div>
+
+      {/* วงล้อเต็ม — โผล่มาตอนกดปุ่มเล็กด้านบน */}
+      <div style={{ position: "fixed", left: 0, right: 0, bottom: 88, zIndex: 45, display: "flex", justifyContent: "center", opacity: wheelOpen ? 1 : 0, transform: `translateY(${wheelOpen ? 0 : 20}px)`, pointerEvents: wheelOpen ? "auto" : "none", transition: "opacity .25s, transform .25s" }}>
+        <div style={{ position: "relative", width: "100%", maxWidth: 440 }}>
           <div style={{ background: t.page, borderRadius: 20, boxShadow: "0 6px 20px rgba(0,0,0,.15)", padding: "10px 0", overflow: "hidden", position: "relative" }}>
             {/* แถบไฮไลต์กึ่งกลางเหมือนวงล้อ */}
             <div style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%,-50%)", width: 60, height: 52, borderRadius: 16, background: `${t.accent}14`, border: `1.5px solid ${t.accent}33`, pointerEvents: "none" }} />
             <div ref={dockScrollRef} onScroll={handleDockScroll} className="rh-wheel" style={{ display: "flex", gap: 4, overflowX: "auto", scrollSnapType: "x mandatory", scrollBehavior: "smooth", padding: "0 calc(50% - 30px)", WebkitOverflowScrolling: "touch" }}>
-              {[["learn", "🎓", "เรียนรู้"], ["review", "🔁", "ทบทวน"], ["quiz", "🧪", "ทดสอบ"], ["listen", "🎧", "ฟัง"], ["speak", "🎤", "พูด"], ["write", "✍️", "เขียน"], ["manage", "📋", "จัดการ"], ["history", "📊", "ประวัติ"]].map(([id, icon, lb]) => {
+              {DOCK_MODES.map(({ id, icon, label }) => {
                 const active = view === id;
                 return (
                   <button key={id} data-view-id={id} onClick={() => selectDockView(id)}
                     style={{ flexShrink: 0, scrollSnapAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, width: 60, height: 52, borderRadius: 14, border: "none", background: "none", cursor: "pointer", transition: "opacity .2s", opacity: active ? 1 : 0.45 }}>
                     <span style={{ fontSize: active ? 20 : 16, display: "inline-block", transition: "font-size .2s", animation: bouncingView === id ? "rh-dock-bounce .32s cubic-bezier(.34,1.56,.64,1)" : "none" }}>{icon}</span>
-                    <span style={{ fontSize: active ? 9.5 : 8.5, fontWeight: 700, color: active ? t.accent : t.faint, transition: "font-size .2s" }}>{lb}</span>
+                    <span style={{ fontSize: active ? 9.5 : 8.5, fontWeight: 700, color: active ? t.accent : t.faint, transition: "font-size .2s" }}>{label}</span>
                   </button>
                 );
               })}
@@ -11163,7 +11192,7 @@ function LangPage({ t, lang, userId, session, authProfile, scrollToTop }) {
         </div>
       </div>
 
-      {/* ✨ ปุ่ม AI เจนให้ ลอยขึ้นมาเหนือมินิด็อก เฉพาะตอนอยู่โหมดเรียนรู้ (โหมดอื่นไม่ต้องเจนคำใหม่) เลื่อนขึ้น-ลงด้วย transition ไม่ใช่โผล่วับๆ */}
+      {/* ✨ ปุ่ม AI เจนให้ ลอยขึ้นมาเหนือตัวเลือกโหมด เฉพาะตอนอยู่โหมดเรียนรู้ (โหมดอื่นไม่ต้องเจนคำใหม่) เลื่อนขึ้น-ลงด้วย transition ไม่ใช่โผล่วับๆ */}
       <div style={{ position: "fixed", left: 0, right: 0, bottom: view === "learn" ? 154 : 60, zIndex: 46, display: "flex", justifyContent: "center", opacity: view === "learn" ? 1 : 0, pointerEvents: view === "learn" ? "auto" : "none", transition: "bottom .35s cubic-bezier(.34,1.15,.64,1), opacity .3s" }}>
         <button onClick={() => setGenOpen(true)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "11px 20px", borderRadius: 24, border: "none", background: t.accent, color: t.onAccent, cursor: "pointer", fontWeight: 700, fontSize: 13, boxShadow: `0 6px 16px ${t.accent}55` }}>
           <Sparkles size={15} /> AI เจนให้
