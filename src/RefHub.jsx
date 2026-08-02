@@ -7338,6 +7338,7 @@ function ChatEntryPage({ t, lang, M, userId, authProfile, session, openThread })
 function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, activeCall, setActiveCall, setCallMinimized }) {
 
   const [messages, setMessages] = useState([]);
+  const [loadingMessages, setLoadingMessages] = useState(true); // 🐛 เดิมไม่มี loading state เลย พอเข้าห้องแชทครั้งแรกก่อนโหลดเสร็จ หน้าจะว่างเปล่าแล้วพอโหลดเสร็จข้อความโผล่มาทีเดียว เห็นเป็นจังหวะกระเดิด
   const [text, setText] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState("");
@@ -7431,6 +7432,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
     (async () => {
       const { data } = await supabase.from("chat_messages").select("*").eq("thread_id", thread.id).order("created_at", { ascending: true }).limit(200);
       setMessages(data || []);
+      setLoadingMessages(false);
       markRead();
     })();
     const channel = supabase
@@ -7539,7 +7541,11 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
         </button>
       )}
       <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, paddingBottom: 10 }}>
-        {messages.map((m) => {
+        {loadingMessages ? (
+          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ fontSize: 12.5, color: t.faint }}>กำลังโหลดข้อความ...</div>
+          </div>
+        ) : messages.map((m) => {
           const mine = m.sender_id === userId;
           const senderName = senderMap[m.sender_id]?.name || (mine ? profile?.name : thread.name);
           const isLastMine = mine && m.id === [...messages].reverse().find((x) => x.sender_id === userId)?.id;
