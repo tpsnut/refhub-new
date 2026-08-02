@@ -6,6 +6,15 @@
 
 import { createClient } from "@supabase/supabase-js";
 
+// 📊 บันทึกการเรียกใช้ AI แต่ละครั้งลง ai_usage_log (สำหรับแดชบอร์ดใช้งาน/ลิมิตในหน้า Admin)
+async function logAiUsage(provider, moduleName, userId) {
+  try {
+    const admin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    await admin.from("ai_usage_log").insert({ provider, module: moduleName, user_id: userId || null });
+  } catch (e) { console.error("บันทึก ai_usage_log ไม่สำเร็จ (ไม่กระทบการตอบกลับ):", e.message); }
+}
+
+
 const PROMPT = (categoryOptions) => `คุณคือระบบอ่านสลิปโอนเงิน/ใบเสร็จร้านค้าภาษาไทย วิเคราะห์รูปที่ได้รับแล้วตอบกลับเป็น JSON เท่านั้น ห้ามมีข้อความอื่นนอก JSON ห้ามใส่ markdown code fence
 
 กติกา:
@@ -106,6 +115,7 @@ export default async function handler(req, res) {
   if (isPremium && process.env.GEMINI_API_KEY_PAID) {
     try {
       const result = await callGeminiVision(process.env.GEMINI_API_KEY_PAID, image, cats);
+      await logAiUsage("gemini_paid", "receipt_scan", userId);
       return res.status(200).json({ ...result, source: "gemini_paid" });
     } catch (e) { errors.push(`Gemini (จ่ายเงิน): ${e.message}`); console.error("Gemini จ่ายเงิน พัง สลับตัวถัดไป:", e.message); }
   }
@@ -114,6 +124,7 @@ export default async function handler(req, res) {
   if (process.env.GROQ_API_KEY) {
     try {
       const result = await callGroqVision(image, cats);
+      await logAiUsage("groq_vision", "receipt_scan", userId);
       return res.status(200).json({ ...result, source: "groq" });
     } catch (e) { errors.push(`Groq: ${e.message}`); console.error("Groq vision พัง สลับตัวถัดไป:", e.message); }
   } else errors.push("Groq: ยังไม่ได้ตั้งค่า GROQ_API_KEY");
@@ -121,6 +132,7 @@ export default async function handler(req, res) {
   if (process.env.GEMINI_API_KEY) {
     try {
       const result = await callGeminiVision(process.env.GEMINI_API_KEY, image, cats);
+      await logAiUsage("gemini", "receipt_scan", userId);
       return res.status(200).json({ ...result, source: "gemini" });
     } catch (e) { errors.push(`Gemini: ${e.message}`); console.error("Gemini พัง:", e.message); }
   } else errors.push("Gemini: ยังไม่ได้ตั้งค่า GEMINI_API_KEY");

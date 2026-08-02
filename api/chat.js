@@ -11,6 +11,15 @@
 
 import { createClient } from "@supabase/supabase-js";
 
+// 📊 บันทึกการเรียกใช้ AI แต่ละครั้งลง ai_usage_log (สำหรับแดชบอร์ดใช้งาน/ลิมิตในหน้า Admin)
+// ใช้ service role key ยิงตรง ไม่ผ่าน RLS — พังไม่ให้กระทบการตอบแชทเด็ดขาด (แค่ log เฉยๆ)
+async function logAiUsage(provider, userId) {
+  try {
+    const admin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    await admin.from("ai_usage_log").insert({ provider, module: "mentor_chat", user_id: userId || null });
+  } catch (e) { console.error("บันทึก ai_usage_log ไม่สำเร็จ (ไม่กระทบการตอบกลับ):", e.message); }
+}
+
 const CONCISE_RULE = "ตอบให้กระชับ ตรงประเด็น ได้ใจความและเป็นประโยชน์สูงสุด ความยาวพอเหมาะเหมือนคนเก่งเรื่องนั้นตอบเพื่อนที่มาถาม ไม่ใช่เขียนบทความยาวเยิ่นเย้อ ไม่ต้องอธิบายทุกแง่มุมในคำตอบเดียว ถ้าเรื่องที่ถามลึกหรือมีรายละเอียดเยอะจริงๆ ให้เลือกตอบส่วนที่สำคัญ/เป็นประโยชน์ที่สุดก่อน แล้วปิดท้ายด้วยคำถามสั้นๆ ถามว่าอยากให้ขยายความส่วนไหนเพิ่มไหม (ผู้ใช้พิมพ์ต่อได้เองถ้าอยากรู้มากกว่านี้) แทนที่จะอัดทุกอย่างมาในคำตอบเดียว";
 
 const PERSONAS = {
@@ -118,22 +127,38 @@ export default async function handler(req, res) {
   const errors = [];
 
   if (process.env.GEMINI_API_KEY) {
-    try { return res.status(200).json({ text: await callGemini(process.env.GEMINI_API_KEY, system, messages), source: "gemini" }); }
+    try {
+      const text = await callGemini(process.env.GEMINI_API_KEY, system, messages);
+      await logAiUsage("gemini", userId);
+      return res.status(200).json({ text, source: "gemini" });
+    }
     catch (e) { errors.push(`Gemini: ${e.message}`); console.error("Gemini พัง สลับตัวถัดไป:", e.message); }
   } else errors.push("Gemini: ยังไม่ได้ตั้งค่า GEMINI_API_KEY");
 
   if (process.env.GROQ_API_KEY) {
-    try { return res.status(200).json({ text: await callGroq(system, messages), source: "groq" }); }
+    try {
+      const text = await callGroq(system, messages);
+      await logAiUsage("groq", userId);
+      return res.status(200).json({ text, source: "groq" });
+    }
     catch (e) { errors.push(`Groq: ${e.message}`); console.error("Groq พัง สลับตัวถัดไป:", e.message); }
   } else errors.push("Groq: ยังไม่ได้ตั้งค่า GROQ_API_KEY");
 
   if (isPremium) {
     if (process.env.DEEPSEEK_API_KEY) {
-      try { return res.status(200).json({ text: await callDeepSeek(system, messages), source: "deepseek" }); }
+      try {
+        const text = await callDeepSeek(system, messages);
+        await logAiUsage("deepseek", userId);
+        return res.status(200).json({ text, source: "deepseek" });
+      }
       catch (e) { errors.push(`DeepSeek: ${e.message}`); console.error("DeepSeek พัง สลับตัวถัดไป:", e.message); }
     }
     if (process.env.GEMINI_API_KEY_PAID) {
-      try { return res.status(200).json({ text: await callGemini(process.env.GEMINI_API_KEY_PAID, system, messages), source: "gemini_paid" }); }
+      try {
+        const text = await callGemini(process.env.GEMINI_API_KEY_PAID, system, messages);
+        await logAiUsage("gemini_paid", userId);
+        return res.status(200).json({ text, source: "gemini_paid" });
+      }
       catch (e) { errors.push(`Gemini (จ่ายเงิน): ${e.message}`); console.error("Gemini จ่ายเงิน พัง:", e.message); }
     }
   }

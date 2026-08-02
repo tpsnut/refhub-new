@@ -6,7 +6,7 @@ import {
   Sparkles, Clock, Search, Volume2, VolumeX, Pencil, Download, ArrowLeft, Users, Camera, Phone, Mic, MicOff, PhoneOff, RefreshCw,
   Utensils, Car, ShoppingBag, Receipt, Gamepad2, HeartPulse, Briefcase, Gift, Coffee, Music,
   Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi, MessageCircle, MoreVertical, KeyRound, MapPin, Copy, LockKeyhole, LogOut, LayoutGrid, Maximize2, Volume1, Settings, Bookmark, Share2, Repeat2, Heart, User, Pin,
-  Heading1, Heading3, ListOrdered, ListTree, Quote, Code2, Minus, Table2, Video, Smile, RotateCcw, GripVertical, ChevronLeft, ChevronUp, ChevronDown, Repeat, Repeat1, Shuffle, Timer, Lock, HelpCircle, Info, CreditCard, Crown, Unlock
+  Heading1, Heading3, ListOrdered, ListTree, Quote, Code2, Minus, Table2, Video, Smile, RotateCcw, GripVertical, ChevronLeft, ChevronUp, ChevronDown, Repeat, Repeat1, Shuffle, Timer, Lock, HelpCircle, Info, CreditCard, Crown, Unlock, Activity
 } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, ResponsiveContainer, Tooltip } from "recharts";
 // 🔀 dnd-kit — ใช้ทำ "ลากวางจัดเรียงจริง" (drag & drop) ทั่วแอป แทนปุ่มขึ้น/ลง — รองรับ touch บนมือถือมาให้เลย
@@ -5749,6 +5749,7 @@ function AdminPage({ t, lang, session, userId, adminAlerts, setAdminAlerts, auth
     hints: { title: "คำแนะนำการใช้งาน", sub: "ข้อความ coachmark ที่โชว์ในแอป", Ic: HelpCircle },
     add: { title: "เพิ่มสมาชิกด้วย PIN", sub: "สำหรับผู้ใหญ่ที่ไม่ถนัดใช้อีเมล", Ic: Plus },
     billing: { title: "แพ็กเกจ", sub: "จัดการแพ็กเกจ/บิลลิ่งทุกครอบครัวในระบบ", Ic: CreditCard },
+    usage: { title: "การใช้งาน/ลิมิต", sub: "โควตา DB/Storage/AI แบบสด กันเกินก่อนต้องอัปเกรด", Ic: Activity },
   };
   const head = TAB_HEAD[tab] || TAB_HEAD.overview;
 
@@ -5912,12 +5913,19 @@ function AdminPage({ t, lang, session, userId, adminAlerts, setAdminAlerts, auth
           <div>
             <div style={{ fontSize: 11, fontWeight: 800, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>ระบบ</div>
             <div style={{ ...card(t), overflow: "hidden" }}>
-              <button onClick={() => setTab("activity")} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "13px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
+              <button onClick={() => setTab("activity")} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "13px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left", borderBottom: authProfile?.is_superadmin ? `1px solid ${t.border}` : "none" }}>
                 <Clock size={17} color={t.sub} />
                 <div style={{ flex: 1 }}><div style={{ fontSize: 13, color: t.text, fontWeight: 600 }}>กิจกรรม/ความเคลื่อนไหว</div><div style={{ fontSize: 10.5, color: t.faint }}>Activity log + ข้อเสนอแนะ</div></div>
                 {unreadFeedback > 0 && <span style={{ fontSize: 10, fontWeight: 800, color: "#fff", background: "#D9534F", borderRadius: 10, padding: "2px 7px", marginRight: 4 }}>{unreadFeedback}</span>}
                 <ChevronRight size={16} color={t.faint} />
               </button>
+              {authProfile?.is_superadmin && (
+                <button onClick={() => setTab("usage")} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "13px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
+                  <Activity size={17} color={t.sub} />
+                  <div style={{ flex: 1 }}><div style={{ fontSize: 13, color: t.text, fontWeight: 600 }}>การใช้งาน/ลิมิต</div><div style={{ fontSize: 10.5, color: t.faint }}>DB/Storage/AI แบบสด + ค่าใช้จ่ายบริการภายนอก</div></div>
+                  <ChevronRight size={16} color={t.faint} />
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -5967,6 +5975,7 @@ function AdminPage({ t, lang, session, userId, adminAlerts, setAdminAlerts, auth
       {tab === "hints" && <AdminHintsPanel t={t} totalMembers={members.filter((m) => m.approved).length} />}
       {tab === "add" && <AdminAddPinMember t={t} session={session} onCreated={loadMembers} />}
       {tab === "billing" && authProfile?.is_superadmin && <AdminBillingPanel t={t} />}
+      {tab === "usage" && authProfile?.is_superadmin && <AdminUsagePanel t={t} />}
 
       {detailMember && (
         <ModalPortal>
@@ -6429,6 +6438,149 @@ function AdminBillingPanel({ t }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// 📊 แผงแอดมิน "การใช้งาน/ลิมิต" — เฉพาะ superadmin เห็นได้ ดึงข้อมูลสดจาก DB ทุกครั้งที่เปิด + รีเฟรชอัตโนมัติทุก 30 วิ
+// ไม่มี API เข้าถึงบิลลิ่งจริงของ Vercel/Groq/DeepSeek/Gemini (ต้องมี token/คีย์ฝั่งนั้นเพิ่ม) เลยนับ "จำนวนครั้งที่เรียก" เอง
+// ผ่าน ai_usage_log แทน ส่วน DB/Storage/ผู้ใช้ เป็นตัวเลขจริงแบบสดจาก Supabase (ผ่านฟังก์ชัน get_app_usage_stats)
+function AdminUsagePanel({ t }) {
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const [services, setServices] = useState([]);
+  const [editingId, setEditingId] = useState(null);
+  const [editPlan, setEditPlan] = useState("");
+  const [editCost, setEditCost] = useState("");
+  const [busyId, setBusyId] = useState(null);
+
+  const loadStats = async () => {
+    const { data, error } = await supabase.rpc("get_app_usage_stats");
+    if (!error) { setStats(data); setLastUpdated(new Date()); } else console.error("โหลดสถิติการใช้งานไม่สำเร็จ:", error.message);
+    setLoading(false);
+  };
+  const loadServices = async () => {
+    const { data } = await supabase.from("infra_services").select("*").order("id");
+    setServices(data || []);
+  };
+  useEffect(() => {
+    loadStats(); loadServices();
+    const interval = setInterval(loadStats, 30000); // 🔄 รีเฟรชอัตโนมัติทุก 30 วิ ให้ใกล้เคียง real-time
+    return () => clearInterval(interval);
+  }, []);
+
+  const saveService = async (id) => {
+    setBusyId(id);
+    await supabase.from("infra_services").update({ current_plan: editPlan.trim() || "free", monthly_cost: parseFloat(editCost) || 0, updated_at: new Date().toISOString() }).eq("id", id);
+    setEditingId(null);
+    await loadServices();
+    setBusyId(null);
+  };
+
+  const Bar = ({ pct }) => (
+    <div style={{ height: 7, borderRadius: 4, background: t.border, overflow: "hidden", marginTop: 6 }}>
+      <div style={{ height: "100%", width: `${pct}%`, background: pct > 90 ? "#D9534F" : pct > 70 ? "#E8894A" : t.accent, borderRadius: 4 }} />
+    </div>
+  );
+
+  if (loading) return <Empty t={t} text="กำลังโหลด..." />;
+  if (!stats) return <Empty t={t} text="โหลดข้อมูลไม่สำเร็จ" />;
+
+  const DB_CAP = 500 * 1024 * 1024;
+  const STORAGE_CAP = 1024 * 1024 * 1024;
+  const dbPct = Math.min(100, (stats.db_bytes / DB_CAP) * 100);
+  const storageBytes = Object.values(stats.storage_buckets || {}).reduce((s, v) => s + Number(v), 0);
+  const storagePct = Math.min(100, (storageBytes / STORAGE_CAP) * 100);
+  const totalMonthlyCost = services.reduce((s, x) => s + Number(x.monthly_cost || 0), 0);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ fontSize: 11, color: t.sub }}>อัปเดตล่าสุด: {lastUpdated?.toLocaleTimeString("th-TH")} · รีเฟรชอัตโนมัติทุก 30 วิ</div>
+        <button onClick={loadStats} style={{ background: "none", border: "none", cursor: "pointer", color: t.accent, fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}><RefreshCw size={12} /> รีเฟรชตอนนี้</button>
+      </div>
+
+      <div style={{ ...card(t), padding: 16 }}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: t.text }}>ฐานข้อมูล (Postgres)</div>
+        <div style={{ fontSize: 11.5, color: t.sub, marginTop: 2 }}>{fmtBytes(stats.db_bytes)} / 500 MB ({dbPct.toFixed(1)}%)</div>
+        <Bar pct={dbPct} />
+      </div>
+
+      <div style={{ ...card(t), padding: 16 }}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: t.text }}>ไฟล์ (Storage)</div>
+        <div style={{ fontSize: 11.5, color: t.sub, marginTop: 2 }}>{fmtBytes(storageBytes)} / 1 GB ({storagePct.toFixed(1)}%)</div>
+        <Bar pct={storagePct} />
+        <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 4 }}>
+          {Object.entries(stats.storage_buckets || {}).map(([bucket, bytes]) => (
+            <div key={bucket} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: t.sub }}>
+              <span>{bucket}</span><span>{fmtBytes(Number(bytes))}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 10 }}>
+        <div style={{ ...card(t), flex: 1, padding: 14, textAlign: "center" }}>
+          <div style={{ fontSize: 19, fontWeight: 800, color: t.text }}>{stats.total_users}</div>
+          <div style={{ fontSize: 10.5, color: t.sub }}>ผู้ใช้ทั้งหมด</div>
+        </div>
+        <div style={{ ...card(t), flex: 1, padding: 14, textAlign: "center" }}>
+          <div style={{ fontSize: 19, fontWeight: 800, color: t.text }}>{stats.active_30d_users}</div>
+          <div style={{ fontSize: 10.5, color: t.sub }}>Active 30 วัน / 50,000</div>
+        </div>
+      </div>
+
+      <div style={{ ...card(t), padding: 16 }}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: t.text, marginBottom: 2 }}>การเรียกใช้ AI</div>
+        <div style={{ fontSize: 10.5, color: t.faint, marginBottom: 10 }}>นับจำนวนครั้ง (ไม่ใช่ $ จริง — เริ่มนับตั้งแต่ติดตั้งระบบนี้ ไม่มีข้อมูลย้อนหลัง)</div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: t.sub, marginBottom: 6 }}>วันนี้</div>
+        {Object.keys(stats.ai_usage_today || {}).length === 0 ? <div style={{ fontSize: 11.5, color: t.faint, marginBottom: 10 }}>ยังไม่มีการเรียกวันนี้</div> :
+          Object.entries(stats.ai_usage_today).map(([p, c]) => (
+            <div key={p} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: t.text, marginBottom: 3 }}><span>{p}</span><span>{c} ครั้ง</span></div>
+          ))}
+        <div style={{ fontSize: 11, fontWeight: 700, color: t.sub, marginTop: 10, marginBottom: 6 }}>เดือนนี้ (รวม)</div>
+        {Object.keys(stats.ai_usage_month || {}).length === 0 ? <div style={{ fontSize: 11.5, color: t.faint }}>ยังไม่มีการเรียกเดือนนี้</div> :
+          Object.entries(stats.ai_usage_month).map(([p, c]) => (
+            <div key={p} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: t.text, marginBottom: 3 }}><span>{p}</span><span>{c} ครั้ง</span></div>
+          ))}
+      </div>
+
+      <div style={{ ...card(t), padding: 12, border: `1px dashed ${t.border}` }}>
+        <div style={{ fontSize: 11, color: t.sub }}>Vercel Serverless Functions: <b style={{ color: t.text }}>12 / 12</b> — นับด้วยมือ (ไม่มี API ดึงสดจาก Vercel ตอนนี้ ต้องมี Vercel API token ถึงจะต่อได้)</div>
+      </div>
+
+      <div style={{ fontSize: 11, fontWeight: 800, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, marginTop: 4 }}>บริการภายนอก &amp; ค่าใช้จ่าย (ตั้งด้วยมือ)</div>
+      <div style={{ ...card(t), padding: 14 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10, paddingBottom: 10, borderBottom: `1px solid ${t.border}` }}>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: t.sub }}>รวมค่าใช้จ่ายต่อเดือน</span>
+          <span style={{ fontSize: 16, fontWeight: 800, color: t.accent }}>{totalMonthlyCost.toLocaleString()}฿</span>
+        </div>
+        {services.map((s, i) => (
+          <div key={s.id} style={{ padding: "10px 0", borderTop: i > 0 ? `1px solid ${t.border}` : "none" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{s.display_name}</div>
+                <div style={{ fontSize: 10, color: t.faint }}>{s.cap_note}</div>
+              </div>
+              {editingId !== s.id && (
+                <button onClick={() => { setEditingId(s.id); setEditPlan(s.current_plan); setEditCost(String(s.monthly_cost)); }} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", flexShrink: 0 }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 700, color: t.text }}>{s.current_plan}</span>
+                  <span style={{ fontSize: 11.5, color: t.sub }}>{Number(s.monthly_cost) > 0 ? `${Number(s.monthly_cost).toLocaleString()}฿/ด.` : "ฟรี"}</span>
+                  <Pencil size={12} color={t.faint} />
+                </button>
+              )}
+            </div>
+            {editingId === s.id && (
+              <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                <input value={editPlan} onChange={(e) => setEditPlan(e.target.value)} placeholder="ชื่อแผน" style={{ ...input(t), flex: 1, padding: "6px 8px", fontSize: 12 }} />
+                <input type="number" value={editCost} onChange={(e) => setEditCost(e.target.value)} placeholder="บาท/เดือน" style={{ ...input(t), width: 90, padding: "6px 8px", fontSize: 12 }} />
+                <button onClick={() => saveService(s.id)} disabled={busyId === s.id} style={{ padding: "6px 10px", borderRadius: 8, border: "none", background: t.accent, color: t.onAccent, fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>บันทึก</button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

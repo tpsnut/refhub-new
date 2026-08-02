@@ -10,6 +10,15 @@
 
 import { createClient } from "@supabase/supabase-js";
 
+// 📊 บันทึกการเรียกใช้ AI แต่ละครั้งลง ai_usage_log (สำหรับแดชบอร์ดใช้งาน/ลิมิตในหน้า Admin)
+async function logAiUsage(provider, moduleName, userId) {
+  try {
+    const admin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    await admin.from("ai_usage_log").insert({ provider, module: moduleName, user_id: userId || null });
+  } catch (e) { console.error("บันทึก ai_usage_log ไม่สำเร็จ (ไม่กระทบการตอบกลับ):", e.message); }
+}
+
+
 // 🔊 แปลงข้อความเป็นเสียงด้วย Azure Neural TTS — โยน error ออกไปถ้าพลาด (โควตาเกิน/ยังไม่ตั้งค่า key ฯลฯ)
 // ฝั่ง frontend จะ catch แล้ว fallback ไปเสียงเครื่อง (speechSynthesis) เองแบบเงียบๆ ไม่ต้องมาพังตรงนี้
 async function synthesizeAzureTTS(text, voice) {
@@ -112,6 +121,7 @@ export default async function handler(req, res) {
       if (userErr || !userData?.user) return res.status(401).json({ error: "ยืนยันตัวตนไม่สำเร็จ ลองล็อกอินใหม่" });
 
       const audioBuffer = await synthesizeAzureTTS(text.slice(0, 4000), voice || "th-TH-PremwadeeNeural");
+      await logAiUsage("azure_tts", "tts", userData.user.id);
       res.setHeader("Content-Type", "audio/mpeg");
       res.setHeader("Cache-Control", "no-store");
       return res.status(200).send(audioBuffer);
@@ -190,14 +200,17 @@ ${scoringRule}
       try {
         if (!geminiKey) throw new Error("ยังไม่ได้ตั้งค่า GEMINI_API_KEY");
         raw = await callGeminiForGoalJSON(geminiKey, prompt, responseSchema);
+        await logAiUsage("gemini", "goal_ai", userData.user.id);
       } catch (geminiErr) {
         try {
           if (!process.env.GROQ_API_KEY) throw new Error("ยังไม่ได้ตั้งค่า GROQ_API_KEY");
           raw = await callGroqForGoalJSON(prompt);
+          await logAiUsage("groq", "goal_ai", userData.user.id);
         } catch (groqErr) {
           try {
             if (!isPremium || !process.env.GEMINI_API_KEY_PAID) throw new Error("ไม่มีสิทธิ์/ไม่ได้ตั้งค่า tier สำรอง");
             raw = await callGeminiForGoalJSON(process.env.GEMINI_API_KEY_PAID, prompt, responseSchema);
+            await logAiUsage("gemini_paid", "goal_ai", userData.user.id);
           } catch (paidErr) {
             // ทุกช่องทางที่มีอยู่ไม่สำเร็จจริงๆ (ไม่ใช่บั๊ก แค่คนใช้เยอะพร้อมกันจนโควตาเต็มชั่วคราว)
             return res.status(429).json({
@@ -279,6 +292,8 @@ ${scoringRule}
       const reason = data.candidates?.[0]?.finishReason || data.promptFeedback?.blockReason;
       return res.status(500).json({ error: reason ? `AI ไม่ตอบกลับเนื้อหา (สาเหตุ: ${reason})` : "AI ไม่ตอบกลับเนื้อหาใดๆ ลองใหม่อีกครั้ง" });
     }
+    await logAiUsage("gemini", "knowledge_gen", userData.user.id);
+
     const cleaned = raw.replace(/^```json\s*|```\s*$/g, "").trim();
     let parsed;
     try {
