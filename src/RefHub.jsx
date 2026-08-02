@@ -7503,7 +7503,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "calc(100dvh - 160px)" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
         <button onClick={onBack} style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 17, background: t.surface, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }} title="กลับไปรายการห้อง"><ArrowLeft size={18} color={t.text} /></button>
         {thread.avatarUrl ? (
