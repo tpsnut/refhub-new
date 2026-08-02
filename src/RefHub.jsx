@@ -911,6 +911,46 @@ function ModalPortal({ children }) {
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 
+// 🔐 Drive ส่วนตัว — ฟังก์ชันเข้ารหัส/ถอดรหัสมาตรฐาน (Web Crypto API ของเบราว์เซอร์เอง ไม่ได้เขียน crypto เองมั่วๆ)
+// PBKDF2 (100,000 รอบ) แปลงรหัสผ่าน+salt เป็นกุญแจ AES-GCM 256 บิต — ถอดรหัสทำในเครื่องผู้ใช้เท่านั้น ไม่ส่งรหัสผ่านขึ้นเซิร์ฟเวอร์เลย
+const b64FromBytes = (bytes) => btoa(String.fromCharCode(...new Uint8Array(bytes)));
+const bytesFromB64 = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+async function vaultDeriveKey(password, saltB64) {
+  const salt = saltB64 ? bytesFromB64(saltB64) : crypto.getRandomValues(new Uint8Array(16));
+  const keyMaterial = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveKey"]);
+  const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt, iterations: 100000, hash: "SHA-256" }, keyMaterial, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+  return { key, saltB64: b64FromBytes(salt) };
+}
+async function vaultEncryptText(plainText, password) {
+  const { key, saltB64 } = await vaultDeriveKey(password, null);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const cipherBuf = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(plainText));
+  return { content: b64FromBytes(cipherBuf), ivB64: b64FromBytes(iv), saltB64 };
+}
+async function vaultDecryptText(cipherB64, ivB64, saltB64, password) {
+  const { key } = await vaultDeriveKey(password, saltB64);
+  const plainBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv: bytesFromB64(ivB64) }, key, bytesFromB64(cipherB64));
+  return new TextDecoder().decode(plainBuf);
+}
+async function vaultEncryptFile(file, password) {
+  const { key, saltB64 } = await vaultDeriveKey(password, null);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const cipherBuf = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, await file.arrayBuffer());
+  return { blob: new Blob([cipherBuf]), ivB64: b64FromBytes(iv), saltB64 };
+}
+async function vaultDecryptFile(blob, ivB64, saltB64, password, mime) {
+  const { key } = await vaultDeriveKey(password, saltB64);
+  const plainBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv: bytesFromB64(ivB64) }, key, await blob.arrayBuffer());
+  return new Blob([plainBuf], { type: mime || "application/octet-stream" });
+}
+async function sha256Hex(str) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+const VAULT_QUOTA_BYTES = 200 * 1024 * 1024; // 200MB ต่อคน (กันโควตา Storage รวมของทั้งโปรเจกต์ 1GB บนแผน Free โดนกินหมดจากคนเดียว)
+const VAULT_MAX_FILE_BYTES = 100 * 1024 * 1024; // 100MB ต่อไฟล์ (กันเครื่องค้างตอนเข้ารหัสไฟล์ใหญ่บนมือถือ)
+const fmtBytes = (n) => n < 1024 ? `${n} B` : n < 1024 ** 2 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1024 ** 2).toFixed(1)} MB`;
+
 // 🔀🚫 เลือกคำ/ประโยคมาฝึก (ทดสอบ/ฟัง/พูด) แบบไม่ซ้ำของเดิมจนกว่าจะครบรอบ — ต่างจากโหมดทบทวนที่ตั้งใจให้วนซ้ำได้ตามปกติ
 // เก็บ id ที่ใช้ไปแล้วต่อ (คำ/ประโยค × หมวด × ระดับ × โหมดฝึก) แยกกันผ่าน localStorage ต่อเครื่อง ถ้าใช้ครบทุกอันในหมวดนั้นแล้วค่อยเริ่มรอบใหม่อัตโนมัติ
 function pickFreshItems(key, pool, count) {
@@ -989,7 +1029,7 @@ const STRINGS = {
     dock_home: "หน้าแรก", dock_ideas: "ไอเดีย", dock_trade: "ลงทุน", dock_news: "ข่าว", dock_lang: "ภาษา", dock_note: "โน้ต",
     menu_title: "เมนู", menu_sub: "พาไปหน้า/ฟีเจอร์ใหญ่ๆ ที่แยกจากหน้าปัจจุบัน",
     menu_admin: "หน้า Admin", menu_media: "สื่อ", menu_chat: "แชท", menu_locations: "ตำแหน่งล่าสุด",
-    menu_account: "ตั้งค่าบัญชี", menu_activity: "ประวัติการใช้งานของฉัน", menu_lang: "เปลี่ยนภาษา", menu_security: "ความปลอดภัย/ความเป็นส่วนตัว", menu_help: "ช่วยเหลือ/FAQ", menu_about: "เกี่ยวกับแอป", menu_plan: "แพ็กเกจของฉัน",
+    menu_account: "ตั้งค่าบัญชี", menu_activity: "ประวัติการใช้งานของฉัน", menu_lang: "เปลี่ยนภาษา", menu_security: "ความปลอดภัย/ความเป็นส่วนตัว", menu_help: "ช่วยเหลือ/FAQ", menu_about: "เกี่ยวกับแอป", menu_plan: "แพ็กเกจของฉัน", menu_vault: "Drive ส่วนตัว",
     menu_signout: "ออกจากระบบ",
     quick_theme: "ธีมสีแอป", quick_font: "ขนาดตัวอักษร", quick_daynight: "โหมดกลางวัน-กลางคืน", quick_shape: "ทรงกรอบการ์ด", quick_layout: "โครงหน้า Home",
     ph_finance_title: "การเงิน", ph_finance_sub: "รายรับ–รายจ่าย · ใช้ได้จริงทุกวัน",
@@ -1014,7 +1054,7 @@ const STRINGS = {
     dock_home: "Home", dock_ideas: "Ideas", dock_trade: "Trade", dock_news: "News", dock_lang: "Lang", dock_note: "Note",
     menu_title: "Menu", menu_sub: "Jump to other pages/major features",
     menu_admin: "Admin Page", menu_media: "Media", menu_chat: "Chat", menu_locations: "Recent Location",
-    menu_account: "Account Settings", menu_activity: "My Activity History", menu_lang: "Change Language", menu_security: "Security & Privacy", menu_help: "Help & FAQ", menu_about: "About the App", menu_plan: "My Plan",
+    menu_account: "Account Settings", menu_activity: "My Activity History", menu_lang: "Change Language", menu_security: "Security & Privacy", menu_help: "Help & FAQ", menu_about: "About the App", menu_plan: "My Plan", menu_vault: "Personal Drive",
     menu_signout: "Sign Out",
     quick_theme: "App Theme", quick_font: "Font Size", quick_daynight: "Day / Night Mode", quick_shape: "Card Shape", quick_layout: "Home Layout",
     ph_finance_title: "Finance", ph_finance_sub: "Income–expenses · for real everyday use",
@@ -2107,6 +2147,7 @@ export default function RefHub() {
           {page === "goalsReport" && <GoalsReportPage t={t} lang={lang} goals={goals} setGoals={setGoals} userId={userId} />}
           {page === "admin" && <AdminPage t={t} lang={lang} session={session} userId={userId} adminAlerts={adminAlerts} setAdminAlerts={setAdminAlerts} authProfile={authProfile} setAuthProfile={setAuthProfile} />}
           {page === "locations" && <LocationsPage t={t} lang={lang} userId={userId} />}
+          {page === "vault" && <VaultPage t={t} lang={lang} userId={userId} />}
           {page === "chat" && <ChatEntryPage t={t} lang={lang} M={M} userId={userId} authProfile={authProfile} session={session} openThread={(id, name, isGroup, avatarUrl, createdBy) => { setActiveThread({ id, name, isGroup: !!isGroup, avatarUrl: avatarUrl || null, createdBy: createdBy || null }); setPage("chatRoom"); }} />}
           {page === "chatRoom" && activeThread && <ChatRoomPage t={t} userId={userId} thread={activeThread} profile={profile} session={session} onLeave={() => { setActiveThread(null); setPage("chat"); }} onBack={() => { setActiveThread(null); setPage("chat"); }} activeCall={activeCall} setActiveCall={setActiveCall} setCallMinimized={setCallMinimized} />}
 
@@ -2223,6 +2264,9 @@ export default function RefHub() {
                 </button>
                 <button onClick={() => { setPlanOpen(true); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
                   <CreditCard size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "menu_plan")}</span>
+                </button>
+                <button onClick={() => { setPage("vault"); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
+                  <Lock size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "menu_vault")}</span>
                 </button>
                 <button onClick={() => { setMyActivityOpen(true); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
                   <Clock size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "menu_activity")}</span>
@@ -5164,7 +5208,7 @@ function AdminActivityPanel({ t, members }) {
   }, []);
 
   const memberOf = (id) => members.find((m) => m.id === id);
-  const moduleLabel = { finance: "การเงิน", goals: "เป้าหมาย", notes: "โน้ต", community: "ชุมชน", mentor: "แชทโค้ช" };
+  const moduleLabel = { finance: "การเงิน", goals: "เป้าหมาย", notes: "โน้ต", community: "ชุมชน", mentor: "แชทโค้ช", vault: "Drive ส่วนตัว" };
 
   const days = []; for (let i = 13; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); days.push(d.toISOString().slice(0, 10)); }
   const chartData = days.map((d) => {
@@ -8493,6 +8537,323 @@ function LocationsPage({ t, lang, userId }) {
   );
 }
 
+// 🔒 ===== Drive ส่วนตัว — เก็บข้อความ/รูป/ไฟล์/วิดีโอที่เป็นความลับ =====
+// สถาปัตยกรรม 2 ชั้น: (1) PIN "ประตูหน้า" กันคนหยิบมือถือดูเร็วๆ (สะดวก ไม่ใช่ความปลอดภัยจริง)
+// (2) ต่อรายการเลือกได้ว่าจะเป็น "ล็อกหน้าจอ" (quick) หรือ "เข้ารหัสจริง" (encrypted, AES-GCM มาตรฐาน
+// ถอดรหัสในเครื่องเท่านั้น ไม่ส่งรหัสผ่านขึ้นเซิร์ฟเวอร์ ลืมรหัส = กู้คืนไม่ได้จริงๆ)
+function VaultPage({ t, lang, userId }) {
+  const [askConfirm, ConfirmUI] = useConfirm(t);
+  const [settings, setSettings] = useState(undefined); // undefined=ยังไม่โหลด, null=ยังไม่เคยตั้ง PIN
+  const [unlocked, setUnlocked] = useState(false);
+  const [pinInput, setPinInput] = useState("");
+  const [pinDraft, setPinDraft] = useState(null);
+  const [pinStep, setPinStep] = useState("enter"); // enter | confirm (ใช้ตอนตั้ง PIN ครั้งแรกเท่านั้น)
+  const [pinError, setPinError] = useState("");
+  const [pinBusy, setPinBusy] = useState(false);
+
+  const [items, setItems] = useState([]);
+  const [loadingItems, setLoadingItems] = useState(true);
+
+  const loadSettings = async () => {
+    const { data } = await supabase.from("vault_settings").select("*").eq("user_id", userId).maybeSingle();
+    setSettings(data || null);
+  };
+  const loadItems = async () => {
+    setLoadingItems(true);
+    const { data } = await supabase.from("vault_items").select("*").eq("user_id", userId).order("created_at", { ascending: false });
+    setItems(data || []);
+    setLoadingItems(false);
+  };
+  useEffect(() => { loadSettings(); }, [userId]);
+  useEffect(() => { if (unlocked) loadItems(); }, [unlocked]);
+
+  const usedBytes = items.reduce((s, it) => s + (it.file_size || 0), 0);
+  const quotaPct = Math.min(100, (usedBytes / VAULT_QUOTA_BYTES) * 100);
+
+  const pressDigit = (d) => { if (pinBusy) return; setPinError(""); setPinInput((p) => (p.length >= 4 ? p : p + d)); };
+  const backspace = () => { if (pinBusy) return; setPinInput((p) => p.slice(0, -1)); };
+
+  useEffect(() => {
+    if (pinInput.length !== 4) return;
+    (async () => {
+      setPinBusy(true);
+      if (settings === null) {
+        if (pinStep === "enter") { setPinDraft(pinInput); setPinInput(""); setPinStep("confirm"); setPinBusy(false); return; }
+        if (pinInput !== pinDraft) { setPinError("PIN ไม่ตรงกัน ตั้งใหม่อีกครั้ง"); setPinInput(""); setPinStep("enter"); setPinDraft(null); setPinBusy(false); return; }
+        const pin_hash = await sha256Hex(pinInput);
+        const { data } = await supabase.from("vault_settings").insert({ user_id: userId, pin_hash }).select().single();
+        setSettings(data); setUnlocked(true); setPinInput(""); setPinBusy(false);
+      } else {
+        const hash = await sha256Hex(pinInput);
+        if (hash === settings.pin_hash) { setUnlocked(true); setPinInput(""); }
+        else { setPinError("PIN ไม่ถูกต้อง"); setTimeout(() => { setPinInput(""); setPinError(""); }, 600); }
+        setPinBusy(false);
+      }
+    })();
+  }, [pinInput]);
+
+  // --- เพิ่มรายการใหม่ ---
+  const [addOpen, setAddOpen] = useState(false);
+  const [newType, setNewType] = useState("text");
+  const [newTitle, setNewTitle] = useState("");
+  const [newText, setNewText] = useState("");
+  const [newFile, setNewFile] = useState(null);
+  const [newMode, setNewMode] = useState("quick");
+  const [newPassword, setNewPassword] = useState("");
+  const [newPassword2, setNewPassword2] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const fileInputRef = useRef(null);
+
+  const resetAddForm = () => { setNewType("text"); setNewTitle(""); setNewText(""); setNewFile(null); setNewMode("quick"); setNewPassword(""); setNewPassword2(""); setSaveError(""); };
+
+  const saveItem = async () => {
+    setSaveError("");
+    if (!newTitle.trim()) { setSaveError("ใส่ชื่อรายการก่อน"); return; }
+    if (newMode === "encrypted" && newPassword.length < 4) { setSaveError("ตั้งรหัสผ่านอย่างน้อย 4 ตัวอักษร"); return; }
+    if (newMode === "encrypted" && newPassword !== newPassword2) { setSaveError("รหัสผ่านยืนยันไม่ตรงกัน"); return; }
+    if (newType === "text" && !newText.trim()) { setSaveError("ใส่เนื้อหาก่อน"); return; }
+    if (newType !== "text" && !newFile) { setSaveError("เลือกไฟล์ก่อน"); return; }
+    if (newFile && newFile.size > VAULT_MAX_FILE_BYTES) { setSaveError(`ไฟล์ใหญ่เกินไป (สูงสุด ${fmtBytes(VAULT_MAX_FILE_BYTES)}/ไฟล์)`); return; }
+    const addingSize = newType === "text" ? new TextEncoder().encode(newText).length : (newFile?.size || 0);
+    if (usedBytes + addingSize > VAULT_QUOTA_BYTES) { setSaveError(`เนื้อที่ไม่พอ (เหลือ ${fmtBytes(Math.max(0, VAULT_QUOTA_BYTES - usedBytes))})`); return; }
+
+    setSaving(true);
+    try {
+      let payload = { user_id: userId, type: newType, title: newTitle.trim(), mode: newMode };
+      if (newType === "text") {
+        if (newMode === "encrypted") {
+          const { content, ivB64, saltB64 } = await vaultEncryptText(newText, newPassword);
+          payload = { ...payload, content, iv: ivB64, salt: saltB64, file_size: new TextEncoder().encode(newText).length };
+        } else {
+          payload = { ...payload, content: newText, file_size: new TextEncoder().encode(newText).length };
+        }
+      } else {
+        const ext = (newFile.name.split(".").pop() || "bin").toLowerCase();
+        const path = `${userId}/${crypto.randomUUID()}.${ext}`;
+        if (newMode === "encrypted") {
+          const { blob, ivB64, saltB64 } = await vaultEncryptFile(newFile, newPassword);
+          const { error: upErr } = await supabase.storage.from("vault").upload(path, blob, { contentType: "application/octet-stream" });
+          if (upErr) throw upErr;
+          payload = { ...payload, storage_path: path, file_mime: newFile.type, file_size: newFile.size, iv: ivB64, salt: saltB64 };
+        } else {
+          const { error: upErr } = await supabase.storage.from("vault").upload(path, newFile, { contentType: newFile.type });
+          if (upErr) throw upErr;
+          payload = { ...payload, storage_path: path, file_mime: newFile.type, file_size: newFile.size };
+        }
+      }
+      const { error } = await supabase.from("vault_items").insert(payload);
+      if (error) throw error;
+      logAudit(userId, "vault", "add", `เพิ่มรายการใน Drive: ${payload.title}`);
+      setAddOpen(false); resetAddForm();
+      await loadItems();
+    } catch (e) { setSaveError("บันทึกไม่สำเร็จ: " + e.message); }
+    setSaving(false);
+  };
+
+  // --- ดูรายการ ---
+  const [viewingItem, setViewingItem] = useState(null);
+  const [viewContent, setViewContent] = useState(null);
+  const [viewPassword, setViewPassword] = useState("");
+  const [viewBusy, setViewBusy] = useState(false);
+  const [viewError, setViewError] = useState("");
+
+  const openItem = (it) => { setViewingItem(it); setViewContent(null); setViewPassword(""); setViewError(""); if (it.mode === "quick") revealItem(it, null); };
+  const revealItem = async (it, password) => {
+    setViewBusy(true); setViewError("");
+    try {
+      if (it.type === "text") {
+        const text = it.mode === "encrypted" ? await vaultDecryptText(it.content, it.iv, it.salt, password) : it.content;
+        setViewContent({ kind: "text", text });
+      } else {
+        const { data, error } = await supabase.storage.from("vault").download(it.storage_path);
+        if (error) throw error;
+        const blob = it.mode === "encrypted" ? await vaultDecryptFile(data, it.iv, it.salt, password, it.file_mime) : data;
+        setViewContent({ kind: "file", url: URL.createObjectURL(blob), mime: it.file_mime });
+      }
+    } catch (e) { setViewError(it.mode === "encrypted" ? "รหัสผ่านไม่ถูกต้อง" : "เปิดไม่สำเร็จ: " + e.message); }
+    setViewBusy(false);
+  };
+  const closeView = () => { if (viewContent?.kind === "file") URL.revokeObjectURL(viewContent.url); setViewingItem(null); setViewContent(null); };
+
+  const deleteItem = async (it) => {
+    if (it.storage_path) await supabase.storage.from("vault").remove([it.storage_path]);
+    await supabase.from("vault_items").delete().eq("id", it.id);
+    setItems((list) => list.filter((x) => x.id !== it.id));
+    logAudit(userId, "vault", "delete", `ลบรายการใน Drive: ${it.title}`);
+    closeView();
+  };
+
+  const typeIcon = { text: FileText, image: ImageIcon, file: Paperclip, video: Video };
+  const itemsPagination = usePagination(items, 15);
+
+  // ---------- หน้าจอ PIN (ตั้งใหม่/ปลดล็อก) ----------
+  if (!unlocked) {
+    const isSetup = settings === null;
+    const title = settings === undefined ? "กำลังโหลด..." : isSetup ? (pinStep === "enter" ? "ตั้ง PIN สำหรับ Drive" : "ยืนยัน PIN อีกครั้ง") : "ปลดล็อก Drive ส่วนตัว";
+    const sub = settings === undefined ? "" : isSetup ? "PIN 4 หลัก กันคนอื่นเปิดดูเร็วๆ ตอนหยิบมือถือ" : "ใส่ PIN เพื่อเข้าดู";
+    return (
+      <>
+        <PageHead t={t} title="Drive ส่วนตัว" sub="ข้อมูลส่วนตัวที่ต้องใส่รหัสก่อนเข้าดู" icon={<Lock size={20} color={t.accent} />} />
+        {settings !== undefined && (
+          <div style={{ minHeight: 460, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "20px 10px" }}>
+            <div style={{ width: 64, height: 64, borderRadius: 18, background: t.accent, display: "grid", placeItems: "center", marginBottom: 16 }}><Lock size={28} color={t.onAccent} /></div>
+            <div style={{ fontSize: 16.5, fontWeight: 800, color: t.text, marginBottom: 4 }}>{title}</div>
+            <div style={{ fontSize: 12, color: t.sub, marginBottom: 20 }}>{sub}</div>
+            <div style={{ display: "flex", gap: 14, marginBottom: 26 }}>
+              {[0, 1, 2, 3].map((i) => <span key={i} style={{ width: 14, height: 14, borderRadius: 7, border: `2px solid ${t.faint}`, background: i < pinInput.length ? t.accent : "transparent", borderColor: i < pinInput.length ? t.accent : t.faint }} />)}
+            </div>
+            {pinError && <div style={{ fontSize: 12, color: "#D9534F", marginBottom: 14 }}>{pinError}</div>}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, width: "100%", maxWidth: 260 }}>
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
+                <button key={n} onClick={() => pressDigit(String(n))} style={{ aspectRatio: "1", borderRadius: "50%", border: "none", background: t.surface, fontSize: 19, fontWeight: 700, color: t.text, boxShadow: "0 2px 6px rgba(0,0,0,.06)", cursor: "pointer" }}>{n}</button>
+              ))}
+              <div />
+              <button onClick={() => pressDigit("0")} style={{ aspectRatio: "1", borderRadius: "50%", border: "none", background: t.surface, fontSize: 19, fontWeight: 700, color: t.text, boxShadow: "0 2px 6px rgba(0,0,0,.06)", cursor: "pointer" }}>0</button>
+              <button onClick={backspace} style={{ aspectRatio: "1", borderRadius: "50%", border: "none", background: "none", fontSize: 15, fontWeight: 700, color: t.sub, cursor: "pointer" }}>⌫</button>
+            </div>
+            {!isSetup && <div style={{ fontSize: 10.5, color: t.faint, marginTop: 22, textAlign: "center", padding: "0 20px", lineHeight: 1.6 }}>PIN นี้ล็อกแค่ "ประตูหน้า" ของ Drive — รายการที่เลือกเข้ารหัสจริงข้างในจะขอรหัสผ่านเฉพาะรายการนั้นแยกอีกชั้นตอนเปิดดู</div>}
+          </div>
+        )}
+      </>
+    );
+  }
+
+  // ---------- หน้าจอรายการ (ปลดล็อกแล้ว) ----------
+  return (
+    <>
+      <PageHead t={t} title="Drive ส่วนตัว" sub="ข้อมูลส่วนตัวที่ต้องใส่รหัสก่อนเข้าดู" icon={<Lock size={20} color={t.accent} />} />
+
+      <div style={{ ...card(t), padding: 14, marginBottom: 14 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, color: t.sub, marginBottom: 6 }}>
+          <span>ใช้ไป {fmtBytes(usedBytes)} จาก {fmtBytes(VAULT_QUOTA_BYTES)}</span>
+          <span>{quotaPct.toFixed(0)}%</span>
+        </div>
+        <div style={{ height: 6, borderRadius: 3, background: t.border, overflow: "hidden" }}>
+          <div style={{ height: "100%", width: `${quotaPct}%`, background: quotaPct > 90 ? "#D9534F" : t.accent, borderRadius: 3 }} />
+        </div>
+      </div>
+
+      {loadingItems && <Empty t={t} text="กำลังโหลด..." />}
+      {!loadingItems && items.length === 0 && <Empty t={t} text="ยังไม่มีรายการ — กดปุ่ม + เพื่อเพิ่มรายการแรก" />}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {itemsPagination.pageItems.map((it) => {
+          const Ic = typeIcon[it.type] || FileText;
+          return (
+            <button key={it.id} onClick={() => openItem(it)} style={{ ...card(t), padding: 12, display: "flex", alignItems: "center", gap: 10, border: `1px solid ${t.border}`, cursor: "pointer", textAlign: "left", width: "100%" }}>
+              <div style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: "grid", placeItems: "center", background: it.mode === "encrypted" ? "#E8894A22" : `${t.accent}22`, color: it.mode === "encrypted" ? "#E8894A" : t.accent }}><Ic size={17} /></div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: t.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.mode === "encrypted" ? "🔐" : "🔓"} {it.title}</div>
+                <div style={{ fontSize: 10.5, color: t.sub }}>{it.mode === "encrypted" ? "เข้ารหัสจริง" : "ล็อกหน้าจอ"} · {fmtBytes(it.file_size || 0)} · {new Date(it.created_at).toLocaleDateString("th-TH", { dateStyle: "medium" })}</div>
+              </div>
+              <ChevronRight size={16} color={t.faint} style={{ flexShrink: 0 }} />
+            </button>
+          );
+        })}
+      </div>
+      <PaginationBar t={t} page={itemsPagination.page} setPage={itemsPagination.setPage} totalPages={itemsPagination.totalPages} />
+
+      <button onClick={() => setAddOpen(true)} style={{ position: "fixed", right: 20, bottom: 96, width: 54, height: 54, borderRadius: 27, border: "none", background: t.accent, color: t.onAccent, fontSize: 26, boxShadow: `0 8px 20px ${t.accent}80`, cursor: "pointer", zIndex: 40 }}>+</button>
+
+      {addOpen && (
+        <ModalPortal>
+          <div style={overlay} onClick={() => { setAddOpen(false); resetAddForm(); }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "88vh", overflowY: "auto" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>เพิ่มรายการใหม่</div>
+                <button onClick={() => { setAddOpen(false); resetAddForm(); }} style={ghost}><X size={20} color={t.sub} /></button>
+              </div>
+
+              <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto" }}>
+                {[["text", "ข้อความ", FileText], ["image", "รูป", ImageIcon], ["file", "ไฟล์", Paperclip], ["video", "วิดีโอ", Video]].map(([v, lb, Ic]) => (
+                  <button key={v} onClick={() => { setNewType(v); setNewFile(null); }} style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 6, padding: "8px 13px", borderRadius: 12, border: `1.5px solid ${newType === v ? t.accent : t.border}`, background: newType === v ? t.accent : "transparent", color: newType === v ? t.onAccent : t.sub, fontSize: 12, fontWeight: 700, cursor: "pointer" }}><Ic size={13} /> {lb}</button>
+                ))}
+              </div>
+
+              <input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="ชื่อรายการ" style={{ ...input(t), marginBottom: 10 }} />
+
+              {newType === "text" ? (
+                <textarea value={newText} onChange={(e) => setNewText(e.target.value)} placeholder="เนื้อหา / รหัสผ่าน / API key ..." style={{ ...input(t), minHeight: 100, resize: "vertical", marginBottom: 10, fontFamily: "inherit" }} />
+              ) : (
+                <>
+                  <input ref={fileInputRef} type="file" accept={newType === "image" ? "image/*" : newType === "video" ? "video/*" : undefined} onChange={(e) => setNewFile(e.target.files?.[0] || null)} style={{ display: "none" }} />
+                  <button onClick={() => fileInputRef.current?.click()} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", padding: "13px 0", borderRadius: 12, border: `1.5px dashed ${t.accent}`, background: `${t.accent}10`, color: t.accent, fontWeight: 700, fontSize: 13, cursor: "pointer", marginBottom: 10 }}>
+                    <Upload size={16} /> {newFile ? `${newFile.name} (${fmtBytes(newFile.size)})` : "เลือกไฟล์"}
+                  </button>
+                </>
+              )}
+
+              <div style={{ fontSize: 11.5, fontWeight: 800, color: t.sub, marginBottom: 8 }}>ระดับความปลอดภัย</div>
+              <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                <button onClick={() => setNewMode("quick")} style={{ flex: 1, padding: "12px 8px", borderRadius: 14, border: `1.5px solid ${newMode === "quick" ? t.accent : t.border}`, background: newMode === "quick" ? `${t.accent}12` : "transparent", cursor: "pointer", textAlign: "center" }}>
+                  <div style={{ fontSize: 18 }}>🔓</div><div style={{ fontSize: 11.5, fontWeight: 800, color: t.text, marginTop: 2 }}>ล็อกหน้าจอ</div><div style={{ fontSize: 9.5, color: t.sub, marginTop: 2 }}>เร็ว กู้คืนได้ถ้าลืม</div>
+                </button>
+                <button onClick={() => setNewMode("encrypted")} style={{ flex: 1, padding: "12px 8px", borderRadius: 14, border: `1.5px solid ${newMode === "encrypted" ? "#E8894A" : t.border}`, background: newMode === "encrypted" ? "#E8894A12" : "transparent", cursor: "pointer", textAlign: "center" }}>
+                  <div style={{ fontSize: 18 }}>🔐</div><div style={{ fontSize: 11.5, fontWeight: 800, color: t.text, marginTop: 2 }}>เข้ารหัสจริง</div><div style={{ fontSize: 9.5, color: t.sub, marginTop: 2 }}>ลืมรหัส = กู้คืนไม่ได้</div>
+                </button>
+              </div>
+
+              {newMode === "encrypted" && (
+                <>
+                  <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="ตั้งรหัสผ่านของรายการนี้" style={{ ...input(t), marginBottom: 10 }} />
+                  <input type="password" value={newPassword2} onChange={(e) => setNewPassword2(e.target.value)} placeholder="ยืนยันรหัสผ่านอีกครั้ง" style={{ ...input(t), marginBottom: 10 }} />
+                  <div className="warn-box" style={{ display: "flex", gap: 8, background: "#E8894A1F", border: "1px solid #E8894A50", borderRadius: 12, padding: "10px 12px", fontSize: 11, color: "#8a5426", marginBottom: 14, lineHeight: 1.5 }}>⚠️ ถอดรหัสในเครื่องเท่านั้น ไม่ส่งรหัสผ่านขึ้นเซิร์ฟเวอร์เลย — ถ้าลืมรหัสนี้ จะกู้คืนเนื้อหาไม่ได้เลย แม้แต่แอดมิน</div>
+                </>
+              )}
+
+              {saveError && <div style={{ fontSize: 12, color: "#D9534F", marginBottom: 10 }}>{saveError}</div>}
+              <button onClick={saveItem} disabled={saving} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "13px 0" }}>{saving ? "กำลังบันทึก..." : "บันทึกรายการ"}</button>
+            </div>
+          </div>
+        </ModalPortal>
+      )}
+
+      {viewingItem && (
+        <ModalPortal>
+          <div style={overlay} onClick={closeView}>
+            <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "88vh", overflowY: "auto" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                <div style={{ fontSize: 15.5, fontWeight: 800, color: t.text }}>{viewingItem.mode === "encrypted" ? "🔐" : "🔓"} {viewingItem.title}</div>
+                <button onClick={closeView} style={ghost}><X size={20} color={t.sub} /></button>
+              </div>
+
+              {viewingItem.mode === "encrypted" && !viewContent && (
+                <>
+                  <div style={{ fontSize: 12, color: t.sub, marginBottom: 10 }}>รายการนี้เข้ารหัสไว้ — ใส่รหัสผ่านเพื่อถอดรหัส</div>
+                  <input type="password" value={viewPassword} onChange={(e) => setViewPassword(e.target.value)} placeholder="รหัสผ่านของรายการนี้" style={{ ...input(t), marginBottom: 10, textAlign: "center" }} autoFocus />
+                  {viewError && <div style={{ fontSize: 12, color: "#D9534F", marginBottom: 10 }}>{viewError}</div>}
+                  <button onClick={() => revealItem(viewingItem, viewPassword)} disabled={viewBusy || !viewPassword} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "12px 0" }}>{viewBusy ? "กำลังถอดรหัส..." : "ปลดล็อกรายการนี้"}</button>
+                </>
+              )}
+
+              {viewBusy && !viewContent && viewingItem.mode !== "encrypted" && <Empty t={t} text="กำลังโหลด..." />}
+
+              {viewContent?.kind === "text" && (
+                <div style={{ fontSize: 13.5, color: t.text, whiteSpace: "pre-wrap", lineHeight: 1.6, background: t.inputBg, borderRadius: 12, padding: 14, marginBottom: 14 }}>{viewContent.text}</div>
+              )}
+              {viewContent?.kind === "file" && (
+                <div style={{ marginBottom: 14 }}>
+                  {viewingItem.file_mime?.startsWith("image/") && <img src={viewContent.url} alt="" style={{ width: "100%", borderRadius: 12 }} />}
+                  {viewingItem.file_mime?.startsWith("video/") && <video src={viewContent.url} controls style={{ width: "100%", borderRadius: 12 }} />}
+                  {!viewingItem.file_mime?.startsWith("image/") && !viewingItem.file_mime?.startsWith("video/") && (
+                    <a href={viewContent.url} download={viewingItem.title} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "13px 0", borderRadius: 12, background: t.inputBg, color: t.accent, fontWeight: 700, fontSize: 13, textDecoration: "none" }}><Download size={16} /> ดาวน์โหลดไฟล์</a>
+                  )}
+                </div>
+              )}
+
+              {(viewContent || viewingItem.mode === "quick") && (
+                <button onClick={() => askConfirm(`ลบ "${viewingItem.title}" เลยไหม? ลบแล้วกู้คืนไม่ได้`, () => deleteItem(viewingItem))} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", padding: "11px 0", borderRadius: 12, border: "1px solid #D9534F55", background: "none", color: "#D9534F", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}><Trash2 size={14} /> ลบรายการนี้</button>
+              )}
+            </div>
+          </div>
+        </ModalPortal>
+      )}
+      {ConfirmUI}
+    </>
+  );
+}
+
 function GoalsReportPage({ t, lang, goals, setGoals, userId }) {
   const [expandedGroup, setExpandedGroup] = useState(null); // label ของกลุ่มที่กำลังขยายดู log อยู่
   const dated = goals.filter((g) => g.date);
@@ -9364,6 +9725,14 @@ function NotePage({ t, lang, notes, setNotes, isNight, userId, session, authProf
   const [tagSheetOpen, setTagSheetOpen] = useState(false); // 🏷️ กางดูแท็กทั้งหมดแบบค้นหาได้ (เผื่อมีแท็กเยอะๆ ในอนาคต)
   const [tagSheetSearch, setTagSheetSearch] = useState("");
   const [copiedNoteId, setCopiedNoteId] = useState(null); // 📋 โชว์ ✓ ชั่วคราวตอนกด copy โน้ต
+  const [vaultSentId, setVaultSentId] = useState(null); // 🔒 โชว์ ✓ ชั่วคราวตอนกดส่งเข้า Drive สำเร็จ
+  const sendNoteToVault = async (n) => {
+    if (!userId) return;
+    const text = blocksToPlainText(n.body);
+    const size = new TextEncoder().encode(text).length;
+    const { error } = await supabase.from("vault_items").insert({ user_id: userId, type: "text", title: n.title || "(ไม่มีหัวข้อ)", content: text, mode: "quick", file_size: size });
+    if (!error) { setVaultSentId(n.id); setTimeout(() => setVaultSentId(null), 1500); logAudit(userId, "vault", "add", `ส่งโน้ตเข้า Drive: ${n.title || "(ไม่มีหัวข้อ)"}`); }
+  };
 
   const parseTags = (str) => str.split(",").map((s) => s.trim()).filter(Boolean);
 
@@ -9668,6 +10037,7 @@ function NotePage({ t, lang, notes, setNotes, isNight, userId, session, authProf
                     {!exportMode && (<>
                     {n.notionId && <span title="sync ขึ้น Notion แล้ว" style={{ display: "grid", placeItems: "center", padding: 4 }}><Check size={14} color="#2E9E6B" /></span>}
                     <button onClick={() => copyNote(n)} style={ghost} title="คัดลอกเนื้อหาโน้ต">{copiedNoteId === n.id ? <Check size={15} color="#2E9E6B" /> : <Copy size={15} color={t.faint} />}</button>
+                    <button onClick={() => sendNoteToVault(n)} style={ghost} title="ส่งเข้า Drive ส่วนตัว">{vaultSentId === n.id ? <Check size={15} color="#2E9E6B" /> : <Lock size={15} color={t.faint} />}</button>
                     <button onClick={() => exportOneMd(n)} style={ghost} title="Export เป็น Markdown"><Download size={15} color={t.faint} /></button>
                     <button onClick={() => togglePin(n.id)} style={ghost} title={n.pinned ? "ปักหมุดแล้ว" : "ปักหมุด"}><Pin size={15} color={n.pinned ? t.accent : t.faint} fill={n.pinned ? t.accent : "none"} /></button>
                     <button onClick={() => openReminder("note", n.id, n.title || "โน้ตไม่มีหัวข้อ")} style={ghost} title="ตั้งเตือนโน้ตนี้"><Bell size={15} color={reminders.some((r) => r.targetType === "note" && r.targetId === n.id) ? t.accent : t.faint} fill={reminders.some((r) => r.targetType === "note" && r.targetId === n.id) ? t.accent : "none"} /></button>
@@ -9712,10 +10082,17 @@ const topicLabel = (id) => KNOWLEDGE_TOPICS.find((t) => t.id === id)?.label || i
 
 function IdeasPage({ t, lang, M, userId, session, authProfile, setAuthProfile, setNotes, setChatOpen, setAskAiTopic }) {
   const [notedIds, setNotedIds] = useState({}); // article.id -> true ถ้าเพิ่งส่งเข้าโน้ตไปแล้ว (โชว์ปุ่มเขียวชั่วคราว)
+  const [vaultedIds, setVaultedIds] = useState({}); // article.id -> true ถ้าเพิ่งส่งเข้า Drive ไปแล้ว
   const notedTo = (article) => {
     sendToNotes(article);
     setNotedIds((m) => ({ ...m, [article.id]: true }));
     setTimeout(() => setNotedIds((m) => ({ ...m, [article.id]: false })), 2500);
+  };
+  const sendArticleToVault = async (article) => {
+    if (!userId) return;
+    const text = `${article.title}\n\n${(article.bullets || []).map((b) => `• ${b}`).join("\n")}`;
+    const { error } = await supabase.from("vault_items").insert({ user_id: userId, type: "text", title: article.title, content: text, mode: "quick", file_size: new TextEncoder().encode(text).length });
+    if (!error) { setVaultedIds((m) => ({ ...m, [article.id]: true })); setTimeout(() => setVaultedIds((m) => ({ ...m, [article.id]: false })), 2500); logAudit(userId, "vault", "add", `ส่งบทความเข้า Drive: ${article.title}`); }
   };
   const askAi = (article) => {
     setAskAiTopic({ title: article.title, bullets: article.bullets });
@@ -9944,6 +10321,7 @@ function IdeasPage({ t, lang, M, userId, session, authProfile, setAuthProfile, s
                     {speakingId === a.id ? <Pause size={16} color={t.accent} /> : <Volume2 size={16} color={t.faint} />}
                   </button>
                   <button onClick={() => toggleStar(a)} style={ghost} title={a.starred ? "บันทึกแล้ว" : "บันทึก"}><Bookmark size={17} color={a.starred ? t.accent : t.faint} fill={a.starred ? t.accent : "none"} /></button>
+                  <button onClick={() => sendArticleToVault(a)} style={ghost} title="ส่งเข้า Drive ส่วนตัว">{vaultedIds[a.id] ? <Check size={16} color="#2E9E6B" /> : <Lock size={15} color={t.faint} />}</button>
                 </div>
               </div>
               <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginTop: 10, lineHeight: 1.4 }}>{a.title}</div>
@@ -9980,6 +10358,7 @@ function IdeasPage({ t, lang, M, userId, session, authProfile, setAuthProfile, s
                       {speakingId === a.id ? <Pause size={16} color={t.accent} /> : <Volume2 size={16} color={t.faint} />}
                     </button>
                     <button onClick={() => toggleStar(a)} style={ghost} title="บันทึกแล้ว"><Bookmark size={17} color={t.accent} fill={t.accent} /></button>
+                    <button onClick={() => sendArticleToVault(a)} style={ghost} title="ส่งเข้า Drive ส่วนตัว">{vaultedIds[a.id] ? <Check size={16} color="#2E9E6B" /> : <Lock size={15} color={t.faint} />}</button>
                   </div>
                 </>
               )}
@@ -10025,6 +10404,7 @@ const NEWS_CATEGORY_GROUPS = [
 function NewsPage({ t, lang, userId, authProfile, setAuthProfile, setChatOpen, setAskAiTopic, hintDefs, seenHintKeys, dismissHint, setNotes, scrollToTop }) {
   const [category, setCategory] = useState(authProfile?.news_category || "tech");
   const [notedIds, setNotedIds] = useState({}); // article.link -> true ชั่วคราวหลังส่งเข้าโน้ตสำเร็จ (โชว์ติ๊กถูกเขียว เหมือนหน้าความรู้)
+  const [vaultedIds, setVaultedIds] = useState({}); // article.link -> true ชั่วคราวหลังส่งเข้า Drive สำเร็จ
   const [showArrowHint, arrowHintText, dismissArrowHint] = useHint("news_category_arrows", hintDefs, seenHintKeys, dismissHint); // 💡 แนะนำครั้งแรกว่าปัด/กดลูกศรเปลี่ยนหมวดได้ (ข้อความแก้ได้จากหน้าแอดมิน)
   const [menuOpen, setMenuOpen] = useState(false);
   useEffect(() => { scrollToTop?.(); }, [category]);
@@ -10198,6 +10578,16 @@ function NewsPage({ t, lang, userId, authProfile, setAuthProfile, setChatOpen, s
     if (userId) {
       await supabase.from("notes").insert({ id: newNote.id, user_id: userId, title: newNote.title, body: newNote.body, date: newNote.date, created_at: newNote.created_at, pinned: newNote.pinned, tags: newNote.tags });
       logAudit(userId, "notes", "add", "ส่งข่าวเข้าโน้ต: " + x.title);
+    }
+  };
+  const sendNewsToVault = async (x) => {
+    if (!userId) return;
+    const text = `${x.title}\n\n${x.summary || ""}\n\n🔗 ${x.link}`;
+    const { error } = await supabase.from("vault_items").insert({ user_id: userId, type: "text", title: x.title, content: text, mode: "quick", file_size: new TextEncoder().encode(text).length });
+    if (!error) {
+      setVaultedIds((m) => ({ ...m, [x.link]: true }));
+      setTimeout(() => setVaultedIds((m) => ({ ...m, [x.link]: false })), 2500);
+      logAudit(userId, "vault", "add", "ส่งข่าวเข้า Drive: " + x.title);
     }
   };
 
@@ -10390,6 +10780,10 @@ function NewsPage({ t, lang, userId, authProfile, setAuthProfile, setChatOpen, s
             <button onClick={() => sendNewsToNote(x)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px" }}>
               <StickyNote size={15} color={notedIds[x.link] ? "#2E9E6B" : t.faint} />
               <span style={{ fontSize: 11, color: notedIds[x.link] ? "#2E9E6B" : t.faint, fontWeight: 700, whiteSpace: "nowrap" }}>{notedIds[x.link] ? "ส่งแล้ว ✓" : "ส่งเข้าโน้ต"}</span>
+            </button>
+            <button onClick={() => sendNewsToVault(x)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px" }}>
+              <Lock size={15} color={vaultedIds[x.link] ? "#2E9E6B" : t.faint} />
+              <span style={{ fontSize: 11, color: vaultedIds[x.link] ? "#2E9E6B" : t.faint, fontWeight: 700, whiteSpace: "nowrap" }}>{vaultedIds[x.link] ? "ส่งแล้ว ✓" : "ส่งเข้า Drive"}</span>
             </button>
             <button onClick={() => askAi(x)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px" }}>
               <MessageCircle size={15} color={t.faint} />
