@@ -5599,6 +5599,8 @@ function AdminPage({ t, lang, session, userId, adminAlerts, setAdminAlerts, auth
   const [detailMember, setDetailMember] = useState(null); // เปิด detail sheet ของสมาชิกคนนี้อยู่
   const [memberSearch, setMemberSearch] = useState(""); // ค้นหาสมาชิกด้วยชื่อ/อีเมล
   const [memberFilter, setMemberFilter] = useState("all"); // all | pending | online — กดจากการ์ดสถิติในภาพรวม
+  const [familyFilterId, setFamilyFilterId] = useState("all"); // กรองตามครอบครัว — มีประโยชน์ตอนมีหลายครอบครัวในระบบ (multi-tenant)
+  const [familiesList, setFamiliesList] = useState([]); // [{id, name}] เผื่ออนาคตมีหลายครอบครัว
   const [billingSummary, setBillingSummary] = useState(null); // { total, paying, revenue } — เฉพาะ superadmin
   const [unreadFeedback, setUnreadFeedback] = useState(0);
 
@@ -5629,6 +5631,12 @@ function AdminPage({ t, lang, session, userId, adminAlerts, setAdminAlerts, auth
       const revenue = data.reduce((s, f) => s + (!f.bypass_billing && f.payment_status === "active" ? (PLAN_INFO[f.plan]?.price || 0) : 0), 0);
       setBillingSummary({ total, paying, revenue });
     })();
+  }, [authProfile?.is_superadmin, tab]);
+
+  // 🏠 โหลดรายชื่อครอบครัวทั้งหมด (id+name เบาๆ) ไว้ทำตัวกรอง — เผื่ออนาคตมีหลายครอบครัวในระบบ
+  useEffect(() => {
+    if (!authProfile?.is_superadmin) return;
+    supabase.from("families").select("id,name").order("created_at", { ascending: true }).then(({ data }) => setFamiliesList(data || []));
   }, [authProfile?.is_superadmin, tab]);
 
   // 💬 นับข้อเสนอแนะที่ยังไม่ได้อ่าน — โชว์เป็นเลขแจ้งเตือนในภาพรวม
@@ -5668,10 +5676,13 @@ function AdminPage({ t, lang, session, userId, adminAlerts, setAdminAlerts, auth
   const onlineMembers = members.filter((m) => isOnline(m.last_seen));
   const recentMembers = [...members].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5);
 
-  // 🔍 รายการสมาชิกหลังกรอง (ค้นหา + ฟิลเตอร์จากการ์ดสถิติ) ใช้ในแท็บ "สมาชิก"
+  // 🔍 รายการสมาชิกหลังกรอง (ค้นหา + ฟิลเตอร์จากการ์ดสถิติ + ครอบครัว) ใช้ในแท็บ "สมาชิก"
   const filteredMembers = members
     .filter((m) => memberFilter === "pending" ? !m.approved : memberFilter === "online" ? isOnline(m.last_seen) : true)
+    .filter((m) => familyFilterId === "all" || m.family_id === familyFilterId)
     .filter((m) => !memberSearch.trim() || (m.name || "").toLowerCase().includes(memberSearch.trim().toLowerCase()) || (m.email || "").toLowerCase().includes(memberSearch.trim().toLowerCase()));
+  const familyNameOf = (id) => familiesList.find((f) => f.id === id)?.name;
+  const membersPagination = usePagination(filteredMembers, 15, `${memberFilter}|${familyFilterId}|${memberSearch}`);
 
   const AvatarDot = ({ m, size = 40 }) => (
     <div style={{ position: "relative", flexShrink: 0 }}>
@@ -5684,9 +5695,22 @@ function AdminPage({ t, lang, session, userId, adminAlerts, setAdminAlerts, auth
     </div>
   );
 
+  // 🏷️ หัวข้อ/ไอคอนของแต่ละหมวด — แทนที่จะขึ้น "Admin" ตายตัวทุกหน้า ให้รู้ชัดว่ากำลังอยู่หมวดไหน
+  const TAB_HEAD = {
+    overview: { title: L(lang, "ph_admin_title"), sub: L(lang, "ph_admin_sub"), Ic: ShieldCheck },
+    members: { title: "สมาชิก", sub: "ดู/ค้นหา/จัดการสิทธิ์สมาชิกทั้งหมด", Ic: Users },
+    activity: { title: "กิจกรรม", sub: "Activity log และข้อเสนอแนะจากผู้ใช้", Ic: Clock },
+    announce: { title: "ประกาศ", sub: "ส่งข้อความถึงทุกคนในแอป", Ic: Bell },
+    news: { title: "ข่าวสาร", sub: "จัดการหมวดหมู่และแหล่งข่าว", Ic: Newspaper },
+    hints: { title: "คำแนะนำการใช้งาน", sub: "ข้อความ coachmark ที่โชว์ในแอป", Ic: HelpCircle },
+    add: { title: "เพิ่มสมาชิกด้วย PIN", sub: "สำหรับผู้ใหญ่ที่ไม่ถนัดใช้อีเมล", Ic: Plus },
+    billing: { title: "แพ็กเกจ", sub: "จัดการแพ็กเกจ/บิลลิ่งทุกครอบครัวในระบบ", Ic: CreditCard },
+  };
+  const head = TAB_HEAD[tab] || TAB_HEAD.overview;
+
   return (
     <>
-      <PageHead t={t} title={L(lang, "ph_admin_title")} sub={L(lang, "ph_admin_sub")} icon={<ShieldCheck size={20} color={t.accent} />} />
+      <PageHead t={t} title={head.title} sub={head.sub} icon={<head.Ic size={20} color={t.accent} />} />
 
       {adminAlerts.length > 0 && (
         <div style={{ ...card(t), padding: 14, marginBottom: 14, border: `1px solid ${t.accent}55` }}>
@@ -5861,14 +5885,21 @@ function AdminPage({ t, lang, session, userId, adminAlerts, setAdminAlerts, auth
             <Search size={15} color={t.faint} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
             <input value={memberSearch} onChange={(e) => setMemberSearch(e.target.value)} placeholder="ค้นหาชื่อ/อีเมล..." style={{ ...input(t), paddingLeft: 34 }} />
           </div>
-          <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
+          <div style={{ display: "flex", gap: 8, marginBottom: 4, overflowX: "auto", paddingBottom: 2 }}>
             {[["all", `ทั้งหมด (${members.length})`], ["pending", `รออนุมัติ (${pendingCount})`], ["online", `ออนไลน์ (${onlineMembers.length})`]].map(([v, lb]) => (
-              <button key={v} onClick={() => setMemberFilter(v)} style={{ flexShrink: 0, padding: "7px 13px", borderRadius: 10, cursor: "pointer", border: `1.5px solid ${memberFilter === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 11.5, background: memberFilter === v ? t.accent : "transparent", color: memberFilter === v ? t.onAccent : t.sub }}>{lb}</button>
+              <button key={v} onClick={() => setMemberFilter(v)} style={{ flexShrink: 0, padding: "7px 13px", borderRadius: 10, cursor: "pointer", border: `1.5px solid ${memberFilter === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 11.5, background: memberFilter === v ? t.accent : "transparent", color: memberFilter === v ? t.onAccent : t.sub, whiteSpace: "nowrap" }}>{lb}</button>
             ))}
           </div>
+          {familiesList.length > 1 && (
+            <select value={familyFilterId} onChange={(e) => setFamilyFilterId(e.target.value)} style={{ border: `1px solid ${t.border}`, borderRadius: 10, background: t.inputBg, color: t.text, fontWeight: 700, fontSize: 12, padding: "8px 10px", marginBottom: 4 }}>
+              <option value="all">ทุกครอบครัว</option>
+              {familiesList.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+            </select>
+          )}
           {loadingList && <Empty t={t} text="กำลังโหลด..." />}
           {!loadingList && filteredMembers.length === 0 && <Empty t={t} text="ไม่พบสมาชิกที่ตรงกับเงื่อนไข" />}
-          {filteredMembers.map((m) => (
+          {!loadingList && filteredMembers.length > 0 && <PaginationBar t={t} page={membersPagination.page} setPage={membersPagination.setPage} totalPages={membersPagination.totalPages} />}
+          {membersPagination.pageItems.map((m) => (
             <button key={m.id} onClick={() => setDetailMember(m)} style={{ ...card(t), padding: 12, display: "flex", alignItems: "center", gap: 10, cursor: "pointer", border: `1px solid ${t.border}`, borderLeft: `3px solid ${m.approved ? "#2E9E6B" : "#D9534F"}`, textAlign: "left", width: "100%" }}>
               <AvatarDot m={m} size={38} />
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -5876,12 +5907,13 @@ function AdminPage({ t, lang, session, userId, adminAlerts, setAdminAlerts, auth
                   {m.name || m.email}
                   {m.role === "admin" && <span style={{ fontSize: 9, fontWeight: 800, color: t.accent, background: `${t.accent}18`, padding: "1px 6px", borderRadius: 8, flexShrink: 0 }}>ADMIN</span>}
                 </div>
-                <div style={{ fontSize: 11, color: t.sub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.login_type === "pin" ? `ชื่อผู้ใช้: ${m.username}` : m.email}</div>
+                <div style={{ fontSize: 11, color: t.sub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.login_type === "pin" ? `ชื่อผู้ใช้: ${m.username}` : m.email}{familiesList.length > 1 && familyNameOf(m.family_id) ? ` · ${familyNameOf(m.family_id)}` : ""}</div>
               </div>
               {!m.approved && <span style={{ fontSize: 10, fontWeight: 700, color: "#D9534F", background: "#D9534F18", padding: "3px 8px", borderRadius: 10, flexShrink: 0 }}>รออนุมัติ</span>}
               <ChevronRight size={17} color={t.faint} style={{ flexShrink: 0 }} />
             </button>
           ))}
+          {!loadingList && filteredMembers.length > 0 && <PaginationBar t={t} page={membersPagination.page} setPage={membersPagination.setPage} totalPages={membersPagination.totalPages} />}
         </div>
       )}
 
