@@ -10660,6 +10660,40 @@ function LangPage({ t, lang, userId, session, authProfile, scrollToTop }) {
   const [addTopicOpen, setAddTopicOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false); // ⚙️ แผงระดับ + ประเภทเนื้อหา (คำศัพท์/ประโยค) รวมไว้ที่เดียว
   const [bouncingView, setBouncingView] = useState(null); // 🎾 id ของไอคอนมินิด็อกที่กำลังเล่นเอฟเฟกต์เด้งอยู่
+
+  // 🎡 วงล้อเลื่อนมินิด็อก — เลื่อนนิ้วแล้ว snap ตัวกึ่งกลางเปลี่ยนโหมดให้เองอัตโนมัติ (debounce กันเปลี่ยนถี่ระหว่างเลื่อนผ่าน)
+  const dockScrollRef = useRef(null);
+  const dockScrollTimeoutRef = useRef(null);
+  const playBounce = (id) => { setBouncingView(id); setTimeout(() => setBouncingView((b) => (b === id ? null : b)), 320); };
+  const handleDockScroll = () => {
+    if (dockScrollTimeoutRef.current) clearTimeout(dockScrollTimeoutRef.current);
+    dockScrollTimeoutRef.current = setTimeout(() => {
+      const el = dockScrollRef.current;
+      if (!el) return;
+      const containerCenter = el.scrollLeft + el.clientWidth / 2;
+      let closestId = null, closestDist = Infinity;
+      Array.from(el.children).forEach((child) => {
+        const id = child.dataset.viewId;
+        if (!id) return;
+        const childCenter = child.offsetLeft + child.offsetWidth / 2;
+        const dist = Math.abs(childCenter - containerCenter);
+        if (dist < closestDist) { closestDist = dist; closestId = id; }
+      });
+      if (closestId && closestId !== view) { setView(closestId); playBounce(closestId); }
+    }, 120); // รอเลื่อนนิ่งก่อนค่อยตัดสินใจ กันกระตุกตอนไถผ่านหลายอันรวด
+  };
+  const selectDockView = (id) => {
+    const el = dockScrollRef.current;
+    const child = el?.querySelector(`[data-view-id="${id}"]`);
+    child?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    setView(id);
+    playBounce(id);
+  };
+  useEffect(() => {
+    const el = dockScrollRef.current;
+    const child = el?.querySelector(`[data-view-id="${view}"]`);
+    child?.scrollIntoView({ behavior: "auto", inline: "center", block: "nearest" });
+  }, []); // แค่ตอนโหลดหน้าครั้งแรกพอ ไม่งั้นวงล้อจะเริ่มที่ซ้ายสุดไม่ตรงกับโหมดเริ่มต้น "เรียนรู้"
   const loadCustomTopics = () => {
     if (!userId) return;
     supabase.from("vocab_custom_categories").select("*").eq("user_id", userId).order("created_at", { ascending: true }).then(({ data, error }) => {
@@ -11102,18 +11136,30 @@ function LangPage({ t, lang, userId, session, authProfile, scrollToTop }) {
       </ModalPortal>
     )}
 
-    {/* 🎯 มินิด็อกลอย — 8 โหมด จัดกึ่งกลาง เอฟเฟกต์เด้งตอนกด ต้องครอบด้วย ModalPortal เพราะ position:fixed ที่อยู่ในกล่อง transform:scale (ปรับขนาดตัวอักษร) จะเพี้ยน ไม่งั้น (บทเรียนราคาแพงจากบั๊กก่อนหน้า) */}
+    {/* 🎯 มินิด็อกลอย — แบบวงล้อเลื่อน (carousel) เลื่อนนิ้วแล้ว snap ให้ตัวกลางเด่นขึ้นเองอัตโนมัติ กดอันไหนก็เลื่อนไปกึ่งกลางให้ทันที ต้องครอบด้วย ModalPortal เพราะ position:fixed ที่อยู่ในกล่อง transform:scale (ปรับขนาดตัวอักษร) จะเพี้ยน ไม่งั้น (บทเรียนราคาแพงจากบั๊กก่อนหน้า) */}
     <ModalPortal>
-      <style>{`@keyframes rh-dock-bounce { 0% { transform: scale(1); } 35% { transform: scale(1.32); } 60% { transform: scale(0.92); } 100% { transform: scale(1); } }`}</style>
+      <style>{`
+        @keyframes rh-dock-bounce { 0% { transform: scale(1); } 35% { transform: scale(1.32); } 60% { transform: scale(0.92); } 100% { transform: scale(1); } }
+        .rh-wheel::-webkit-scrollbar { display: none; }
+      `}</style>
       <div style={{ position: "fixed", left: 0, right: 0, bottom: 88, zIndex: 45, display: "flex", justifyContent: "center", pointerEvents: "none" }}>
-        <div style={{ display: "flex", justifyContent: "center", gap: 4, background: t.page, borderRadius: 20, boxShadow: "0 6px 20px rgba(0,0,0,.15)", padding: "8px 6px", pointerEvents: "auto", maxWidth: "94%", overflowX: "auto" }}>
-          {[["learn", "🎓", "เรียนรู้"], ["review", "🔁", "ทบทวน"], ["quiz", "🧪", "ทดสอบ"], ["listen", "🎧", "ฟัง"], ["speak", "🎤", "พูด"], ["write", "✍️", "เขียน"], ["manage", "📋", "จัดการ"], ["history", "📊", "ประวัติ"]].map(([id, icon, lb]) => (
-            <button key={id} onClick={() => { setView(id); setBouncingView(id); setTimeout(() => setBouncingView((b) => (b === id ? null : b)), 320); }}
-              style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, width: 52, padding: "6px 2px", borderRadius: 14, border: "none", cursor: "pointer", background: view === id ? `${t.accent}18` : "transparent" }}>
-              <span style={{ fontSize: 17, display: "inline-block", animation: bouncingView === id ? "rh-dock-bounce .32s cubic-bezier(.34,1.56,.64,1)" : "none" }}>{icon}</span>
-              <span style={{ fontSize: 9, fontWeight: 700, color: view === id ? t.accent : t.faint }}>{lb}</span>
-            </button>
-          ))}
+        <div style={{ position: "relative", width: "100%", maxWidth: 440, pointerEvents: "auto" }}>
+          <div style={{ background: t.page, borderRadius: 20, boxShadow: "0 6px 20px rgba(0,0,0,.15)", padding: "10px 0", overflow: "hidden", position: "relative" }}>
+            {/* แถบไฮไลต์กึ่งกลางเหมือนวงล้อ */}
+            <div style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%,-50%)", width: 60, height: 52, borderRadius: 16, background: `${t.accent}14`, border: `1.5px solid ${t.accent}33`, pointerEvents: "none" }} />
+            <div ref={dockScrollRef} onScroll={handleDockScroll} className="rh-wheel" style={{ display: "flex", gap: 4, overflowX: "auto", scrollSnapType: "x mandatory", scrollBehavior: "smooth", padding: "0 calc(50% - 30px)", WebkitOverflowScrolling: "touch" }}>
+              {[["learn", "🎓", "เรียนรู้"], ["review", "🔁", "ทบทวน"], ["quiz", "🧪", "ทดสอบ"], ["listen", "🎧", "ฟัง"], ["speak", "🎤", "พูด"], ["write", "✍️", "เขียน"], ["manage", "📋", "จัดการ"], ["history", "📊", "ประวัติ"]].map(([id, icon, lb]) => {
+                const active = view === id;
+                return (
+                  <button key={id} data-view-id={id} onClick={() => selectDockView(id)}
+                    style={{ flexShrink: 0, scrollSnapAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, width: 60, height: 52, borderRadius: 14, border: "none", background: "none", cursor: "pointer", transition: "opacity .2s", opacity: active ? 1 : 0.45 }}>
+                    <span style={{ fontSize: active ? 20 : 16, display: "inline-block", transition: "font-size .2s", animation: bouncingView === id ? "rh-dock-bounce .32s cubic-bezier(.34,1.56,.64,1)" : "none" }}>{icon}</span>
+                    <span style={{ fontSize: active ? 9.5 : 8.5, fontWeight: 700, color: active ? t.accent : t.faint, transition: "font-size .2s" }}>{lb}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
 
