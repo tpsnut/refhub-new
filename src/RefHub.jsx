@@ -10681,23 +10681,38 @@ function LangPage({ t, lang, userId, session, authProfile, scrollToTop }) {
     if (closeWheelTimeoutRef.current) clearTimeout(closeWheelTimeoutRef.current);
     closeWheelTimeoutRef.current = setTimeout(() => setWheelOpen(false), 480); // หน่วงนิดให้เห็นเอฟเฟกต์เด้งยืนยันตัวที่เลือกก่อน ค่อยเลื่อนหายลงไปเป็นปุ่มเล็ก
   };
+  const confirmCenteredView = () => {
+    const el = dockScrollRef.current;
+    if (!el) return null;
+    const containerCenter = el.scrollLeft + el.clientWidth / 2;
+    let closestId = null, closestDist = Infinity;
+    Array.from(el.children).forEach((child) => {
+      const id = child.dataset.viewId;
+      if (!id) return;
+      const childCenter = child.offsetLeft + child.offsetWidth / 2;
+      const dist = Math.abs(childCenter - containerCenter);
+      if (dist < closestDist) { closestDist = dist; closestId = id; }
+    });
+    if (closestId && closestId !== view) { setView(closestId); playBounce(closestId); }
+    return closestId;
+  };
+  const dockTouchingRef = useRef(false); // 👆 นิ้วยังแตะวงล้ออยู่ไหม — ระหว่างนี้ห้ามปิดวงล้อเด็ดขาด ต่อให้เลื่อนหยุดนิ่งชั่วขณะระหว่างลาก
   const handleDockScroll = () => {
+    // ระหว่างเลื่อน แค่อัปเดตว่าตอนนี้ตัวไหนอยู่กึ่งกลาง (ไว้โชว์พรีวิว) ไม่ปิดวงล้อจากตรงนี้เด็ดขาด ต้องรอปล่อยนิ้วก่อนเท่านั้น (handleDockTouchEnd)
     if (dockScrollTimeoutRef.current) clearTimeout(dockScrollTimeoutRef.current);
     dockScrollTimeoutRef.current = setTimeout(() => {
-      const el = dockScrollRef.current;
-      if (!el) return;
-      const containerCenter = el.scrollLeft + el.clientWidth / 2;
-      let closestId = null, closestDist = Infinity;
-      Array.from(el.children).forEach((child) => {
-        const id = child.dataset.viewId;
-        if (!id) return;
-        const childCenter = child.offsetLeft + child.offsetWidth / 2;
-        const dist = Math.abs(childCenter - containerCenter);
-        if (dist < closestDist) { closestDist = dist; closestId = id; }
-      });
-      if (closestId && closestId !== view) { setView(closestId); playBounce(closestId); }
-      scheduleWheelClose();
-    }, 120); // รอเลื่อนนิ่งก่อนค่อยตัดสินใจ กันกระตุกตอนไถผ่านหลายอันรวด
+      confirmCenteredView();
+      if (!dockTouchingRef.current) scheduleWheelClose(); // เผื่อกรณี scroll แบบไม่มี touch (เช่นลาก scrollbar บนคอม) นิ้วไม่ได้แตะจริง ก็ปิดได้ตามปกติ
+    }, 120);
+  };
+  const handleDockTouchStart = () => {
+    dockTouchingRef.current = true;
+    if (closeWheelTimeoutRef.current) clearTimeout(closeWheelTimeoutRef.current); // ยกเลิกตัวนับถอยหลังปิดใดๆที่ค้างอยู่ทันทีที่นิ้วแตะ
+  };
+  const handleDockTouchEnd = () => {
+    dockTouchingRef.current = false;
+    // รอให้ scroll-snap เลื่อนนิ่งสนิทก่อนค่อยยืนยันตัวกึ่งกลางแล้วค่อยเริ่มนับถอยหลังปิด
+    setTimeout(() => { confirmCenteredView(); scheduleWheelClose(); }, 150);
   };
   const selectDockView = (id) => {
     const el = dockScrollRef.current;
@@ -11170,13 +11185,16 @@ function LangPage({ t, lang, userId, session, authProfile, scrollToTop }) {
         </button>
       </div>
 
+      {/* กดพื้นที่เปล่านอกวงล้อเพื่อปิดได้ — โปร่งใสสนิท ไม่บังอะไร แค่ดักแตะ */}
+      {wheelOpen && <div onClick={() => setWheelOpen(false)} onTouchStart={() => setWheelOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 44 }} />}
+
       {/* วงล้อเต็ม — โผล่มาตอนกดปุ่มเล็กด้านบน */}
       <div style={{ position: "fixed", left: 0, right: 0, bottom: 88, zIndex: 45, display: "flex", justifyContent: "center", opacity: wheelOpen ? 1 : 0, transform: `translateY(${wheelOpen ? 0 : 20}px)`, pointerEvents: wheelOpen ? "auto" : "none", transition: "opacity .25s, transform .25s" }}>
         <div style={{ position: "relative", width: "100%", maxWidth: 440 }}>
           <div style={{ background: t.page, borderRadius: 20, boxShadow: "0 6px 20px rgba(0,0,0,.15)", padding: "10px 0", overflow: "hidden", position: "relative" }}>
             {/* แถบไฮไลต์กึ่งกลางเหมือนวงล้อ */}
             <div style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%,-50%)", width: 60, height: 52, borderRadius: 16, background: `${t.accent}14`, border: `1.5px solid ${t.accent}33`, pointerEvents: "none" }} />
-            <div ref={dockScrollRef} onScroll={handleDockScroll} className="rh-wheel" style={{ display: "flex", gap: 4, overflowX: "auto", scrollSnapType: "x mandatory", scrollBehavior: "smooth", padding: "0 calc(50% - 30px)", WebkitOverflowScrolling: "touch" }}>
+            <div ref={dockScrollRef} onScroll={handleDockScroll} onTouchStart={handleDockTouchStart} onTouchEnd={handleDockTouchEnd} onMouseDown={handleDockTouchStart} onMouseUp={handleDockTouchEnd} className="rh-wheel" style={{ display: "flex", gap: 4, overflowX: "auto", scrollSnapType: "x mandatory", scrollBehavior: "smooth", padding: "0 calc(50% - 30px)", WebkitOverflowScrolling: "touch" }}>
               {DOCK_MODES.map(({ id, icon, label }) => {
                 const active = view === id;
                 return (
