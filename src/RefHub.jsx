@@ -6,7 +6,7 @@ import {
   Sparkles, Clock, Search, Volume2, VolumeX, Pencil, Download, ArrowLeft, Users, Camera, Phone, Mic, MicOff, PhoneOff, RefreshCw,
   Utensils, Car, ShoppingBag, Receipt, Gamepad2, HeartPulse, Briefcase, Gift, Coffee, Music,
   Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi, MessageCircle, MoreVertical, KeyRound, MapPin, Copy, LockKeyhole, LogOut, LayoutGrid, Maximize2, Volume1, Settings, Bookmark, Share2, Repeat2, Heart, User, Pin,
-  Heading1, Heading3, ListOrdered, ListTree, Quote, Code2, Minus, Table2, Video, Smile, RotateCcw, GripVertical, ChevronLeft, ChevronUp, ChevronDown, Repeat, Repeat1, Shuffle, Timer, Lock, HelpCircle, Info
+  Heading1, Heading3, ListOrdered, ListTree, Quote, Code2, Minus, Table2, Video, Smile, RotateCcw, GripVertical, ChevronLeft, ChevronUp, ChevronDown, Repeat, Repeat1, Shuffle, Timer, Lock, HelpCircle, Info, CreditCard, Crown
 } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, ResponsiveContainer, Tooltip } from "recharts";
 // 🔀 dnd-kit — ใช้ทำ "ลากวางจัดเรียงจริง" (drag & drop) ทั่วแอป แทนปุ่มขึ้น/ลง — รองรับ touch บนมือถือมาให้เลย
@@ -989,7 +989,7 @@ const STRINGS = {
     dock_home: "หน้าแรก", dock_ideas: "ไอเดีย", dock_trade: "ลงทุน", dock_news: "ข่าว", dock_lang: "ภาษา", dock_note: "โน้ต",
     menu_title: "เมนู", menu_sub: "พาไปหน้า/ฟีเจอร์ใหญ่ๆ ที่แยกจากหน้าปัจจุบัน",
     menu_admin: "หน้า Admin", menu_media: "สื่อ", menu_chat: "แชท", menu_locations: "ตำแหน่งล่าสุด",
-    menu_account: "ตั้งค่าบัญชี", menu_activity: "ประวัติการใช้งานของฉัน", menu_lang: "เปลี่ยนภาษา", menu_security: "ความปลอดภัย/ความเป็นส่วนตัว", menu_help: "ช่วยเหลือ/FAQ", menu_about: "เกี่ยวกับแอป",
+    menu_account: "ตั้งค่าบัญชี", menu_activity: "ประวัติการใช้งานของฉัน", menu_lang: "เปลี่ยนภาษา", menu_security: "ความปลอดภัย/ความเป็นส่วนตัว", menu_help: "ช่วยเหลือ/FAQ", menu_about: "เกี่ยวกับแอป", menu_plan: "แพ็กเกจของฉัน",
     menu_signout: "ออกจากระบบ",
     quick_theme: "ธีมสีแอป", quick_font: "ขนาดตัวอักษร", quick_daynight: "โหมดกลางวัน-กลางคืน", quick_shape: "ทรงกรอบการ์ด", quick_layout: "โครงหน้า Home",
     ph_finance_title: "การเงิน", ph_finance_sub: "รายรับ–รายจ่าย · ใช้ได้จริงทุกวัน",
@@ -1014,7 +1014,7 @@ const STRINGS = {
     dock_home: "Home", dock_ideas: "Ideas", dock_trade: "Trade", dock_news: "News", dock_lang: "Lang", dock_note: "Note",
     menu_title: "Menu", menu_sub: "Jump to other pages/major features",
     menu_admin: "Admin Page", menu_media: "Media", menu_chat: "Chat", menu_locations: "Recent Location",
-    menu_account: "Account Settings", menu_activity: "My Activity History", menu_lang: "Change Language", menu_security: "Security & Privacy", menu_help: "Help & FAQ", menu_about: "About the App",
+    menu_account: "Account Settings", menu_activity: "My Activity History", menu_lang: "Change Language", menu_security: "Security & Privacy", menu_help: "Help & FAQ", menu_about: "About the App", menu_plan: "My Plan",
     menu_signout: "Sign Out",
     quick_theme: "App Theme", quick_font: "Font Size", quick_daynight: "Day / Night Mode", quick_shape: "Card Shape", quick_layout: "Home Layout",
     ph_finance_title: "Finance", ph_finance_sub: "Income–expenses · for real everyday use",
@@ -1128,6 +1128,7 @@ export default function RefHub() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [myActivityOpen, setMyActivityOpen] = useState(false);
+  const [planOpen, setPlanOpen] = useState(false); // 💳 หน้าแพ็กเกจของฉัน (ดูสถานะแพ็กเกจ/mock checkout/เข้าร่วมครอบครัว)
   const [chatUnread, setChatUnread] = useState(0); // จำนวนข้อความแชทที่ยังไม่ได้อ่าน (คำนวณจริงในหน้าแชท)
   const [msgToast, setMsgToast] = useState(null); // ป็อปอัพแจ้งข้อความใหม่ทั่วทั้งแอป { name, text, threadId, at }
   useEffect(() => { if (!msgToast) return; const id = setTimeout(() => setMsgToast(null), 4000); return () => clearTimeout(id); }, [msgToast?.at]);
@@ -2220,6 +2221,9 @@ export default function RefHub() {
                 <button onClick={() => { setAccountSettingsOpen(true); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
                   <KeyRound size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "menu_account")}</span>
                 </button>
+                <button onClick={() => { setPlanOpen(true); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
+                  <CreditCard size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "menu_plan")}</span>
+                </button>
                 <button onClick={() => { setMyActivityOpen(true); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
                   <Clock size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "menu_activity")}</span>
                 </button>
@@ -2249,6 +2253,7 @@ export default function RefHub() {
         {helpOpen && <HelpFaqModal t={t} lang={lang} close={() => setHelpOpen(false)} />}
         {aboutOpen && <AboutAppModal t={t} lang={lang} close={() => setAboutOpen(false)} />}
         {accountSettingsOpen && <AccountSettingsModal t={t} authProfile={authProfile} setAuthProfile={setAuthProfile} userId={userId} session={session} close={() => setAccountSettingsOpen(false)} />}
+        {planOpen && <PlanModal t={t} userId={userId} authProfile={authProfile} profileName={profile?.name} close={() => setPlanOpen(false)} />}
         {myActivityOpen && <MyActivityModal t={t} userId={userId} close={() => setMyActivityOpen(false)} />}
         {communityOpen && <CommunityOverlay t={t} cardShape={cardShape} userId={userId} authProfile={authProfile} session={session} openThread={() => {}} close={() => setCommunityOpen(false)} />}
         {chatOpen && <ChatModal t={t} M={M} mentor={mentor} setMentor={setMentor} authProfile={authProfile} setAuthProfile={setAuthProfile} customMentors={customMentors} setCustomMentors={setCustomMentors} userId={userId} session={session} goals={goals} askAiTopic={askAiTopic} close={() => { setChatOpen(false); setAskAiTopic(null); }} />}
@@ -2929,6 +2934,219 @@ function AccountSettingsModal({ t, authProfile, setAuthProfile, userId, session,
         )}
       </div>
     </div>
+    </ModalPortal>
+  );
+}
+
+// 💳 แพ็กเกจ = ครอบครัว (tenant) หน่วยบิลลิ่งเดียว — solo คือครอบครัวขนาด 1 ที่นั่ง ใช้โครงสร้างเดียวกันหมด
+const PLAN_INFO = {
+  trial: { label: "ทดลองใช้ฟรี", price: 0, seats: 1 },
+  solo: { label: "Solo", price: 199, seats: 1 },
+  duo: { label: "Duo", price: 349, seats: 2 },
+  family_admin: { label: "Family Admin", price: 499, seats: 5 },
+};
+
+// 💳 หน้าแพ็กเกจของฉัน — ดูสถานะ/mock checkout (โหมดทดสอบ ยังไม่ต่อเกตเวย์จ่ายเงินจริง Omise/2C2P)
+// + เข้าร่วมครอบครัวด้วยรหัสเชิญผ่านฟังก์ชัน join_family_by_code (SECURITY DEFINER เช็คโควตาที่นั่งให้)
+function PlanModal({ t, userId, authProfile, profileName, close }) {
+  const [loading, setLoading] = useState(true);
+  const [family, setFamily] = useState(null); // { ...แถวจาก families, myRole }
+  const [members, setMembers] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [checkoutPlan, setCheckoutPlan] = useState(null);
+  const [joinCode, setJoinCode] = useState("");
+  const [joinBusy, setJoinBusy] = useState(false);
+  const [joinMsg, setJoinMsg] = useState("");
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const { data: prof } = await supabase.from("profiles").select("family_id, family_role").eq("id", userId).maybeSingle();
+      if (prof?.family_id) {
+        const { data: fam } = await supabase.from("families").select("*").eq("id", prof.family_id).maybeSingle();
+        if (fam) {
+          setFamily({ ...fam, myRole: prof.family_role });
+          const { data: mem } = await supabase.from("profiles").select("id,name,avatar_url,approved,family_role").eq("family_id", fam.id).order("created_at", { ascending: true });
+          setMembers(mem || []);
+        } else { setFamily(null); setMembers([]); }
+      } else { setFamily(null); setMembers([]); }
+    } catch (e) { console.error("โหลดข้อมูลแพ็กเกจไม่สำเร็จ:", e.message); }
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, [userId]);
+
+  const isOwner = family?.myRole === "owner";
+  const seatsUsed = members.length;
+
+  // 🧪 Mock checkout — โหมดทดสอบ ยังไม่หักเงินจริง จำลอง flow ให้ครบเพื่อเทสต์ UX ก่อนต่อเกตเวย์จริง
+  const confirmCheckout = async (planKey) => {
+    setBusy(true);
+    const info = PLAN_INFO[planKey];
+    const periodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    try {
+      if (!family) {
+        const { data: created, error } = await supabase.from("families").insert({
+          name: profileName ? `ครอบครัวของ ${profileName}` : "ครอบครัวของฉัน",
+          owner_id: userId, plan: planKey, max_seats: info.seats, payment_status: "active", current_period_end: periodEnd,
+        }).select().single();
+        if (error) throw error;
+        await supabase.from("profiles").update({ family_id: created.id, family_role: "owner" }).eq("id", userId);
+      } else {
+        const { error } = await supabase.from("families").update({
+          plan: planKey, max_seats: Math.max(info.seats, family.max_seats), payment_status: "active", current_period_end: periodEnd,
+        }).eq("id", family.id);
+        if (error) throw error;
+      }
+      setCheckoutPlan(null);
+      await load();
+    } catch (e) { alert("ชำระเงิน (ทดสอบ) ไม่สำเร็จ: " + e.message); }
+    setBusy(false);
+  };
+
+  const addExtraSeat = async () => {
+    if (!family) return;
+    setBusy(true);
+    await supabase.from("families").update({ max_seats: family.max_seats + 1 }).eq("id", family.id);
+    await load();
+    setBusy(false);
+  };
+
+  const cancelPlan = async () => {
+    if (!family) return;
+    setBusy(true);
+    await supabase.from("families").update({ payment_status: "canceled" }).eq("id", family.id);
+    await load();
+    setBusy(false);
+  };
+
+  const doJoin = async () => {
+    if (!joinCode.trim()) return;
+    setJoinBusy(true); setJoinMsg("");
+    try {
+      const { error } = await supabase.rpc("join_family_by_code", { p_family_code: joinCode.trim() });
+      if (error) throw error;
+      setJoinMsg("เข้าร่วมสำเร็จ! รอเจ้าของครอบครัวกดอนุมัติในหน้า Admin");
+      setJoinCode("");
+      await load();
+    } catch (e) { setJoinMsg(e.message.replace(/^.*: /, "")); }
+    setJoinBusy(false);
+  };
+
+  const statusLabel = { trialing: "ทดลองใช้", active: "ใช้งานอยู่", canceled: "ยกเลิกแล้ว (ใช้ได้ถึงหมดรอบ)", expired: "หมดอายุแล้ว" };
+  const statusColor = { trialing: "#3DA5D9", active: "#2E9E6B", canceled: "#E8894A", expired: "#D9534F" };
+
+  return (
+    <ModalPortal>
+      <div style={overlay} onClick={close}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "90vh", overflowY: "auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <div style={{ fontSize: 17, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 8 }}><CreditCard size={19} color={t.accent} /> แพ็กเกจของฉัน</div>
+            <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+          </div>
+
+          {loading ? (
+            <Empty t={t} text="กำลังโหลด..." />
+          ) : !family ? (
+            <div style={{ ...card(t), padding: 16, marginBottom: 16 }}>
+              <div style={{ fontSize: 13, color: t.sub }}>ยังไม่มีครอบครัว — เลือกแพ็กเกจด้านล่างเพื่อเริ่มต้น หรือกรอกรหัสเชิญด้านล่างสุดเพื่อเข้าร่วมครอบครัวที่มีอยู่แล้ว</div>
+            </div>
+          ) : (
+            <div style={{ ...card(t), padding: 16, marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>{PLAN_INFO[family.plan]?.label || family.plan}</div>
+                <span style={{ fontSize: 10.5, fontWeight: 700, color: statusColor[family.payment_status], background: `${statusColor[family.payment_status]}18`, padding: "3px 9px", borderRadius: 10 }}>
+                  {family.bypass_billing ? "ให้ใช้ฟรีโดยแอดมิน" : (statusLabel[family.payment_status] || family.payment_status)}
+                </span>
+              </div>
+              <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 4 }}>ที่นั่ง: {seatsUsed} / {family.max_seats} คน</div>
+              {family.current_period_end && <div style={{ fontSize: 12, color: t.faint, marginBottom: 4 }}>ต่ออายุ/หมดอายุ: {new Date(family.current_period_end).toLocaleDateString("th-TH", { dateStyle: "medium" })}</div>}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 10, paddingTop: 10, borderTop: `1px solid ${t.border}` }}>
+                <div style={{ fontSize: 11.5, color: t.sub }}>รหัสเชิญครอบครัว</div>
+                <button onClick={() => { navigator.clipboard?.writeText(family.family_code); }} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer" }}>
+                  <span style={{ fontSize: 14, fontWeight: 800, color: t.accent, letterSpacing: 2 }}>{family.family_code}</span><Copy size={13} color={t.faint} />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!loading && family && members.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 11.5, fontWeight: 800, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>สมาชิกในครอบครัว ({members.length})</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {members.map((m) => (
+                  <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: t.text }}>
+                    <div style={{ width: 26, height: 26, borderRadius: 8, background: colorFor(m.name || "?"), color: "#fff", display: "grid", placeItems: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{(m.name || "?")[0]}</div>
+                    <span style={{ flex: 1 }}>{m.name || "(ไม่มีชื่อ)"}</span>
+                    {m.family_role === "owner" && <span style={{ fontSize: 9.5, fontWeight: 800, color: t.accent }}>เจ้าของ</span>}
+                    {!m.approved && <span style={{ fontSize: 9.5, fontWeight: 700, color: "#D9534F" }}>รออนุมัติ</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!loading && (isOwner || !family) && (
+            <>
+              <div style={{ fontSize: 11.5, fontWeight: 800, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>เลือก/เปลี่ยนแพ็กเกจ (โหมดทดสอบ — ยังไม่หักเงินจริง)</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+                {["solo", "duo", "family_admin"].map((key) => {
+                  const info = PLAN_INFO[key];
+                  const isCurrent = family?.plan === key;
+                  return (
+                    <div key={key} style={{ ...card(t), padding: 12, display: "flex", alignItems: "center", justifyContent: "space-between", border: isCurrent ? `1.5px solid ${t.accent}` : `1px solid ${t.border}` }}>
+                      <div>
+                        <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text }}>{info.label} · {info.seats} ที่นั่ง</div>
+                        <div style={{ fontSize: 12, color: t.sub }}>{info.price}฿ / เดือน</div>
+                      </div>
+                      {isCurrent ? (
+                        <span style={{ fontSize: 11, fontWeight: 700, color: t.accent }}>ใช้อยู่ตอนนี้</span>
+                      ) : (
+                        <button onClick={() => setCheckoutPlan(key)} style={{ padding: "8px 14px", borderRadius: 10, border: "none", background: t.accent, color: t.onAccent, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>เลือก</button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {family && (
+                <button onClick={addExtraSeat} disabled={busy} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", padding: "10px 0", borderRadius: 12, border: `1px dashed ${t.border}`, background: "none", color: t.sub, fontSize: 12.5, fontWeight: 700, cursor: "pointer", marginBottom: 16 }}>
+                  <Plus size={14} /> เพิ่มที่นั่ง (+99฿/ที่นั่ง/เดือน) — ตอนนี้ {family.max_seats} ที่นั่ง
+                </button>
+              )}
+
+              {family && family.payment_status !== "canceled" && (
+                <button onClick={cancelPlan} disabled={busy} style={{ width: "100%", padding: "11px 0", borderRadius: 12, border: "1px solid #D9534F55", background: "none", color: "#D9534F", fontSize: 12.5, fontWeight: 700, cursor: "pointer", marginBottom: 16 }}>ยกเลิกแพ็กเกจ</button>
+              )}
+            </>
+          )}
+
+          {!loading && !isOwner && family && (
+            <div style={{ fontSize: 12, color: t.sub, marginBottom: 16 }}>เจ้าของครอบครัว ({members.find((m) => m.family_role === "owner")?.name || "-"}) เป็นผู้จัดการแพ็กเกจนี้</div>
+          )}
+
+          <div style={{ fontSize: 11.5, fontWeight: 800, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>เข้าร่วมครอบครัวอื่นด้วยรหัส</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input value={joinCode} onChange={(e) => setJoinCode(e.target.value.toUpperCase())} placeholder="กรอกรหัสเชิญ" style={{ ...input(t) }} />
+            <button onClick={doJoin} disabled={joinBusy} style={{ flexShrink: 0, padding: "0 16px", borderRadius: 12, border: "none", background: t.accent, color: t.onAccent, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>{joinBusy ? "..." : "เข้าร่วม"}</button>
+          </div>
+          {joinMsg && <div style={{ fontSize: 11.5, color: joinMsg.includes("สำเร็จ") ? "#2E9E6B" : "#D9534F", marginTop: 6 }}>{joinMsg}</div>}
+        </div>
+      </div>
+
+      {checkoutPlan && (
+        <div style={{ ...overlay, zIndex: 130 }} onClick={() => !busy && setCheckoutPlan(null)}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 400, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: t.text, marginBottom: 4 }}>ยืนยันการชำระเงิน</div>
+            <div style={{ fontSize: 11.5, color: "#E8894A", marginBottom: 14 }}>⚠️ โหมดทดสอบ — ยังไม่หักเงินจริง (รอต่อระบบชำระเงินจริง)</div>
+            <div style={{ ...card(t), padding: 14, marginBottom: 16, display: "flex", justifyContent: "space-between" }}>
+              <span style={{ fontSize: 13.5, fontWeight: 700, color: t.text }}>{PLAN_INFO[checkoutPlan].label} · {PLAN_INFO[checkoutPlan].seats} ที่นั่ง</span>
+              <span style={{ fontSize: 15, fontWeight: 800, color: t.accent }}>{PLAN_INFO[checkoutPlan].price}฿</span>
+            </div>
+            <button onClick={() => confirmCheckout(checkoutPlan)} disabled={busy} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "13px 0", marginBottom: 8 }}>{busy ? "กำลังดำเนินการ..." : "ยืนยันการชำระเงิน (ทดสอบ)"}</button>
+            <button onClick={() => setCheckoutPlan(null)} disabled={busy} style={{ width: "100%", padding: "11px 0", borderRadius: 12, border: "none", background: "none", color: t.sub, fontSize: 13, cursor: "pointer" }}>ยกเลิก</button>
+          </div>
+        </div>
+      )}
     </ModalPortal>
   );
 }
@@ -5449,7 +5667,7 @@ function AdminPage({ t, lang, session, userId, adminAlerts, setAdminAlerts, auth
 
       <div style={{ position: "relative", marginBottom: 14 }}>
         <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2 }}>
-          {[["overview", "ภาพรวม"], ["members", "สมาชิก"], ["activity", "กิจกรรม"], ["announce", "ประกาศ"], ["news", "ข่าวสาร"], ["hints", "คำแนะนำ"], ["add", "เพิ่มสมาชิก"]].map(([v, lb]) => (
+          {[["overview", "ภาพรวม"], ["members", "สมาชิก"], ["activity", "กิจกรรม"], ["announce", "ประกาศ"], ["news", "ข่าวสาร"], ["hints", "คำแนะนำ"], ["add", "เพิ่มสมาชิก"], ...(authProfile?.is_superadmin ? [["billing", "แพ็กเกจ"]] : [])].map(([v, lb]) => (
             <button key={v} onClick={() => setTab(v)} style={{ flexShrink: 0, padding: "9px 16px", borderRadius: 12, cursor: "pointer", border: `1.5px solid ${tab === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 12.5, background: tab === v ? t.accent : "transparent", color: tab === v ? t.onAccent : t.sub, whiteSpace: "nowrap" }}>{lb}</button>
           ))}
         </div>
@@ -5555,6 +5773,7 @@ function AdminPage({ t, lang, session, userId, adminAlerts, setAdminAlerts, auth
       {tab === "news" && <AdminNewsPanel t={t} />}
       {tab === "hints" && <AdminHintsPanel t={t} totalMembers={members.filter((m) => m.approved).length} />}
       {tab === "add" && <AdminAddPinMember t={t} session={session} onCreated={loadMembers} />}
+      {tab === "billing" && authProfile?.is_superadmin && <AdminBillingPanel t={t} />}
 
       {detailMember && (
         <ModalPortal>
@@ -5693,6 +5912,115 @@ function MemberDetailModal({ t, m, isSelf, isOnline, setApproved, setRole, setCa
       </div>
     </div>
     </ModalPortal>
+  );
+}
+
+// 💳 แผงแอดมิน "แพ็กเกจ" — เฉพาะ superadmin (Maxnuss) เห็นได้ทุกครอบครัวในระบบ (ตอนนี้มีครอบครัวเดียว รองรับหลายครอบครัวไว้แล้วสำหรับตอน SaaS)
+// ตั้งค่า plan/max_seats/bypass_billing/payment_status แบบแมนนวลได้ตรงๆ (ไม่ต้องผ่านการจ่ายเงินจริง) — ใช้เทสต์ + ใช้จริงตอนยังไม่มีเกตเวย์
+function AdminBillingPanel({ t }) {
+  const [families, setFamilies] = useState([]);
+  const [membersByFamily, setMembersByFamily] = useState({}); // { [family_id]: [profiles...] }
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(null); // family_id ที่กางรายละเอียดอยู่
+  const [busyId, setBusyId] = useState(null);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const { data: fams } = await supabase.from("families").select("*").order("created_at", { ascending: true });
+      const { data: profs } = await supabase.from("profiles").select("id,name,email,avatar_url,family_id,family_role,approved");
+      const grouped = {};
+      (profs || []).forEach((p) => { if (p.family_id) { (grouped[p.family_id] = grouped[p.family_id] || []).push(p); } });
+      setFamilies(fams || []);
+      setMembersByFamily(grouped);
+    } catch (e) { console.error("โหลดข้อมูลแพ็กเกจ (แอดมิน) ไม่สำเร็จ:", e.message); }
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
+
+  const updateFamily = async (id, patch) => {
+    setBusyId(id);
+    const { error } = await supabase.from("families").update(patch).eq("id", id);
+    if (error) alert("อัปเดตไม่สำเร็จ: " + error.message);
+    await load();
+    setBusyId(null);
+  };
+
+  const kickMember = async (memberId, familyId) => {
+    setBusyId(familyId);
+    await supabase.from("profiles").update({ family_id: null, family_role: "member" }).eq("id", memberId);
+    await load();
+    setBusyId(null);
+  };
+
+  const selectStyle = { border: `1px solid ${t.border}`, borderRadius: 8, background: t.inputBg, color: t.text, fontWeight: 700, fontSize: 12, padding: "5px 8px" };
+  const numInputStyle = { ...selectStyle, width: 56, textAlign: "center" };
+
+  if (loading) return <Empty t={t} text="กำลังโหลด..." />;
+  if (families.length === 0) return <Empty t={t} text="ยังไม่มีครอบครัวในระบบ" />;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 2 }}>ตั้งค่าแพ็กเกจ/สิทธิ์แต่ละครอบครัวด้วยมือได้ตรงนี้ — ไม่ต้องรอระบบจ่ายเงินจริง เหมาะกับตอนเทสต์และตอนต้องให้ใช้ฟรีเป็นกรณีพิเศษ</div>
+      {families.map((f) => {
+        const mem = membersByFamily[f.id] || [];
+        const isOpen = expanded === f.id;
+        const busy = busyId === f.id;
+        return (
+          <div key={f.id} style={{ ...card(t), padding: 14 }}>
+            <button onClick={() => setExpanded(isOpen ? null : f.id)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 6 }}>
+                  {f.name} {f.bypass_billing && <Crown size={13} color="#F2872E" />}
+                </div>
+                <div style={{ fontSize: 11.5, color: t.sub }}>{PLAN_INFO[f.plan]?.label || f.plan} · {mem.length}/{f.max_seats} ที่นั่ง · โค้ด {f.family_code}</div>
+              </div>
+              <ChevronDown size={16} color={t.faint} style={{ transform: isOpen ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
+            </button>
+
+            {isOpen && (
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${t.border}`, display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: 12.5, color: t.sub }}>แพ็กเกจ</span>
+                  <select value={f.plan} disabled={busy} onChange={(e) => updateFamily(f.id, { plan: e.target.value })} style={selectStyle}>
+                    {Object.entries(PLAN_INFO).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                  </select>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: 12.5, color: t.sub }}>ที่นั่งสูงสุด</span>
+                  <input type="number" min={1} value={f.max_seats} disabled={busy} onChange={(e) => updateFamily(f.id, { max_seats: Math.max(1, +e.target.value || 1) })} style={numInputStyle} />
+                </div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: 12.5, color: t.sub }}>สถานะการจ่ายเงิน</span>
+                  <select value={f.payment_status} disabled={busy} onChange={(e) => updateFamily(f.id, { payment_status: e.target.value })} style={selectStyle}>
+                    {["trialing", "active", "canceled", "expired"].map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: 12.5, color: t.sub }}>ให้ใช้ฟรีตลอด (bypass การจ่ายเงิน)</span>
+                  <button onClick={() => updateFamily(f.id, { bypass_billing: !f.bypass_billing })} disabled={busy} style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 10px", borderRadius: 10, border: `1px solid ${f.bypass_billing ? "#F2872E" : t.border}`, cursor: "pointer", background: f.bypass_billing ? "#F2872E18" : "none", color: f.bypass_billing ? "#F2872E" : t.sub, fontSize: 11.5, fontWeight: 700 }}>
+                    <Crown size={12} /> {f.bypass_billing ? "เปิดอยู่" : "ปิดอยู่ (กดเพื่อเปิด)"}
+                  </button>
+                </div>
+
+                <div style={{ fontSize: 11, fontWeight: 800, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, marginTop: 4 }}>สมาชิก ({mem.length})</div>
+                {mem.map((m) => (
+                  <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: t.text }}>
+                    <div style={{ width: 24, height: 24, borderRadius: 7, background: colorFor(m.name || m.email || "?"), color: "#fff", display: "grid", placeItems: "center", fontSize: 10.5, fontWeight: 700, flexShrink: 0 }}>{(m.name || m.email || "?")[0].toUpperCase()}</div>
+                    <span style={{ flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.name || m.email}</span>
+                    {m.family_role === "owner" && <span style={{ fontSize: 9.5, fontWeight: 800, color: t.accent, flexShrink: 0 }}>เจ้าของ</span>}
+                    {!m.approved && <span style={{ fontSize: 9.5, fontWeight: 700, color: "#D9534F", flexShrink: 0 }}>รออนุมัติ</span>}
+                    {m.family_role !== "owner" && (
+                      <button onClick={() => kickMember(m.id, f.id)} disabled={busy} style={{ flexShrink: 0, background: "none", border: "none", cursor: "pointer", fontSize: 11, color: "#D9534F" }}>ถอดออก</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
