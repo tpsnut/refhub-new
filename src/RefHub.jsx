@@ -2102,7 +2102,7 @@ export default function RefHub() {
           {page === "ideas" && <IdeasPage t={t} lang={lang} M={M} userId={userId} session={session} authProfile={authProfile} setAuthProfile={setAuthProfile} setNotes={setNotes} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} />}
           {page === "trade" && <TradePage t={t} lang={lang} />}
           {page === "news" && <NewsPage t={t} lang={lang} userId={userId} authProfile={authProfile} setAuthProfile={setAuthProfile} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} hintDefs={hintDefs} seenHintKeys={seenHintKeys} dismissHint={dismissHint} setNotes={setNotes} scrollToTop={() => { if (contentScrollRef.current) contentScrollRef.current.scrollTop = 0; }} />}
-          {page === "lang" && <LangPage t={t} lang={lang} userId={userId} session={session} scrollToTop={() => { if (contentScrollRef.current) contentScrollRef.current.scrollTop = 0; }} />}
+          {page === "lang" && <LangPage t={t} lang={lang} userId={userId} session={session} authProfile={authProfile} scrollToTop={() => { if (contentScrollRef.current) contentScrollRef.current.scrollTop = 0; }} />}
           {page === "goalsReport" && <GoalsReportPage t={t} lang={lang} goals={goals} setGoals={setGoals} userId={userId} />}
           {page === "admin" && <AdminPage t={t} lang={lang} session={session} userId={userId} adminAlerts={adminAlerts} setAdminAlerts={setAdminAlerts} authProfile={authProfile} setAuthProfile={setAuthProfile} />}
           {page === "locations" && <LocationsPage t={t} lang={lang} userId={userId} />}
@@ -9684,7 +9684,7 @@ const VOCAB_TOPICS = [
 ];
 const CEFR_LEVELS = ["A1", "A2", "B1", "B2", "C1"];
 
-function VocabWordModal({ t, table = "vocab_words", mode = "word", initial, userId, session, close, onSaved }) {
+function VocabWordModal({ t, table = "vocab_words", mode = "word", topics = VOCAB_TOPICS, initial, userId, session, close, onSaved }) {
   const isWord = mode === "word";
   const [word, setWord] = useState(initial?.word || "");
   const [pronunciation, setPronunciation] = useState(initial?.pronunciation || "");
@@ -9778,7 +9778,7 @@ function VocabWordModal({ t, table = "vocab_words", mode = "word", initial, user
           </>)}
           <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>หมวดหมู่</div>
           <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4, marginBottom: 14 }}>
-            {VOCAB_TOPICS.map((c) => (
+            {topics.map((c) => (
               <button key={c.id} onClick={() => setCategory(c.id)} style={{ flexShrink: 0, padding: "6px 12px", borderRadius: 14, cursor: "pointer", fontSize: 11.5, fontWeight: 700, border: `1.5px solid ${category === c.id ? t.accent : t.border}`, background: category === c.id ? t.accent : "transparent", color: category === c.id ? t.onAccent : t.sub }}>{c.label}</button>
             ))}
           </div>
@@ -9791,7 +9791,7 @@ function VocabWordModal({ t, table = "vocab_words", mode = "word", initial, user
 }
 
 // ✨ ให้ AI เจนคำศัพท์เป็นชุด ตามหมวด+ระดับที่เลือก — พรีวิวให้ดูก่อนค่อยกดบันทึกจริง (กันเผลอยัดคำแปลกๆเข้าคลังโดยไม่ได้เช็ค)
-function VocabBatchGenModal({ t, table = "vocab_words", mode = "word", userId, session, category, level: levelProp, existingWords = [], close, onSaved }) {
+function VocabBatchGenModal({ t, table = "vocab_words", mode = "word", topics = VOCAB_TOPICS, userId, session, category, level: levelProp, existingWords = [], close, onSaved }) {
   const isWord = mode === "word";
   const [count, setCount] = useState(10);
   const isMixed = levelProp === "mixed" || !levelProp; // ข้างนอกเลือก "ทุกระดับ" ไว้ — ให้ AI สุ่มคละทุกระดับมาในชุดเดียวเลย ไม่ต้องเลือกเอง
@@ -9799,12 +9799,15 @@ function VocabBatchGenModal({ t, table = "vocab_words", mode = "word", userId, s
   const [err, setErr] = useState("");
   const [preview, setPreview] = useState(null); // [{word,pronunciation,meaning,example,level}]
   const [saving, setSaving] = useState(false);
-  const topicLabel = VOCAB_TOPICS.find((c) => c.id === category)?.label || category;
+  const topicMeta = topics.find((c) => c.id === category);
+  const topicLabel = topicMeta?.label || category;
+  const topicDescription = topicMeta?.description; // 📁 คำอธิบายหมวดที่เพิ่มเอง — ใช้บอก AI ว่าหมวดนี้จริงๆแล้วอยากได้คำศัพท์แนวไหน (เช่นชื่อ "ตัวเอง" แต่คำอธิบาย "ร่างกายมนุษย์" ก็ควรได้คำว่า ตา จมูก ปาก ไม่ใช่คำทั่วไปเกี่ยวกับตัวเอง)
 
   const generate = async () => {
     setLoading(true); setErr(""); setPreview(null);
     try {
       const avoidText = existingWords.length ? `\nห้ามซ้ำกับ${isWord ? "คำศัพท์" : "ประโยค"}ที่มีอยู่แล้วในหมวดนี้: ${existingWords.slice(0, 60).join(", ")}` : "";
+      const descText = topicDescription ? `\nหมวด "${topicLabel}" นี้หมายถึง: ${topicDescription} — เลือก${isWord ? "คำศัพท์" : "ประโยค"}ให้ตรงกับความหมายนี้จริงๆ ไม่ใช่แค่ความหมายผิวเผินจากชื่อหมวด` : "";
       const r = await fetch("/api/chat", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -9815,7 +9818,7 @@ function VocabBatchGenModal({ t, table = "vocab_words", mode = "word", userId, s
               : `สร้างประโยคสนทนาภาษาอังกฤษที่ใช้บ่อยในชีวิตจริง หมวด "${topicLabel}" จำนวน ${count} ประโยค ที่ยังไม่ซ้ำกัน คละระดับ CEFR ให้กระจายทั้ง A1,A2,B1,B2,C1 ปนกันไปในชุดนี้ (ไม่ต้องเรียงลำดับ) ตอบเป็นรายการบรรทัดละ 1 ประโยค รูปแบบเป๊ะๆ ห้ามมีเลขข้อ/เครื่องหมายนำหน้า/หัวข้ออื่นใดๆ:\nประโยคภาษาอังกฤษ | คำอ่านไทยทับศัพท์ | คำแปลไทย | ระดับ(A1/A2/B1/B2/C1)`)
             : (isWord
               ? `สร้างคำศัพท์ภาษาอังกฤษระดับ ${levelProp} หมวด "${topicLabel}" จำนวน ${count} คำ ที่ยังไม่ซ้ำกัน ตอบเป็นรายการบรรทัดละ 1 คำ รูปแบบเป๊ะๆ ห้ามมีเลขข้อ/เครื่องหมายนำหน้า/หัวข้ออื่นใดๆ:\nword | คำอ่านไทย | ความหมายไทย | ตัวอย่างประโยคภาษาอังกฤษสั้นๆ | คำแปลไทยของตัวอย่างนั้น`
-              : `สร้างประโยคสนทนาภาษาอังกฤษที่ใช้บ่อยในชีวิตจริง ระดับ ${levelProp} หมวด "${topicLabel}" จำนวน ${count} ประโยค ที่ยังไม่ซ้ำกัน ตอบเป็นรายการบรรทัดละ 1 ประโยค รูปแบบเป๊ะๆ ห้ามมีเลขข้อ/เครื่องหมายนำหน้า/หัวข้ออื่นใดๆ:\nประโยคภาษาอังกฤษ | คำอ่านไทยทับศัพท์ | คำแปลไทย`)) + avoidText }],
+              : `สร้างประโยคสนทนาภาษาอังกฤษที่ใช้บ่อยในชีวิตจริง ระดับ ${levelProp} หมวด "${topicLabel}" จำนวน ${count} ประโยค ที่ยังไม่ซ้ำกัน ตอบเป็นรายการบรรทัดละ 1 ประโยค รูปแบบเป๊ะๆ ห้ามมีเลขข้อ/เครื่องหมายนำหน้า/หัวข้ออื่นใดๆ:\nประโยคภาษาอังกฤษ | คำอ่านไทยทับศัพท์ | คำแปลไทย`)) + descText + avoidText }],
         }),
       });
       const data = await r.json();
@@ -10112,8 +10115,10 @@ function VocabListeningModal({ t, mode, category, level, pool, userId, session, 
 }
 
 // ✍️ โจทย์เขียน — AI ตั้งโจทย์ตามหมวด+ระดับ แล้วช่วยตรวจให้คะแนน+แก้ให้
-function VocabWritingModal({ t, category, level, userId, session, close }) {
-  const topicLabel = VOCAB_TOPICS.find((c) => c.id === category)?.label || category;
+function VocabWritingModal({ t, category, level, topics = VOCAB_TOPICS, userId, session, close }) {
+  const topicMeta = topics.find((c) => c.id === category);
+  const topicLabel = topicMeta?.label || category;
+  const topicDescription = topicMeta?.description;
   const [prompt, setPrompt] = useState(null);
   const [loadingPrompt, setLoadingPrompt] = useState(true);
   const [answer, setAnswer] = useState("");
@@ -10126,11 +10131,12 @@ function VocabWritingModal({ t, category, level, userId, session, close }) {
     setLoadingPrompt(true); setErr(""); setFeedback(null); setAnswer("");
     try {
       const avoidText = seenPromptsRef.current.length ? `\nห้ามซ้ำกับโจทย์เหล่านี้ที่เคยให้ไปแล้ว:\n${seenPromptsRef.current.map((p) => "- " + p).join("\n")}` : "";
+      const descText = topicDescription ? `\nหมวด "${topicLabel}" นี้หมายถึง: ${topicDescription}` : "";
       const r = await fetch("/api/chat", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mentor: "none", userId, callerToken: session?.access_token,
-          messages: [{ who: "u", text: `ตั้งโจทย์เขียนภาษาอังกฤษสั้นๆ 1 โจทย์ ระดับ ${level} หมวด "${topicLabel}" ให้ผู้เรียนเขียนตอบเป็นภาษาอังกฤษ 2-4 ประโยค ตอบเป็นภาษาไทยอธิบายโจทย์บรรทัดเดียว ห้ามมีข้อความอื่น${avoidText}` }],
+          messages: [{ who: "u", text: `ตั้งโจทย์เขียนภาษาอังกฤษสั้นๆ 1 โจทย์ ระดับ ${level} หมวด "${topicLabel}" ให้ผู้เรียนเขียนตอบเป็นภาษาอังกฤษ 2-4 ประโยค ตอบเป็นภาษาไทยอธิบายโจทย์บรรทัดเดียว ห้ามมีข้อความอื่น${descText}${avoidText}` }],
         }),
       });
       const data = await r.json();
@@ -10579,7 +10585,54 @@ function VocabGuideModal({ t, lang, close }) {
   );
 }
 
-function LangPage({ t, lang, userId, session, scrollToTop }) {
+// 📁 เพิ่มหมวดหมู่เอง — ต้องมีทั้งชื่อและคำอธิบาย (คำอธิบายไว้บอก AI ว่าหมวดนี้จริงๆอยากได้เนื้อหาแนวไหน) จำกัดจำนวนตามแพ็กเกจ
+function AddTopicModal({ t, userId, limit, currentCount, close, onAdded }) {
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+  const atLimit = currentCount >= limit;
+  const save = async () => {
+    if (!name.trim() || !description.trim() || saving || atLimit) return;
+    setSaving(true); setErr("");
+    try {
+      const row = { id: crypto.randomUUID(), user_id: userId, name: name.trim(), description: description.trim(), created_at: new Date().toISOString() };
+      const { error } = await supabase.from("vocab_custom_categories").insert(row);
+      if (error) throw error;
+      onAdded(row);
+      close();
+    } catch (e) {
+      setErr("บันทึกไม่สำเร็จ: " + e.message + " (เช็คว่ารัน SQL สร้างตาราง vocab_custom_categories แล้วหรือยัง)");
+    } finally { setSaving(false); }
+  };
+  return (
+    <ModalPortal>
+      <div style={overlayHi} onClick={close}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>📁 เพิ่มหมวดหมู่</div>
+            <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+          </div>
+          {atLimit ? (
+            <div style={{ fontSize: 13, color: t.sub, textAlign: "center", padding: "24px 0", lineHeight: 1.7 }}>
+              เพิ่มครบโควตาแล้ว ({currentCount}/{limit} หมวด)<br />อัปเกรดแพ็กเกจเพื่อเพิ่มหมวดหมู่ได้มากขึ้น
+            </div>
+          ) : (<>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>ชื่อหมวดหมู่</div>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="เช่น ตัวเอง, กีฬา, ดนตรี" style={{ ...input(t), marginBottom: 10 }} />
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 6 }}>คำอธิบาย (บอก AI ว่าหมวดนี้เกี่ยวกับอะไรจริงๆ)</div>
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder='เช่น "ร่างกายมนุษย์" (จะได้คำว่า ตา จมูก ปาก แทนคำทั่วไปเกี่ยวกับตัวเอง)' rows={3} style={{ ...input(t), marginBottom: 6, resize: "vertical", fontFamily: "inherit" }} />
+            <div style={{ fontSize: 10.5, color: t.faint, marginBottom: 14 }}>เหลือโควตา {limit - currentCount}/{limit} หมวด</div>
+            {err && <div style={{ fontSize: 11.5, color: "#D9534F", marginBottom: 10 }}>{err}</div>}
+            <button onClick={save} disabled={!name.trim() || !description.trim() || saving} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "12px 0", opacity: !name.trim() || !description.trim() || saving ? 0.6 : 1 }}>{saving ? "กำลังบันทึก..." : "เพิ่มหมวดหมู่"}</button>
+          </>)}
+        </div>
+      </div>
+    </ModalPortal>
+  );
+}
+
+function LangPage({ t, lang, userId, session, authProfile, scrollToTop }) {
   const [askConfirm, ConfirmUI] = useConfirm(t);
   const [contentType, setContentType] = useState("word"); // "word" | "sentence" — สลับระหว่างคลังคำศัพท์กับคลังประโยค (คนละตารางกัน)
   const table = contentType === "word" ? "vocab_words" : "vocab_sentences";
@@ -10599,6 +10652,23 @@ function LangPage({ t, lang, userId, session, scrollToTop }) {
   const [menuOpen, setMenuOpen] = useState(false); // เมนูเลือกหมวดแบบเดียวกับหน้าข่าว
   const [guideOpen, setGuideOpen] = useState(false);
   const [cardViewMode, setCardViewMode] = useState("card"); // "card" | "list" — มุมมองของแท็บเรียนรู้/ทบทวน
+
+  // 📁 หมวดหมู่ที่ผู้ใช้เพิ่มเอง — จำกัดจำนวนตามแพ็กเกจ (authProfile.plan: free=3, pro=10, family=50) ต่อยอดจาก VOCAB_TOPICS มาตรฐาน
+  const CUSTOM_CATEGORY_LIMITS = { free: 3, pro: 10, family: 50 };
+  const customCategoryLimit = CUSTOM_CATEGORY_LIMITS[authProfile?.plan] ?? CUSTOM_CATEGORY_LIMITS.free;
+  const [customTopics, setCustomTopics] = useState([]);
+  const [addTopicOpen, setAddTopicOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false); // ⚙️ แผงระดับ + ประเภทเนื้อหา (คำศัพท์/ประโยค) รวมไว้ที่เดียว
+  const [bouncingView, setBouncingView] = useState(null); // 🎾 id ของไอคอนมินิด็อกที่กำลังเล่นเอฟเฟกต์เด้งอยู่
+  const loadCustomTopics = () => {
+    if (!userId) return;
+    supabase.from("vocab_custom_categories").select("*").eq("user_id", userId).order("created_at", { ascending: true }).then(({ data, error }) => {
+      if (error) { console.error("โหลดหมวดหมู่ที่เพิ่มเองไม่สำเร็จ:", error.message); return; }
+      setCustomTopics((data || []).map((c) => ({ id: c.id, label: `📁 ${c.name}`, description: c.description, custom: true })));
+    });
+  };
+  useEffect(() => { loadCustomTopics(); }, [userId]);
+  const allTopics = [...VOCAB_TOPICS, ...customTopics]; // 🧩 หมวดมาตรฐาน + ที่เพิ่มเอง รวมกันใช้ทุกที่ที่เดิมอ้างอิง VOCAB_TOPICS
   useEffect(() => {
     try {
       if (!localStorage.getItem("refhub:vocabGuideSeenV2")) { setGuideOpen(true); localStorage.setItem("refhub:vocabGuideSeenV2", "1"); }
@@ -10748,12 +10818,12 @@ function LangPage({ t, lang, userId, session, scrollToTop }) {
     if (!start) return;
     const dx = e.changedTouches[0].clientX - start.x, dy = e.changedTouches[0].clientY - start.y;
     if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.3) return;
-    const idx = VOCAB_TOPICS.findIndex((c) => c.id === topic);
-    if (dx < 0 && idx < VOCAB_TOPICS.length - 1) setTopic(VOCAB_TOPICS[idx + 1].id);
-    else if (dx > 0 && idx > 0) setTopic(VOCAB_TOPICS[idx - 1].id);
+    const idx = allTopics.findIndex((c) => c.id === topic);
+    if (dx < 0 && idx < allTopics.length - 1) setTopic(allTopics[idx + 1].id);
+    else if (dx > 0 && idx > 0) setTopic(allTopics[idx - 1].id);
   };
 
-  const currentTopicMeta = VOCAB_TOPICS.find((c) => c.id === topic);
+  const currentTopicMeta = allTopics.find((c) => c.id === topic);
   const isWord = contentType === "word";
   const noun = isWord ? "คำศัพท์" : "ประโยค";
 
@@ -10774,46 +10844,24 @@ function LangPage({ t, lang, userId, session, scrollToTop }) {
       ))}
     </div>
 
-    {/* 📖💬 สลับคลังคำศัพท์ / คลังประโยค */}
-    <div style={{ display: "flex", gap: 6, marginBottom: 8, background: t.inputBg, borderRadius: 12, padding: 4 }}>
-      <button onClick={() => setContentType("word")} style={{ flex: 1, padding: "8px 0", borderRadius: 9, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 12.5, background: contentType === "word" ? t.accent : "transparent", color: contentType === "word" ? t.onAccent : t.sub }}>📖 คำศัพท์</button>
-      <button onClick={() => setContentType("sentence")} style={{ flex: 1, padding: "8px 0", borderRadius: 9, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 12.5, background: contentType === "sentence" ? t.accent : "transparent", color: contentType === "sentence" ? t.onAccent : t.sub }}>💬 ประโยค</button>
-    </div>
-
-    <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 8 }}>
-      {[["review", "🔁 ทบทวน"], ["learn", "🎓 เรียนรู้"], ["quiz", "🧪 ทดสอบ"], ["listen", "🎧 ฟัง"], ["speak", "🎤 พูด"], ["write", "✍️ เขียน"], ["manage", "📋 จัดการ"], ["history", "📊 ประวัติ"]].map(([id, lb]) => (
-        <button key={id} onClick={() => setView(id)} style={{ flexShrink: 0, padding: "7px 14px", borderRadius: 12, cursor: "pointer", fontWeight: 700, fontSize: 12, border: `1.5px solid ${view === id ? t.accent : t.border}`, background: view === id ? t.accent : "transparent", color: view === id ? t.onAccent : t.sub }}>{lb}</button>
-      ))}
-    </div>
-
-    {/* 📚 ตัวเลือกหมวด + ระดับ — แบบเดียวกับหน้าข่าว */}
-    <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-      <button onClick={() => setMenuOpen(true)} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 14px", borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, cursor: "pointer" }}>
+    {/* 📚 หัวข้อควบคุมแบบใหม่ — กะทัดรัดเหลือแถวเดียว: หมวด + ⚙️ตั้งค่า(ระดับ+ประเภทเนื้อหา) + 🗂/📃 มุมมอง (โหมด 8 อันย้ายไปมินิด็อกลอยด้านล่างแทนแล้ว) */}
+    <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+      <button onClick={() => setMenuOpen(true)} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 14px", borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, cursor: "pointer" }}>
         <span style={{ fontSize: 13.5, fontWeight: 800, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{currentTopicMeta?.label} ({wordCountByTopic(topic)})</span>
         <ChevronDown size={15} color={t.faint} style={{ flexShrink: 0 }} />
       </button>
-      <button onClick={() => setGenOpen(true)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 14px", borderRadius: 12, border: "none", background: t.accent, color: t.onAccent, cursor: "pointer", fontWeight: 700, fontSize: 12.5, flexShrink: 0 }}>
-        <Sparkles size={14} /> AI เจนให้
+      <button onClick={() => setSettingsOpen(true)} style={{ width: 42, height: 42, borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }} title="ตั้งค่า">
+        <Settings size={17} color={t.sub} />
       </button>
-    </div>
-    <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 10 }}>
-      <button onClick={() => setLevel("all")} style={{ flexShrink: 0, padding: "5px 12px", borderRadius: 12, cursor: "pointer", fontSize: 11, fontWeight: 700, border: `1.5px solid ${level === "all" ? t.accent : t.border}`, background: level === "all" ? t.accent : "transparent", color: level === "all" ? t.onAccent : t.sub }}>ทุกระดับ</button>
-      {CEFR_LEVELS.map((lv) => (
-        <button key={lv} onClick={() => setLevel(lv)} style={{ flexShrink: 0, padding: "5px 12px", borderRadius: 12, cursor: "pointer", fontSize: 11, fontWeight: 700, border: `1.5px solid ${level === lv ? t.accent : t.border}`, background: level === lv ? t.accent : "transparent", color: level === lv ? t.onAccent : t.sub }}>{lv}</button>
-      ))}
+      <button onClick={() => setCardViewMode((m) => (m === "card" ? "list" : "card"))} style={{ width: 42, height: 42, borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }} title="สลับมุมมอง">
+        {cardViewMode === "card" ? <List size={17} color={t.sub} /> : <LayoutGrid size={17} color={t.sub} />}
+      </button>
     </div>
 
     {view === "review" && reviewOnlyPool.length > 0 && (
-      <button onClick={() => setRecallOpen(true)} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "13px 0", marginBottom: 10, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14 }}>
+      <button onClick={() => setRecallOpen(true)} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "13px 0", marginBottom: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14 }}>
         ▶️ เริ่มทบทวน ({reviewOnlyPool.length})
       </button>
-    )}
-
-    {(view === "learn" || view === "review") && (
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginBottom: 8 }}>
-        <button onClick={() => setCardViewMode("card")} style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 10px", borderRadius: 10, cursor: "pointer", fontSize: 11, fontWeight: 700, border: `1.5px solid ${cardViewMode === "card" ? t.accent : t.border}`, background: cardViewMode === "card" ? t.accent : "transparent", color: cardViewMode === "card" ? t.onAccent : t.sub }}><LayoutGrid size={12} /> การ์ด</button>
-        <button onClick={() => setCardViewMode("list")} style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 10px", borderRadius: 10, cursor: "pointer", fontSize: 11, fontWeight: 700, border: `1.5px solid ${cardViewMode === "list" ? t.accent : t.border}`, background: cardViewMode === "list" ? t.accent : "transparent", color: cardViewMode === "list" ? t.onAccent : t.sub }}><List size={12} /> ลิสต์</button>
-      </div>
     )}
 
     {loading && view !== "history" && <Empty t={t} text="กำลังโหลด..." />}
@@ -10977,7 +11025,7 @@ function LangPage({ t, lang, userId, session, scrollToTop }) {
           {history.map((h) => (
             <div key={h.id} style={{ ...card(t), padding: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{h.skill === "listening" ? "🎧" : "🧪"} {VOCAB_TOPICS.find((c) => c.id === h.category)?.label || h.category} <span style={{ fontSize: 10.5, color: t.faint }}>· {h.mode === "word" ? "คำศัพท์" : "ประโยค"} · {h.level}</span></div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{h.skill === "listening" ? "🎧" : "🧪"} {allTopics.find((c) => c.id === h.category)?.label || h.category} <span style={{ fontSize: 10.5, color: t.faint }}>· {h.mode === "word" ? "คำศัพท์" : "ประโยค"} · {h.level}</span></div>
                 <div style={{ fontSize: 10.5, color: t.faint, marginTop: 2 }}>{new Date(h.created_at).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" })}</div>
               </div>
               <div style={{ fontSize: 16, fontWeight: 800, color: h.score === h.total ? "#2E9E6B" : t.accent }}>{h.score}/{h.total}</div>
@@ -10995,7 +11043,7 @@ function LangPage({ t, lang, userId, session, scrollToTop }) {
             <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 2 }}>เลือกหมวด{noun}</div>
             <div style={{ fontSize: 11, color: t.sub, marginBottom: 14 }}>ยังไม่รู้จะเริ่มไหน? เริ่มที่ "ทั่วไป" ก่อนได้เลย เหมาะกับทุกคน</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {VOCAB_TOPICS.map((c) => (
+              {allTopics.map((c) => (
                 <button key={c.id} onClick={() => { setTopic(c.id); setMenuOpen(false); }} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px", borderRadius: 12, border: c.id === "general" ? `1.5px solid ${t.accent}` : "none", cursor: "pointer", background: topic === c.id ? `${t.accent}18` : "none", textAlign: "left" }}>
                   <span style={{ fontSize: 14, fontWeight: 700, color: t.text, display: "flex", alignItems: "center", gap: 6 }}>
                     {c.label}
@@ -11005,20 +11053,84 @@ function LangPage({ t, lang, userId, session, scrollToTop }) {
                 </button>
               ))}
             </div>
+            <button onClick={() => { setMenuOpen(false); setAddTopicOpen(true); }} style={{ width: "100%", marginTop: 10, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px 14px", borderRadius: 12, border: `1.5px dashed ${t.border}`, background: "none", cursor: "pointer", color: t.accent, fontWeight: 700, fontSize: 13.5 }}>
+              <Plus size={15} /> เพิ่มหมวดหมู่ ({customTopics.length}/{customCategoryLimit})
+            </button>
           </div>
         </div>
       </ModalPortal>
     )}
 
-    {addOpen && <VocabWordModal t={t} table={table} mode={contentType} initial={editing || { category: topic }} userId={userId} session={session} close={() => setAddOpen(false)} onSaved={onSaved} />}
-    {genOpen && <VocabBatchGenModal t={t} table={table} mode={contentType} userId={userId} session={session} category={topic} level={level === "all" ? "mixed" : level} existingWords={topicWords.map((w) => w.word)} close={() => setGenOpen(false)} onSaved={onSavedBatch} />}
+    {addOpen && <VocabWordModal t={t} table={table} mode={contentType} topics={allTopics} initial={editing || { category: topic }} userId={userId} session={session} close={() => setAddOpen(false)} onSaved={onSaved} />}
+    {genOpen && <VocabBatchGenModal t={t} table={table} mode={contentType} topics={allTopics} userId={userId} session={session} category={topic} level={level === "all" ? "mixed" : level} existingWords={topicWords.map((w) => w.word)} close={() => setGenOpen(false)} onSaved={onSavedBatch} />}
     {guideOpen && <VocabGuideModal t={t} lang={lang} close={() => setGuideOpen(false)} />}
+    {addTopicOpen && <AddTopicModal t={t} userId={userId} limit={customCategoryLimit} currentCount={customTopics.length} close={() => setAddTopicOpen(false)} onAdded={(row) => { setCustomTopics((list) => [...list, { id: row.id, label: `📁 ${row.name}`, description: row.description, custom: true }]); setTopic(row.id); }} />}
+
+    {settingsOpen && (
+      <ModalPortal>
+        <div style={overlayHi} onClick={() => setSettingsOpen(false)}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>⚙️ ตั้งค่า</div>
+              <button onClick={() => setSettingsOpen(false)} style={ghost}><X size={20} color={t.sub} /></button>
+            </div>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 8 }}>ประเภทเนื้อหา</div>
+            <div style={{ display: "flex", gap: 6, marginBottom: 18, background: t.inputBg, borderRadius: 12, padding: 4 }}>
+              <button onClick={() => setContentType("word")} style={{ flex: 1, padding: "9px 0", borderRadius: 9, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13, background: contentType === "word" ? t.accent : "transparent", color: contentType === "word" ? t.onAccent : t.sub }}>📖 คำศัพท์</button>
+              <button onClick={() => setContentType("sentence")} style={{ flex: 1, padding: "9px 0", borderRadius: 9, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13, background: contentType === "sentence" ? t.accent : "transparent", color: contentType === "sentence" ? t.onAccent : t.sub }}>💬 ประโยค</button>
+            </div>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 8 }}>ระดับ (CEFR)</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 20 }}>
+              <button onClick={() => setLevel("all")} style={{ padding: "8px 14px", borderRadius: 12, cursor: "pointer", fontSize: 12.5, fontWeight: 700, border: `1.5px solid ${level === "all" ? t.accent : t.border}`, background: level === "all" ? t.accent : "transparent", color: level === "all" ? t.onAccent : t.sub }}>ทุกระดับ</button>
+              {CEFR_LEVELS.map((lv) => (
+                <button key={lv} onClick={() => setLevel(lv)} style={{ padding: "8px 14px", borderRadius: 12, cursor: "pointer", fontSize: 12.5, fontWeight: 700, border: `1.5px solid ${level === lv ? t.accent : t.border}`, background: level === lv ? t.accent : "transparent", color: level === lv ? t.onAccent : t.sub }}>{lv}</button>
+              ))}
+            </div>
+            <div style={{ height: 1, background: t.border, margin: "4px 0 16px" }} />
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 8 }}>ความคืบหน้า</div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ fontSize: 15 }}>🔥</span><span style={{ fontSize: 12.5, fontWeight: 700, color: t.text }}>{streakDays} วัน</span></div>
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ fontSize: 15 }}>⭐</span><span style={{ fontSize: 12.5, fontWeight: 700, color: t.text }}>{xp} XP</span></div>
+              {badges.map((b, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 3, background: `${t.accent}15`, borderRadius: 10, padding: "3px 8px" }}>
+                  <span style={{ fontSize: 12 }}>{b.icon}</span><span style={{ fontSize: 10.5, fontWeight: 700, color: t.accent }}>{b.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </ModalPortal>
+    )}
+
+    {/* 🎯 มินิด็อกลอย — 8 โหมด จัดกึ่งกลาง เอฟเฟกต์เด้งตอนกด ต้องครอบด้วย ModalPortal เพราะ position:fixed ที่อยู่ในกล่อง transform:scale (ปรับขนาดตัวอักษร) จะเพี้ยน ไม่งั้น (บทเรียนราคาแพงจากบั๊กก่อนหน้า) */}
+    <ModalPortal>
+      <style>{`@keyframes rh-dock-bounce { 0% { transform: scale(1); } 35% { transform: scale(1.32); } 60% { transform: scale(0.92); } 100% { transform: scale(1); } }`}</style>
+      <div style={{ position: "fixed", left: 0, right: 0, bottom: 88, zIndex: 45, display: "flex", justifyContent: "center", pointerEvents: "none" }}>
+        <div style={{ display: "flex", justifyContent: "center", gap: 4, background: t.page, borderRadius: 20, boxShadow: "0 6px 20px rgba(0,0,0,.15)", padding: "8px 6px", pointerEvents: "auto", maxWidth: "94%", overflowX: "auto" }}>
+          {[["learn", "🎓", "เรียนรู้"], ["review", "🔁", "ทบทวน"], ["quiz", "🧪", "ทดสอบ"], ["listen", "🎧", "ฟัง"], ["speak", "🎤", "พูด"], ["write", "✍️", "เขียน"], ["manage", "📋", "จัดการ"], ["history", "📊", "ประวัติ"]].map(([id, icon, lb]) => (
+            <button key={id} onClick={() => { setView(id); setBouncingView(id); setTimeout(() => setBouncingView((b) => (b === id ? null : b)), 320); }}
+              style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, width: 52, padding: "6px 2px", borderRadius: 14, border: "none", cursor: "pointer", background: view === id ? `${t.accent}18` : "transparent" }}>
+              <span style={{ fontSize: 17, display: "inline-block", animation: bouncingView === id ? "rh-dock-bounce .32s cubic-bezier(.34,1.56,.64,1)" : "none" }}>{icon}</span>
+              <span style={{ fontSize: 9, fontWeight: 700, color: view === id ? t.accent : t.faint }}>{lb}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ✨ ปุ่ม AI เจนให้ ลอยขึ้นมาเหนือมินิด็อก เฉพาะตอนอยู่โหมดเรียนรู้ (โหมดอื่นไม่ต้องเจนคำใหม่) เลื่อนขึ้น-ลงด้วย transition ไม่ใช่โผล่วับๆ */}
+      <div style={{ position: "fixed", left: 0, right: 0, bottom: view === "learn" ? 154 : 60, zIndex: 46, display: "flex", justifyContent: "center", opacity: view === "learn" ? 1 : 0, pointerEvents: view === "learn" ? "auto" : "none", transition: "bottom .35s cubic-bezier(.34,1.15,.64,1), opacity .3s" }}>
+        <button onClick={() => setGenOpen(true)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "11px 20px", borderRadius: 24, border: "none", background: t.accent, color: t.onAccent, cursor: "pointer", fontWeight: 700, fontSize: 13, boxShadow: `0 6px 16px ${t.accent}55` }}>
+          <Sparkles size={15} /> AI เจนให้
+        </button>
+      </div>
+    </ModalPortal>
     {quizOpen && <VocabQuizModal t={t} mode={contentType} category={topic} level={level === "all" ? "mixed" : level} pool={topicWords} allItems={words} userId={userId} close={() => setQuizOpen(false)} onFinished={loadHistory} />}
     {listenOpen && <VocabListeningModal t={t} mode={contentType} category={topic} level={level === "all" ? "mixed" : level} pool={topicWords} userId={userId} session={session} close={() => setListenOpen(false)} onFinished={loadHistory} />}
     {speakOpen && <VocabSpeakingModal t={t} mode={contentType} category={topic} level={level === "all" ? "mixed" : level} pool={topicWords} userId={userId} close={() => setSpeakOpen(false)} onFinished={loadHistory} />}
     {recallOpen && <VocabRecallModal t={t} mode={contentType} category={topic} level={level === "all" ? "mixed" : level} pool={reviewOnlyPool} userId={userId} session={session} close={() => setRecallOpen(false)} onFinished={loadHistory} />}
-    {writeOpen && <VocabWritingModal t={t} category={topic} level={level === "all" ? "A1" : level} userId={userId} session={session} close={() => setWriteOpen(false)} />}
+    {writeOpen && <VocabWritingModal t={t} category={topic} level={level === "all" ? "A1" : level} topics={allTopics} userId={userId} session={session} close={() => setWriteOpen(false)} />}
     {ConfirmUI}
+    <div style={{ height: 110 }} /> {/* กันเนื้อหาท้ายสุดโดนมินิด็อก/ปุ่ม AI ลอยบัง */}
   </>);
 }
 
