@@ -6,7 +6,7 @@ import {
   Sparkles, Clock, Search, Volume2, VolumeX, Pencil, Download, ArrowLeft, Users, Camera, Phone, Mic, MicOff, PhoneOff, RefreshCw,
   Utensils, Car, ShoppingBag, Receipt, Gamepad2, HeartPulse, Briefcase, Gift, Coffee, Music,
   Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi, MessageCircle, MoreVertical, KeyRound, MapPin, Copy, LockKeyhole, LogOut, LayoutGrid, Maximize2, Volume1, Settings, Bookmark, Share2, Repeat2, Heart, User, Pin,
-  Heading1, Heading3, ListOrdered, ListTree, Quote, Code2, Minus, Table2, Video, Smile, RotateCcw, GripVertical, ChevronLeft, ChevronUp, ChevronDown, Repeat, Repeat1, Shuffle, Timer, Lock, HelpCircle, Info, CreditCard, Crown
+  Heading1, Heading3, ListOrdered, ListTree, Quote, Code2, Minus, Table2, Video, Smile, RotateCcw, GripVertical, ChevronLeft, ChevronUp, ChevronDown, Repeat, Repeat1, Shuffle, Timer, Lock, HelpCircle, Info, CreditCard, Crown, Unlock
 } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, ResponsiveContainer, Tooltip } from "recharts";
 // 🔀 dnd-kit — ใช้ทำ "ลากวางจัดเรียงจริง" (drag & drop) ทั่วแอป แทนปุ่มขึ้น/ลง — รองรับ touch บนมือถือมาให้เลย
@@ -9725,13 +9725,17 @@ function NotePage({ t, lang, notes, setNotes, isNight, userId, session, authProf
   const [tagSheetOpen, setTagSheetOpen] = useState(false); // 🏷️ กางดูแท็กทั้งหมดแบบค้นหาได้ (เผื่อมีแท็กเยอะๆ ในอนาคต)
   const [tagSheetSearch, setTagSheetSearch] = useState("");
   const [copiedNoteId, setCopiedNoteId] = useState(null); // 📋 โชว์ ✓ ชั่วคราวตอนกด copy โน้ต
-  const [vaultSentId, setVaultSentId] = useState(null); // 🔒 โชว์ ✓ ชั่วคราวตอนกดส่งเข้า Drive สำเร็จ
-  const sendNoteToVault = async (n) => {
+  const [vaultedNoteIds, setVaultedNoteIds] = useState(new Set()); // 🔒 โน้ตที่เคยส่งเข้า Drive แล้ว (ถาวร ไม่ใช่แค่ชั่วคราว) โหลดจริงจาก DB
+  useEffect(() => {
     if (!userId) return;
+    supabase.from("vault_items").select("source_id").eq("user_id", userId).eq("source_type", "note").then(({ data }) => setVaultedNoteIds(new Set((data || []).map((r) => r.source_id))));
+  }, [userId]);
+  const sendNoteToVault = async (n) => {
+    if (!userId || vaultedNoteIds.has(n.id)) return;
     const text = blocksToPlainText(n.body);
     const size = new TextEncoder().encode(text).length;
-    const { error } = await supabase.from("vault_items").insert({ user_id: userId, type: "text", title: n.title || "(ไม่มีหัวข้อ)", content: text, mode: "quick", file_size: size });
-    if (!error) { setVaultSentId(n.id); setTimeout(() => setVaultSentId(null), 1500); logAudit(userId, "vault", "add", `ส่งโน้ตเข้า Drive: ${n.title || "(ไม่มีหัวข้อ)"}`); }
+    const { error } = await supabase.from("vault_items").insert({ user_id: userId, type: "text", title: n.title || "(ไม่มีหัวข้อ)", content: text, mode: "quick", file_size: size, source_type: "note", source_id: n.id });
+    if (!error) { setVaultedNoteIds((s) => new Set(s).add(n.id)); logAudit(userId, "vault", "add", `ส่งโน้ตเข้า Drive: ${n.title || "(ไม่มีหัวข้อ)"}`); }
   };
 
   const parseTags = (str) => str.split(",").map((s) => s.trim()).filter(Boolean);
@@ -10037,7 +10041,7 @@ function NotePage({ t, lang, notes, setNotes, isNight, userId, session, authProf
                     {!exportMode && (<>
                     {n.notionId && <span title="sync ขึ้น Notion แล้ว" style={{ display: "grid", placeItems: "center", padding: 4 }}><Check size={14} color="#2E9E6B" /></span>}
                     <button onClick={() => copyNote(n)} style={ghost} title="คัดลอกเนื้อหาโน้ต">{copiedNoteId === n.id ? <Check size={15} color="#2E9E6B" /> : <Copy size={15} color={t.faint} />}</button>
-                    <button onClick={() => sendNoteToVault(n)} style={ghost} title="ส่งเข้า Drive ส่วนตัว">{vaultSentId === n.id ? <Check size={15} color="#2E9E6B" /> : <Lock size={15} color={t.faint} />}</button>
+                    <button onClick={() => sendNoteToVault(n)} style={ghost} title={vaultedNoteIds.has(n.id) ? "ส่งเข้า Drive ส่วนตัวแล้ว" : "ส่งเข้า Drive ส่วนตัว"}>{vaultedNoteIds.has(n.id) ? <Check size={15} color="#2E9E6B" /> : <Unlock size={15} color={t.faint} />}</button>
                     <button onClick={() => exportOneMd(n)} style={ghost} title="Export เป็น Markdown"><Download size={15} color={t.faint} /></button>
                     <button onClick={() => togglePin(n.id)} style={ghost} title={n.pinned ? "ปักหมุดแล้ว" : "ปักหมุด"}><Pin size={15} color={n.pinned ? t.accent : t.faint} fill={n.pinned ? t.accent : "none"} /></button>
                     <button onClick={() => openReminder("note", n.id, n.title || "โน้ตไม่มีหัวข้อ")} style={ghost} title="ตั้งเตือนโน้ตนี้"><Bell size={15} color={reminders.some((r) => r.targetType === "note" && r.targetId === n.id) ? t.accent : t.faint} fill={reminders.some((r) => r.targetType === "note" && r.targetId === n.id) ? t.accent : "none"} /></button>
@@ -10082,17 +10086,21 @@ const topicLabel = (id) => KNOWLEDGE_TOPICS.find((t) => t.id === id)?.label || i
 
 function IdeasPage({ t, lang, M, userId, session, authProfile, setAuthProfile, setNotes, setChatOpen, setAskAiTopic }) {
   const [notedIds, setNotedIds] = useState({}); // article.id -> true ถ้าเพิ่งส่งเข้าโน้ตไปแล้ว (โชว์ปุ่มเขียวชั่วคราว)
-  const [vaultedIds, setVaultedIds] = useState({}); // article.id -> true ถ้าเพิ่งส่งเข้า Drive ไปแล้ว
+  const [vaultedIds, setVaultedIds] = useState(new Set()); // article.id ที่เคยส่งเข้า Drive แล้ว (ถาวร โหลดจริงจาก DB)
+  useEffect(() => {
+    if (!userId) return;
+    supabase.from("vault_items").select("source_id").eq("user_id", userId).eq("source_type", "article").then(({ data }) => setVaultedIds(new Set((data || []).map((r) => r.source_id))));
+  }, [userId]);
   const notedTo = (article) => {
     sendToNotes(article);
     setNotedIds((m) => ({ ...m, [article.id]: true }));
     setTimeout(() => setNotedIds((m) => ({ ...m, [article.id]: false })), 2500);
   };
   const sendArticleToVault = async (article) => {
-    if (!userId) return;
+    if (!userId || vaultedIds.has(article.id)) return;
     const text = `${article.title}\n\n${(article.bullets || []).map((b) => `• ${b}`).join("\n")}`;
-    const { error } = await supabase.from("vault_items").insert({ user_id: userId, type: "text", title: article.title, content: text, mode: "quick", file_size: new TextEncoder().encode(text).length });
-    if (!error) { setVaultedIds((m) => ({ ...m, [article.id]: true })); setTimeout(() => setVaultedIds((m) => ({ ...m, [article.id]: false })), 2500); logAudit(userId, "vault", "add", `ส่งบทความเข้า Drive: ${article.title}`); }
+    const { error } = await supabase.from("vault_items").insert({ user_id: userId, type: "text", title: article.title, content: text, mode: "quick", file_size: new TextEncoder().encode(text).length, source_type: "article", source_id: article.id });
+    if (!error) { setVaultedIds((s) => new Set(s).add(article.id)); logAudit(userId, "vault", "add", `ส่งบทความเข้า Drive: ${article.title}`); }
   };
   const askAi = (article) => {
     setAskAiTopic({ title: article.title, bullets: article.bullets });
@@ -10321,7 +10329,7 @@ function IdeasPage({ t, lang, M, userId, session, authProfile, setAuthProfile, s
                     {speakingId === a.id ? <Pause size={16} color={t.accent} /> : <Volume2 size={16} color={t.faint} />}
                   </button>
                   <button onClick={() => toggleStar(a)} style={ghost} title={a.starred ? "บันทึกแล้ว" : "บันทึก"}><Bookmark size={17} color={a.starred ? t.accent : t.faint} fill={a.starred ? t.accent : "none"} /></button>
-                  <button onClick={() => sendArticleToVault(a)} style={ghost} title="ส่งเข้า Drive ส่วนตัว">{vaultedIds[a.id] ? <Check size={16} color="#2E9E6B" /> : <Lock size={15} color={t.faint} />}</button>
+                  <button onClick={() => sendArticleToVault(a)} style={ghost} title={vaultedIds.has(a.id) ? "ส่งเข้า Drive ส่วนตัวแล้ว" : "ส่งเข้า Drive ส่วนตัว"}>{vaultedIds.has(a.id) ? <Check size={16} color="#2E9E6B" /> : <Unlock size={15} color={t.faint} />}</button>
                 </div>
               </div>
               <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginTop: 10, lineHeight: 1.4 }}>{a.title}</div>
@@ -10358,7 +10366,7 @@ function IdeasPage({ t, lang, M, userId, session, authProfile, setAuthProfile, s
                       {speakingId === a.id ? <Pause size={16} color={t.accent} /> : <Volume2 size={16} color={t.faint} />}
                     </button>
                     <button onClick={() => toggleStar(a)} style={ghost} title="บันทึกแล้ว"><Bookmark size={17} color={t.accent} fill={t.accent} /></button>
-                    <button onClick={() => sendArticleToVault(a)} style={ghost} title="ส่งเข้า Drive ส่วนตัว">{vaultedIds[a.id] ? <Check size={16} color="#2E9E6B" /> : <Lock size={15} color={t.faint} />}</button>
+                    <button onClick={() => sendArticleToVault(a)} style={ghost} title={vaultedIds.has(a.id) ? "ส่งเข้า Drive ส่วนตัวแล้ว" : "ส่งเข้า Drive ส่วนตัว"}>{vaultedIds.has(a.id) ? <Check size={16} color="#2E9E6B" /> : <Unlock size={15} color={t.faint} />}</button>
                   </div>
                 </>
               )}
@@ -10404,7 +10412,11 @@ const NEWS_CATEGORY_GROUPS = [
 function NewsPage({ t, lang, userId, authProfile, setAuthProfile, setChatOpen, setAskAiTopic, hintDefs, seenHintKeys, dismissHint, setNotes, scrollToTop }) {
   const [category, setCategory] = useState(authProfile?.news_category || "tech");
   const [notedIds, setNotedIds] = useState({}); // article.link -> true ชั่วคราวหลังส่งเข้าโน้ตสำเร็จ (โชว์ติ๊กถูกเขียว เหมือนหน้าความรู้)
-  const [vaultedIds, setVaultedIds] = useState({}); // article.link -> true ชั่วคราวหลังส่งเข้า Drive สำเร็จ
+  const [vaultedIds, setVaultedIds] = useState(new Set()); // article.link ที่เคยส่งเข้า Drive แล้ว (ถาวร โหลดจริงจาก DB)
+  useEffect(() => {
+    if (!userId) return;
+    supabase.from("vault_items").select("source_id").eq("user_id", userId).eq("source_type", "news").then(({ data }) => setVaultedIds(new Set((data || []).map((r) => r.source_id))));
+  }, [userId]);
   const [showArrowHint, arrowHintText, dismissArrowHint] = useHint("news_category_arrows", hintDefs, seenHintKeys, dismissHint); // 💡 แนะนำครั้งแรกว่าปัด/กดลูกศรเปลี่ยนหมวดได้ (ข้อความแก้ได้จากหน้าแอดมิน)
   const [menuOpen, setMenuOpen] = useState(false);
   useEffect(() => { scrollToTop?.(); }, [category]);
@@ -10581,12 +10593,11 @@ function NewsPage({ t, lang, userId, authProfile, setAuthProfile, setChatOpen, s
     }
   };
   const sendNewsToVault = async (x) => {
-    if (!userId) return;
+    if (!userId || vaultedIds.has(x.link)) return;
     const text = `${x.title}\n\n${x.summary || ""}\n\n🔗 ${x.link}`;
-    const { error } = await supabase.from("vault_items").insert({ user_id: userId, type: "text", title: x.title, content: text, mode: "quick", file_size: new TextEncoder().encode(text).length });
+    const { error } = await supabase.from("vault_items").insert({ user_id: userId, type: "text", title: x.title, content: text, mode: "quick", file_size: new TextEncoder().encode(text).length, source_type: "news", source_id: x.link });
     if (!error) {
-      setVaultedIds((m) => ({ ...m, [x.link]: true }));
-      setTimeout(() => setVaultedIds((m) => ({ ...m, [x.link]: false })), 2500);
+      setVaultedIds((s) => new Set(s).add(x.link));
       logAudit(userId, "vault", "add", "ส่งข่าวเข้า Drive: " + x.title);
     }
   };
@@ -10782,8 +10793,8 @@ function NewsPage({ t, lang, userId, authProfile, setAuthProfile, setChatOpen, s
               <span style={{ fontSize: 11, color: notedIds[x.link] ? "#2E9E6B" : t.faint, fontWeight: 700, whiteSpace: "nowrap" }}>{notedIds[x.link] ? "ส่งแล้ว ✓" : "ส่งเข้าโน้ต"}</span>
             </button>
             <button onClick={() => sendNewsToVault(x)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px" }}>
-              <Lock size={15} color={vaultedIds[x.link] ? "#2E9E6B" : t.faint} />
-              <span style={{ fontSize: 11, color: vaultedIds[x.link] ? "#2E9E6B" : t.faint, fontWeight: 700, whiteSpace: "nowrap" }}>{vaultedIds[x.link] ? "ส่งแล้ว ✓" : "ส่งเข้า Drive"}</span>
+              {vaultedIds.has(x.link) ? <Check size={15} color="#2E9E6B" /> : <Unlock size={15} color={t.faint} />}
+              <span style={{ fontSize: 11, color: vaultedIds.has(x.link) ? "#2E9E6B" : t.faint, fontWeight: 700, whiteSpace: "nowrap" }}>{vaultedIds.has(x.link) ? "ส่งเข้า Drive แล้ว" : "ส่งเข้า Drive"}</span>
             </button>
             <button onClick={() => askAi(x)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px" }}>
               <MessageCircle size={15} color={t.faint} />
