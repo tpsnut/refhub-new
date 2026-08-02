@@ -3010,7 +3010,7 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
     if (!target) return;
     const next = !target.pinnedHome;
     setPlaylist((p) => p.map((x) => (x.id === id ? { ...x, pinnedHome: next } : x)));
-    if (userId) supabase.from("playlists").update({ pinned_home: next }).eq("id", id).then(() => {}, () => {});
+    if (userId) supabase.from("playlists").update({ pinned_home: next }).eq("id", id).then(({ error }) => { if (error) { console.error("ปักหมุดไม่สำเร็จ:", error.message); alert("ปักหมุดไม่สำเร็จ: " + error.message + " (เช็คว่ามีคอลัมน์ pinned_home ในตาราง playlists แล้วหรือยัง)"); } }, () => {});
   };
 
   const activeFolderId = tab === "all" || tab === "fav" ? null : tab;
@@ -3398,7 +3398,7 @@ function TrackRow({ t, M, track, active, playing, folders, dragHandleProps, drag
         {isLink && (
           <button onClick={onPinHome} style={ghost} title={track.pinnedHome ? "เอาออกจากหน้าโฮม" : "โชว์ที่หน้าโฮม"}><Home size={15} color={track.pinnedHome ? "#2E9E6B" : t.faint} /></button>
         )}
-        <button onClick={onFav} style={ghost} title="โปรด"><Sparkles size={15} color={track.favorite ? "#E0B24A" : t.faint} fill={track.favorite ? "#E0B24A" : "none"} /></button>
+        <button onClick={onFav} style={ghost} title="โปรด"><Heart size={15} color={track.favorite ? "#E0245E" : t.faint} fill={track.favorite ? "#E0245E" : "none"} /></button>
         {track.kind === "file" && (
           <a href={track.src} download={track.name} style={{ ...ghost, display: "grid", placeItems: "center" }} title="ดาวน์โหลด"><Download size={15} color={t.faint} /></a>
         )}
@@ -7545,7 +7545,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
           const isLastMine = mine && m.id === [...messages].reverse().find((x) => x.sender_id === userId)?.id;
           const readByCount = isLastMine ? otherMembers.filter((u) => reads[u.id] && new Date(reads[u.id]) >= new Date(m.created_at)).length : 0;
           return (
-            <div key={m.id} style={{ display: "flex", flexDirection: "column", alignItems: mine ? "flex-end" : "flex-start", maxWidth: "84%", alignSelf: mine ? "flex-end" : "flex-start", position: "relative" }}>
+            <div key={m.id} style={{ display: "flex", flexDirection: "column", alignItems: mine ? "flex-end" : "flex-start", maxWidth: "88%", alignSelf: mine ? "flex-end" : "flex-start", position: "relative" }}>
               {!mine && thread.isGroup && <div style={{ fontSize: 10.5, color: t.faint, marginBottom: 2, paddingLeft: 34 }}>{senderName}</div>}
               <div style={{ display: "flex", gap: 8, flexDirection: mine ? "row-reverse" : "row" }}>
                 {!mine && (senderMap[m.sender_id]?.avatarUrl ? (
@@ -7596,7 +7596,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
                     onTouchStart={mine && !m.attachment_url ? () => startLongPress(m) : undefined}
                     onTouchEnd={mine && !m.attachment_url ? cancelLongPress : undefined}
                     onTouchMove={mine && !m.attachment_url ? cancelLongPress : undefined}
-                    style={{ background: mine ? t.accent : t.surface, color: mine ? t.onAccent : t.text, padding: m.attachment_url ? 6 : "9px 13px", borderRadius: 14, fontSize: 13.5, lineHeight: 1.4, border: mine ? "none" : `1px solid ${t.border}`, cursor: isCallMsg ? "pointer" : (mine ? "default" : "default"), userSelect: "none", WebkitUserSelect: "none" }}
+                    style={{ background: mine ? t.accent : t.surface, color: mine ? t.onAccent : t.text, padding: m.attachment_url ? 6 : "10px 14px", borderRadius: 14, fontSize: 14.5, lineHeight: 1.5, border: mine ? "none" : `1px solid ${t.borderStrong}`, cursor: isCallMsg ? "pointer" : (mine ? "default" : "default"), userSelect: "none", WebkitUserSelect: "none" }}
                   >
                     {m.attachment_type === "image" && <img src={m.attachment_url} alt="" onClick={() => setLightbox(m.attachment_url)} style={{ maxWidth: 200, borderRadius: 10, display: "block", cursor: "pointer" }} />}
                     {m.attachment_type === "file" && (
@@ -11424,7 +11424,7 @@ function ChatModal({ t, M, mentor, setMentor, authProfile, setAuthProfile, custo
         <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
           {histLoading && <div style={{ alignSelf: "center", color: t.sub, fontSize: 12.5, padding: "20px 0" }}>กำลังโหลดประวัติแชท...</div>}
           {!histLoading && msgs.map((m, i) => (
-            <div key={i} style={{ alignSelf: m.who === "u" ? "flex-end" : "flex-start", maxWidth: "78%", background: m.who === "u" ? M.accent : t.surface, color: m.who === "u" ? M.onAccent : t.text, padding: "10px 14px", borderRadius: 16, fontSize: 13.5, lineHeight: 1.45, border: m.who === "u" ? "none" : `1px solid ${t.border}` }}>
+            <div key={i} style={{ alignSelf: m.who === "u" ? "flex-end" : "flex-start", maxWidth: "88%", background: m.who === "u" ? M.accent : t.surface, color: m.who === "u" ? M.onAccent : t.text, padding: "11px 15px", borderRadius: 16, fontSize: 14.5, lineHeight: 1.5, border: m.who === "u" ? "none" : `1px solid ${t.borderStrong}` }}>
               {m.image && <img src={m.image} alt="" style={{ maxWidth: "100%", borderRadius: 10, marginBottom: m.text ? 6 : 0, display: "block" }} />}
               {m.text}
               {m.isMock && <div style={{ fontSize: 9.5, opacity: 0.55, marginTop: 4 }}>⚠️ โหมดสำรอง (AI ตอบไม่สำเร็จ ดูสาเหตุใน Console)</div>}
