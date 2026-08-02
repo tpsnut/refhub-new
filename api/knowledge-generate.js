@@ -9,6 +9,7 @@
 // ให้ frontend เป็นคน insert เองด้วย client ที่ authenticated อยู่แล้วง่ายกว่า ปลอดภัยกว่า ไม่ต้องพึ่ง service role
 
 import { createClient } from "@supabase/supabase-js";
+import { RoomServiceClient } from "livekit-server-sdk";
 
 // 📊 บันทึกการเรียกใช้ AI แต่ละครั้งลง ai_usage_log (สำหรับแดชบอร์ดใช้งาน/ลิมิตในหน้า Admin)
 async function logAiUsage(provider, moduleName, userId) {
@@ -107,6 +108,40 @@ export default async function handler(req, res) {
   const body = req.body || {};
 
   // 🔊 กิ่งใหม่: อ่านออกเสียงบทความ (ใช้ endpoint เดียวกับสร้างบทความ กัน Vercel function เกิน 12 อัน)
+
+  // 📞 กิ่งใหม่: เช็คสถานะห้อง LiveKit สดๆ ตอนนี้ (เฉพาะ superadmin) — ใช้ endpoint เดียวกัน กัน Vercel function เกิน 12 อัน
+  // หมายเหตุ: นี่คือสถานะห้อง "ตอนนี้" จริง ไม่ใช่ยอดนาที/บิล $ ย้อนหลัง (อันนั้นต้องดูที่ LiveKit Cloud dashboard เอง)
+  if (body.action === "livekit_usage") {
+    const { callerToken } = body;
+    if (!callerToken) return res.status(401).json({ error: "ไม่พบข้อมูลยืนยันตัวตน" });
+    try {
+      const supabaseUrl = process.env.VITE_SUPABASE_URL;
+      const anonKey = process.env.VITE_SUPABASE_ANON_KEY;
+      const authClient = createClient(supabaseUrl, anonKey);
+      const { data: userData, error: userErr } = await authClient.auth.getUser(callerToken);
+      if (userErr || !userData?.user) return res.status(401).json({ error: "ยืนยันตัวตนไม่สำเร็จ" });
+
+      const admin = createClient(supabaseUrl, process.env.SUPABASE_SERVICE_ROLE_KEY);
+      const { data: prof } = await admin.from("profiles").select("is_superadmin").eq("id", userData.user.id).maybeSingle();
+      if (!prof?.is_superadmin) return res.status(403).json({ error: "เฉพาะ superadmin เท่านั้น" });
+
+      if (!process.env.LIVEKIT_API_KEY || !process.env.LIVEKIT_API_SECRET || !process.env.LIVEKIT_URL) {
+        return res.status(500).json({ error: "ยังไม่ได้ตั้งค่า LIVEKIT_API_KEY/SECRET/URL บน Vercel" });
+      }
+      const httpUrl = process.env.LIVEKIT_URL.replace(/^wss:/, "https:").replace(/^ws:/, "http:");
+      const roomService = new RoomServiceClient(httpUrl, process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET);
+      const rooms = await roomService.listRooms();
+      const totalParticipants = rooms.reduce((s, r) => s + (r.numParticipants || 0), 0);
+      return res.status(200).json({
+        activeRooms: rooms.length,
+        totalParticipants,
+        rooms: rooms.map((r) => ({ name: r.name, numParticipants: r.numParticipants, creationTime: r.creationTime?.toString?.() || null })),
+      });
+    } catch (e) {
+      return res.status(500).json({ error: "เช็คสถานะ LiveKit ไม่สำเร็จ: " + e.message });
+    }
+  }
+
   if (body.action === "tts") {
     const { text, voice, callerToken } = body;
     if (!text || typeof text !== "string") return res.status(400).json({ error: "ไม่มีข้อความให้อ่าน" });

@@ -5975,7 +5975,7 @@ function AdminPage({ t, lang, session, userId, adminAlerts, setAdminAlerts, auth
       {tab === "hints" && <AdminHintsPanel t={t} totalMembers={members.filter((m) => m.approved).length} />}
       {tab === "add" && <AdminAddPinMember t={t} session={session} onCreated={loadMembers} />}
       {tab === "billing" && authProfile?.is_superadmin && <AdminBillingPanel t={t} />}
-      {tab === "usage" && authProfile?.is_superadmin && <AdminUsagePanel t={t} />}
+      {tab === "usage" && authProfile?.is_superadmin && <AdminUsagePanel t={t} session={session} />}
 
       {detailMember && (
         <ModalPortal>
@@ -6445,7 +6445,7 @@ function AdminBillingPanel({ t }) {
 // 📊 แผงแอดมิน "การใช้งาน/ลิมิต" — เฉพาะ superadmin เห็นได้ ดึงข้อมูลสดจาก DB ทุกครั้งที่เปิด + รีเฟรชอัตโนมัติทุก 30 วิ
 // ไม่มี API เข้าถึงบิลลิ่งจริงของ Vercel/Groq/DeepSeek/Gemini (ต้องมี token/คีย์ฝั่งนั้นเพิ่ม) เลยนับ "จำนวนครั้งที่เรียก" เอง
 // ผ่าน ai_usage_log แทน ส่วน DB/Storage/ผู้ใช้ เป็นตัวเลขจริงแบบสดจาก Supabase (ผ่านฟังก์ชัน get_app_usage_stats)
-function AdminUsagePanel({ t }) {
+function AdminUsagePanel({ t, session }) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -6454,6 +6454,15 @@ function AdminUsagePanel({ t }) {
   const [editPlan, setEditPlan] = useState("");
   const [editCost, setEditCost] = useState("");
   const [busyId, setBusyId] = useState(null);
+
+  // 🚦 การใช้ AI รายคน (เทียบโควตา daily_ai_limit จริง — ตัวที่บังคับจริงในฝั่ง /api/chat.js แล้ว)
+  const [userUsage, setUserUsage] = useState([]);
+  const [editingLimitId, setEditingLimitId] = useState(null);
+  const [editLimitVal, setEditLimitVal] = useState("");
+
+  // 📞 LiveKit สถานะห้องสด
+  const [livekit, setLivekit] = useState(null);
+  const [livekitErr, setLivekitErr] = useState("");
 
   const loadStats = async () => {
     const { data, error } = await supabase.rpc("get_app_usage_stats");
@@ -6464,11 +6473,30 @@ function AdminUsagePanel({ t }) {
     const { data } = await supabase.from("infra_services").select("*").order("id");
     setServices(data || []);
   };
+  const loadUserUsage = async () => {
+    const { data, error } = await supabase.rpc("get_ai_usage_by_user");
+    if (!error) setUserUsage(data || []); else console.error("โหลดการใช้งาน AI รายคนไม่สำเร็จ:", error.message);
+  };
+  const loadLivekit = async () => {
+    try {
+      const r = await fetch("/api/knowledge-generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "livekit_usage", callerToken: session?.access_token }) });
+      const d = await r.json();
+      if (!r.ok) { setLivekitErr(d.error || "เช็คสถานะ LiveKit ไม่สำเร็จ"); return; }
+      setLivekit(d); setLivekitErr("");
+    } catch (e) { setLivekitErr("เชื่อมต่อ LiveKit ไม่สำเร็จ: " + e.message); }
+  };
   useEffect(() => {
-    loadStats(); loadServices();
-    const interval = setInterval(loadStats, 30000); // 🔄 รีเฟรชอัตโนมัติทุก 30 วิ ให้ใกล้เคียง real-time
+    loadStats(); loadServices(); loadUserUsage(); loadLivekit();
+    const interval = setInterval(() => { loadStats(); loadUserUsage(); loadLivekit(); }, 30000); // 🔄 รีเฟรชอัตโนมัติทุก 30 วิ ให้ใกล้เคียง real-time
     return () => clearInterval(interval);
   }, []);
+
+  const saveUserLimit = async (userId) => {
+    const val = Math.max(1, parseInt(editLimitVal) || 200);
+    await supabase.from("profiles").update({ daily_ai_limit: val }).eq("id", userId);
+    setEditingLimitId(null);
+    await loadUserUsage();
+  };
 
   const saveService = async (id) => {
     setBusyId(id);
@@ -6544,6 +6572,46 @@ function AdminUsagePanel({ t }) {
           Object.entries(stats.ai_usage_month).map(([p, c]) => (
             <div key={p} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: t.text, marginBottom: 3 }}><span>{p}</span><span>{c} ครั้ง</span></div>
           ))}
+      </div>
+
+      <div style={{ ...card(t), padding: 16 }}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: t.text, marginBottom: 2 }}>โควตา AI รายคน (บังคับจริง)</div>
+        <div style={{ fontSize: 10.5, color: t.faint, marginBottom: 10 }}>นับเฉพาะแชทโค้ช (mentor_chat) ต่อวัน ตามเวลาไทย — เกินโควตาจะถูกบล็อกจริงที่ /api/chat.js ไม่ใช่แค่เตือนเฉยๆ</div>
+        {userUsage.length === 0 ? <div style={{ fontSize: 11.5, color: t.faint }}>ยังไม่มีข้อมูล</div> : userUsage.map((u) => {
+          const pct = Math.min(100, (Number(u.today_count) / (u.daily_ai_limit || 1)) * 100);
+          return (
+            <div key={u.user_id} style={{ padding: "8px 0", borderTop: `1px solid ${t.border}` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: t.text }}>{u.name || "(ไม่มีชื่อ)"}</span>
+                {editingLimitId === u.user_id ? (
+                  <div style={{ display: "flex", gap: 4 }}>
+                    <input type="number" value={editLimitVal} onChange={(e) => setEditLimitVal(e.target.value)} style={{ width: 60, padding: "3px 6px", fontSize: 11, borderRadius: 6, border: `1px solid ${t.border}`, background: t.inputBg, color: t.text }} />
+                    <button onClick={() => saveUserLimit(u.user_id)} style={{ fontSize: 11, fontWeight: 700, color: t.accent, background: "none", border: "none", cursor: "pointer" }}>บันทึก</button>
+                  </div>
+                ) : (
+                  <button onClick={() => { setEditingLimitId(u.user_id); setEditLimitVal(String(u.daily_ai_limit)); }} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer" }}>
+                    <span style={{ fontSize: 11.5, color: pct >= 100 ? "#D9534F" : t.sub }}>{u.today_count} / {u.daily_ai_limit} ครั้งวันนี้</span>
+                    <Pencil size={11} color={t.faint} />
+                  </button>
+                )}
+              </div>
+              <div style={{ height: 5, borderRadius: 3, background: t.border, overflow: "hidden" }}>
+                <div style={{ height: "100%", width: `${pct}%`, background: pct >= 100 ? "#D9534F" : pct > 70 ? "#E8894A" : t.accent, borderRadius: 3 }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ ...card(t), padding: 16 }}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: t.text, marginBottom: 2 }}>LiveKit (แชท/โทร) — สถานะสด</div>
+        <div style={{ fontSize: 10.5, color: t.faint, marginBottom: 10 }}>สถานะห้อง "ตอนนี้" จริง — ยอดนาที/บิล $ ย้อนหลังต้องดูที่ LiveKit Cloud dashboard เอง</div>
+        {livekitErr ? <div style={{ fontSize: 11.5, color: "#D9534F" }}>{livekitErr}</div> : !livekit ? <div style={{ fontSize: 11.5, color: t.faint }}>กำลังโหลด...</div> : (
+          <div style={{ display: "flex", gap: 10 }}>
+            <div style={{ flex: 1, textAlign: "center" }}><div style={{ fontSize: 19, fontWeight: 800, color: t.text }}>{livekit.activeRooms}</div><div style={{ fontSize: 10.5, color: t.sub }}>ห้องที่กำลังใช้งาน</div></div>
+            <div style={{ flex: 1, textAlign: "center" }}><div style={{ fontSize: 19, fontWeight: 800, color: t.text }}>{livekit.totalParticipants}</div><div style={{ fontSize: 10.5, color: t.sub }}>คนที่กำลังคุยอยู่</div></div>
+          </div>
+        )}
       </div>
 
       <div style={{ ...card(t), padding: 12, border: `1px dashed ${t.border}` }}>

@@ -108,8 +108,9 @@ export default async function handler(req, res) {
   )) + (goalsContext ? `\n\n[ข้อมูลเป้าหมายจริงของผู้ใช้ ณ ตอนนี้ — ใช้ประกอบการให้คำแนะนำแบบธรรมชาติ ไม่ต้องพูดถึงทุกครั้งหรือฟังดูเหมือนอ่านสคริปต์ แค่หยิบมาใช้เวลาที่เกี่ยวข้องกับสิ่งที่คุยกันจริงๆ เช่น ถ้าผู้ใช้ถามเรื่องแรงจูงใจ/ผัดวันประกันพรุ่ง ให้ลองอ้างอิงเป้าหมายจริงของเขาได้เลย]\n${goalsContext}` : "");
   if (!Array.isArray(messages) || messages.length === 0) return res.status(400).json({ error: "ไม่มีข้อความส่งมา" });
 
-  // เช็คสิทธิ์พรีเมียม (ถ้ามี userId+token ส่งมา — ถ้าไม่มีถือว่าไม่มีสิทธิ์พรีเมียม ไม่ error เพราะฟีเจอร์ฟรียังใช้ได้ปกติ)
+  // เช็คสิทธิ์พรีเมียม + โควตา AI รายวัน (ถ้ามี userId+token ส่งมา — ถ้าไม่มีถือว่าไม่มีสิทธิ์พรีเมียม ไม่ error เพราะฟีเจอร์ฟรียังใช้ได้ปกติ)
   let isPremium = false;
+  let verifiedUserId = null;
   if (userId && callerToken) {
     try {
       const supabaseUrl = process.env.VITE_SUPABASE_URL;
@@ -117,11 +118,26 @@ export default async function handler(req, res) {
       const authClient = createClient(supabaseUrl, anonKey);
       const { data: userData } = await authClient.auth.getUser(callerToken);
       if (userData?.user?.id === userId) {
+        verifiedUserId = userId;
         const admin = createClient(supabaseUrl, process.env.SUPABASE_SERVICE_ROLE_KEY);
-        const { data: prof } = await admin.from("profiles").select("premium_ai").eq("id", userId).maybeSingle();
+        const { data: prof } = await admin.from("profiles").select("premium_ai, daily_ai_limit").eq("id", userId).maybeSingle();
         isPremium = !!prof?.premium_ai;
+
+        // 🚦 โควตา AI รายวันจริง (นับตามวันเวลาไทย Asia/Bangkok ไม่ใช่ UTC เที่ยงคืน) — บล็อกจริงถ้าเกิน ไม่ใช่แค่โชว์เฉยๆ
+        const dailyLimit = prof?.daily_ai_limit ?? 200;
+        const bkkOffsetMs = 7 * 60 * 60 * 1000;
+        const bkkNow = new Date(Date.now() + bkkOffsetMs);
+        const bkkMidnightUtc = new Date(Date.UTC(bkkNow.getUTCFullYear(), bkkNow.getUTCMonth(), bkkNow.getUTCDate()) - bkkOffsetMs);
+        const { count } = await admin.from("ai_usage_log").select("id", { count: "exact", head: true })
+          .eq("user_id", userId).eq("module", "mentor_chat").gte("created_at", bkkMidnightUtc.toISOString());
+        if ((count || 0) >= dailyLimit) {
+          return res.status(429).json({
+            error: `ใช้ครบโควตา AI วันนี้แล้ว (${count}/${dailyLimit} ครั้ง) พรุ่งนี้โควตาจะรีเซ็ตใหม่ ถ้าต้องการเพิ่มโควตา ติดต่อแอดมิน`,
+            quotaExceeded: true,
+          });
+        }
       }
-    } catch (e) { console.error("เช็คสิทธิ์พรีเมียมไม่สำเร็จ (ถือว่าไม่มีสิทธิ์):", e.message); }
+    } catch (e) { console.error("เช็คสิทธิ์พรีเมียม/โควตาไม่สำเร็จ (ถือว่าไม่มีสิทธิ์/ปล่อยผ่าน):", e.message); }
   }
 
   const errors = [];
@@ -129,7 +145,7 @@ export default async function handler(req, res) {
   if (process.env.GEMINI_API_KEY) {
     try {
       const text = await callGemini(process.env.GEMINI_API_KEY, system, messages);
-      await logAiUsage("gemini", userId);
+      await logAiUsage("gemini", verifiedUserId);
       return res.status(200).json({ text, source: "gemini" });
     }
     catch (e) { errors.push(`Gemini: ${e.message}`); console.error("Gemini พัง สลับตัวถัดไป:", e.message); }
@@ -138,7 +154,7 @@ export default async function handler(req, res) {
   if (process.env.GROQ_API_KEY) {
     try {
       const text = await callGroq(system, messages);
-      await logAiUsage("groq", userId);
+      await logAiUsage("groq", verifiedUserId);
       return res.status(200).json({ text, source: "groq" });
     }
     catch (e) { errors.push(`Groq: ${e.message}`); console.error("Groq พัง สลับตัวถัดไป:", e.message); }
@@ -148,7 +164,7 @@ export default async function handler(req, res) {
     if (process.env.DEEPSEEK_API_KEY) {
       try {
         const text = await callDeepSeek(system, messages);
-        await logAiUsage("deepseek", userId);
+        await logAiUsage("deepseek", verifiedUserId);
         return res.status(200).json({ text, source: "deepseek" });
       }
       catch (e) { errors.push(`DeepSeek: ${e.message}`); console.error("DeepSeek พัง สลับตัวถัดไป:", e.message); }
@@ -156,7 +172,7 @@ export default async function handler(req, res) {
     if (process.env.GEMINI_API_KEY_PAID) {
       try {
         const text = await callGemini(process.env.GEMINI_API_KEY_PAID, system, messages);
-        await logAiUsage("gemini_paid", userId);
+        await logAiUsage("gemini_paid", verifiedUserId);
         return res.status(200).json({ text, source: "gemini_paid" });
       }
       catch (e) { errors.push(`Gemini (จ่ายเงิน): ${e.message}`); console.error("Gemini จ่ายเงิน พัง:", e.message); }
