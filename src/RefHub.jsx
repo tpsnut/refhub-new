@@ -5157,6 +5157,9 @@ function AdminActivityPanel({ t, members }) {
       const { data: f } = await supabase.from("feedback").select("*").order("created_at", { ascending: false }).limit(100);
       setLogs(l || []); setFeedback(f || []);
       setLoading(false);
+      // 📖 เปิดแท็บนี้ = ถือว่าอ่านข้อเสนอแนะแล้วทั้งหมด (ทำเครื่องหมายอ่านแล้วเงียบๆ ไม่ต้องรอ user กดอะไรเพิ่ม)
+      const unreadIds = (f || []).filter((x) => !x.read).map((x) => x.id);
+      if (unreadIds.length) supabase.from("feedback").update({ read: true }).in("id", unreadIds).then(() => {}, () => {});
     })();
   }, []);
 
@@ -5222,6 +5225,7 @@ function AdminActivityPanel({ t, members }) {
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                 {m?.avatar_url ? <img src={m.avatar_url} alt="" style={{ width: 24, height: 24, borderRadius: 8, objectFit: "cover" }} /> : <div style={{ width: 24, height: 24, borderRadius: 8, background: colorFor(m?.name || "?"), color: "#fff", display: "grid", placeItems: "center", fontSize: 10, fontWeight: 700 }}>{(m?.name || "?")[0]?.toUpperCase()}</div>}
                 <div style={{ fontSize: 12, fontWeight: 700, color: t.text }}>{m?.name || m?.email || "ไม่ทราบชื่อ"}</div>
+                {!f.read && <span style={{ fontSize: 9, fontWeight: 800, color: "#fff", background: "#D9534F", borderRadius: 8, padding: "1px 7px" }}>ใหม่</span>}
                 <div style={{ fontSize: 10, color: t.faint, marginLeft: "auto" }}>{new Date(f.created_at).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}</div>
               </div>
               <div style={{ fontSize: 13, color: t.text, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{f.message}</div>
@@ -5593,6 +5597,10 @@ function AdminPage({ t, lang, session, userId, adminAlerts, setAdminAlerts, auth
   const [members, setMembers] = useState([]);
   const [loadingList, setLoadingList] = useState(true);
   const [detailMember, setDetailMember] = useState(null); // เปิด detail sheet ของสมาชิกคนนี้อยู่
+  const [memberSearch, setMemberSearch] = useState(""); // ค้นหาสมาชิกด้วยชื่อ/อีเมล
+  const [memberFilter, setMemberFilter] = useState("all"); // all | pending | online — กดจากการ์ดสถิติในภาพรวม
+  const [billingSummary, setBillingSummary] = useState(null); // { total, paying, revenue } — เฉพาะ superadmin
+  const [unreadFeedback, setUnreadFeedback] = useState(0);
 
   const loadMembers = async () => {
     setLoadingList(true);
@@ -5609,6 +5617,27 @@ function AdminPage({ t, lang, session, userId, adminAlerts, setAdminAlerts, auth
     setLoadingList(false);
   };
   useEffect(() => { loadMembers(); }, []);
+
+  // 💳 สรุปแพ็กเกจแบบย่อในภาพรวม (เฉพาะ superadmin) — คำนวณฝั่ง client จากข้อมูลเบาๆ ไม่ query ซ้ำซ้อนกับ AdminBillingPanel
+  useEffect(() => {
+    if (!authProfile?.is_superadmin) return;
+    (async () => {
+      const { data } = await supabase.from("families").select("plan,payment_status,bypass_billing");
+      if (!data) return;
+      const total = data.length;
+      const paying = data.filter((f) => !f.bypass_billing && f.plan !== "trial").length;
+      const revenue = data.reduce((s, f) => s + (!f.bypass_billing && f.payment_status === "active" ? (PLAN_INFO[f.plan]?.price || 0) : 0), 0);
+      setBillingSummary({ total, paying, revenue });
+    })();
+  }, [authProfile?.is_superadmin, tab]);
+
+  // 💬 นับข้อเสนอแนะที่ยังไม่ได้อ่าน — โชว์เป็นเลขแจ้งเตือนในภาพรวม
+  useEffect(() => {
+    (async () => {
+      const { count } = await supabase.from("feedback").select("id", { count: "exact", head: true }).eq("read", false);
+      setUnreadFeedback(count || 0);
+    })();
+  }, [tab]);
 
   const isOnline = (lastSeen) => lastSeen && (Date.now() - new Date(lastSeen).getTime()) < 2 * 60 * 1000;
 
@@ -5629,14 +5658,20 @@ function AdminPage({ t, lang, session, userId, adminAlerts, setAdminAlerts, auth
   const setPremiumAi = async (id, premium_ai) => { await supabase.from("profiles").update({ premium_ai }).eq("id", id); loadMembers(); };
   const setMentorLimit = async (id, mentor_limit) => { await supabase.from("profiles").update({ mentor_limit }).eq("id", id); loadMembers(); };
   const resetMentorPick = async (id) => { await supabase.from("custom_mentors").delete().eq("user_id", id); loadMembers(); };
-  const setTopicLimit = async (id, topic_limit) => { await supabase.from("profiles").update({ topic_limit }).eq("id", id); loadMembers(); };
-  const setDailyArticleLimit = async (id, daily_article_limit) => { await supabase.from("profiles").update({ daily_article_limit }).eq("id", id); loadMembers(); };
+  // 🔧 ตั้งค่าคลังความรู้ (บทความ/วัน, หมวดสูงสุด) — ถ้าเป็นการตั้งค่าของตัวเอง (userId) ต้อง sync authProfile ทันทีด้วย ไม่งั้นค่าจะไม่อัปเดตจนกว่าจะรีโหลดหน้า
+  const setTopicLimit = async (id, topic_limit) => { await supabase.from("profiles").update({ topic_limit }).eq("id", id); if (id === userId) setAuthProfile((p) => ({ ...p, topic_limit })); loadMembers(); };
+  const setDailyArticleLimit = async (id, daily_article_limit) => { await supabase.from("profiles").update({ daily_article_limit }).eq("id", id); if (id === userId) setAuthProfile((p) => ({ ...p, daily_article_limit })); loadMembers(); };
   const setCanRefreshArticles = async (id, can_refresh_articles) => { await supabase.from("profiles").update({ can_refresh_articles }).eq("id", id); loadMembers(); };
   const removeMember = async (id) => { await supabase.from("profiles").delete().eq("id", id); setDetailMember(null); loadMembers(); };
 
   const pendingCount = members.filter((m) => !m.approved).length;
   const onlineMembers = members.filter((m) => isOnline(m.last_seen));
   const recentMembers = [...members].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5);
+
+  // 🔍 รายการสมาชิกหลังกรอง (ค้นหา + ฟิลเตอร์จากการ์ดสถิติ) ใช้ในแท็บ "สมาชิก"
+  const filteredMembers = members
+    .filter((m) => memberFilter === "pending" ? !m.approved : memberFilter === "online" ? isOnline(m.last_seen) : true)
+    .filter((m) => !memberSearch.trim() || (m.name || "").toLowerCase().includes(memberSearch.trim().toLowerCase()) || (m.email || "").toLowerCase().includes(memberSearch.trim().toLowerCase()));
 
   const AvatarDot = ({ m, size = 40 }) => (
     <div style={{ position: "relative", flexShrink: 0 }}>
@@ -5665,53 +5700,67 @@ function AdminPage({ t, lang, session, userId, adminAlerts, setAdminAlerts, auth
         </div>
       )}
 
-      <div style={{ position: "relative", marginBottom: 14 }}>
-        <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2 }}>
-          {[["overview", "ภาพรวม"], ["members", "สมาชิก"], ["activity", "กิจกรรม"], ["announce", "ประกาศ"], ["news", "ข่าวสาร"], ["hints", "คำแนะนำ"], ["add", "เพิ่มสมาชิก"], ...(authProfile?.is_superadmin ? [["billing", "แพ็กเกจ"]] : [])].map(([v, lb]) => (
-            <button key={v} onClick={() => setTab(v)} style={{ flexShrink: 0, padding: "9px 16px", borderRadius: 12, cursor: "pointer", border: `1.5px solid ${tab === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 12.5, background: tab === v ? t.accent : "transparent", color: tab === v ? t.onAccent : t.sub, whiteSpace: "nowrap" }}>{lb}</button>
-          ))}
-        </div>
-        <div style={{ position: "absolute", right: 0, top: 0, bottom: 2, width: 28, pointerEvents: "none", background: `linear-gradient(to right, transparent, ${t.bg})` }} />
-      </div>
+      {tab !== "overview" && (
+        <button onClick={() => { setTab("overview"); setMemberFilter("all"); setMemberSearch(""); }} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", marginBottom: 14, padding: 0 }}>
+          <ChevronLeft size={18} color={t.sub} /><span style={{ fontSize: 13, fontWeight: 700, color: t.sub }}>กลับไปภาพรวม</span>
+        </button>
+      )}
 
       {tab === "overview" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <div style={{ ...card(t), padding: 16 }}>
-            <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text, marginBottom: 4 }}>⚙️ ตั้งค่าคลังความรู้ (บัญชีของฉันเอง)</div>
-            <div style={{ fontSize: 11, color: t.sub, marginBottom: 12 }}>กำหนดจำนวนบทความ/หมวดที่ AI สร้างให้ทุกวัน กันบทความล้นเก็บสะสมเยอะเกินไป</div>
-            <div style={{ display: "flex", gap: 10 }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 11, color: t.faint, marginBottom: 4 }}>บทความ/วัน</div>
-                <select value={authProfile?.daily_article_limit ?? 3} onChange={async (e) => { const v = +e.target.value; await supabase.from("profiles").update({ daily_article_limit: v }).eq("id", userId); setAuthProfile((p) => ({ ...p, daily_article_limit: v })); }} style={{ border: `1px solid ${t.border}`, borderRadius: 8, background: t.inputBg, color: t.text, fontWeight: 700, fontSize: 12.5, padding: "4px 8px", width: "100%" }}>
-                  {[1, 2, 3, 4, 5, 6, 8, 10].map((n) => <option key={n} value={n}>{n} บทความ</option>)}
-                </select>
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 11, color: t.faint, marginBottom: 4 }}>หมวดที่เลือกได้สูงสุด</div>
-                <select value={authProfile?.topic_limit ?? KNOWLEDGE_TOPICS.length} onChange={async (e) => { const v = +e.target.value; await supabase.from("profiles").update({ topic_limit: v }).eq("id", userId); setAuthProfile((p) => ({ ...p, topic_limit: v })); }} style={{ border: `1px solid ${t.border}`, borderRadius: 8, background: t.inputBg, color: t.text, fontWeight: 700, fontSize: 12.5, padding: "4px 8px", width: "100%" }}>
-                  {[1, 2, 3, 4, 5, 6, 8, 10].map((n) => <option key={n} value={n}>{n} หมวด</option>)}
-                </select>
-              </div>
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: 10 }}>
-            <div style={{ ...card(t), flex: 1, padding: 16, textAlign: "center" }}>
-              <div style={{ fontSize: 22, fontWeight: 800, color: t.text }}>{members.length}</div>
-              <div style={{ fontSize: 11, color: t.sub, marginTop: 2 }}>สมาชิกทั้งหมด</div>
-            </div>
-            <div style={{ ...card(t), flex: 1, padding: 16, textAlign: "center" }}>
-              <div style={{ fontSize: 22, fontWeight: 800, color: pendingCount ? "#D9534F" : t.text }}>{pendingCount}</div>
-              <div style={{ fontSize: 11, color: t.sub, marginTop: 2 }}>รออนุมัติ</div>
-            </div>
-            <div style={{ ...card(t), flex: 1, padding: 16, textAlign: "center" }}>
-              <div style={{ fontSize: 22, fontWeight: 800, color: "#2E9E6B" }}>{onlineMembers.length}</div>
-              <div style={{ fontSize: 11, color: t.sub, marginTop: 2 }}>ออนไลน์ตอนนี้</div>
-            </div>
+          <div style={{ position: "relative" }}>
+            <Search size={15} color={t.faint} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
+            <input value={memberSearch} onChange={(e) => setMemberSearch(e.target.value)} onFocus={() => setTab("members")} placeholder="ค้นหาสมาชิกด้วยชื่อ/อีเมล..." style={{ ...input(t), paddingLeft: 34 }} />
           </div>
 
-          {pendingCount > 0 && (
-            <button onClick={() => setTab("members")} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "12px 0" }}>ไปอนุมัติสมาชิกที่รออยู่ ({pendingCount})</button>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={() => { setMemberFilter("all"); setTab("members"); }} style={{ ...card(t), flex: 1, padding: 16, textAlign: "center", border: "none", cursor: "pointer" }}>
+              <div style={{ fontSize: 22, fontWeight: 800, color: t.text }}>{members.length}</div>
+              <div style={{ fontSize: 11, color: t.sub, marginTop: 2 }}>สมาชิกทั้งหมด</div>
+            </button>
+            <button onClick={() => { setMemberFilter("pending"); setTab("members"); }} style={{ ...card(t), flex: 1, padding: 16, textAlign: "center", border: "none", cursor: "pointer" }}>
+              <div style={{ fontSize: 22, fontWeight: 800, color: pendingCount ? "#D9534F" : t.text }}>{pendingCount}</div>
+              <div style={{ fontSize: 11, color: t.sub, marginTop: 2 }}>รออนุมัติ</div>
+            </button>
+            <button onClick={() => { setMemberFilter("online"); setTab("members"); }} style={{ ...card(t), flex: 1, padding: 16, textAlign: "center", border: "none", cursor: "pointer" }}>
+              <div style={{ fontSize: 22, fontWeight: 800, color: "#2E9E6B" }}>{onlineMembers.length}</div>
+              <div style={{ fontSize: 11, color: t.sub, marginTop: 2 }}>ออนไลน์ตอนนี้</div>
+            </button>
+          </div>
+
+          {(pendingCount > 0 || unreadFeedback > 0) && (
+            <div style={{ ...card(t), padding: 14, border: `1px solid #D9534F55` }}>
+              <div style={{ fontSize: 12.5, fontWeight: 800, color: t.text, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>🔔 ต้องดำเนินการ</div>
+              {pendingCount > 0 && (
+                <button onClick={() => { setMemberFilter("pending"); setTab("members"); }} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "none", border: "none", cursor: "pointer", padding: "6px 0", textAlign: "left" }}>
+                  <span style={{ fontSize: 12.5, color: t.text }}>สมาชิกรออนุมัติ</span>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: "#D9534F", display: "flex", alignItems: "center", gap: 4 }}>{pendingCount} <ChevronRight size={13} /></span>
+                </button>
+              )}
+              {unreadFeedback > 0 && (
+                <button onClick={() => setTab("activity")} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "none", border: "none", cursor: "pointer", padding: "6px 0", textAlign: "left" }}>
+                  <span style={{ fontSize: 12.5, color: t.text }}>ข้อเสนอแนะใหม่ที่ยังไม่ได้อ่าน</span>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: "#D9534F", display: "flex", alignItems: "center", gap: 4 }}>{unreadFeedback} <ChevronRight size={13} /></span>
+                </button>
+              )}
+            </div>
           )}
+
+          {authProfile?.is_superadmin && billingSummary && (
+            <button onClick={() => setTab("billing")} style={{ ...card(t), padding: 14, display: "flex", alignItems: "center", gap: 14, border: "none", cursor: "pointer", textAlign: "left", width: "100%" }}>
+              <CreditCard size={20} color={t.accent} style={{ flexShrink: 0 }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 800, color: t.text }}>แพ็กเกจ/บิลลิ่ง</div>
+                <div style={{ fontSize: 11, color: t.sub }}>{billingSummary.total} ครอบครัว · {billingSummary.paying} จ่ายเงินจริง · ~{billingSummary.revenue.toLocaleString()}฿/เดือน</div>
+              </div>
+              <ChevronRight size={16} color={t.faint} />
+            </button>
+          )}
+
+          <div style={{ ...card(t), padding: 12, border: `1px dashed ${t.border}`, display: "flex", alignItems: "center", gap: 10 }}>
+            <Info size={16} color="#E8894A" style={{ flexShrink: 0 }} />
+            <div style={{ fontSize: 11, color: t.sub }}>Vercel Hobby plan อยู่ที่ลิมิต 12 serverless functions พอดี — ถ้าจะเพิ่ม endpoint ใหม่ ต้องรวมเข้าไฟล์เดิมหรืออัปเกรดแผนก่อน</div>
+          </div>
 
           <div>
             <div style={{ fontSize: 12.5, fontWeight: 800, color: t.sub, marginBottom: 8 }}>🟢 ออนไลน์ตอนนี้</div>
@@ -5744,14 +5793,82 @@ function AdminPage({ t, lang, session, userId, adminAlerts, setAdminAlerts, auth
               ))}
             </div>
           </div>
+
+          {/* ⚙️ เมนูตั้งค่า/หมวดหมู่ทั้งหมด — แบบลิสต์แนวตั้งจัดกลุ่ม (แทนแท็บแนวนอนเดิม) รองรับเพิ่มรายการได้ไม่จำกัดโดยไม่รกจอ */}
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 800, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6, marginTop: 4 }}>จัดการสมาชิก</div>
+            <div style={{ ...card(t), overflow: "hidden" }}>
+              {[
+                { v: "members", Ic: Users, label: "สมาชิกทั้งหมด", sub: `${members.length} คน` },
+                { v: "add", Ic: Plus, label: "เพิ่มสมาชิกด้วย PIN", sub: "สำหรับผู้ใหญ่ที่ไม่ถนัดใช้อีเมล" },
+              ].map((r, i, arr) => (
+                <button key={r.v} onClick={() => { if (r.v === "members") setMemberFilter("all"); setTab(r.v); }} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "13px 14px", background: "none", border: "none", borderBottom: i < arr.length - 1 ? `1px solid ${t.border}` : "none", cursor: "pointer", textAlign: "left" }}>
+                  <r.Ic size={17} color={t.sub} />
+                  <div style={{ flex: 1 }}><div style={{ fontSize: 13, color: t.text, fontWeight: 600 }}>{r.label}</div><div style={{ fontSize: 10.5, color: t.faint }}>{r.sub}</div></div>
+                  <ChevronRight size={16} color={t.faint} />
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {authProfile?.is_superadmin && (
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 800, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>แพ็กเกจ/บิลลิ่ง</div>
+              <div style={{ ...card(t), overflow: "hidden" }}>
+                <button onClick={() => setTab("billing")} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "13px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
+                  <CreditCard size={17} color={t.sub} />
+                  <div style={{ flex: 1 }}><div style={{ fontSize: 13, color: t.text, fontWeight: 600 }}>จัดการแพ็กเกจ</div><div style={{ fontSize: 10.5, color: t.faint }}>ดู/แก้ไขทุกครอบครัวในระบบ</div></div>
+                  <ChevronRight size={16} color={t.faint} />
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 800, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>เนื้อหา</div>
+            <div style={{ ...card(t), overflow: "hidden" }}>
+              {[
+                { v: "announce", Ic: Bell, label: "ประกาศ", sub: "ส่งข้อความถึงทุกคน" },
+                { v: "news", Ic: Newspaper, label: "ข่าวสาร", sub: "จัดการหมวดหมู่/แหล่งข่าว" },
+                { v: "hints", Ic: HelpCircle, label: "คำแนะนำการใช้งาน", sub: "ข้อความ coachmark ในแอป" },
+              ].map((r, i, arr) => (
+                <button key={r.v} onClick={() => setTab(r.v)} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "13px 14px", background: "none", border: "none", borderBottom: i < arr.length - 1 ? `1px solid ${t.border}` : "none", cursor: "pointer", textAlign: "left" }}>
+                  <r.Ic size={17} color={t.sub} />
+                  <div style={{ flex: 1 }}><div style={{ fontSize: 13, color: t.text, fontWeight: 600 }}>{r.label}</div><div style={{ fontSize: 10.5, color: t.faint }}>{r.sub}</div></div>
+                  <ChevronRight size={16} color={t.faint} />
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 800, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>ระบบ</div>
+            <div style={{ ...card(t), overflow: "hidden" }}>
+              <button onClick={() => setTab("activity")} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "13px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
+                <Clock size={17} color={t.sub} />
+                <div style={{ flex: 1 }}><div style={{ fontSize: 13, color: t.text, fontWeight: 600 }}>กิจกรรม/ความเคลื่อนไหว</div><div style={{ fontSize: 10.5, color: t.faint }}>Activity log + ข้อเสนอแนะ</div></div>
+                {unreadFeedback > 0 && <span style={{ fontSize: 10, fontWeight: 800, color: "#fff", background: "#D9534F", borderRadius: 10, padding: "2px 7px", marginRight: 4 }}>{unreadFeedback}</span>}
+                <ChevronRight size={16} color={t.faint} />
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
       {tab === "members" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ position: "relative", marginBottom: 2 }}>
+            <Search size={15} color={t.faint} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
+            <input value={memberSearch} onChange={(e) => setMemberSearch(e.target.value)} placeholder="ค้นหาชื่อ/อีเมล..." style={{ ...input(t), paddingLeft: 34 }} />
+          </div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
+            {[["all", `ทั้งหมด (${members.length})`], ["pending", `รออนุมัติ (${pendingCount})`], ["online", `ออนไลน์ (${onlineMembers.length})`]].map(([v, lb]) => (
+              <button key={v} onClick={() => setMemberFilter(v)} style={{ flexShrink: 0, padding: "7px 13px", borderRadius: 10, cursor: "pointer", border: `1.5px solid ${memberFilter === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 11.5, background: memberFilter === v ? t.accent : "transparent", color: memberFilter === v ? t.onAccent : t.sub }}>{lb}</button>
+            ))}
+          </div>
           {loadingList && <Empty t={t} text="กำลังโหลด..." />}
-          {!loadingList && members.length === 0 && <Empty t={t} text="ยังไม่มีสมาชิก" />}
-          {members.map((m) => (
+          {!loadingList && filteredMembers.length === 0 && <Empty t={t} text="ไม่พบสมาชิกที่ตรงกับเงื่อนไข" />}
+          {filteredMembers.map((m) => (
             <button key={m.id} onClick={() => setDetailMember(m)} style={{ ...card(t), padding: 12, display: "flex", alignItems: "center", gap: 10, cursor: "pointer", border: `1px solid ${t.border}`, borderLeft: `3px solid ${m.approved ? "#2E9E6B" : "#D9534F"}`, textAlign: "left", width: "100%" }}>
               <AvatarDot m={m} size={38} />
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -5838,6 +5955,22 @@ function MemberDetailModal({ t, m, isSelf, isOnline, setApproved, setRole, setCa
             {m.approved ? <UserCheck size={13} /> : <UserX size={13} />} {m.approved ? "อนุมัติแล้ว" : "รออนุมัติ (กดเพื่ออนุมัติ)"}
           </button>
         </Row>
+        {isSelf && (
+          <>
+            <div style={{ fontSize: 11.5, fontWeight: 800, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, margin: "18px 0 4px" }}>⚙️ ตั้งค่าคลังความรู้ (บัญชีของฉันเอง)</div>
+            <div style={{ fontSize: 11, color: t.sub, marginBottom: 8 }}>กำหนดจำนวนบทความ/หมวดที่ AI สร้างให้ทุกวัน กันบทความล้นเก็บสะสมเยอะเกินไป</div>
+            <Row label="บทความ/วัน">
+              <select value={m.daily_article_limit ?? 3} onChange={(e) => setDailyArticleLimit(m.id, +e.target.value)} style={selectStyle}>
+                {[1, 2, 3, 4, 5, 6, 8, 10].map((n) => <option key={n} value={n}>{n} บทความ</option>)}
+              </select>
+            </Row>
+            <Row label="หมวดที่เลือกได้สูงสุด">
+              <select value={m.topic_limit ?? KNOWLEDGE_TOPICS.length} onChange={(e) => setTopicLimit(m.id, +e.target.value)} style={selectStyle}>
+                {[1, 2, 3, 4, 5, 6, 8, 10].map((n) => <option key={n} value={n}>{n} หมวด</option>)}
+              </select>
+            </Row>
+          </>
+        )}
         {!isSelf && (
           <Row label="สิทธิ์แอดมิน">
             <button onClick={() => setRole(m.id, m.role === "admin" ? "member" : "admin")} style={{ padding: "6px 12px", borderRadius: 10, border: `1px solid ${t.border}`, cursor: "pointer", background: "none", color: t.sub, fontSize: 12, fontWeight: 700 }}>{m.role === "admin" ? "ถอดสิทธิ์แอดมิน" : "ตั้งเป็นแอดมิน"}</button>
@@ -5883,16 +6016,20 @@ function MemberDetailModal({ t, m, isSelf, isOnline, setApproved, setRole, setCa
             <Row label="ล้างโค้ชที่สร้างไว้ทั้งหมด">
               <button onClick={() => resetMentorPick(m.id)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 10, border: `1px solid ${t.border}`, cursor: "pointer", background: "none", color: t.sub, fontSize: 12, fontWeight: 700 }}>ล้างทั้งหมด</button>
             </Row>
-            <Row label="หมวดความสนใจสูงสุด">
-              <select value={m.topic_limit ?? 3} onChange={(e) => setTopicLimit(m.id, +e.target.value)} style={selectStyle}>
-                {Array.from({ length: 14 }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n} หมวด</option>)}
-              </select>
-            </Row>
-            <Row label="บทความความรู้/วัน">
-              <select value={m.daily_article_limit ?? 3} onChange={(e) => setDailyArticleLimit(m.id, +e.target.value)} style={selectStyle}>
-                {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n} บทความ</option>)}
-              </select>
-            </Row>
+            {!isSelf && (
+              <>
+                <Row label="หมวดความสนใจสูงสุด">
+                  <select value={m.topic_limit ?? 3} onChange={(e) => setTopicLimit(m.id, +e.target.value)} style={selectStyle}>
+                    {Array.from({ length: 14 }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n} หมวด</option>)}
+                  </select>
+                </Row>
+                <Row label="บทความความรู้/วัน">
+                  <select value={m.daily_article_limit ?? 3} onChange={(e) => setDailyArticleLimit(m.id, +e.target.value)} style={selectStyle}>
+                    {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n} บทความ</option>)}
+                  </select>
+                </Row>
+              </>
+            )}
             <Row label="รีเฟรชบทความเองได้">
               <button onClick={() => setCanRefreshArticles(m.id, !m.can_refresh_articles)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 10, border: `1px solid ${m.can_refresh_articles ? "#2E9E6B" : t.border}`, cursor: "pointer", background: m.can_refresh_articles ? "#2E9E6B18" : "none", color: m.can_refresh_articles ? "#2E9E6B" : t.sub, fontSize: 12, fontWeight: 700 }}>{m.can_refresh_articles ? "เปิดอยู่" : "ปิดอยู่ (กดเพื่อเปิด)"}</button>
             </Row>
