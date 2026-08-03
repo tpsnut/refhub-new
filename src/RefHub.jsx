@@ -8653,6 +8653,9 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
   const [showMembers, setShowMembers] = useState(false);
   const [callParticipants, setCallParticipants] = useState([]); // คนที่กำลังอยู่ในสายเสียงของห้องนี้ตอนนี้ (ไม่รวมตัวเอง ไว้โชว์แบนเนอร์เตือน)
   const [callDetail, setCallDetail] = useState(null); // สรุปประวัติการโทร (เปิดเมื่อกดที่ข้อความโทร) { starter, joiners[], durationMins, at }
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false); // 📎 เมนูขยาย: ถ่ายรูป/รูปภาพ/วิดีโอ/ไฟล์
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  const [expandedTimeId, setExpandedTimeId] = useState(null); // id ข้อความที่กดดูเวลาแบบเต็ม (วันเดือนปี) อยู่
   // เสียงเรียกเข้าย้ายไปที่ IncomingCallWatcher ระดับแอปแล้ว (ทำงานทุกหน้า) — ตรงนี้เหลือแค่แบนเนอร์ในห้อง กันเสียงซ้อนกัน
   useEffect(() => {
     const isMeInThisCall = activeCall?.threadId === thread.id;
@@ -8682,9 +8685,15 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
     } catch (e) { setLeaveErr("ลบห้องไม่สำเร็จ: " + e.message); setConfirmLeave(false); }
   };
   const fileRef = useRef(null);
+  const cameraRef = useRef(null); // 📷 เปิดกล้องถ่ายรูปตรงๆ (capture="environment")
+  const videoRef = useRef(null); // 🎥 แนบวิดีโอ (จากคลัง หรือ capture="environment" สำหรับอัดใหม่)
+  const docRef = useRef(null); // 📄 ไฟล์เอกสาร (pdf/doc/xlsx) — แยกจาก fileRef (รูปภาพ) กัน accept ชนกัน
   const endRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const broadcastRef = useRef(null);
+
+  // 😀 ชุดอีโมจิที่ใช้บ่อย — เลือกแล้วแทรกเข้าช่องพิมพ์ ไม่ปิด picker ทันทีเผื่อเลือกต่อหลายตัว
+  const EMOJI_LIST = ["😀","😂","🤣","😅","😊","😍","🥰","😘","😉","😎","🤩","🥳","😇","🙂","😏","😢","😭","😡","😱","😴","🤔","🙄","😬","😅","👍","👎","🙏","👏","💪","🤝","👋","✌️","🤞","❤️","🧡","💛","💚","💙","💜","🖤","💔","💯","🔥","✨","🎉","🎊","🥳","😅","🍀","⭐","☀️","🌙","🌧️","☕","🍕","🍺","🎂","😴","🐱","🐶","💤","👀","🤗","😌","🥺","😤","😐"];
 
   const markRead = () => supabase.from("chat_reads").upsert({ user_id: userId, thread_id: thread.id, last_read_at: new Date().toISOString() }, { onConflict: "user_id,thread_id" }).then(({ error }) => { if (error) console.error("บันทึก 'อ่านแล้ว' ไม่สำเร็จ:", error.message); }, () => {});
 
@@ -8768,6 +8777,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
     if (error) { setLeaveErr("ส่งข้อความไม่สำเร็จ (อาจถูกปิดไม่ให้พิมพ์ในห้องนี้): " + error.message); setText(t2); return; }
     notifyPush(otherMembers.map((m) => m.id), `${profile?.name || "ข้อความใหม่"} · ${thread.name}`, t2, session?.access_token);
   };
+  const insertEmoji = (emo) => setText((s) => s + emo);
   const startEdit = (m) => { setEditingId(m.id); setEditText(m.text); };
   const saveEdit = async () => {
     if (!editText.trim()) return;
@@ -8779,22 +8789,22 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
   const startLongPress = (m) => { longPressRef.current = setTimeout(() => setMsgMenuId(m.id), 380); };
   const cancelLongPress = () => { if (longPressRef.current) { clearTimeout(longPressRef.current); longPressRef.current = null; } };
 
-  // 📎 แนบรูป/ไฟล์ในแชท — เก็บผ่าน Supabase Storage bucket "attachments" (ตัวเดียวกับที่ใช้ในโน้ต)
+  // 📎 แนบรูป/วิดีโอ/ไฟล์ในแชท — เก็บผ่าน Supabase Storage bucket "attachments" (ตัวเดียวกับที่ใช้ในโน้ต)
   const pickFile = async (e) => {
     const f = e.target.files?.[0]; if (!f) return;
     e.target.value = "";
-    setUploading(true);
+    setUploading(true); setAttachMenuOpen(false);
     try {
-      const isImage = f.type.startsWith("image/");
+      const kind = f.type.startsWith("image/") ? "image" : f.type.startsWith("video/") ? "video" : "file";
       const path = `${userId}/${uid()}-${f.name}`;
       const { error } = await supabase.storage.from("attachments").upload(path, f);
       if (error) throw error;
       const { data } = supabase.storage.from("attachments").getPublicUrl(path);
       await supabase.from("chat_messages").insert({
         thread_id: thread.id, sender_id: userId, text: "",
-        attachment_url: data.publicUrl, attachment_name: f.name, attachment_type: isImage ? "image" : "file",
+        attachment_url: data.publicUrl, attachment_name: f.name, attachment_type: kind,
       });
-      notifyPush(otherMembers.map((m) => m.id), `${profile?.name || "ข้อความใหม่"} · ${thread.name}`, isImage ? "ส่งรูปภาพมา" : `ส่งไฟล์: ${f.name}`, session?.access_token);
+      notifyPush(otherMembers.map((m) => m.id), `${profile?.name || "ข้อความใหม่"} · ${thread.name}`, kind === "image" ? "ส่งรูปภาพมา" : kind === "video" ? "ส่งวิดีโอมา" : `ส่งไฟล์: ${f.name}`, session?.access_token);
     } catch (err) {
       alert("แนบไฟล์ไม่สำเร็จ: " + err.message);
     } finally { setUploading(false); }
@@ -8838,7 +8848,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
           <span style={{ fontSize: 11, fontWeight: 800, color: "#fff", background: "#2E9E6B", padding: "5px 10px", borderRadius: 10 }}>เข้าร่วม</span>
         </button>
       )}
-      <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, paddingBottom: 10 }}>
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, paddingBottom: 10 }}>
         {loadingMessages ? (
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <div style={{ fontSize: 12.5, color: t.faint }}>กำลังโหลดข้อความ...</div>
@@ -8903,6 +8913,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
                     style={{ background: mine ? t.accent : t.surface, color: mine ? t.onAccent : t.text, padding: m.attachment_url ? 6 : "10px 14px", borderRadius: 14, fontSize: 14.5, lineHeight: 1.5, border: mine ? "none" : `1px solid ${t.borderStrong}`, cursor: isCallMsg ? "pointer" : (mine ? "default" : "default"), userSelect: "none", WebkitUserSelect: "none" }}
                   >
                     {m.attachment_type === "image" && <img src={m.attachment_url} alt="" onClick={() => setLightbox(m.attachment_url)} style={{ maxWidth: 200, borderRadius: 10, display: "block", cursor: "pointer" }} />}
+                    {m.attachment_type === "video" && <video src={m.attachment_url} controls style={{ maxWidth: 220, borderRadius: 10, display: "block" }} />}
                     {m.attachment_type === "file" && (
                       <a href={m.attachment_url} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: 6, color: "inherit", textDecoration: "underline", padding: "3px 7px" }}><FileText size={14} /> {m.attachment_name}</a>
                     )}
@@ -8925,6 +8936,11 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
                   </div>
                 </>
               )}
+              <button onClick={() => setExpandedTimeId(expandedTimeId === m.id ? null : m.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: "2px 2px 0", fontSize: 10, color: t.faint }}>
+                {expandedTimeId === m.id
+                  ? new Date(m.created_at).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })
+                  : new Date(m.created_at).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}
+              </button>
               {isLastMine && otherMembers.length > 0 && (
                 <div style={{ fontSize: 10, color: t.faint, marginTop: 2, paddingRight: 2 }}>
                   {readByCount === 0 ? "ส่งแล้ว" : otherMembers.length === 1 ? "อ่านแล้ว ✓✓" : `อ่านแล้ว ${readByCount}/${otherMembers.length} ✓✓`}
@@ -8936,13 +8952,49 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
         {typingName && <div style={{ fontSize: 11, color: t.faint, paddingLeft: 4, fontStyle: "italic" }}>{typingName} กำลังพิมพ์...</div>}
         <div ref={endRef} />
       </div>
-      <div style={{ display: "flex", gap: 8, paddingTop: 10 }}>
-        <button onClick={() => fileRef.current?.click()} disabled={uploading} style={{ width: 42, borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}>
-          <Upload size={16} color={t.sub} />
-        </button>
-        <input ref={fileRef} type="file" accept="image/*,.pdf,.doc,.docx" onChange={pickFile} style={{ display: "none" }} />
-        <textarea value={text} onChange={(e) => { setText(e.target.value); notifyTyping(); }} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder="พิมพ์ข้อความ..." rows={1} style={{ ...input(t), resize: "none", maxHeight: 120, overflowY: "auto", fontFamily: "inherit", lineHeight: 1.4 }} onInput={(e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px"; }} />
-        <button onClick={send} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: 46, display: "grid", placeItems: "center" }}><Send size={17} /></button>
+      <div style={{ position: "relative" }}>
+        {attachMenuOpen && (
+          <>
+            <div onClick={() => setAttachMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+            <div style={{ position: "absolute", bottom: "100%", left: 0, marginBottom: 8, zIndex: 41, display: "flex", gap: 8, background: t.page, border: `1px solid ${t.border}`, borderRadius: 16, padding: 10, boxShadow: "0 6px 18px rgba(0,0,0,.18)" }}>
+              {[
+                { Ic: Camera, label: "ถ่ายรูป", onClick: () => cameraRef.current?.click() },
+                { Ic: ImageIcon, label: "รูปภาพ", onClick: () => fileRef.current?.click() },
+                { Ic: Video, label: "วิดีโอ", onClick: () => videoRef.current?.click() },
+                { Ic: FileText, label: "ไฟล์", onClick: () => docRef.current?.click() },
+              ].map(({ Ic, label, onClick }) => (
+                <button key={label} onClick={onClick} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "6px 8px", width: 62 }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 20, background: t.inputBg, display: "grid", placeItems: "center" }}><Ic size={18} color={t.accent} /></div>
+                  <span style={{ fontSize: 9.5, color: t.sub, fontWeight: 700 }}>{label}</span>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+        {emojiPickerOpen && (
+          <>
+            <div onClick={() => setEmojiPickerOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+            <div style={{ position: "absolute", bottom: "100%", right: 0, marginBottom: 8, zIndex: 41, background: t.page, border: `1px solid ${t.border}`, borderRadius: 16, padding: 10, boxShadow: "0 6px 18px rgba(0,0,0,.18)", width: 260, maxHeight: 180, overflowY: "auto", display: "flex", flexWrap: "wrap", gap: 2 }}>
+              {EMOJI_LIST.map((emo, i) => (
+                <button key={i} onClick={() => insertEmoji(emo)} style={{ width: 32, height: 32, background: "none", border: "none", cursor: "pointer", fontSize: 18, display: "grid", placeItems: "center" }}>{emo}</button>
+              ))}
+            </div>
+          </>
+        )}
+        <div style={{ display: "flex", gap: 8, paddingTop: 10 }}>
+          <button onClick={() => setAttachMenuOpen((v) => !v)} disabled={uploading} style={{ width: 42, borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }} title="แนบไฟล์">
+            {uploading ? <RefreshCw size={16} color={t.sub} style={{ animation: "spin 1s linear infinite" }} /> : <Plus size={18} color={t.sub} />}
+          </button>
+          <input ref={fileRef} type="file" accept="image/*" onChange={pickFile} style={{ display: "none" }} />
+          <input ref={cameraRef} type="file" accept="image/*" capture="environment" onChange={pickFile} style={{ display: "none" }} />
+          <input ref={videoRef} type="file" accept="video/*" onChange={pickFile} style={{ display: "none" }} />
+          <input ref={docRef} type="file" accept=".pdf,.doc,.docx,.xlsx,.txt" onChange={pickFile} style={{ display: "none" }} />
+          <textarea value={text} onChange={(e) => { setText(e.target.value); notifyTyping(); }} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder="พิมพ์ข้อความ..." rows={1} style={{ ...input(t), resize: "none", maxHeight: 120, overflowY: "auto", fontFamily: "inherit", lineHeight: 1.4 }} onInput={(e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px"; }} />
+          <button onClick={() => setEmojiPickerOpen((v) => !v)} style={{ width: 42, borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }} title="อีโมจิ">
+            <Smile size={18} color={t.sub} />
+          </button>
+          <button onClick={send} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: 46, display: "grid", placeItems: "center" }}><Send size={17} /></button>
+        </div>
       </div>
       {lightbox && <ImageLightbox src={lightbox} onClose={() => setLightbox(null)} />}
       {callDetail && (
