@@ -2205,10 +2205,10 @@ export default function RefHub() {
           {page === "news" && <NewsPage t={t} lang={lang} userId={userId} authProfile={authProfile} setAuthProfile={setAuthProfile} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} hintDefs={hintDefs} seenHintKeys={seenHintKeys} dismissHint={dismissHint} setNotes={setNotes} scrollToTop={() => { if (contentScrollRef.current) contentScrollRef.current.scrollTop = 0; }} />}
           {page === "lang" && <LangPage t={t} lang={lang} userId={userId} session={session} authProfile={authProfile} scrollToTop={() => { if (contentScrollRef.current) contentScrollRef.current.scrollTop = 0; }} />}
           {page === "goalsReport" && <GoalsReportPage t={t} lang={lang} goals={goals} setGoals={setGoals} userId={userId} />}
-          {page === "admin" && <AdminPage t={t} lang={lang} session={session} userId={userId} adminAlerts={adminAlerts} setAdminAlerts={setAdminAlerts} authProfile={authProfile} setAuthProfile={setAuthProfile} />}
-          {page === "locations" && <LocationsPage t={t} lang={lang} userId={userId} />}
-          {page === "vault" && <VaultPage t={t} lang={lang} userId={userId} />}
-          {page === "chat" && <ChatEntryPage t={t} lang={lang} M={M} userId={userId} authProfile={authProfile} session={session} openThread={(id, name, isGroup, avatarUrl, createdBy) => { setActiveThread({ id, name, isGroup: !!isGroup, avatarUrl: avatarUrl || null, createdBy: createdBy || null }); setPage("chatRoom"); }} />}
+          {page === "admin" && <AdminPage t={t} lang={lang} session={session} userId={userId} adminAlerts={adminAlerts} setAdminAlerts={setAdminAlerts} authProfile={authProfile} setAuthProfile={setAuthProfile} onBack={() => setPage("home")} />}
+          {page === "locations" && <LocationsPage t={t} lang={lang} userId={userId} onBack={() => setPage("home")} />}
+          {page === "vault" && <VaultPage t={t} lang={lang} userId={userId} onBack={() => setPage("home")} />}
+          {page === "chat" && <ChatEntryPage t={t} lang={lang} M={M} userId={userId} authProfile={authProfile} session={session} onBack={() => setPage("home")} openThread={(id, name, isGroup, avatarUrl, createdBy) => { setActiveThread({ id, name, isGroup: !!isGroup, avatarUrl: avatarUrl || null, createdBy: createdBy || null }); setPage("chatRoom"); }} />}
           {page === "chatRoom" && activeThread && <ChatRoomPage t={t} userId={userId} thread={activeThread} profile={profile} session={session} onLeave={() => { setActiveThread(null); setPage("chat"); }} onBack={() => { setActiveThread(null); setPage("chat"); }} activeCall={activeCall} setActiveCall={setActiveCall} setCallMinimized={setCallMinimized} />}
 
           {/* 🎵 การ์ด "กำลังเล่น" ต่อท้ายเนื้อหาหน้า Home (ใต้เป้าหมาย) — div#yt-mini-player mount ค้างตลอด
@@ -5805,7 +5805,7 @@ function AdminHintsPanel({ t, totalMembers }) {
   );
 }
 
-function AdminPage({ t, lang, session, userId, adminAlerts, setAdminAlerts, authProfile, setAuthProfile }) {
+function AdminPage({ t, lang, session, userId, adminAlerts, setAdminAlerts, authProfile, setAuthProfile, onBack }) {
   const [tab, setTab] = useState("overview"); // overview | members | add
   const [members, setMembers] = useState([]);
   const [loadingList, setLoadingList] = useState(true);
@@ -5924,7 +5924,7 @@ function AdminPage({ t, lang, session, userId, adminAlerts, setAdminAlerts, auth
 
   return (
     <>
-      <PageHead t={t} title={head.title} sub={head.sub} icon={<head.Ic size={20} color={t.accent} />} />
+      <PageHead t={t} title={head.title} sub={head.sub} icon={<head.Ic size={20} color={t.accent} />} onBack={tab === "overview" ? onBack : undefined} />
 
       {adminAlerts.length > 0 && (
         <div style={{ ...card(t), padding: 14, marginBottom: 14, border: `1px solid ${t.accent}55` }}>
@@ -8212,7 +8212,7 @@ function ComposeModal({ t, userId, onDone, close }) {
   );
 }
 
-function ChatEntryPage({ t, lang, M, userId, authProfile, session, openThread }) {
+function ChatEntryPage({ t, lang, M, userId, authProfile, session, openThread, onBack }) {
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sheet, setSheet] = useState(null); // null | "menu" | "create" | "join" | "direct"
@@ -8337,7 +8337,7 @@ function ChatEntryPage({ t, lang, M, userId, authProfile, session, openThread })
   if (!authProfile?.can_chat && !hasFullAccess) {
     return (
       <>
-        <PageHead t={t} title={L(lang, "ph_chat_title")} sub={L(lang, "ph_chat_sub1")} icon={<MessageCircle size={20} color={t.accent} />} />
+        <PageHead t={t} title={L(lang, "ph_chat_title")} sub={L(lang, "ph_chat_sub1")} icon={<MessageCircle size={20} color={t.accent} />} onBack={onBack} />
         <Empty t={t} text="คุณยังไม่ได้รับสิทธิ์ใช้งานแชท — ให้แอดมินเปิดสิทธิ์ให้ที่หน้า Admin ก่อนนะ" />
       </>
     );
@@ -8345,7 +8345,7 @@ function ChatEntryPage({ t, lang, M, userId, authProfile, session, openThread })
 
   return (
     <>
-      <PageHead t={t} title={L(lang, "ph_chat_title")} sub={L(lang, "ph_chat_sub2")} icon={<MessageCircle size={20} color={t.accent} />} />
+      <PageHead t={t} title={L(lang, "ph_chat_title")} sub={L(lang, "ph_chat_sub2")} icon={<MessageCircle size={20} color={t.accent} />} onBack={onBack} />
 
       <>
       {authProfile.chat_code && (
@@ -8880,7 +8880,7 @@ function RoomMembersModal({ t, threadId, session, close }) {
   );
 }
 
-function LocationsPage({ t, lang, userId }) {
+function LocationsPage({ t, lang, userId, onBack }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -8905,7 +8905,7 @@ function LocationsPage({ t, lang, userId }) {
 
   return (
     <>
-      <PageHead t={t} title={L(lang, "ph_locations_title")} sub={L(lang, "ph_locations_sub")} icon={<MapPin size={20} color={t.accent} />} />
+      <PageHead t={t} title={L(lang, "ph_locations_title")} sub={L(lang, "ph_locations_sub")} icon={<MapPin size={20} color={t.accent} />} onBack={onBack} />
       {loading && <Empty t={t} text="กำลังโหลด..." />}
       {!loading && rows.length === 0 && <Empty t={t} text="ยังไม่มีใครแชร์ตำแหน่งให้คุณเห็น (หรือคุณยังไม่ได้รับสิทธิ์ดูจากแอดมิน)" />}
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -8930,7 +8930,7 @@ function LocationsPage({ t, lang, userId }) {
 // สถาปัตยกรรม 2 ชั้น: (1) PIN "ประตูหน้า" กันคนหยิบมือถือดูเร็วๆ (สะดวก ไม่ใช่ความปลอดภัยจริง)
 // (2) ต่อรายการเลือกได้ว่าจะเป็น "ล็อกหน้าจอ" (quick) หรือ "เข้ารหัสจริง" (encrypted, AES-GCM มาตรฐาน
 // ถอดรหัสในเครื่องเท่านั้น ไม่ส่งรหัสผ่านขึ้นเซิร์ฟเวอร์ ลืมรหัส = กู้คืนไม่ได้จริงๆ)
-function VaultPage({ t, lang, userId }) {
+function VaultPage({ t, lang, userId, onBack }) {
   const [askConfirm, ConfirmUI] = useConfirm(t);
   const [settings, setSettings] = useState(undefined); // undefined=ยังไม่โหลด, null=ยังไม่เคยตั้ง PIN
   const [unlocked, setUnlocked] = useState(false);
@@ -9083,7 +9083,7 @@ function VaultPage({ t, lang, userId }) {
     const sub = settings === undefined ? "" : isSetup ? "PIN 4 หลัก กันคนอื่นเปิดดูเร็วๆ ตอนหยิบมือถือ" : "ใส่ PIN เพื่อเข้าดู";
     return (
       <>
-        <PageHead t={t} title="Drive ส่วนตัว" sub="ข้อมูลส่วนตัวที่ต้องใส่รหัสก่อนเข้าดู" icon={<Lock size={20} color={t.accent} />} />
+        <PageHead t={t} title="Drive ส่วนตัว" sub="ข้อมูลส่วนตัวที่ต้องใส่รหัสก่อนเข้าดู" icon={<Lock size={20} color={t.accent} />} onBack={onBack} />
         {settings !== undefined && (
           <div style={{ minHeight: 460, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "20px 10px" }}>
             <div style={{ width: 64, height: 64, borderRadius: 18, background: t.accent, display: "grid", placeItems: "center", marginBottom: 16 }}><Lock size={28} color={t.onAccent} /></div>
@@ -9111,7 +9111,7 @@ function VaultPage({ t, lang, userId }) {
   // ---------- หน้าจอรายการ (ปลดล็อกแล้ว) ----------
   return (
     <>
-      <PageHead t={t} title="Drive ส่วนตัว" sub="ข้อมูลส่วนตัวที่ต้องใส่รหัสก่อนเข้าดู" icon={<Lock size={20} color={t.accent} />} />
+      <PageHead t={t} title="Drive ส่วนตัว" sub="ข้อมูลส่วนตัวที่ต้องใส่รหัสก่อนเข้าดู" icon={<Lock size={20} color={t.accent} />} onBack={onBack} />
 
       <div style={{ ...card(t), padding: 14, marginBottom: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, color: t.sub, marginBottom: 6 }}>
@@ -13675,7 +13675,23 @@ function CatCard({ t, k, icon, label, children, onClick, shp }) {
     {children}
   </button>);
 }
-function PageHead({ t, title, sub, icon, right }) { return (<div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}><div style={{ width: 44, height: 44, borderRadius: 14, background: `${t.accent}1A`, display: "grid", placeItems: "center", flexShrink: 0 }}>{icon}</div><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 21, fontWeight: 700, color: t.text, fontFamily: "'Kanit', sans-serif" }}>{title}</div><div style={{ fontSize: 12.5, color: t.sub }}>{sub}</div></div>{right}</div>); }
+function PageHead({ t, title, sub, icon, right, onBack }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+      {onBack && (
+        <button onClick={onBack} style={{ width: 38, height: 38, borderRadius: 12, border: "none", background: t.surface, display: "grid", placeItems: "center", flexShrink: 0, cursor: "pointer" }} title="กลับ">
+          <ChevronLeft size={20} color={t.text} />
+        </button>
+      )}
+      <div style={{ width: 44, height: 44, borderRadius: 14, background: `${t.accent}1A`, display: "grid", placeItems: "center", flexShrink: 0 }}>{icon}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 21, fontWeight: 700, color: t.text, fontFamily: "'Kanit', sans-serif" }}>{title}</div>
+        <div style={{ fontSize: 12.5, color: t.sub }}>{sub}</div>
+      </div>
+      {right}
+    </div>
+  );
+}
 function MockBanner({ t, text }) { return (<div style={{ display: "flex", alignItems: "center", gap: 8, background: `${t.accent}14`, border: `1px dashed ${t.accent}66`, borderRadius: 12, padding: "9px 12px", fontSize: 11.5, color: t.accent, fontWeight: 600 }}><Clock size={14} /> {text}</div>); }
 function Empty({ t, text }) {
   const isLoading = typeof text === "string" && text.includes("กำลังโหลด");
