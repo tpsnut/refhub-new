@@ -142,6 +142,69 @@ export default async function handler(req, res) {
     }
   }
 
+  // 🎨 กิ่งใหม่: สร้างรูปด้วย AI (Gemini Nano Banana) — เฉพาะคนที่ premium_ai เท่านั้น เพราะราคาต่อรูปแพงกว่าข้อความมาก
+  // ใช้ endpoint เดียวกัน กัน Vercel เกิน 12 functions — โควตารูปแยกจากโควตาแชทข้อความ (daily_image_limit)
+  if (body.action === "gen_image") {
+    const { prompt, callerToken } = body;
+    if (!prompt || typeof prompt !== "string") return res.status(400).json({ error: "ไม่มีคำอธิบายรูปที่ต้องการ" });
+    if (!callerToken) return res.status(401).json({ error: "ไม่พบข้อมูลยืนยันตัวตน" });
+    try {
+      const supabaseUrl = process.env.VITE_SUPABASE_URL;
+      const anonKey = process.env.VITE_SUPABASE_ANON_KEY;
+      const authClient = createClient(supabaseUrl, anonKey);
+      const { data: userData, error: userErr } = await authClient.auth.getUser(callerToken);
+      if (userErr || !userData?.user) return res.status(401).json({ error: "ยืนยันตัวตนไม่สำเร็จ" });
+      const userId = userData.user.id;
+
+      const admin = createClient(supabaseUrl, process.env.SUPABASE_SERVICE_ROLE_KEY);
+      const { data: prof } = await admin.from("profiles").select("premium_ai, daily_image_limit").eq("id", userId).maybeSingle();
+      if (!prof?.premium_ai) return res.status(403).json({ error: "ฟีเจอร์สร้างรูปเฉพาะสมาชิกพรีเมียมเท่านั้น" });
+
+      const dailyImageLimit = prof?.daily_image_limit ?? 5;
+      const bkkOffsetMs = 7 * 60 * 60 * 1000;
+      const bkkNow = new Date(Date.now() + bkkOffsetMs);
+      const bkkMidnightUtc = new Date(Date.UTC(bkkNow.getUTCFullYear(), bkkNow.getUTCMonth(), bkkNow.getUTCDate()) - bkkOffsetMs);
+      const { count } = await admin.from("ai_usage_log").select("id", { count: "exact", head: true })
+        .eq("user_id", userId).eq("module", "image_gen").gte("created_at", bkkMidnightUtc.toISOString());
+      if ((count || 0) >= dailyImageLimit) {
+        return res.status(429).json({ error: `ใช้ครบโควตาสร้างรูปวันนี้แล้ว (${count}/${dailyImageLimit} รูป) พรุ่งนี้โควตาจะรีเซ็ตใหม่`, quotaExceeded: true });
+      }
+
+      if (!process.env.GEMINI_API_KEY_PAID && !process.env.GEMINI_API_KEY) {
+        return res.status(500).json({ error: "ยังไม่ได้ตั้งค่า GEMINI_API_KEY บน Vercel" });
+      }
+      const imgKey = process.env.GEMINI_API_KEY_PAID || process.env.GEMINI_API_KEY;
+      const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": imgKey },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data?.error?.message || "Gemini Image API error");
+      const parts = data.candidates?.[0]?.content?.parts || [];
+      const imgPart = parts.find((p) => p.inlineData?.data);
+      const textPart = parts.find((p) => p.text)?.text || "";
+      if (!imgPart) throw new Error("AI ไม่ได้สร้างรูปกลับมา (อาจติดเงื่อนไขความปลอดภัยของเนื้อหา)");
+
+      // อัปโหลดเข้า bucket 'attachments' (public) เดียวกับรูปแชท/โพสต์อื่นๆ ในแอป
+      const mime = imgPart.inlineData.mimeType || "image/png";
+      const ext = mime.split("/")[1] || "png";
+      const path = `ai-generated/${userId}/${crypto.randomUUID()}.${ext}`;
+      const bytes = Buffer.from(imgPart.inlineData.data, "base64");
+      const { error: upErr } = await admin.storage.from("attachments").upload(path, bytes, { contentType: mime });
+      if (upErr) throw upErr;
+      const { data: pub } = admin.storage.from("attachments").getPublicUrl(path);
+
+      await admin.from("ai_usage_log").insert({ provider: "gemini_image", module: "image_gen", user_id: userId });
+      return res.status(200).json({ imageUrl: pub.publicUrl, text: textPart });
+    } catch (e) {
+      return res.status(500).json({ error: "สร้างรูปไม่สำเร็จ: " + e.message });
+    }
+  }
+
   if (body.action === "tts") {
     const { text, voice, callerToken } = body;
     if (!text || typeof text !== "string") return res.status(400).json({ error: "ไม่มีข้อความให้อ่าน" });

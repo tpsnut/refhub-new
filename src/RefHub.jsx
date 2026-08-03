@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   Home, Lightbulb, TrendingUp, Plus, Newspaper, Languages, StickyNote, Eye, Menu, Image as ImageIcon, CheckSquare, Heading2, List, Paperclip,
   Sun, Moon, Send, Check, Trash2, X, Wallet, Target, BookOpen, ChevronRight,
@@ -907,6 +909,41 @@ function ImageLightbox({ src, images, index, onClose }) {
 
 function ModalPortal({ children }) {
   return createPortal(children, document.body);
+}
+
+// 📝 render ข้อความ AI เป็น Markdown จริง (หัวข้อ/ตัวหนา/bullet/ตาราง/โค้ด) แทนที่จะโชว์ตัวอักษรดิบๆ มั่วๆ
+// color = สีตัวอักษรหลัก (bubble ผู้ใช้กับ AI ใช้สีต่างกัน), accent = สีเน้น (ลิงก์/โค้ด/เส้นตาราง)
+function MarkdownText({ text, color, accent }) {
+  if (!text) return null;
+  return (
+    <div style={{ color, fontSize: 14.5, lineHeight: 1.6 }}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          p: ({ children }) => <p style={{ margin: "0 0 8px", whiteSpace: "pre-wrap" }}>{children}</p>,
+          h1: ({ children }) => <div style={{ fontSize: 17, fontWeight: 800, margin: "10px 0 6px" }}>{children}</div>,
+          h2: ({ children }) => <div style={{ fontSize: 15.5, fontWeight: 800, margin: "10px 0 6px" }}>{children}</div>,
+          h3: ({ children }) => <div style={{ fontSize: 14.5, fontWeight: 700, margin: "8px 0 4px" }}>{children}</div>,
+          strong: ({ children }) => <strong style={{ fontWeight: 800 }}>{children}</strong>,
+          em: ({ children }) => <em>{children}</em>,
+          ul: ({ children }) => <ul style={{ margin: "4px 0 8px", paddingLeft: 20 }}>{children}</ul>,
+          ol: ({ children }) => <ol style={{ margin: "4px 0 8px", paddingLeft: 20 }}>{children}</ol>,
+          li: ({ children }) => <li style={{ marginBottom: 3 }}>{children}</li>,
+          code: ({ children }) => <code style={{ background: `${accent}22`, color: accent, padding: "1px 6px", borderRadius: 5, fontSize: 13 }}>{children}</code>,
+          pre: ({ children }) => <pre style={{ background: `${accent}18`, padding: 10, borderRadius: 10, overflowX: "auto", fontSize: 12.5, margin: "6px 0" }}>{children}</pre>,
+          a: ({ children, href }) => <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: accent, textDecoration: "underline" }}>{children}</a>,
+          blockquote: ({ children }) => <div style={{ borderLeft: `3px solid ${accent}`, paddingLeft: 10, margin: "6px 0", opacity: 0.85 }}>{children}</div>,
+          hr: () => <hr style={{ border: "none", borderTop: `1px solid ${accent}44`, margin: "10px 0" }} />,
+          table: ({ children }) => <div style={{ overflowX: "auto", margin: "6px 0" }}><table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5 }}>{children}</table></div>,
+          thead: ({ children }) => <thead>{children}</thead>,
+          th: ({ children }) => <th style={{ border: `1px solid ${accent}44`, padding: "5px 8px", textAlign: "left", fontWeight: 800, background: `${accent}14` }}>{children}</th>,
+          td: ({ children }) => <td style={{ border: `1px solid ${accent}44`, padding: "5px 8px" }}>{children}</td>,
+        }}
+      >
+        {text}
+      </ReactMarkdown>
+    </div>
+  );
 }
 
 const uid = () => Math.random().toString(36).slice(2, 9);
@@ -12678,6 +12715,35 @@ function ChatModal({ t, M, mentor, setMentor, authProfile, setAuthProfile, custo
   const [myUsage, setMyUsage] = useState(null); // { today_count, daily_ai_limit } — โควตา AI ของตัวเองวันนี้
   const loadMyUsage = () => { if (userId) supabase.rpc("get_my_ai_usage").then(({ data }) => { if (data?.[0]) setMyUsage(data[0]); }); };
   useEffect(() => { loadMyUsage(); }, [userId]);
+  // 🎨 โหมดสร้างรูป AI — เฉพาะพรีเมียม โควตาแยกจากแชทข้อความ (ราคาต่อรูปแพงกว่ามาก)
+  const [imgGenMode, setImgGenMode] = useState(false);
+  const [myImageUsage, setMyImageUsage] = useState(null);
+  const loadMyImageUsage = () => { if (userId) supabase.rpc("get_my_image_usage").then(({ data }) => { if (data?.[0]) setMyImageUsage(data[0]); }); };
+  useEffect(() => { if (authProfile?.premium_ai) loadMyImageUsage(); }, [userId, authProfile?.premium_ai]);
+  const sendImageGen = async () => {
+    if (!inp.trim() || loading) return;
+    const promptText = inp.trim();
+    const userMsg = { who: "u", text: `🎨 ขอรูป: ${promptText}` };
+    setMsgs((m) => [...m, userMsg]); setInp("");
+    if (userId) supabase.from("mentor_chat_messages").insert({ user_id: userId, mentor, session_id: currentSessionId, who: userMsg.who, text: userMsg.text }).then(({ error }) => { if (error) console.error("บันทึกข้อความไม่สำเร็จ:", error.message); }, () => {});
+    setLoading(true);
+    try {
+      const r = await fetch("/api/knowledge-generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "gen_image", prompt: promptText, callerToken: session?.access_token }) });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "สร้างรูปไม่สำเร็จ");
+      const replyMsg = { who: "m", text: data.text || "", image: data.imageUrl };
+      setMsgs((m) => [...m, replyMsg]);
+      loadMyImageUsage();
+      if (userId) supabase.from("mentor_chat_messages").insert({ user_id: userId, mentor, session_id: currentSessionId, who: replyMsg.who, text: replyMsg.text, image: replyMsg.image }).then(({ error }) => { if (error) console.error("บันทึกรูปไม่สำเร็จ:", error.message); }, () => {});
+    } catch (e) {
+      console.error("สร้างรูปไม่สำเร็จ:", e.message);
+      const errMsg = { who: "m", text: "❌ " + e.message };
+      setMsgs((m) => [...m, errMsg]);
+      if (userId) supabase.from("mentor_chat_messages").insert({ user_id: userId, mentor, session_id: currentSessionId, who: errMsg.who, text: errMsg.text }).then(() => {}, () => {});
+    } finally {
+      setLoading(false);
+    }
+  };
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, loading]);
 
   const greeting = () => ({ who: "m", text: `สวัสดี ฉันคือ ${M.full} วันนี้อยากให้ช่วยเรื่องอะไร?` });
@@ -12808,7 +12874,7 @@ function ChatModal({ t, M, mentor, setMentor, authProfile, setAuthProfile, custo
           {!histLoading && msgs.map((m, i) => (
             <div key={i} style={{ alignSelf: m.who === "u" ? "flex-end" : "flex-start", maxWidth: "88%", background: m.who === "u" ? M.accent : t.surface, color: m.who === "u" ? M.onAccent : t.text, padding: "11px 15px", borderRadius: 16, fontSize: 14.5, lineHeight: 1.5, border: m.who === "u" ? "none" : `1px solid ${t.borderStrong}` }}>
               {m.image && <img src={m.image} alt="" style={{ maxWidth: "100%", borderRadius: 10, marginBottom: m.text ? 6 : 0, display: "block" }} />}
-              {m.text}
+              {m.who === "u" ? <span style={{ whiteSpace: "pre-wrap" }}>{m.text}</span> : <MarkdownText text={m.text} color={t.text} accent={M.accent} />}
               {m.isMock && <div style={{ fontSize: 9.5, opacity: 0.55, marginTop: 4 }}>⚠️ โหมดสำรอง (AI ตอบไม่สำเร็จ ดูสาเหตุใน Console)</div>}
             </div>
           ))}
@@ -12823,13 +12889,18 @@ function ChatModal({ t, M, mentor, setMentor, authProfile, setAuthProfile, custo
               <button onClick={() => setPendingImg(null)} style={ghost}><X size={15} color={t.faint} /></button>
             </div>
           )}
+          {authProfile?.premium_ai && myImageUsage && (
+            <button onClick={() => setImgGenMode((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, padding: "5px 10px", borderRadius: 10, border: `1.5px solid ${imgGenMode ? M.accent : t.border}`, background: imgGenMode ? `${M.accent}18` : "none", color: imgGenMode ? M.accent : t.sub, fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
+              <ImageIcon size={13} /> {imgGenMode ? "โหมดสร้างรูป (เปิดอยู่)" : "สร้างรูป AI"} <span style={{ opacity: 0.7 }}>({myImageUsage.today_count}/{myImageUsage.daily_image_limit})</span>
+            </button>
+          )}
           <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={() => fileRef.current?.click()} disabled={loading} style={{ width: 42, borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}>
+            <button onClick={() => fileRef.current?.click()} disabled={loading || imgGenMode} style={{ width: 42, borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0, opacity: imgGenMode ? 0.4 : 1 }}>
               <Upload size={16} color={t.sub} />
             </button>
             <input ref={fileRef} type="file" accept="image/*" onChange={pickImage} style={{ display: "none" }} />
-            <textarea value={inp} onChange={(e) => setInp(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder={`ถาม ${M.name}...`} rows={1} style={{ ...input(t), resize: "none", maxHeight: 120, overflowY: "auto", fontFamily: "inherit", lineHeight: 1.4 }} disabled={loading} onInput={(e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px"; }} />
-            <button onClick={send} disabled={loading} style={{ ...primaryBtn(M), width: 46, padding: 0, display: "grid", placeItems: "center", opacity: loading ? 0.6 : 1 }}><Send size={18} /></button>
+            <textarea value={inp} onChange={(e) => setInp(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); imgGenMode ? sendImageGen() : send(); } }} placeholder={imgGenMode ? "อธิบายรูปที่อยากได้..." : `ถาม ${M.name}...`} rows={1} style={{ ...input(t), resize: "none", maxHeight: 120, overflowY: "auto", fontFamily: "inherit", lineHeight: 1.4 }} disabled={loading} onInput={(e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px"; }} />
+            <button onClick={imgGenMode ? sendImageGen : send} disabled={loading} style={{ ...primaryBtn(M), width: 46, padding: 0, display: "grid", placeItems: "center", opacity: loading ? 0.6 : 1 }}>{imgGenMode ? <ImageIcon size={17} /> : <Send size={18} />}</button>
           </div>
         </div>
       </div>
