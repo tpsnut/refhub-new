@@ -8,7 +8,7 @@ import {
   Sparkles, Clock, Search, Volume2, VolumeX, Pencil, Download, ArrowLeft, Users, Camera, Phone, Mic, MicOff, PhoneOff, RefreshCw,
   Utensils, Car, ShoppingBag, Receipt, Gamepad2, HeartPulse, Briefcase, Gift, Coffee, Music,
   Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi, MessageCircle, MoreVertical, KeyRound, MapPin, Copy, LockKeyhole, LogOut, LayoutGrid, Maximize2, Volume1, Settings, Bookmark, Share2, Repeat2, Heart, User, Pin,
-  Heading1, Heading3, ListOrdered, ListTree, Quote, Code2, Minus, Table2, Video, Smile, RotateCcw, GripVertical, ChevronLeft, ChevronUp, ChevronDown, Repeat, Repeat1, Shuffle, Timer, Lock, HelpCircle, Info, CreditCard, Crown, Unlock, Activity
+  Heading1, Heading3, ListOrdered, ListTree, Quote, Code2, Minus, Table2, Video, Smile, RotateCcw, GripVertical, ChevronLeft, ChevronUp, ChevronDown, Repeat, Repeat1, Shuffle, Timer, Lock, HelpCircle, Info, CreditCard, Crown, Unlock, Activity, CheckCircle2, XCircle
 } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, ResponsiveContainer, Tooltip } from "recharts";
 // 🔀 dnd-kit — ใช้ทำ "ลากวางจัดเรียงจริง" (drag & drop) ทั่วแอป แทนปุ่มขึ้น/ลง — รองรับ touch บนมือถือมาให้เลย
@@ -2299,55 +2299,72 @@ export default function RefHub() {
         {hamburgerOpen && (
           <ModalPortal>
           <div style={overlay} onClick={() => setHamburgerOpen(false)}>
-            <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
-              <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 2 }}>{L(lang, "menu_title")}</div>
-              <div style={{ fontSize: 11, color: t.sub, marginBottom: 12 }}>{L(lang, "menu_sub")}</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {authProfile?.role === "admin" && (
-                  <button onClick={() => { setPage("admin"); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 2 }}>
+                <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>{L(lang, "menu_title")}</div>
+                <button onClick={() => setHamburgerOpen(false)} style={ghost}><X size={20} color={t.sub} /></button>
+              </div>
+              <div style={{ fontSize: 11, color: t.sub, marginBottom: 14 }}>{L(lang, "menu_sub")}</div>
+
+              {authProfile?.role === "admin" && (
+                <div style={{ ...card(t), overflow: "hidden", marginBottom: 12 }}>
+                  <button onClick={() => { setPage("admin"); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "13px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
                     <ShieldCheck size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "menu_admin")}</span>
                     {adminAlerts.length > 0 && <span style={{ marginLeft: "auto", width: 8, height: 8, borderRadius: 4, background: "#D9534F" }} />}
                   </button>
-                )}
-                <button onClick={() => { setMusicOpen(true); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}><Music size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "menu_media")}</span></button>
-                <button onClick={() => { setPage("chat"); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
+                </div>
+              )}
+
+              <div style={{ fontSize: 10.5, fontWeight: 800, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>ฟีเจอร์หลัก</div>
+              <div style={{ ...card(t), overflow: "hidden", marginBottom: 14 }}>
+                <button onClick={() => { setMusicOpen(true); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "13px 14px", background: "none", border: "none", borderBottom: `1px solid ${t.border}`, cursor: "pointer", textAlign: "left" }}><Music size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "menu_media")}</span></button>
+                <button onClick={() => { setPage("chat"); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "13px 14px", background: "none", border: "none", borderBottom: (authProfile?.can_view_locations || authProfile?.role === "admin") ? `1px solid ${t.border}` : "none", cursor: "pointer", textAlign: "left" }}>
                   <MessageCircle size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "menu_chat")}</span>
                   {chatUnread > 0 && <span style={{ marginLeft: "auto", width: 8, height: 8, borderRadius: 4, background: "#D9534F" }} />}
                 </button>
                 {(authProfile?.can_view_locations || authProfile?.role === "admin") && (
-                  <button onClick={() => { setPage("locations"); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
+                  <button onClick={() => { setPage("locations"); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "13px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
                     <MapPin size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "menu_locations")}</span>
                   </button>
                 )}
-                <button onClick={() => { setAccountSettingsOpen(true); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
+              </div>
+
+              <div style={{ fontSize: 10.5, fontWeight: 800, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>บัญชีของฉัน</div>
+              <div style={{ ...card(t), overflow: "hidden", marginBottom: 14 }}>
+                <button onClick={() => { setAccountSettingsOpen(true); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "13px 14px", background: "none", border: "none", borderBottom: `1px solid ${t.border}`, cursor: "pointer", textAlign: "left" }}>
                   <KeyRound size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "menu_account")}</span>
                 </button>
-                <button onClick={() => { setPlanOpen(true); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
+                <button onClick={() => { setPlanOpen(true); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "13px 14px", background: "none", border: "none", borderBottom: `1px solid ${t.border}`, cursor: "pointer", textAlign: "left" }}>
                   <CreditCard size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "menu_plan")}</span>
                 </button>
-                <button onClick={() => { setPage("vault"); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
+                <button onClick={() => { setPage("vault"); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "13px 14px", background: "none", border: "none", borderBottom: `1px solid ${t.border}`, cursor: "pointer", textAlign: "left" }}>
                   <Lock size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "menu_vault")}</span>
                 </button>
-                <button onClick={() => { setMyActivityOpen(true); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
+                <button onClick={() => { setMyActivityOpen(true); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "13px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
                   <Clock size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "menu_activity")}</span>
                 </button>
-                <button onClick={() => { setLangModalOpen(true); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
+              </div>
+
+              <div style={{ fontSize: 10.5, fontWeight: 800, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>ตั้งค่า & ช่วยเหลือ</div>
+              <div style={{ ...card(t), overflow: "hidden", marginBottom: 14 }}>
+                <button onClick={() => { setLangModalOpen(true); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "13px 14px", background: "none", border: "none", borderBottom: `1px solid ${t.border}`, cursor: "pointer", textAlign: "left" }}>
                   <Languages size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "menu_lang")}</span>
                   <span style={{ marginLeft: "auto", fontSize: 11, color: t.faint, fontWeight: 700 }}>{lang === "th" ? "ไทย" : "EN"}</span>
                 </button>
-                <button onClick={() => { setSecurityOpen(true); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
+                <button onClick={() => { setSecurityOpen(true); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "13px 14px", background: "none", border: "none", borderBottom: `1px solid ${t.border}`, cursor: "pointer", textAlign: "left" }}>
                   <ShieldCheck size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "menu_security")}</span>
                 </button>
-                <button onClick={() => { setHelpOpen(true); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
+                <button onClick={() => { setHelpOpen(true); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "13px 14px", background: "none", border: "none", borderBottom: `1px solid ${t.border}`, cursor: "pointer", textAlign: "left" }}>
                   <HelpCircle size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "menu_help")}</span>
                 </button>
-                <button onClick={() => { setAboutOpen(true); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
+                <button onClick={() => { setAboutOpen(true); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "13px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
                   <Info size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "menu_about")}</span>
                 </button>
-                <button onClick={() => supabase.auth.signOut()} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 10px", borderRadius: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
-                  <X size={18} color="#D9534F" /><span style={{ fontSize: 14, color: "#D9534F" }}>{L(lang, "menu_signout")}</span>
-                </button>
               </div>
+
+              <button onClick={() => supabase.auth.signOut()} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "13px 14px", borderRadius: 14, border: `1px solid #D9534F40`, background: "none", cursor: "pointer", textAlign: "left" }}>
+                <X size={18} color="#D9534F" /><span style={{ fontSize: 14, color: "#D9534F", fontWeight: 700 }}>{L(lang, "menu_signout")}</span>
+              </button>
             </div>
           </div>
           </ModalPortal>
@@ -4856,7 +4873,6 @@ function HomePage({ t, lang, M, quote, isNight, setMentorPick, balance, tx, goal
                   {g.comment && <div style={{ fontSize: 10.5, color: t.faint, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>💬 {g.comment}</div>}
                 </button>
                 <div style={{ display: "flex", gap: 4, flexShrink: 0, marginTop: 2 }}>
-                  <button onClick={() => setCommentingId(commentingId === g.id ? null : g.id)} style={ghost} title="เพิ่มคอมเมนต์/สถานะ"><MessageCircle size={14} color={g.comment ? t.accent : t.faint} /></button>
                   {g.timerMode && <button onClick={() => setGoalTimerTarget(g)} style={{ ...ghost, display: "flex", alignItems: "center", gap: 3, border: `1px solid ${t.accent}55`, background: `${t.accent}12`, padding: "5px 8px" }} title="เริ่มจับเวลา"><Timer size={13} color={t.accent} /><span style={{ fontSize: 10.5, fontWeight: 700, color: t.accent }}>{formatTimerBadge(g.timerSeconds, g.timerUnit)}</span></button>}
                   <button onClick={() => setWorkoutTimerTarget(g)} style={{ ...ghost, display: "flex", alignItems: "center", gap: 3, border: `1px solid ${t.border}`, padding: "5px 8px" }} title="จับเวลาออกกำลังกาย (นาฬิกา+เซ็ต/พัก)"><Play size={12} color={t.sub} /><span style={{ fontSize: 10, fontWeight: 700, color: t.sub }}>จับเวลา</span></button>
                   <button onClick={() => openReminder("goal", g.id, g.text)} style={ghost} title="ตั้งเตือนเป้าหมายนี้"><Bell size={14} color={reminders.some((r) => r.targetType === "goal" && r.targetId === g.id) ? t.accent : t.faint} fill={reminders.some((r) => r.targetType === "goal" && r.targetId === g.id) ? t.accent : "none"} /></button>
@@ -9229,6 +9245,7 @@ function VaultPage({ t, lang, userId }) {
 
 function GoalsReportPage({ t, lang, goals, setGoals, userId }) {
   const [expandedGroup, setExpandedGroup] = useState(null); // label ของกลุ่มที่กำลังขยายดู log อยู่
+  const [viewPeriod, setViewPeriod] = useState("today"); // today | week | month — มุมมองเช็คลิสต์แบบง่าย (แทนกราฟเดิม)
   const dated = goals.filter((g) => g.date);
 
   // จัดกลุ่มเป้าหมายที่ข้อความคล้ายกัน (ตัดช่องว่าง+ตัวพิมพ์เล็กใหญ่) ให้นับเป็นเป้าหมายเดียวกันที่ทำซ้ำหลายวัน
@@ -9251,58 +9268,30 @@ function GoalsReportPage({ t, lang, goals, setGoals, userId }) {
     return streak;
   };
 
-  // heatmap ปฏิทิน 12 สัปดาห์ล่าสุด (คล้าย GitHub contribution graph)
-  const days = []; for (let i = 83; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); days.push(d.toISOString().slice(0, 10)); }
-  const doneCountByDate = {};
-  dated.forEach((g) => { if (g.done) { const dd = g.doneDate || g.date; doneCountByDate[dd] = (doneCountByDate[dd] || 0) + 1; } });
-  const maxCount = Math.max(1, ...Object.values(doneCountByDate));
-  const weeks = []; for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i + 7));
-
-  // กราฟแท่งแนวโน้ม 14 วันล่าสุด
-  const trend = days.slice(-14).map((d) => { const dt = new Date(d); return { label: `${dt.getDate()}/${dt.getMonth() + 1}`, สำเร็จ: doneCountByDate[d] || 0 }; });
-
-  // 🥧 วงกลม: สัดส่วนสำเร็จ/พลาด สัปดาห์นี้
-  const weekRangeOfNow = () => {
-    const d = new Date(); const dow = (d.getDay() + 6) % 7;
-    const mon = new Date(d); mon.setDate(d.getDate() - dow);
-    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
-    return { start: mon.toISOString().slice(0, 10), end: sun.toISOString().slice(0, 10) };
+  // 📅 มุมมองเช็คลิสต์ง่ายๆ วันนี้/สัปดาห์นี้/เดือนนี้ — "ตั้งอะไรไว้ ทำได้จริงไหม" ไม่ใช้กราฟเลย ตามที่ขอ
+  const now = new Date();
+  const periodRange = () => {
+    if (viewPeriod === "today") { const s = todayStr(); return { start: s, end: s }; }
+    if (viewPeriod === "week") {
+      const dow = (now.getDay() + 6) % 7; const mon = new Date(now); mon.setDate(now.getDate() - dow);
+      const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+      return { start: mon.toISOString().slice(0, 10), end: sun.toISOString().slice(0, 10) };
+    }
+    const first = new Date(now.getFullYear(), now.getMonth(), 1);
+    const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    return { start: first.toISOString().slice(0, 10), end: last.toISOString().slice(0, 10) };
   };
-  const { start: weekStart, end: weekEnd } = weekRangeOfNow();
-  const thisWeek = dated.filter((g) => g.date >= weekStart && g.date <= weekEnd);
-  const weekDone = thisWeek.filter((g) => g.done).length;
-  const weekMissed = thisWeek.length - weekDone;
-  const pieData = [
-    { name: "สำเร็จ", value: weekDone, color: "#2E9E6B" },
-    { name: "ยังไม่ทำ", value: weekMissed, color: "#8A93A8" },
-  ];
+  const { start: periodStart, end: periodEnd } = periodRange();
+  const periodGoals = dated.filter((g) => g.date >= periodStart && g.date <= periodEnd);
+  const periodDone = periodGoals.filter((g) => g.done).length;
+  const periodPct = periodGoals.length ? Math.round((periodDone / periodGoals.length) * 100) : 0;
 
-  // 📈 เส้น: % ความสำเร็จรายสัปดาห์ ย้อนหลัง 10 สัปดาห์
-  const weeklyTrend = []; 
-  for (let i = 9; i >= 0; i--) {
-    const d = new Date(); d.setDate(d.getDate() - i * 7);
-    const dow = (d.getDay() + 6) % 7;
-    const mon = new Date(d); mon.setDate(d.getDate() - dow);
-    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
-    const ws = mon.toISOString().slice(0, 10), we = sun.toISOString().slice(0, 10);
-    const wgoals = dated.filter((g) => g.date >= ws && g.date <= we);
-    const pct = wgoals.length ? Math.round((wgoals.filter((g) => g.done).length / wgoals.length) * 100) : 0;
-    weeklyTrend.push({ label: `${mon.getDate()}/${mon.getMonth() + 1}`, "สำเร็จ%": pct });
-  }
-
-  // 📊 แท่ง: อัตราสำเร็จแยกตามวันในสัปดาห์ (จ-อา) — เห็นว่าวันไหนทำได้ดี/แย่
-  const dayLabelsTh = ["จ", "อ", "พ", "พฤ", "ศ", "ส", "อา"];
-  const byWeekday = dayLabelsTh.map((lb, i) => {
-    const rows = dated.filter((g) => (new Date(g.date + "T00:00:00").getDay() + 6) % 7 === i);
-    const pct = rows.length ? Math.round((rows.filter((g) => g.done).length / rows.length) * 100) : 0;
-    return { วัน: lb, "สำเร็จ%": pct };
-  });
-
-  const heatColor = (n) => {
-    if (!n) return t.star ? "rgba(255,255,255,.06)" : "rgba(0,0,0,.05)";
-    const ratio = n / maxCount;
-    return `${t.accent}${Math.round(30 + ratio * 70).toString(16).padStart(2, "0")}`;
-  };
+  // จัดกลุ่มตามวันที่ (ล่าสุดก่อน) — วันนี้ไม่ต้องกลุ่มเพราะมีวันเดียวอยู่แล้ว
+  const byDate = {};
+  periodGoals.forEach((g) => { (byDate[g.date] = byDate[g.date] || []).push(g); });
+  const dateKeys = Object.keys(byDate).sort((a, b) => b.localeCompare(a));
+  const thaiDow = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
+  const fmtDateHead = (d) => { const dt = new Date(d + "T00:00:00"); return `วัน${thaiDow[dt.getDay()]} ${dt.getDate()}/${dt.getMonth() + 1}`; };
 
   // ✏️ แก้ไขย้อนหลัง: สลับสถานะสำเร็จ/ไม่สำเร็จของวันในอดีต (ส่ง comment ไปด้วยเสมอ)
   const toggleRetroDate = async (label, date) => {
@@ -9341,79 +9330,53 @@ function GoalsReportPage({ t, lang, goals, setGoals, userId }) {
         <Empty t={t} text="ยังไม่มีข้อมูลเป้าหมายให้ดูย้อนหลัง ลองเพิ่ม/ติ๊กเป้าหมายที่หน้า Home ก่อนนะ" />
       ) : (
         <>
+          <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+            {[["today", "วันนี้"], ["week", "สัปดาห์นี้"], ["month", "เดือนนี้"]].map(([v, lb]) => (
+              <button key={v} onClick={() => setViewPeriod(v)} style={{ flex: 1, padding: "10px 0", borderRadius: 12, cursor: "pointer", border: `1.5px solid ${viewPeriod === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 12.5, background: viewPeriod === v ? t.accent : "transparent", color: viewPeriod === v ? t.onAccent : t.sub }}>{lb}</button>
+            ))}
+          </div>
+
           <div style={{ ...card(t), padding: 16, marginBottom: 14 }}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: t.text, marginBottom: 10 }}>ภาพรวม 12 สัปดาห์ล่าสุด</div>
-            <div style={{ display: "flex", gap: 3, overflowX: "auto", paddingBottom: 4 }}>
-              {weeks.map((week, wi) => (
-                <div key={wi} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                  {week.map((d) => (
-                    <div key={d} title={`${d}: ทำสำเร็จ ${doneCountByDate[d] || 0} อย่าง`} style={{ width: 12, height: 12, borderRadius: 3, background: heatColor(doneCountByDate[d]) }} />
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ width: 54, height: 54, borderRadius: 27, background: `${t.accent}18`, display: "grid", placeItems: "center", flexShrink: 0 }}>
+                <span style={{ fontSize: 15, fontWeight: 800, color: t.accent }}>{periodPct}%</span>
+              </div>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>ทำสำเร็จ {periodDone} จาก {periodGoals.length} ที่ตั้งไว้</div>
+                <div style={{ fontSize: 11.5, color: t.sub }}>{viewPeriod === "today" ? "วันนี้" : viewPeriod === "week" ? "สัปดาห์นี้ (จ-อา)" : "เดือนนี้"}</div>
+              </div>
+            </div>
+          </div>
+
+          {periodGoals.length === 0 ? (
+            <div style={{ ...card(t), padding: 20, textAlign: "center", marginBottom: 14 }}>
+              <div style={{ fontSize: 12.5, color: t.faint }}>ยังไม่มีเป้าหมายในช่วงนี้</div>
+            </div>
+          ) : viewPeriod === "today" ? (
+            <div style={{ ...card(t), padding: 6, marginBottom: 14 }}>
+              {periodGoals.map((g, i) => (
+                <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 10px", borderTop: i > 0 ? `1px solid ${t.border}` : "none" }}>
+                  {g.done ? <CheckCircle2 size={18} color="#2E9E6B" style={{ flexShrink: 0 }} /> : <XCircle size={18} color={t.faint} style={{ flexShrink: 0 }} />}
+                  <span style={{ fontSize: 13.5, color: g.done ? t.text : t.sub, flex: 1 }}>{g.text}</span>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: g.done ? "#2E9E6B" : t.faint, flexShrink: 0 }}>{g.done ? "ทำแล้ว" : "ยังไม่ทำ"}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ marginBottom: 14 }}>
+              {dateKeys.map((d) => (
+                <div key={d} style={{ ...card(t), padding: 6, marginBottom: 8 }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: t.sub, padding: "8px 10px 4px" }}>{fmtDateHead(d)}</div>
+                  {byDate[d].map((g, i) => (
+                    <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderTop: i > 0 ? `1px solid ${t.border}` : "none" }}>
+                      {g.done ? <CheckCircle2 size={16} color="#2E9E6B" style={{ flexShrink: 0 }} /> : <XCircle size={16} color={t.faint} style={{ flexShrink: 0 }} />}
+                      <span style={{ fontSize: 13, color: g.done ? t.text : t.sub, flex: 1 }}>{g.text}</span>
+                    </div>
                   ))}
                 </div>
               ))}
             </div>
-            <div style={{ fontSize: 10, color: t.faint, marginTop: 8 }}>สีเข้ม = วันที่ทำสำเร็จเยอะ · สีจาง/ว่าง = ยังไม่ได้ทำ</div>
-          </div>
-
-          <div style={{ ...card(t), padding: 16, marginBottom: 14 }}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: t.text, marginBottom: 10 }}>แนวโน้ม 14 วันล่าสุด</div>
-            <div style={{ width: "100%", height: 140 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={trend}>
-                  <XAxis dataKey="label" tick={{ fontSize: 9, fill: t.sub }} axisLine={false} tickLine={false} />
-                  <Tooltip />
-                  <Bar dataKey="สำเร็จ" fill={t.accent} radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          <div style={{ display: "flex", gap: 14, marginBottom: 14, flexWrap: "wrap" }}>
-            <div style={{ ...card(t), padding: 16, flex: 1, minWidth: 160 }}>
-              <div style={{ fontSize: 13, fontWeight: 800, color: t.text, marginBottom: 4 }}>สัปดาห์นี้</div>
-              <div style={{ fontSize: 11, color: t.sub, marginBottom: 6 }}>{weekDone}/{thisWeek.length || 0} สำเร็จ</div>
-              <div style={{ width: "100%", height: 130, position: "relative" }}>
-                {thisWeek.length === 0 ? (
-                  <div style={{ display: "grid", placeItems: "center", height: "100%", fontSize: 11, color: t.faint }}>ยังไม่มีข้อมูลสัปดาห์นี้</div>
-                ) : (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={pieData} dataKey="value" nameKey="name" innerRadius={34} outerRadius={55} paddingAngle={2}>
-                        {pieData.map((e, i) => <Cell key={i} fill={e.color} stroke="none" />)}
-                      </Pie>
-                      <Tooltip formatter={(v) => `${v} รายการ`} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                )}
-                {thisWeek.length > 0 && (
-                  <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", pointerEvents: "none" }}>
-                    <div style={{ fontSize: 17, fontWeight: 800, color: t.text }}>{Math.round((weekDone / thisWeek.length) * 100)}%</div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div style={{ ...card(t), padding: 16, flex: 1, minWidth: 160 }}>
-              <div style={{ fontSize: 13, fontWeight: 800, color: t.text, marginBottom: 10 }}>รายวันในสัปดาห์ (%)</div>
-              <div style={{ width: "100%", height: 130 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={byWeekday}>
-                    <XAxis dataKey="วัน" tick={{ fontSize: 10, fill: t.sub }} axisLine={false} tickLine={false} />
-                    <Tooltip formatter={(v) => `${v}%`} />
-                    <Bar dataKey="สำเร็จ%" fill="#3DA5D9" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          </div>
-
-          <div style={{ ...card(t), padding: 16, marginBottom: 14 }}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: t.text, marginBottom: 2 }}>พัฒนาการรายสัปดาห์</div>
-            <div style={{ fontSize: 11, color: t.sub, marginBottom: 10 }}>% ความสำเร็จ ย้อนหลัง 10 สัปดาห์</div>
-            <div style={{ width: "100%", height: 140 }}>
-              <ConstellationChart t={t} data={weeklyTrend} />
-            </div>
-          </div>
+          )}
 
           <div style={{ fontSize: 13, fontWeight: 800, color: t.sub, margin: "4px 0 10px" }}>เป้าหมายที่ทำบ่อย ({groupList.length})</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
