@@ -4267,12 +4267,10 @@ function GoalTimerModal({ t, goal, close }) {
 // ต้องตั้งค่า "เวลารวมทั้งหมด" + (ถ้าต้องการ) แบ่งเป็นรอบทำ/พัก ก่อนกดเริ่มเสมอ — ไม่ auto-start เดาเอง
 function WorkoutTimerModal({ t, goal, userId, close }) {
   const [configuring, setConfiguring] = useState(true);
-  const [totalMin, setTotalMin] = useState(0); // 0 = ไม่กำหนดเพดาน (นับขึ้นเรื่อยๆ)
+  const [totalSec, setTotalSec] = useState(0); // 0 = ไม่กำหนดเพดาน (นับขึ้นเรื่อยๆ) — เก็บเป็นวินาทีเสมอ ไม่ผูกหน่วยเดียว
   const [useIntervals, setUseIntervals] = useState(false);
-  const [workUnit, setWorkUnit] = useState("sec");
-  const [workVal, setWorkVal] = useState(30);
-  const [restUnit, setRestUnit] = useState("sec");
-  const [restVal, setRestVal] = useState(10);
+  const [workSec, setWorkSec] = useState(30);
+  const [restSec, setRestSec] = useState(10);
 
   // 🔊 การตั้งค่าเสียง — แยกอิสระกัน 2 จุด (จบรอบ / พักครบ) ผสมข้าม preset กันได้ ผูกกับโปรไฟล์ใช้ซ้ำได้ทุกครั้ง
   const [roundPreset, setRoundPreset] = useState("beep");
@@ -4321,6 +4319,11 @@ function WorkoutTimerModal({ t, goal, userId, close }) {
   const playRestSound = () => { if (restSoundUrl) playCustomTimerSound(restSoundUrl); else playTimerAlert("rest", restPreset); };
   const playCompleteSound = () => playTimerAlert("complete", roundPreset); // 🎉 เสียงครบเป้าหมายรวม ใช้โทนสีตาม preset ของ "จบรอบ" เป็นค่าเริ่มต้น
 
+  // 📎 ไฟล์เสียงที่เลือกไว้รอฟังตัวอย่างก่อนกดยืนยันอัปโหลดจริง — เก็บที่ระดับ parent (ไม่ใช่ใน SoundSection)
+  // เพราะ SoundSection ถูกนิยามใหม่ทุกครั้งที่ parent re-render ถ้าเก็บ state ไว้ข้างในจะรีเซ็ตหายเงียบๆ
+  const [stagedRound, setStagedRound] = useState(null); // { file, previewUrl }
+  const [stagedRest, setStagedRest] = useState(null);
+
   // ---- ตัวจับเวลาจริง (เริ่มหลังกด "เริ่มจับเวลา" เท่านั้น) ----
   const [elapsedSec, setElapsedSec] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -4329,16 +4332,12 @@ function WorkoutTimerModal({ t, goal, userId, close }) {
   const [phaseRemaining, setPhaseRemaining] = useState(0);
   const [setCount, setSetCount] = useState(0);
 
-  const totalTargetSec = totalMin > 0 ? totalMin * 60 : 0;
-  const workSec = workUnit === "min" ? workVal * 60 : workVal;
-  const restSec = restUnit === "min" ? restVal * 60 : restVal;
-
   useEffect(() => {
     if (configuring || paused || reachedTarget) return;
     const timer = setTimeout(() => {
       setElapsedSec((s) => {
         const next = s + 1;
-        if (totalTargetSec > 0 && next >= totalTargetSec) { setReachedTarget(true); playCompleteSound(); }
+        if (totalSec > 0 && next >= totalSec) { setReachedTarget(true); playCompleteSound(); }
         return next;
       });
     }, 1000);
@@ -4346,7 +4345,7 @@ function WorkoutTimerModal({ t, goal, userId, close }) {
   }, [elapsedSec, paused, configuring, reachedTarget]);
 
   useEffect(() => {
-    if (configuring || !useIntervals || paused || reachedTarget || phase === null) return;
+    if (configuring || paused || reachedTarget || phase === null) return;
     if (phaseRemaining <= 0) {
       if (phase === "work") { setSetCount((c) => c + 1); playRoundSound(); setPhase("rest"); setPhaseRemaining(restSec); }
       else { playRestSound(); setPhase("work"); setPhaseRemaining(workSec); }
@@ -4354,51 +4353,46 @@ function WorkoutTimerModal({ t, goal, userId, close }) {
     }
     const timer = setTimeout(() => setPhaseRemaining((s) => s - 1), 1000);
     return () => clearTimeout(timer);
-  }, [phaseRemaining, useIntervals, paused, configuring, reachedTarget, phase, roundSoundUrl, restSoundUrl, roundPreset, restPreset]);
+  }, [phaseRemaining, paused, configuring, reachedTarget, phase, roundSoundUrl, restSoundUrl, roundPreset, restPreset]);
 
-  const startSession = () => {
-    setConfiguring(false); setElapsedSec(0); setReachedTarget(false);
-    if (useIntervals) { setPhase("work"); setPhaseRemaining(workSec); setSetCount(0); }
-  };
+  // ▶️ 2 ปุ่มเริ่มแยกอิสระจากกันจริงๆ ตามที่ขอ — กดฝั่งไหนก็เริ่มแค่ส่วนนั้น อีกฝั่งไม่ทำงานแม้จะตั้งค่าไว้ก็ตาม
+  const startTotalOnly = () => { setConfiguring(false); setElapsedSec(0); setReachedTarget(false); setPhase(null); };
+  const startWithRounds = () => { setConfiguring(false); setElapsedSec(0); setReachedTarget(false); setPhase("work"); setPhaseRemaining(workSec); setSetCount(0); };
   const continuePastTarget = () => setReachedTarget(false);
 
   const fmtShort = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
   const fmtElapsed = (s) => { const h = Math.floor(s / 3600); const m = String(Math.floor((s % 3600) / 60)).padStart(2, "0"); const ss = String(s % 60).padStart(2, "0"); return h > 0 ? `${h}:${m}:${ss}` : `${m}:${ss}`; };
-  const TOTAL_PRESETS = [0, 3, 5, 10, 15, 20, 30, 45, 60, 90];
-  const SEC_PRESETS = [15, 20, 30, 45, 60, 90];
-  const MIN_PRESETS = [1, 2, 3, 5, 10, 15, 20];
 
-  // 🔢 แถวปุ่มด่วน + ช่องกรอกเวลาเองต่อท้ายเสมอ (0 = "ไม่กำหนด" เฉพาะแถวเวลารวม)
-  const PresetRow = ({ values, val, setVal, unitLabel, allowZero }) => (
-    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-      {values.map((v) => (
-        <button key={v} onClick={() => setVal(v)} style={{ padding: "7px 12px", borderRadius: 10, border: `1.5px solid ${val === v ? t.accent : t.border}`, background: val === v ? t.accent : "transparent", color: val === v ? t.onAccent : t.sub, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>{v === 0 && allowZero ? "ไม่กำหนด" : `${v}${unitLabel}`}</button>
-      ))}
-      <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 10px", borderRadius: 10, border: `1.5px solid ${t.border}`, background: t.inputBg }}>
-        <input type="number" min="0" value={val} onChange={(e) => setVal(Math.max(0, +e.target.value || 0))} style={{ width: 40, border: "none", background: "none", color: t.text, fontSize: 12, fontWeight: 700, outline: "none" }} />
-        <span style={{ fontSize: 10, color: t.faint }}>{unitLabel} เอง</span>
-      </div>
-    </div>
-  );
-
-  const UnitPresets = ({ label, unit, setUnit, val, setVal }) => (
-    <div style={{ marginBottom: 14 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-        <div style={{ fontSize: 11.5, fontWeight: 800, color: t.sub }}>{label}</div>
-        <div style={{ display: "flex", gap: 4 }}>
-          {[["sec", "วินาที"], ["min", "นาที"]].map(([u, lb]) => (
-            <button key={u} onClick={() => { setUnit(u); setVal(u === "sec" ? 30 : 1); }} style={{ padding: "3px 9px", borderRadius: 8, border: `1px solid ${unit === u ? t.accent : t.border}`, background: unit === u ? t.accent : "transparent", color: unit === u ? t.onAccent : t.faint, fontSize: 10.5, fontWeight: 700, cursor: "pointer" }}>{lb}</button>
+  // ⏱️ ตัวตั้งเวลาแบบมาตรฐาน — ปุ่มด่วน + ช่องกรอกเองที่เลือกหน่วย วิ/นาที/ชม. ได้อิสระ (เก็บผลลัพธ์เป็นวินาทีเสมอ)
+  const UNIT_MULT = { sec: 1, min: 60, hour: 3600 };
+  const fmtPresetLabel = (s) => (s === 0 ? "ไม่กำหนด" : s < 60 ? `${s}วิ` : s < 3600 ? `${Math.round(s / 60)}น.` : `${Math.round(s / 3600)}ชม.`);
+  const TimeSetting = ({ presetsSec, seconds, setSeconds }) => {
+    const [customVal, setCustomVal] = useState(1);
+    const [customUnit, setCustomUnit] = useState("min");
+    const applyCustom = (val, unit) => setSeconds(Math.max(0, val) * UNIT_MULT[unit]);
+    return (
+      <div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+          {presetsSec.map((s) => (
+            <button key={s} onClick={() => setSeconds(s)} style={{ padding: "7px 12px", borderRadius: 10, border: `1.5px solid ${seconds === s ? t.accent : t.border}`, background: seconds === s ? t.accent : "transparent", color: seconds === s ? t.onAccent : t.sub, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>{fmtPresetLabel(s)}</button>
           ))}
         </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: 10.5, color: t.faint }}>กำหนดเอง:</span>
+          <input type="number" min="0" value={customVal} onChange={(e) => { const v = Math.max(0, +e.target.value || 0); setCustomVal(v); applyCustom(v, customUnit); }} style={{ width: 44, padding: "5px 6px", borderRadius: 8, border: `1.5px solid ${t.border}`, background: t.inputBg, color: t.text, fontSize: 12, fontWeight: 700, outline: "none" }} />
+          <div style={{ display: "flex", gap: 3 }}>
+            {[["sec", "วิ"], ["min", "นาที"], ["hour", "ชม."]].map(([u, lb]) => (
+              <button key={u} onClick={() => { setCustomUnit(u); applyCustom(customVal, u); }} style={{ padding: "4px 8px", borderRadius: 7, border: `1px solid ${customUnit === u ? t.accent : t.border}`, background: customUnit === u ? t.accent : "transparent", color: customUnit === u ? t.onAccent : t.faint, fontSize: 10.5, fontWeight: 700, cursor: "pointer" }}>{lb}</button>
+            ))}
+          </div>
+        </div>
       </div>
-      <PresetRow values={unit === "sec" ? SEC_PRESETS : MIN_PRESETS} val={val} setVal={setVal} unitLabel={unit === "sec" ? "วิ" : "น."} />
-    </div>
-  );
+    );
+  };
 
-  // 📎 ไฟล์เสียงที่เลือกไว้รอฟังตัวอย่างก่อนกดยืนยันอัปโหลดจริง — เก็บที่ระดับ parent (ไม่ใช่ใน SoundSection)
-  // เพราะ SoundSection ถูกนิยามใหม่ทุกครั้งที่ parent re-render ถ้าเก็บ state ไว้ข้างในจะรีเซ็ตหายเงียบๆ
-  const [stagedRound, setStagedRound] = useState(null); // { file, previewUrl }
-  const [stagedRest, setStagedRest] = useState(null);
+  const TOTAL_PRESETS_SEC = [0, 180, 300, 600, 900, 1200, 1800, 2700, 3600, 5400];
+  const WORK_PRESETS_SEC = [15, 20, 30, 45, 60, 90, 120, 180, 300];
+  const REST_PRESETS_SEC = [5, 10, 15, 20, 30, 45, 60, 90, 120];
 
   // 🔊 แถวเสียง — เลือก preset ได้อิสระต่อจุด + อัปโหลดเองได้ พร้อม "ฟังตัวอย่างก่อนบันทึก" ก่อนอัปโหลดจริง
   const SoundSection = ({ title, preset, savePreset, url, kind, fileRef, staged, setStaged }) => {
@@ -4454,15 +4448,16 @@ function WorkoutTimerModal({ t, goal, userId, close }) {
           <>
             <div style={{ ...card(t), padding: 14, marginBottom: 14 }}>
               <div style={{ fontSize: 12.5, fontWeight: 800, color: t.text, marginBottom: 2 }}>1️⃣ เวลารวมทั้งหมด</div>
-              <div style={{ fontSize: 10.5, color: t.faint, marginBottom: 10 }}>เวลาเป้าหมายของทั้งเซสชัน (แยกจากเวลาต่อรอบด้านล่าง)</div>
-              <PresetRow values={TOTAL_PRESETS} val={totalMin} setVal={setTotalMin} unitLabel=" น." allowZero />
+              <div style={{ fontSize: 10.5, color: t.faint, marginBottom: 10 }}>เวลาเป้าหมายของทั้งเซสชัน (แยกอิสระจากเวลาต่อรอบด้านล่าง คนละปุ่มเริ่มกันเลย)</div>
+              <TimeSetting presetsSec={TOTAL_PRESETS_SEC} seconds={totalSec} setSeconds={setTotalSec} />
+              <button onClick={startTotalOnly} style={{ width: "100%", padding: "12px 0", borderRadius: 12, border: "none", background: `linear-gradient(135deg,${t.accent2},${t.accent})`, color: t.onAccent, fontWeight: 800, fontSize: 13.5, cursor: "pointer", marginTop: 14 }}>▶ เริ่มจับเวลารวม (ไม่แบ่งรอบ)</button>
             </div>
 
             <div style={{ ...card(t), padding: 14, marginBottom: 14 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>
                   <div style={{ fontSize: 12.5, fontWeight: 800, color: t.text }}>2️⃣ แบ่งเป็นรอบทำ/พัก</div>
-                  <div style={{ fontSize: 10.5, color: t.faint }}>ไม่บังคับ — ปิดไว้ก็จับเวลารวมเฉยๆ ได้</div>
+                  <div style={{ fontSize: 10.5, color: t.faint }}>คนละโหมดกับข้อ 1 — มีปุ่มเริ่มของตัวเอง</div>
                 </div>
                 <button onClick={() => setUseIntervals((v) => !v)} style={{ width: 44, height: 26, borderRadius: 13, border: "none", background: useIntervals ? t.accent : t.border, position: "relative", cursor: "pointer", flexShrink: 0 }}>
                   <div style={{ width: 20, height: 20, borderRadius: 10, background: "#fff", position: "absolute", top: 3, left: useIntervals ? 21 : 3, transition: "left .15s" }} />
@@ -4470,8 +4465,11 @@ function WorkoutTimerModal({ t, goal, userId, close }) {
               </div>
               {useIntervals && (
                 <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${t.border}` }}>
-                  <UnitPresets label="เวลาต่อรอบ" unit={workUnit} setUnit={setWorkUnit} val={workVal} setVal={setWorkVal} />
-                  <UnitPresets label="เวลาพักระหว่างรอบ" unit={restUnit} setUnit={setRestUnit} val={restVal} setVal={setRestVal} />
+                  <div style={{ fontSize: 11.5, fontWeight: 800, color: t.sub, marginBottom: 8 }}>เวลาต่อรอบ</div>
+                  <TimeSetting presetsSec={WORK_PRESETS_SEC} seconds={workSec} setSeconds={setWorkSec} />
+                  <div style={{ fontSize: 11.5, fontWeight: 800, color: t.sub, margin: "14px 0 8px" }}>เวลาพักระหว่างรอบ</div>
+                  <TimeSetting presetsSec={REST_PRESETS_SEC} seconds={restSec} setSeconds={setRestSec} />
+                  <button onClick={startWithRounds} style={{ width: "100%", padding: "12px 0", borderRadius: 12, border: "none", background: `linear-gradient(135deg,${t.accent2},${t.accent})`, color: t.onAccent, fontWeight: 800, fontSize: 13.5, cursor: "pointer", marginTop: 14 }}>▶ เริ่มจับเวลาแบบแบ่งรอบ</button>
                 </div>
               )}
             </div>
@@ -4479,20 +4477,18 @@ function WorkoutTimerModal({ t, goal, userId, close }) {
             <div style={{ fontSize: 11, fontWeight: 800, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>3️⃣ เสียงแจ้งเตือน (เลือกผสมกันได้)</div>
             <SoundSection title="ตอนจบรอบ → พัก" preset={roundPreset} savePreset={saveRoundPreset} url={roundSoundUrl} kind="round" fileRef={roundFileRef} staged={stagedRound} setStaged={setStagedRound} />
             <SoundSection title="ตอนพักครบ → เริ่มรอบใหม่" preset={restPreset} savePreset={saveRestPreset} url={restSoundUrl} kind="rest" fileRef={restFileRef} staged={stagedRest} setStaged={setStagedRest} />
-
-            <button onClick={startSession} style={{ width: "100%", padding: "14px 0", borderRadius: 14, border: "none", background: `linear-gradient(135deg,${t.accent2},${t.accent})`, color: t.onAccent, fontWeight: 800, fontSize: 14, cursor: "pointer", marginTop: 8 }}>▶ เริ่มจับเวลา</button>
           </>
         ) : (
           <>
             <div style={{ textAlign: "center", padding: "18px 0 6px" }}>
               <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 4 }}>เวลาที่ใช้ไป</div>
               <div style={{ fontFamily: "'Kanit',sans-serif", fontSize: 44, fontWeight: 800, color: t.text, letterSpacing: 1 }}>{fmtElapsed(elapsedSec)}</div>
-              {totalTargetSec > 0 && (
+              {totalSec > 0 && (
                 <>
                   <div style={{ height: 6, borderRadius: 3, background: t.border, overflow: "hidden", margin: "10px auto 4px", maxWidth: 260 }}>
-                    <div style={{ height: "100%", width: `${Math.min(100, (elapsedSec / totalTargetSec) * 100)}%`, background: t.accent, borderRadius: 3 }} />
+                    <div style={{ height: "100%", width: `${Math.min(100, (elapsedSec / totalSec) * 100)}%`, background: t.accent, borderRadius: 3 }} />
                   </div>
-                  <div style={{ fontSize: 11, color: t.faint }}>จากเป้าหมาย {fmtElapsed(totalTargetSec)}</div>
+                  <div style={{ fontSize: 11, color: t.faint }}>จากเป้าหมาย {fmtElapsed(totalSec)}</div>
                 </>
               )}
               {paused && <div style={{ fontSize: 11, color: "#E8894A", fontWeight: 700, marginTop: 4 }}>หยุดชั่วคราวอยู่</div>}
@@ -4505,7 +4501,7 @@ function WorkoutTimerModal({ t, goal, userId, close }) {
               </div>
             )}
 
-            {useIntervals && !reachedTarget && phase && (
+            {!reachedTarget && phase && (
               <div style={{ textAlign: "center", padding: "16px 0", borderRadius: 18, marginBottom: 16, background: phase === "work" ? "#E8894A18" : "#3DA5D918", border: `1.5px solid ${phase === "work" ? "#E8894A" : "#3DA5D9"}` }}>
                 <div style={{ fontSize: 13, fontWeight: 800, color: phase === "work" ? "#E8894A" : "#3DA5D9" }}>{phase === "work" ? `🎯 รอบที่ ${setCount + 1} — ลุยเลย!` : "😌 พัก"}</div>
                 <div style={{ fontFamily: "'Kanit',sans-serif", fontSize: 32, fontWeight: 800, color: t.text, marginTop: 6 }}>{fmtShort(phaseRemaining)}</div>
