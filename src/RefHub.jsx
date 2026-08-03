@@ -2220,7 +2220,19 @@ export default function RefHub() {
           {page === "locations" && <LocationsPage t={t} lang={lang} userId={userId} onBack={() => setPage("home")} />}
           {page === "vault" && <VaultPage t={t} lang={lang} userId={userId} onBack={() => setPage("home")} />}
           {page === "chat" && <ChatEntryPage t={t} lang={lang} M={M} userId={userId} authProfile={authProfile} session={session} onBack={() => setPage("home")} openThread={(id, name, isGroup, avatarUrl, createdBy) => { setActiveThread({ id, name, isGroup: !!isGroup, avatarUrl: avatarUrl || null, createdBy: createdBy || null }); setPage("chatRoom"); }} />}
-          {page === "chatRoom" && activeThread && <ChatRoomPage t={t} userId={userId} thread={activeThread} profile={profile} session={session} onLeave={() => { setActiveThread(null); setPage("chat"); }} onBack={() => { setActiveThread(null); setPage("chat"); }} activeCall={activeCall} setActiveCall={setActiveCall} setCallMinimized={setCallMinimized} />}
+          {page === "chatRoom" && activeThread && (
+            <ModalPortal>
+              {/* 🔒 แยก ChatRoomPage ออกมาเป็น fixed เต็มจออิสระของตัวเอง ไม่อยู่ใต้ wrapper transform:scale หลักอีกต่อไป
+                  เหตุผล: position:fixed ที่อยู่ใต้ ancestor ที่มี transform จะอ้างอิงกับกล่องของ ancestor นั้นแทนวิวพอร์ตจริง
+                  (ตาม CSS spec) ทำให้การคำนวณความสูงแบบ dvh/visualViewport ที่ทำไปก่อนหน้านี้ยังคลาดเคลื่อนได้เวลาคีย์บอร์ดเปิด
+                  ย้ายมาเป็น fixed ที่ระดับบนสุดจริงๆ แบบนี้ browser จะจัดการขนาด/ตำแหน่งให้เองตรงๆ ไม่ต้องคำนวณเอง */}
+              <div style={{ position: "fixed", inset: 0, zIndex: 60, background: t.bg, overflow: "hidden" }}>
+                <div style={{ transform: `scale(${fontScale / 100})`, transformOrigin: "top left", width: `${10000 / fontScale}%`, height: `${10000 / fontScale}%`, padding: "8px 10px 10px", boxSizing: "border-box" }}>
+                  <ChatRoomPage t={t} userId={userId} thread={activeThread} profile={profile} session={session} onLeave={() => { setActiveThread(null); setPage("chat"); }} onBack={() => { setActiveThread(null); setPage("chat"); }} activeCall={activeCall} setActiveCall={setActiveCall} setCallMinimized={setCallMinimized} />
+                </div>
+              </div>
+            </ModalPortal>
+          )}
 
           {/* 🎵 การ์ด "กำลังเล่น" ต่อท้ายเนื้อหาหน้า Home (ใต้เป้าหมาย) — div#yt-mini-player mount ค้างตลอด
               ไม่เคย unmount เลย (ซ่อนด้วย display:none เท่านั้น) กันปัญหา React ชนกับ DOM ที่ YouTube API แก้เอง
@@ -8905,7 +8917,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
           return (
             <div key={m.id} style={{ display: "flex", flexDirection: "column", alignItems: mine ? "flex-end" : "flex-start", maxWidth: "88%", alignSelf: mine ? "flex-end" : "flex-start", position: "relative" }}>
               {!mine && thread.isGroup && <div style={{ fontSize: 10.5, color: t.faint, marginBottom: 2, paddingLeft: 34 }}>{senderName}</div>}
-              <div style={{ display: "flex", gap: 8, flexDirection: mine ? "row-reverse" : "row" }}>
+              <div style={{ display: "flex", gap: 8, flexDirection: mine ? "row-reverse" : "row", position: "relative" }}>
                 {!mine && (senderMap[m.sender_id]?.avatarUrl ? (
                   <img src={senderMap[m.sender_id].avatarUrl} alt="" onClick={() => setLightbox(senderMap[m.sender_id].avatarUrl)} style={{ width: 26, height: 26, borderRadius: 8, objectFit: "cover", flexShrink: 0, cursor: "pointer" }} />
                 ) : (
@@ -8954,7 +8966,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
                     onTouchStart={!isCallMsg ? (e) => startLongPress(m, e) : undefined}
                     onTouchEnd={!isCallMsg ? cancelLongPress : undefined}
                     onTouchMove={!isCallMsg ? cancelLongPress : undefined}
-                    style={{ background: mine ? t.accent : t.surface, color: mine ? t.onAccent : t.text, padding: m.attachment_url ? 6 : "10px 14px", borderRadius: 14, fontSize: 14.5, lineHeight: 1.5, border: mine ? "none" : `1px solid ${t.borderStrong}`, cursor: isCallMsg ? "pointer" : (mine ? "default" : "default"), userSelect: "none", WebkitUserSelect: "none" }}
+                    style={{ background: mine ? t.accent : t.surface, color: mine ? t.onAccent : t.text, padding: m.attachment_url ? 6 : "7px 11px", borderRadius: 14, fontSize: 14.5, lineHeight: 1.4, border: mine ? "none" : `1px solid ${t.borderStrong}`, cursor: isCallMsg ? "pointer" : (mine ? "default" : "default"), userSelect: "none", WebkitUserSelect: "none" }}
                   >
                     {m.attachment_type === "image" && <img src={m.attachment_url} alt="" onClick={() => setLightbox(m.attachment_url)} style={{ maxWidth: 200, borderRadius: 10, display: "block", cursor: "pointer" }} />}
                     {m.attachment_type === "video" && <video src={m.attachment_url} controls style={{ maxWidth: 220, borderRadius: 10, display: "block" }} />}
@@ -8963,6 +8975,20 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
                     )}
                     {m.text && <div style={{ padding: m.attachment_url ? "6px 7px 2px" : 0 }}>{m.text}{m.edited_at && <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 6 }}>(แก้ไขแล้ว)</span>}{isCallMsg && <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 6 }}>· ดูรายละเอียด</span>}</div>}
                   </div>
+                  );
+                })()}
+                {reactions[m.id]?.length > 0 && (() => {
+                  const counts = {};
+                  reactions[m.id].forEach((r) => { counts[r.emoji] = (counts[r.emoji] || 0) + 1; });
+                  const myEmoji = reactions[m.id].find((r) => r.user_id === userId)?.emoji;
+                  return (
+                    <div style={{ position: "absolute", bottom: -9, [mine ? "left" : "right"]: -4, display: "flex", gap: 2, zIndex: 5 }}>
+                      {Object.entries(counts).map(([emo, count]) => (
+                        <button key={emo} onClick={() => toggleReaction(m.id, emo)} style={{ display: "flex", alignItems: "center", gap: 2, padding: "1px 6px", borderRadius: 9, border: `1.5px solid ${t.page}`, background: myEmoji === emo ? `${t.accent}22` : t.surface, cursor: "pointer", fontSize: 11.5, boxShadow: "0 1px 3px rgba(0,0,0,.15)" }}>
+                          <span>{emo}</span>{count > 1 && <span style={{ fontSize: 9.5, color: t.sub, fontWeight: 700 }}>{count}</span>}
+                        </button>
+                      ))}
+                    </div>
                   );
                 })()}
               </div>
@@ -9005,20 +9031,6 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
                   </div>
                 </ModalPortal>
               )}
-              {reactions[m.id]?.length > 0 && (() => {
-                const counts = {};
-                reactions[m.id].forEach((r) => { counts[r.emoji] = (counts[r.emoji] || 0) + 1; });
-                const myEmoji = reactions[m.id].find((r) => r.user_id === userId)?.emoji;
-                return (
-                  <div style={{ display: "flex", gap: 4, marginTop: 3, flexWrap: "wrap" }}>
-                    {Object.entries(counts).map(([emo, count]) => (
-                      <button key={emo} onClick={() => toggleReaction(m.id, emo)} style={{ display: "flex", alignItems: "center", gap: 3, padding: "2px 7px", borderRadius: 10, border: `1px solid ${myEmoji === emo ? t.accent : t.border}`, background: myEmoji === emo ? `${t.accent}18` : t.surface, cursor: "pointer", fontSize: 12 }}>
-                        <span>{emo}</span>{count > 1 && <span style={{ fontSize: 10, color: t.sub, fontWeight: 700 }}>{count}</span>}
-                      </button>
-                    ))}
-                  </div>
-                );
-              })()}
               <button onClick={() => setExpandedTimeId(expandedTimeId === m.id ? null : m.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: "2px 2px 0", fontSize: 10, color: t.faint }}>
                 {expandedTimeId === m.id
                   ? new Date(m.created_at).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })
