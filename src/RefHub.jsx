@@ -387,26 +387,27 @@ function startTimerAlarm(onRing, maxRings) {
   return { stop };
 }
 
-// 🔔🏋️ เสียงแจ้งเตือนตัวจับเวลาออกกำลังกาย — ตั้งใจให้ "ตรงข้ามกัน" ชัดเจน ฟังแล้วรู้ทันทีว่าจบเซ็ตหรือจบพัก ไม่ต้องมองจอ
-// หมดเซ็ต→พัก: โทนไล่ลง (สูง→ต่ำ) ให้ความรู้สึก "ผ่อน" + สั่นยาว 1 ครั้ง
-function playSetDoneAlert() {
+// 🔔⏱️ เสียงแจ้งเตือนตัวจับเวลา — เลือก preset ได้ (ปี๊บ/ระฆัง/นุ่มนวล) หรือใช้เสียงอัปโหลดเองแทนก็ได้
+// kind: 'round' (จบรอบ→พัก, โทนลง) | 'rest' (พักครบ→เริ่มรอบใหม่, โทนขึ้น) | 'complete' (ครบเวลารวมที่ตั้งไว้)
+function playTimerAlert(kind, preset) {
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     const ctx = new AudioCtx();
-    beepOn(ctx, 880, 0, 0.18, "sine", 0.26); beepOn(ctx, 660, 0.15, 0.18, "sine", 0.24); beepOn(ctx, 440, 0.3, 0.28, "sine", 0.22);
-    setTimeout(() => { try { ctx.close(); } catch (e) {} }, 700);
+    const wave = preset === "beep" && kind === "rest" ? "square" : "sine";
+    const vol = preset === "soft" ? 0.16 : preset === "bell" ? 0.22 : 0.26;
+    const dur = preset === "bell" ? 0.8 : preset === "soft" ? 0.5 : 0.2;
+    const gap = preset === "bell" ? 0.35 : preset === "soft" ? 0.3 : 0.15;
+    let notes;
+    if (kind === "complete") notes = [523, 659, 784, 1046];
+    else if (kind === "round") notes = preset === "bell" ? [784, 523] : preset === "soft" ? [330, 220] : [880, 660, 440];
+    else notes = preset === "bell" ? [523, 784] : preset === "soft" ? [220, 330] : [440, 660, 880];
+    notes.forEach((f, i) => beepOn(ctx, f, i * gap, i === notes.length - 1 ? dur * 1.3 : dur, wave, vol));
+    setTimeout(() => { try { ctx.close(); } catch (e) {} }, (notes.length * gap + dur + 0.4) * 1000);
   } catch (e) {}
-  try { navigator.vibrate?.(220); } catch (e) {}
+  try { navigator.vibrate?.(kind === "complete" ? [100, 60, 100, 60, 200] : kind === "round" ? 220 : [90, 70, 90]); } catch (e) {}
 }
-// พักครบ→เริ่มเซ็ตใหม่: โทนไล่ขึ้น (ต่ำ→สูง) ให้ความรู้สึก "ตื่นตัว/ไปต่อ" + สั่นสั้นถี่ 2 ครั้ง
-function playRestDoneAlert() {
-  try {
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    const ctx = new AudioCtx();
-    beepOn(ctx, 440, 0, 0.14, "square", 0.26); beepOn(ctx, 660, 0.12, 0.14, "square", 0.26); beepOn(ctx, 880, 0.24, 0.24, "square", 0.3);
-    setTimeout(() => { try { ctx.close(); } catch (e) {} }, 700);
-  } catch (e) {}
-  try { navigator.vibrate?.([90, 70, 90]); } catch (e) {}
+function playCustomTimerSound(url) {
+  try { const audio = new Audio(url); audio.play().catch(() => {}); } catch (e) {}
 }
 
 // ---------------- Theme ----------------
@@ -2410,7 +2411,7 @@ export default function RefHub() {
         {billManagerOpen && <BillManagerModal t={t} billReminders={billReminders} billPayments={billPayments} addBillReminder={addBillReminder} deleteBillReminder={deleteBillReminder} markBillPaid={markBillPaid} unmarkBillPaid={unmarkBillPaid} close={() => setBillManagerOpen(false)} />}
         {leaderboardOpen && <LeaderboardModal t={t} userId={userId} close={() => setLeaderboardOpen(false)} />}
         {goalTimerTarget && <GoalTimerModal t={t} goal={goalTimerTarget} close={() => setGoalTimerTarget(null)} />}
-        {workoutTimerTarget && <WorkoutTimerModal t={t} goal={workoutTimerTarget} close={() => setWorkoutTimerTarget(null)} />}
+        {workoutTimerTarget && <WorkoutTimerModal t={t} goal={workoutTimerTarget} userId={userId} close={() => setWorkoutTimerTarget(null)} />}
         {addGoalOpen && <AddGoalModal t={t} userId={userId} session={session} setGoals={setGoals} goalTemplates={goalTemplates} setGoalTemplates={setGoalTemplates} close={() => setAddGoalOpen(false)} />}
         {scoreRulesOpen && <ScoreRulesModal t={t} close={() => setScoreRulesOpen(false)} />}
         {reminderTarget && <ReminderModal t={t} targetType={reminderTarget.targetType} targetId={reminderTarget.targetId} label={reminderTarget.label} existing={reminderTarget.existing} upsertReminder={upsertReminder} deleteReminder={deleteReminder} close={() => setReminderTarget(null)} />}
@@ -4261,88 +4262,227 @@ function GoalTimerModal({ t, goal, close }) {
 // 🏋️ ===== นาฬิกาจับเวลาออกกำลังกาย (นาฬิการวม + เซ็ต/พัก) =====
 // ต่างจาก GoalTimerModal เดิม (ต้องตั้งค่าตอนสร้างเป้าหมาย, นับถอยหลังทีเดียวจบ):
 // อันนี้กดปุ๊บเริ่มจับเวลารวมทันที (นับขึ้น ไม่มีเพดาน) + ตั้งเซ็ต/พักได้ในหน้านี้เลย วนรอบไม่จำกัดจนกว่าจะหยุดเอง
-function WorkoutTimerModal({ t, goal, close }) {
-  const [elapsedSec, setElapsedSec] = useState(0); // ⏱ เวลารวมทั้งเซสชัน เดินตลอดไม่ว่าจะอยู่ช่วงเซ็ตหรือพัก
+// ⏱️ ===== นาฬิกาจับเวลาแบบมาตรฐาน (เวลารวม + แบ่งรอบทำ/พักได้ตามต้องการ) =====
+// ใช้ได้กับกิจกรรมทั่วไป ไม่ผูกกับการออกกำลังกายโดยเฉพาะ (อ่านหนังสือ/ดูหนัง/ทำงาน ฯลฯ)
+// ต้องตั้งค่า "เวลารวมทั้งหมด" + (ถ้าต้องการ) แบ่งเป็นรอบทำ/พัก ก่อนกดเริ่มเสมอ — ไม่ auto-start เดาเอง
+function WorkoutTimerModal({ t, goal, userId, close }) {
+  const [configuring, setConfiguring] = useState(true);
+  const [totalMin, setTotalMin] = useState(0); // 0 = ไม่กำหนดเพดาน (นับขึ้นเรื่อยๆ)
+  const [useIntervals, setUseIntervals] = useState(false);
+  const [workUnit, setWorkUnit] = useState("sec");
+  const [workVal, setWorkVal] = useState(30);
+  const [restUnit, setRestUnit] = useState("sec");
+  const [restVal, setRestVal] = useState(10);
+
+  // 🔊 การตั้งค่าเสียง — ผูกกับโปรไฟล์ ใช้ร่วมกันทุกครั้งที่เปิดตัวจับเวลา (ไม่ต้องตั้งใหม่ทุกรอบ)
+  const [soundPreset, setSoundPreset] = useState("beep");
+  const [roundSoundUrl, setRoundSoundUrl] = useState(null);
+  const [restSoundUrl, setRestSoundUrl] = useState(null);
+  const [uploadingKind, setUploadingKind] = useState(null);
+  const roundFileRef = useRef(null);
+  const restFileRef = useRef(null);
+
+  useEffect(() => {
+    if (!userId) return;
+    supabase.from("profiles").select("timer_sound_preset, timer_sound_round_url, timer_sound_rest_url").eq("id", userId).maybeSingle().then(({ data }) => {
+      if (data) { setSoundPreset(data.timer_sound_preset || "beep"); setRoundSoundUrl(data.timer_sound_round_url || null); setRestSoundUrl(data.timer_sound_rest_url || null); }
+    });
+  }, [userId]);
+
+  const saveSoundPreset = async (preset) => { setSoundPreset(preset); if (userId) await supabase.from("profiles").update({ timer_sound_preset: preset }).eq("id", userId); };
+  const uploadCustomSound = async (kind, file) => {
+    if (!userId || !file) return;
+    setUploadingKind(kind);
+    try {
+      const ext = (file.name.split(".").pop() || "mp3").toLowerCase();
+      const path = `timer-sounds/${userId}/${kind}-${crypto.randomUUID()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from("attachments").upload(path, file, { contentType: file.type });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from("attachments").getPublicUrl(path);
+      const col = kind === "round" ? "timer_sound_round_url" : "timer_sound_rest_url";
+      await supabase.from("profiles").update({ [col]: pub.publicUrl }).eq("id", userId);
+      if (kind === "round") setRoundSoundUrl(pub.publicUrl); else setRestSoundUrl(pub.publicUrl);
+    } catch (e) { alert("อัปโหลดเสียงไม่สำเร็จ: " + e.message); }
+    setUploadingKind(null);
+  };
+  const removeCustomSound = async (kind) => {
+    const col = kind === "round" ? "timer_sound_round_url" : "timer_sound_rest_url";
+    if (userId) await supabase.from("profiles").update({ [col]: null }).eq("id", userId);
+    if (kind === "round") setRoundSoundUrl(null); else setRestSoundUrl(null);
+  };
+  const playRoundSound = () => { if (roundSoundUrl) playCustomTimerSound(roundSoundUrl); else playTimerAlert("round", soundPreset); };
+  const playRestSound = () => { if (restSoundUrl) playCustomTimerSound(restSoundUrl); else playTimerAlert("rest", soundPreset); };
+  const playCompleteSound = () => playTimerAlert("complete", soundPreset);
+
+  // ---- ตัวจับเวลาจริง (เริ่มหลังกด "เริ่มจับเวลา" เท่านั้น) ----
+  const [elapsedSec, setElapsedSec] = useState(0);
   const [paused, setPaused] = useState(false);
-  const [workSec, setWorkSec] = useState(30);
-  const [restSec, setRestSec] = useState(10);
-  const [intervalActive, setIntervalActive] = useState(false);
-  const [phase, setPhase] = useState(null); // 'work' | 'rest'
+  const [reachedTarget, setReachedTarget] = useState(false);
+  const [phase, setPhase] = useState(null); // 'work' | 'rest' | null
   const [phaseRemaining, setPhaseRemaining] = useState(0);
   const [setCount, setSetCount] = useState(0);
 
-  useEffect(() => {
-    if (paused) return;
-    const timer = setTimeout(() => setElapsedSec((s) => s + 1), 1000);
-    return () => clearTimeout(timer);
-  }, [elapsedSec, paused]);
+  const totalTargetSec = totalMin > 0 ? totalMin * 60 : 0;
+  const workSec = workUnit === "min" ? workVal * 60 : workVal;
+  const restSec = restUnit === "min" ? restVal * 60 : restVal;
 
   useEffect(() => {
-    if (!intervalActive || paused) return;
+    if (configuring || paused || reachedTarget) return;
+    const timer = setTimeout(() => {
+      setElapsedSec((s) => {
+        const next = s + 1;
+        if (totalTargetSec > 0 && next >= totalTargetSec) { setReachedTarget(true); playCompleteSound(); }
+        return next;
+      });
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [elapsedSec, paused, configuring, reachedTarget]);
+
+  useEffect(() => {
+    if (configuring || !useIntervals || paused || reachedTarget || phase === null) return;
     if (phaseRemaining <= 0) {
-      if (phase === "work") { setSetCount((c) => c + 1); playSetDoneAlert(); setPhase("rest"); setPhaseRemaining(restSec); }
-      else { playRestDoneAlert(); setPhase("work"); setPhaseRemaining(workSec); }
+      if (phase === "work") { setSetCount((c) => c + 1); playRoundSound(); setPhase("rest"); setPhaseRemaining(restSec); }
+      else { playRestSound(); setPhase("work"); setPhaseRemaining(workSec); }
       return;
     }
     const timer = setTimeout(() => setPhaseRemaining((s) => s - 1), 1000);
     return () => clearTimeout(timer);
-  }, [phaseRemaining, intervalActive, paused, phase, workSec, restSec]);
+  }, [phaseRemaining, useIntervals, paused, configuring, reachedTarget, phase, roundSoundUrl, restSoundUrl, soundPreset]);
 
-  const startInterval = () => { setIntervalActive(true); setPhase("work"); setPhaseRemaining(workSec); setSetCount(0); };
-  const stopInterval = () => { setIntervalActive(false); setPhase(null); setPhaseRemaining(0); };
+  const startSession = () => {
+    setConfiguring(false); setElapsedSec(0); setReachedTarget(false);
+    if (useIntervals) { setPhase("work"); setPhaseRemaining(workSec); setSetCount(0); }
+  };
+  const continuePastTarget = () => setReachedTarget(false);
 
   const fmtShort = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
   const fmtElapsed = (s) => { const h = Math.floor(s / 3600); const m = String(Math.floor((s % 3600) / 60)).padStart(2, "0"); const ss = String(s % 60).padStart(2, "0"); return h > 0 ? `${h}:${m}:${ss}` : `${m}:${ss}`; };
-  const WORK_PRESETS = [15, 20, 30, 45, 60, 90];
-  const REST_PRESETS = [5, 10, 15, 20, 30, 45, 60];
+  const TOTAL_PRESETS = [0, 3, 5, 10, 15, 20, 30, 45, 60, 90];
+  const SEC_PRESETS = [15, 20, 30, 45, 60, 90];
+  const MIN_PRESETS = [1, 2, 3, 5, 10, 15, 20];
+
+  const UnitPresets = ({ label, unit, setUnit, val, setVal }) => (
+    <>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+        <div style={{ fontSize: 11.5, fontWeight: 800, color: t.sub }}>{label}</div>
+        <div style={{ display: "flex", gap: 4 }}>
+          {[["sec", "วินาที"], ["min", "นาที"]].map(([u, lb]) => (
+            <button key={u} onClick={() => { setUnit(u); setVal(u === "sec" ? 30 : 1); }} style={{ padding: "3px 9px", borderRadius: 8, border: `1px solid ${unit === u ? t.accent : t.border}`, background: unit === u ? t.accent : "transparent", color: unit === u ? t.onAccent : t.faint, fontSize: 10.5, fontWeight: 700, cursor: "pointer" }}>{lb}</button>
+          ))}
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+        {(unit === "sec" ? SEC_PRESETS : MIN_PRESETS).map((s) => (
+          <button key={s} onClick={() => setVal(s)} style={{ padding: "7px 12px", borderRadius: 10, border: `1.5px solid ${val === s ? t.accent : t.border}`, background: val === s ? t.accent : "transparent", color: val === s ? t.onAccent : t.sub, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>{s} {unit === "sec" ? "วิ" : "น."}</button>
+        ))}
+      </div>
+    </>
+  );
+
+  const SoundRow = ({ label, kind, url, fileRef }) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+      <span style={{ fontSize: 11.5, color: t.sub, flex: 1 }}>{label}</span>
+      {url ? (
+        <>
+          <button onClick={() => playCustomTimerSound(url)} style={ghost} title="ทดลองฟัง"><Play size={13} color={t.accent} /></button>
+          <button onClick={() => removeCustomSound(kind)} style={ghost} title="ลบ ใช้เสียง preset แทน"><Trash2 size={13} color="#D9534F" /></button>
+        </>
+      ) : (
+        <button onClick={() => fileRef.current?.click()} disabled={uploadingKind === kind} style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 10px", borderRadius: 8, border: `1px dashed ${t.border}`, background: "none", color: t.sub, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+          <Upload size={12} /> {uploadingKind === kind ? "กำลังอัปโหลด..." : "อัปโหลดเอง"}
+        </button>
+      )}
+      <input ref={fileRef} type="file" accept="audio/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadCustomSound(kind, f); }} />
+    </div>
+  );
 
   return (
     <ModalPortal>
     <div style={overlay} onClick={close}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "90vh", overflowY: "auto" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-          <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>🏋️ {goal.text}</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: configuring ? 14 : 4 }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>⏱️ {goal.text}</div>
           <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
         </div>
 
-        <div style={{ textAlign: "center", padding: "18px 0 6px" }}>
-          <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 4 }}>เวลารวมทั้งหมด</div>
-          <div style={{ fontFamily: "'Kanit',sans-serif", fontSize: 44, fontWeight: 800, color: t.text, letterSpacing: 1 }}>{fmtElapsed(elapsedSec)}</div>
-          {paused && <div style={{ fontSize: 11, color: "#E8894A", fontWeight: 700, marginTop: 2 }}>หยุดชั่วคราวอยู่</div>}
-        </div>
-
-        {intervalActive && (
-          <div style={{ textAlign: "center", padding: "16px 0", borderRadius: 18, marginBottom: 16, background: phase === "work" ? "#E8894A18" : "#3DA5D918", border: `1.5px solid ${phase === "work" ? "#E8894A" : "#3DA5D9"}` }}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: phase === "work" ? "#E8894A" : "#3DA5D9" }}>{phase === "work" ? `🔥 เซ็ตที่ ${setCount + 1} — ออกแรง!` : "😌 พัก"}</div>
-            <div style={{ fontFamily: "'Kanit',sans-serif", fontSize: 32, fontWeight: 800, color: t.text, marginTop: 6 }}>{fmtShort(phaseRemaining)}</div>
-            <div style={{ fontSize: 10.5, color: t.faint, marginTop: 2 }}>ทำสำเร็จแล้ว {setCount} เซ็ต</div>
-          </div>
-        )}
-
-        {!intervalActive ? (
+        {configuring ? (
           <>
-            <div style={{ fontSize: 11.5, fontWeight: 800, color: t.sub, marginBottom: 6 }}>เวลาออกแรงต่อเซ็ต</div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
-              {WORK_PRESETS.map((s) => (
-                <button key={s} onClick={() => setWorkSec(s)} style={{ padding: "7px 12px", borderRadius: 10, border: `1.5px solid ${workSec === s ? t.accent : t.border}`, background: workSec === s ? t.accent : "transparent", color: workSec === s ? t.onAccent : t.sub, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>{s} วิ</button>
-              ))}
-            </div>
-            <div style={{ fontSize: 11.5, fontWeight: 800, color: t.sub, marginBottom: 6 }}>เวลาพักระหว่างเซ็ต</div>
+            <div style={{ fontSize: 11.5, fontWeight: 800, color: t.sub, marginBottom: 6 }}>เวลารวมทั้งหมด</div>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 18 }}>
-              {REST_PRESETS.map((s) => (
-                <button key={s} onClick={() => setRestSec(s)} style={{ padding: "7px 12px", borderRadius: 10, border: `1.5px solid ${restSec === s ? t.accent : t.border}`, background: restSec === s ? t.accent : "transparent", color: restSec === s ? t.onAccent : t.sub, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>{s} วิ</button>
+              {TOTAL_PRESETS.map((m) => (
+                <button key={m} onClick={() => setTotalMin(m)} style={{ padding: "7px 12px", borderRadius: 10, border: `1.5px solid ${totalMin === m ? t.accent : t.border}`, background: totalMin === m ? t.accent : "transparent", color: totalMin === m ? t.onAccent : t.sub, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>{m === 0 ? "ไม่กำหนด" : `${m} น.`}</button>
               ))}
             </div>
-            <button onClick={startInterval} style={{ width: "100%", padding: "13px 0", borderRadius: 14, border: "none", background: `linear-gradient(135deg,${t.accent2},${t.accent})`, color: t.onAccent, fontWeight: 800, fontSize: 14, cursor: "pointer", marginBottom: 10 }}>▶ เริ่มจับเวลาเซ็ต ({workSec}วิ ออกแรง / {restSec}วิ พัก)</button>
+
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, ...card(t), padding: 12 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: t.text }}>แบ่งเป็นรอบทำ/พัก</span>
+              <button onClick={() => setUseIntervals((v) => !v)} style={{ width: 44, height: 26, borderRadius: 13, border: "none", background: useIntervals ? t.accent : t.border, position: "relative", cursor: "pointer" }}>
+                <div style={{ width: 20, height: 20, borderRadius: 10, background: "#fff", position: "absolute", top: 3, left: useIntervals ? 21 : 3, transition: "left .15s" }} />
+              </button>
+            </div>
+
+            {useIntervals && (
+              <>
+                <UnitPresets label="เวลาต่อรอบ" unit={workUnit} setUnit={setWorkUnit} val={workVal} setVal={setWorkVal} />
+                <UnitPresets label="เวลาพักระหว่างรอบ" unit={restUnit} setUnit={setRestUnit} val={restVal} setVal={setRestVal} />
+              </>
+            )}
+
+            <div style={{ fontSize: 11.5, fontWeight: 800, color: t.sub, marginBottom: 8 }}>🔊 เสียงแจ้งเตือน</div>
+            <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+              {[["beep", "ปี๊บ"], ["bell", "ระฆัง"], ["soft", "นุ่มนวล"]].map(([p, lb]) => (
+                <button key={p} onClick={() => saveSoundPreset(p)} style={{ flex: 1, padding: "8px 0", borderRadius: 10, border: `1.5px solid ${soundPreset === p ? t.accent : t.border}`, background: soundPreset === p ? t.accent : "transparent", color: soundPreset === p ? t.onAccent : t.sub, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>{lb}</button>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 10, marginBottom: 6 }}>
+              <button onClick={() => playRoundSound()} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "6px 0", borderRadius: 8, border: `1px solid ${t.border}`, background: "none", color: t.sub, fontSize: 11, cursor: "pointer" }}><Play size={11} /> ทดลองฟัง (จบรอบ)</button>
+              <button onClick={() => playRestSound()} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "6px 0", borderRadius: 8, border: `1px solid ${t.border}`, background: "none", color: t.sub, fontSize: 11, cursor: "pointer" }}><Play size={11} /> ทดลองฟัง (พักครบ)</button>
+            </div>
+            <div style={{ ...card(t), padding: 12, marginBottom: 18 }}>
+              <div style={{ fontSize: 10.5, color: t.faint, marginBottom: 8 }}>หรือใช้เสียงของตัวเองแทน preset (แยกได้ 2 จุด):</div>
+              <SoundRow label="เสียงตอนจบรอบ→พัก" kind="round" url={roundSoundUrl} fileRef={roundFileRef} />
+              <SoundRow label="เสียงตอนพักครบ→เริ่มรอบใหม่" kind="rest" url={restSoundUrl} fileRef={restFileRef} />
+            </div>
+
+            <button onClick={startSession} style={{ width: "100%", padding: "14px 0", borderRadius: 14, border: "none", background: `linear-gradient(135deg,${t.accent2},${t.accent})`, color: t.onAccent, fontWeight: 800, fontSize: 14, cursor: "pointer" }}>▶ เริ่มจับเวลา</button>
           </>
         ) : (
-          <button onClick={stopInterval} style={{ width: "100%", padding: "12px 0", borderRadius: 14, border: `1.5px solid ${t.border}`, background: "none", color: t.sub, fontWeight: 700, fontSize: 13, cursor: "pointer", marginBottom: 10 }}>หยุดจับเวลาเซ็ต (นาฬิการวมยังเดินต่อ)</button>
-        )}
+          <>
+            <div style={{ textAlign: "center", padding: "18px 0 6px" }}>
+              <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 4 }}>เวลาที่ใช้ไป</div>
+              <div style={{ fontFamily: "'Kanit',sans-serif", fontSize: 44, fontWeight: 800, color: t.text, letterSpacing: 1 }}>{fmtElapsed(elapsedSec)}</div>
+              {totalTargetSec > 0 && (
+                <>
+                  <div style={{ height: 6, borderRadius: 3, background: t.border, overflow: "hidden", margin: "10px auto 4px", maxWidth: 260 }}>
+                    <div style={{ height: "100%", width: `${Math.min(100, (elapsedSec / totalTargetSec) * 100)}%`, background: t.accent, borderRadius: 3 }} />
+                  </div>
+                  <div style={{ fontSize: 11, color: t.faint }}>จากเป้าหมาย {fmtElapsed(totalTargetSec)}</div>
+                </>
+              )}
+              {paused && <div style={{ fontSize: 11, color: "#E8894A", fontWeight: 700, marginTop: 4 }}>หยุดชั่วคราวอยู่</div>}
+            </div>
 
-        <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={() => setPaused((p) => !p)} style={{ flex: 1, padding: "12px 0", borderRadius: 12, border: `1.5px solid ${t.border}`, background: "none", color: t.text, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>{paused ? "เล่นต่อ" : "หยุดชั่วคราวทั้งหมด"}</button>
-          <button onClick={close} style={{ flex: 1, padding: "12px 0", borderRadius: 12, border: `1.5px solid ${t.border}`, background: "none", color: t.sub, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>จบเซสชัน</button>
-        </div>
+            {reachedTarget && (
+              <div style={{ textAlign: "center", padding: 16, borderRadius: 18, marginBottom: 14, background: "#2E9E6B18", border: "1.5px solid #2E9E6B" }}>
+                <div style={{ fontSize: 14, fontWeight: 800, color: "#2E9E6B" }}>🎉 ครบเวลาที่ตั้งไว้แล้ว!</div>
+                <button onClick={continuePastTarget} style={{ marginTop: 8, padding: "8px 16px", borderRadius: 10, border: "none", background: "#2E9E6B", color: "#fff", fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}>ทำต่ออีกหน่อย</button>
+              </div>
+            )}
+
+            {useIntervals && !reachedTarget && phase && (
+              <div style={{ textAlign: "center", padding: "16px 0", borderRadius: 18, marginBottom: 16, background: phase === "work" ? "#E8894A18" : "#3DA5D918", border: `1.5px solid ${phase === "work" ? "#E8894A" : "#3DA5D9"}` }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: phase === "work" ? "#E8894A" : "#3DA5D9" }}>{phase === "work" ? `🎯 รอบที่ ${setCount + 1} — ลุยเลย!` : "😌 พัก"}</div>
+                <div style={{ fontFamily: "'Kanit',sans-serif", fontSize: 32, fontWeight: 800, color: t.text, marginTop: 6 }}>{fmtShort(phaseRemaining)}</div>
+                <div style={{ fontSize: 10.5, color: t.faint, marginTop: 2 }}>ทำสำเร็จแล้ว {setCount} รอบ</div>
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => setPaused((p) => !p)} style={{ flex: 1, padding: "12px 0", borderRadius: 12, border: `1.5px solid ${t.border}`, background: "none", color: t.text, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>{paused ? "เล่นต่อ" : "หยุดชั่วคราว"}</button>
+              <button onClick={close} style={{ flex: 1, padding: "12px 0", borderRadius: 12, border: `1.5px solid ${t.border}`, background: "none", color: t.sub, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>จบเซสชัน</button>
+            </div>
+          </>
+        )}
       </div>
     </div>
     </ModalPortal>
