@@ -12675,6 +12675,9 @@ function ChatModal({ t, M, mentor, setMentor, authProfile, setAuthProfile, custo
   const [inp, setInp] = useState(() => askAiTopic ? `ช่วยคุยเรื่อง "${askAiTopic.title}" ต่อให้หน่อย อยากรู้เพิ่มเติมเกี่ยวกับเรื่องนี้` : ""); const [loading, setLoading] = useState(false); const endRef = useRef(null);
   const [pendingImg, setPendingImg] = useState(null); // { dataUrl, mime } รูปที่เลือกไว้ รอกดส่ง
   const fileRef = useRef(null);
+  const [myUsage, setMyUsage] = useState(null); // { today_count, daily_ai_limit } — โควตา AI ของตัวเองวันนี้
+  const loadMyUsage = () => { if (userId) supabase.rpc("get_my_ai_usage").then(({ data }) => { if (data?.[0]) setMyUsage(data[0]); }); };
+  useEffect(() => { loadMyUsage(); }, [userId]);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, loading]);
 
   const greeting = () => ({ who: "m", text: `สวัสดี ฉันคือ ${M.full} วันนี้อยากให้ช่วยเรื่องอะไร?` });
@@ -12750,14 +12753,15 @@ function ChatModal({ t, M, mentor, setMentor, authProfile, setAuthProfile, custo
       if (!r.ok) throw new Error(data.error || "API error");
       const replyMsg = { who: "m", text: data.text || M.replies[Math.floor(Math.random() * M.replies.length)], source: data.source };
       setMsgs((m) => [...m, replyMsg]);
+      loadMyUsage(); // 🚦 อัปเดตเลขโควตาที่ใช้ไปวันนี้ ทันทีหลังตอบสำเร็จ
       if (userId) supabase.from("mentor_chat_messages").insert({ user_id: userId, mentor, session_id: currentSessionId, who: replyMsg.who, text: replyMsg.text }).then(({ error }) => { if (error) console.error("บันทึกคำตอบโค้ชไม่สำเร็จ:", error.message); }, () => {});
     } catch (e) {
       // ยังไม่ deploy หรือ API มีปัญหา -> fallback เป็น mock reply ชั่วคราว ไม่ให้แชทค้าง
       // แต่ log สาเหตุจริงไว้ให้เช็คได้ (กด F12 > Console) และติดป้ายบอกชัดว่านี่คือ mock ไม่ใช่ AI จริง
       console.error("เรียก /api/chat ไม่สำเร็จ ตกไปใช้ mock reply สาเหตุ:", e.message);
-      const mockMsg = { who: "m", text: M.replies[Math.floor(Math.random() * M.replies.length)], isMock: true };
-      setMsgs((m) => [...m, mockMsg]);
-      if (userId) supabase.from("mentor_chat_messages").insert({ user_id: userId, mentor, session_id: currentSessionId, who: mockMsg.who, text: mockMsg.text }).then(({ error }) => { if (error) console.error("บันทึกข้อความ mock ไม่สำเร็จ:", error.message); }, () => {});
+      const quotaMsg = { who: "m", text: e.message?.includes("โควตา") ? e.message : M.replies[Math.floor(Math.random() * M.replies.length)], isMock: !e.message?.includes("โควตา") };
+      setMsgs((m) => [...m, quotaMsg]);
+      if (userId) supabase.from("mentor_chat_messages").insert({ user_id: userId, mentor, session_id: currentSessionId, who: quotaMsg.who, text: quotaMsg.text }).then(({ error }) => { if (error) console.error("บันทึกข้อความ mock ไม่สำเร็จ:", error.message); }, () => {});
     } finally {
       setLoading(false);
     }
@@ -12786,6 +12790,19 @@ function ChatModal({ t, M, mentor, setMentor, authProfile, setAuthProfile, custo
         </div>
         {switchPick && <MentorPicker t={t} mentor={mentor} setMentor={setMentor} authProfile={authProfile} setAuthProfile={setAuthProfile} userId={userId} customMentors={customMentors} setCustomMentors={setCustomMentors} close={() => setSwitchPick(false)} />}
         {showHistList && <ChatHistoryListModal t={t} userId={userId} mentor={mentor} currentSessionId={currentSessionId} onSelect={viewSession} close={() => setShowHistList(false)} />}
+        {myUsage && (() => {
+          const pct = Math.min(100, (myUsage.today_count / (myUsage.daily_ai_limit || 1)) * 100);
+          return (
+            <div style={{ padding: "8px 16px", background: t.page, borderBottom: `1px solid ${t.border}` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: pct >= 90 ? "#D9534F" : t.faint, marginBottom: 4 }}>
+                <span>โควตาแชทวันนี้</span><span>{myUsage.today_count} / {myUsage.daily_ai_limit} ครั้ง</span>
+              </div>
+              <div style={{ height: 4, borderRadius: 2, background: t.border, overflow: "hidden" }}>
+                <div style={{ height: "100%", width: `${pct}%`, background: pct >= 100 ? "#D9534F" : pct > 70 ? "#E8894A" : t.accent, borderRadius: 2 }} />
+              </div>
+            </div>
+          );
+        })()}
         <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
           {histLoading && <div style={{ alignSelf: "center", color: t.sub, fontSize: 12.5, padding: "20px 0" }}>กำลังโหลดประวัติแชท...</div>}
           {!histLoading && msgs.map((m, i) => (
