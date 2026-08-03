@@ -1190,6 +1190,16 @@ export default function RefHub() {
   const dbFontScaleHydratedRef = useRef(false); // 🔒 กันบั๊ก: ค่าจาก DB (font_scale) เคยไปทับค่าที่เพิ่งเลือกไว้ในเครื่องนี้ทุกครั้งที่ authProfile โหลดใหม่ — ให้ดึงจาก DB มาทับได้แค่ "ครั้งแรก" ตอน hydrate เท่านั้น และเฉพาะตอนที่เครื่องนี้ไม่มีค่าอยู่ในเครื่องอยู่แล้ว (เครื่องใหม่/ล้าง storage)
   const [page, setPage] = useState(() => { try { return sessionStorage.getItem("refhub:page") || "home"; } catch (e) { return "home"; } });
   const contentScrollRef = useRef(null); // 📜 container หลักที่ scroll ของทุกหน้า — ใช้เด้งกลับขึ้นบนตอนเปลี่ยนหน้า + ปุ่มเลื่อนขึ้น/ลง
+  // 📱 ติดตามความสูง viewport จริงผ่าน VisualViewport API — บาง Android WebView/PWA ไม่อัปเดต CSS dvh ตอนคีย์บอร์ดเปิด
+  // ทำให้เหลือพื้นที่ว่างด้านล่างค้างอยู่เท่าความสูงคีย์บอร์ด (container คิดว่ายังมีพื้นที่เท่าเดิมทั้งที่คีย์บอร์ดมาบังไปแล้ว)
+  const [vvh, setVvh] = useState(() => (typeof window !== "undefined" && window.visualViewport ? window.visualViewport.height : null));
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.visualViewport) return;
+    const onVvResize = () => setVvh(window.visualViewport.height);
+    window.visualViewport.addEventListener("resize", onVvResize);
+    window.visualViewport.addEventListener("scroll", onVvResize);
+    return () => { window.visualViewport.removeEventListener("resize", onVvResize); window.visualViewport.removeEventListener("scroll", onVvResize); };
+  }, []);
   const [atTop, setAtTop] = useState(true); // true = อยู่บนสุด (ปุ่มลอยจะเป็นลูกศรลง), false = เลื่อนลงมาแล้ว (ปุ่มลอยเป็นลูกศรขึ้น)
   useEffect(() => {
     const el = contentScrollRef.current;
@@ -2197,7 +2207,7 @@ export default function RefHub() {
         </div>
 
         {/* CONTENT — ความสูงหารด้วยสเกลชดเชย transform:scale ข้างบน กันตอนขยายฟอนต์แล้วท้ายเนื้อหาจมใต้ Dock */}
-        <div ref={contentScrollRef} onScroll={(e) => setAtTop(e.currentTarget.scrollTop < 80)} style={{ position: "relative", zIndex: 2, padding: `8px 10px ${page === "chat" || page === "chatRoom" ? 16 : 120}px`, height: `calc(${(10000 / fontScale).toFixed(2)}dvh - 76px)`, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
+        <div ref={contentScrollRef} onScroll={(e) => setAtTop(e.currentTarget.scrollTop < 80)} style={{ position: "relative", zIndex: 2, padding: `8px 10px ${page === "chat" || page === "chatRoom" ? 16 : 120}px`, height: vvh ? `${(vvh * 100 / fontScale - 76).toFixed(2)}px` : `calc(${(10000 / fontScale).toFixed(2)}dvh - 76px)`, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
           {page === "home" && <ErrorCatcher t={t}><HomePage {...{ t, lang, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, allGoals: goals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, setMusicOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget, setWorkoutTimerTarget, setAddGoalOpen, setScoreRulesOpen, cardShape, homeLayout, walletWidgets, setWalletWidgets, bentoWidgets, setBentoWidgets, classicWidgets, setClassicWidgets, catColors, setCatColors, heroShortcuts, setHeroShortcuts }} /></ErrorCatcher>}
           {page === "ledger" && <FinancePage {...{ t, lang, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt), userId, billReminders, billPayments, markBillPaid, setBillManagerOpen }} />}
           {page === "note" && <NotePage {...{ t, lang, notes, setNotes, isNight, userId, session, authProfile, reminders, openReminder }} />}
@@ -8656,6 +8666,8 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
   const [attachMenuOpen, setAttachMenuOpen] = useState(false); // 📎 เมนูขยาย: ถ่ายรูป/รูปภาพ/วิดีโอ/ไฟล์
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [expandedTimeId, setExpandedTimeId] = useState(null); // id ข้อความที่กดดูเวลาแบบเต็ม (วันเดือนปี) อยู่
+  const [reactions, setReactions] = useState({}); // message_id -> [{user_id, emoji}] — อีโมจิรีแอคชันต่อข้อความ
+  const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
   // เสียงเรียกเข้าย้ายไปที่ IncomingCallWatcher ระดับแอปแล้ว (ทำงานทุกหน้า) — ตรงนี้เหลือแค่แบนเนอร์ในห้อง กันเสียงซ้อนกัน
   useEffect(() => {
     const isMeInThisCall = activeCall?.threadId === thread.id;
@@ -8757,6 +8769,29 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [thread.id]);
+
+  // 😀 รีแอคชันอีโมจิบนข้อความ — โหลดทั้งหมดของห้องนี้ + ฟังการเปลี่ยนแปลงแบบสด (insert/update/delete)
+  const loadReactions = () => {
+    supabase.from("chat_message_reactions").select("*, chat_messages!inner(thread_id)").eq("chat_messages.thread_id", thread.id).then(({ data }) => {
+      const grouped = {};
+      (data || []).forEach((r) => { (grouped[r.message_id] = grouped[r.message_id] || []).push(r); });
+      setReactions(grouped);
+    });
+  };
+  useEffect(() => {
+    loadReactions();
+    const channel = supabase
+      .channel(`reactions-${thread.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "chat_message_reactions" }, () => loadReactions())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [thread.id]);
+  const toggleReaction = async (messageId, emoji) => {
+    const mine = (reactions[messageId] || []).find((r) => r.user_id === userId);
+    if (mine && mine.emoji === emoji) await supabase.from("chat_message_reactions").delete().eq("message_id", messageId).eq("user_id", userId);
+    else await supabase.from("chat_message_reactions").upsert({ message_id: messageId, user_id: userId, emoji }, { onConflict: "message_id,user_id" });
+    setMsgMenuId(null);
+  };
 
   // ดึงชื่อจริงของทุกคนที่เคยส่งข้อความในห้องนี้ (สำคัญมากสำหรับห้องกลุ่มที่มีมากกว่า 2 คน)
   useEffect(() => {
@@ -8904,12 +8939,12 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
                   return (
                   <div
                     onClick={isCallMsg ? openCallDetail : undefined}
-                    onMouseDown={mine && !m.attachment_url ? () => startLongPress(m) : undefined}
-                    onMouseUp={mine && !m.attachment_url ? cancelLongPress : undefined}
-                    onMouseLeave={mine && !m.attachment_url ? cancelLongPress : undefined}
-                    onTouchStart={mine && !m.attachment_url ? () => startLongPress(m) : undefined}
-                    onTouchEnd={mine && !m.attachment_url ? cancelLongPress : undefined}
-                    onTouchMove={mine && !m.attachment_url ? cancelLongPress : undefined}
+                    onMouseDown={!isCallMsg ? () => startLongPress(m) : undefined}
+                    onMouseUp={!isCallMsg ? cancelLongPress : undefined}
+                    onMouseLeave={!isCallMsg ? cancelLongPress : undefined}
+                    onTouchStart={!isCallMsg ? () => startLongPress(m) : undefined}
+                    onTouchEnd={!isCallMsg ? cancelLongPress : undefined}
+                    onTouchMove={!isCallMsg ? cancelLongPress : undefined}
                     style={{ background: mine ? t.accent : t.surface, color: mine ? t.onAccent : t.text, padding: m.attachment_url ? 6 : "10px 14px", borderRadius: 14, fontSize: 14.5, lineHeight: 1.5, border: mine ? "none" : `1px solid ${t.borderStrong}`, cursor: isCallMsg ? "pointer" : (mine ? "default" : "default"), userSelect: "none", WebkitUserSelect: "none" }}
                   >
                     {m.attachment_type === "image" && <img src={m.attachment_url} alt="" onClick={() => setLightbox(m.attachment_url)} style={{ maxWidth: 200, borderRadius: 10, display: "block", cursor: "pointer" }} />}
@@ -8922,20 +8957,43 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
                   );
                 })()}
               </div>
-              {/* เมนูแก้ไข/ลบ — โผล่เฉพาะตอนกดค้าง ไม่ค้างอยู่ตลอดใต้ทุกข้อความ (กันหน้าจอรก) */}
+              {/* เมนูแตะค้าง: แถวอีโมจิรีแอคชัน (ทุกข้อความ) + แก้ไข/ลบ (เฉพาะข้อความตัวเอง) */}
               {msgMenuId === m.id && (
                 <>
                   <div onClick={() => { setMsgMenuId(null); setConfirmDeleteMsgId(null); }} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
-                  <div style={{ position: "absolute", top: "100%", [mine ? "right" : "left"]: 0, marginTop: 4, zIndex: 41, background: t.page, border: `1px solid ${t.border}`, borderRadius: 12, boxShadow: "0 6px 18px rgba(0,0,0,.18)", display: "flex", overflow: "hidden" }}>
-                    <button onClick={() => { startEdit(m); setMsgMenuId(null); }} style={{ padding: "9px 16px", background: "none", border: "none", cursor: "pointer", fontSize: 12.5, color: t.text, fontWeight: 600, borderRight: `1px solid ${t.border}` }}>แก้ไข</button>
-                    {confirmDeleteMsgId === m.id ? (
-                      <button onClick={() => deleteMsg(m.id)} style={{ padding: "9px 16px", background: "none", border: "none", cursor: "pointer", fontSize: 12.5, color: "#D9534F", fontWeight: 700 }}>ยืนยันลบ?</button>
-                    ) : (
-                      <button onClick={() => setConfirmDeleteMsgId(m.id)} style={{ padding: "9px 16px", background: "none", border: "none", cursor: "pointer", fontSize: 12.5, color: "#D9534F", fontWeight: 600 }}>ลบ</button>
+                  <div style={{ position: "absolute", top: "100%", [mine ? "right" : "left"]: 0, marginTop: 4, zIndex: 41, background: t.page, border: `1px solid ${t.border}`, borderRadius: 12, boxShadow: "0 6px 18px rgba(0,0,0,.18)", overflow: "hidden" }}>
+                    <div style={{ display: "flex", padding: "6px 8px", borderBottom: mine ? `1px solid ${t.border}` : "none" }}>
+                      {QUICK_REACTIONS.map((emo) => (
+                        <button key={emo} onClick={() => toggleReaction(m.id, emo)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 19, padding: "2px 5px" }}>{emo}</button>
+                      ))}
+                    </div>
+                    {mine && (
+                      <div style={{ display: "flex" }}>
+                        <button onClick={() => { startEdit(m); setMsgMenuId(null); }} style={{ padding: "9px 16px", background: "none", border: "none", cursor: "pointer", fontSize: 12.5, color: t.text, fontWeight: 600, borderRight: `1px solid ${t.border}` }}>แก้ไข</button>
+                        {confirmDeleteMsgId === m.id ? (
+                          <button onClick={() => deleteMsg(m.id)} style={{ padding: "9px 16px", background: "none", border: "none", cursor: "pointer", fontSize: 12.5, color: "#D9534F", fontWeight: 700 }}>ยืนยันลบ?</button>
+                        ) : (
+                          <button onClick={() => setConfirmDeleteMsgId(m.id)} style={{ padding: "9px 16px", background: "none", border: "none", cursor: "pointer", fontSize: 12.5, color: "#D9534F", fontWeight: 600 }}>ลบ</button>
+                        )}
+                      </div>
                     )}
                   </div>
                 </>
               )}
+              {reactions[m.id]?.length > 0 && (() => {
+                const counts = {};
+                reactions[m.id].forEach((r) => { counts[r.emoji] = (counts[r.emoji] || 0) + 1; });
+                const myEmoji = reactions[m.id].find((r) => r.user_id === userId)?.emoji;
+                return (
+                  <div style={{ display: "flex", gap: 4, marginTop: 3, flexWrap: "wrap" }}>
+                    {Object.entries(counts).map(([emo, count]) => (
+                      <button key={emo} onClick={() => toggleReaction(m.id, emo)} style={{ display: "flex", alignItems: "center", gap: 3, padding: "2px 7px", borderRadius: 10, border: `1px solid ${myEmoji === emo ? t.accent : t.border}`, background: myEmoji === emo ? `${t.accent}18` : t.surface, cursor: "pointer", fontSize: 12 }}>
+                        <span>{emo}</span>{count > 1 && <span style={{ fontSize: 10, color: t.sub, fontWeight: 700 }}>{count}</span>}
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
               <button onClick={() => setExpandedTimeId(expandedTimeId === m.id ? null : m.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: "2px 2px 0", fontSize: 10, color: t.faint }}>
                 {expandedTimeId === m.id
                   ? new Date(m.created_at).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })
@@ -8989,7 +9047,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
           <input ref={cameraRef} type="file" accept="image/*" capture="environment" onChange={pickFile} style={{ display: "none" }} />
           <input ref={videoRef} type="file" accept="video/*" onChange={pickFile} style={{ display: "none" }} />
           <input ref={docRef} type="file" accept=".pdf,.doc,.docx,.xlsx,.txt" onChange={pickFile} style={{ display: "none" }} />
-          <textarea value={text} onChange={(e) => { setText(e.target.value); notifyTyping(); }} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder="พิมพ์ข้อความ..." rows={1} style={{ ...input(t), resize: "none", maxHeight: 120, overflowY: "auto", fontFamily: "inherit", lineHeight: 1.4 }} onInput={(e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px"; }} />
+          <textarea value={text} onChange={(e) => { setText(e.target.value); notifyTyping(); }} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder="พิมพ์ข้อความ..." rows={1} style={{ ...input(t), resize: "none", maxHeight: 56, overflowY: "auto", fontFamily: "inherit", lineHeight: 1.4 }} onInput={(e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 56) + "px"; }} />
           <button onClick={() => setEmojiPickerOpen((v) => !v)} style={{ width: 42, borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }} title="อีโมจิ">
             <Smile size={18} color={t.sub} />
           </button>
@@ -13202,7 +13260,7 @@ function ChatModal({ t, M, mentor, setMentor, authProfile, setAuthProfile, custo
               <Upload size={16} color={t.sub} />
             </button>
             <input ref={fileRef} type="file" accept="image/*" onChange={pickImage} style={{ display: "none" }} />
-            <textarea value={inp} onChange={(e) => setInp(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); imgGenMode ? sendImageGen() : send(); } }} placeholder={imgGenMode ? "อธิบายรูปที่อยากได้..." : `ถาม ${M.name}...`} rows={1} style={{ ...input(t), resize: "none", maxHeight: 120, overflowY: "auto", fontFamily: "inherit", lineHeight: 1.4 }} disabled={loading} onInput={(e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px"; }} />
+            <textarea value={inp} onChange={(e) => setInp(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); imgGenMode ? sendImageGen() : send(); } }} placeholder={imgGenMode ? "อธิบายรูปที่อยากได้..." : `ถาม ${M.name}...`} rows={1} style={{ ...input(t), resize: "none", maxHeight: 56, overflowY: "auto", fontFamily: "inherit", lineHeight: 1.4 }} disabled={loading} onInput={(e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 56) + "px"; }} />
             <button onClick={imgGenMode ? sendImageGen : send} disabled={loading} style={{ ...primaryBtn(M), width: 46, padding: 0, display: "grid", placeItems: "center", opacity: loading ? 0.6 : 1 }}>{imgGenMode ? <ImageIcon size={17} /> : <Send size={18} />}</button>
           </div>
         </div>
