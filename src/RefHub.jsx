@@ -387,6 +387,28 @@ function startTimerAlarm(onRing, maxRings) {
   return { stop };
 }
 
+// 🔔🏋️ เสียงแจ้งเตือนตัวจับเวลาออกกำลังกาย — ตั้งใจให้ "ตรงข้ามกัน" ชัดเจน ฟังแล้วรู้ทันทีว่าจบเซ็ตหรือจบพัก ไม่ต้องมองจอ
+// หมดเซ็ต→พัก: โทนไล่ลง (สูง→ต่ำ) ให้ความรู้สึก "ผ่อน" + สั่นยาว 1 ครั้ง
+function playSetDoneAlert() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AudioCtx();
+    beepOn(ctx, 880, 0, 0.18, "sine", 0.26); beepOn(ctx, 660, 0.15, 0.18, "sine", 0.24); beepOn(ctx, 440, 0.3, 0.28, "sine", 0.22);
+    setTimeout(() => { try { ctx.close(); } catch (e) {} }, 700);
+  } catch (e) {}
+  try { navigator.vibrate?.(220); } catch (e) {}
+}
+// พักครบ→เริ่มเซ็ตใหม่: โทนไล่ขึ้น (ต่ำ→สูง) ให้ความรู้สึก "ตื่นตัว/ไปต่อ" + สั่นสั้นถี่ 2 ครั้ง
+function playRestDoneAlert() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AudioCtx();
+    beepOn(ctx, 440, 0, 0.14, "square", 0.26); beepOn(ctx, 660, 0.12, 0.14, "square", 0.26); beepOn(ctx, 880, 0.24, 0.24, "square", 0.3);
+    setTimeout(() => { try { ctx.close(); } catch (e) {} }, 700);
+  } catch (e) {}
+  try { navigator.vibrate?.([90, 70, 90]); } catch (e) {}
+}
+
 // ---------------- Theme ----------------
 // 🎨 ระบบธีมสีแอป (แยกอิสระจากสี Mentor โดยสิ้นเชิง — Mentor ใช้แค่จุดที่เป็นตัวตนโค้ชเท่านั้น เช่น การ์ดเลือกโค้ช/แชท)
 // แต่ละธีมมีเวอร์ชัน day และ night ของตัวเอง อิสระจากกัน (เลือกธีมได้โดยไม่ผูกกับเวลา/โหมดกลางวัน-กลางคืน)
@@ -1216,6 +1238,7 @@ export default function RefHub() {
   const [billManagerOpen, setBillManagerOpen] = useState(false);
   const [leaderboardOpen, setLeaderboardOpen] = useState(false); // ⚠️ ย้ายมาจากใน HomePage — เดิม modal เรนเดอร์อยู่ในกล่อง transform:scale ของ HomePage ทำให้ position:fixed เพี้ยน ไม่เต็มจอจริง (ซ้อนทับกับ Dock) บั๊กแบบเดียวกับที่เคยเจอกับ BillManagerModal ต้องเรนเดอร์จากระดับบนสุดของแอปเท่านั้น
   const [goalTimerTarget, setGoalTimerTarget] = useState(null); // ⏱ เก็บ goal object ที่กำลังจับเวลาอยู่ (null = ไม่ได้เปิด) เรนเดอร์ GoalTimerModal จากระดับบนสุดตาม pattern เดียวกับ leaderboardOpen ข้างบน
+  const [workoutTimerTarget, setWorkoutTimerTarget] = useState(null); // 🏋️ นาฬิกาจับเวลารวม+เซ็ต/พัก แบบกดเริ่มได้เลยไม่ต้องตั้งค่าตอนสร้างเป้าหมาย
   const [scoreRulesOpen, setScoreRulesOpen] = useState(false); // 📐 หน้ากฎการนับคะแนน — เรนเดอร์จากระดับบนสุดเช่นกัน กันบั๊ก transform:scale
   const [addGoalOpen, setAddGoalOpen] = useState(false); // ⚠️ ย้ายมาจากใน HomePage — เจอบั๊กเดียวกับ leaderboardOpen/BillManagerModal คือ position:fixed เพี้ยนเพราะอยู่ในกล่อง transform:scale ทำให้ modal ไปชนซ้อนกับหัวแอปด้านบน
   const [exportText, setExportText] = useState(null);
@@ -2370,6 +2393,7 @@ export default function RefHub() {
         {billManagerOpen && <BillManagerModal t={t} billReminders={billReminders} billPayments={billPayments} addBillReminder={addBillReminder} deleteBillReminder={deleteBillReminder} markBillPaid={markBillPaid} unmarkBillPaid={unmarkBillPaid} close={() => setBillManagerOpen(false)} />}
         {leaderboardOpen && <LeaderboardModal t={t} userId={userId} close={() => setLeaderboardOpen(false)} />}
         {goalTimerTarget && <GoalTimerModal t={t} goal={goalTimerTarget} close={() => setGoalTimerTarget(null)} />}
+        {workoutTimerTarget && <WorkoutTimerModal t={t} goal={workoutTimerTarget} close={() => setWorkoutTimerTarget(null)} />}
         {addGoalOpen && <AddGoalModal t={t} userId={userId} session={session} setGoals={setGoals} goalTemplates={goalTemplates} setGoalTemplates={setGoalTemplates} close={() => setAddGoalOpen(false)} />}
         {scoreRulesOpen && <ScoreRulesModal t={t} close={() => setScoreRulesOpen(false)} />}
         {reminderTarget && <ReminderModal t={t} targetType={reminderTarget.targetType} targetId={reminderTarget.targetId} label={reminderTarget.label} existing={reminderTarget.existing} upsertReminder={upsertReminder} deleteReminder={deleteReminder} close={() => setReminderTarget(null)} />}
@@ -4217,6 +4241,97 @@ function GoalTimerModal({ t, goal, close }) {
   );
 }
 
+// 🏋️ ===== นาฬิกาจับเวลาออกกำลังกาย (นาฬิการวม + เซ็ต/พัก) =====
+// ต่างจาก GoalTimerModal เดิม (ต้องตั้งค่าตอนสร้างเป้าหมาย, นับถอยหลังทีเดียวจบ):
+// อันนี้กดปุ๊บเริ่มจับเวลารวมทันที (นับขึ้น ไม่มีเพดาน) + ตั้งเซ็ต/พักได้ในหน้านี้เลย วนรอบไม่จำกัดจนกว่าจะหยุดเอง
+function WorkoutTimerModal({ t, goal, close }) {
+  const [elapsedSec, setElapsedSec] = useState(0); // ⏱ เวลารวมทั้งเซสชัน เดินตลอดไม่ว่าจะอยู่ช่วงเซ็ตหรือพัก
+  const [paused, setPaused] = useState(false);
+  const [workSec, setWorkSec] = useState(30);
+  const [restSec, setRestSec] = useState(10);
+  const [intervalActive, setIntervalActive] = useState(false);
+  const [phase, setPhase] = useState(null); // 'work' | 'rest'
+  const [phaseRemaining, setPhaseRemaining] = useState(0);
+  const [setCount, setSetCount] = useState(0);
+
+  useEffect(() => {
+    if (paused) return;
+    const timer = setTimeout(() => setElapsedSec((s) => s + 1), 1000);
+    return () => clearTimeout(timer);
+  }, [elapsedSec, paused]);
+
+  useEffect(() => {
+    if (!intervalActive || paused) return;
+    if (phaseRemaining <= 0) {
+      if (phase === "work") { setSetCount((c) => c + 1); playSetDoneAlert(); setPhase("rest"); setPhaseRemaining(restSec); }
+      else { playRestDoneAlert(); setPhase("work"); setPhaseRemaining(workSec); }
+      return;
+    }
+    const timer = setTimeout(() => setPhaseRemaining((s) => s - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [phaseRemaining, intervalActive, paused, phase, workSec, restSec]);
+
+  const startInterval = () => { setIntervalActive(true); setPhase("work"); setPhaseRemaining(workSec); setSetCount(0); };
+  const stopInterval = () => { setIntervalActive(false); setPhase(null); setPhaseRemaining(0); };
+
+  const fmtShort = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+  const fmtElapsed = (s) => { const h = Math.floor(s / 3600); const m = String(Math.floor((s % 3600) / 60)).padStart(2, "0"); const ss = String(s % 60).padStart(2, "0"); return h > 0 ? `${h}:${m}:${ss}` : `${m}:${ss}`; };
+  const WORK_PRESETS = [15, 20, 30, 45, 60, 90];
+  const REST_PRESETS = [5, 10, 15, 20, 30, 45, 60];
+
+  return (
+    <ModalPortal>
+    <div style={overlay} onClick={close}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "90vh", overflowY: "auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>🏋️ {goal.text}</div>
+          <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+        </div>
+
+        <div style={{ textAlign: "center", padding: "18px 0 6px" }}>
+          <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 4 }}>เวลารวมทั้งหมด</div>
+          <div style={{ fontFamily: "'Kanit',sans-serif", fontSize: 44, fontWeight: 800, color: t.text, letterSpacing: 1 }}>{fmtElapsed(elapsedSec)}</div>
+          {paused && <div style={{ fontSize: 11, color: "#E8894A", fontWeight: 700, marginTop: 2 }}>หยุดชั่วคราวอยู่</div>}
+        </div>
+
+        {intervalActive && (
+          <div style={{ textAlign: "center", padding: "16px 0", borderRadius: 18, marginBottom: 16, background: phase === "work" ? "#E8894A18" : "#3DA5D918", border: `1.5px solid ${phase === "work" ? "#E8894A" : "#3DA5D9"}` }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: phase === "work" ? "#E8894A" : "#3DA5D9" }}>{phase === "work" ? `🔥 เซ็ตที่ ${setCount + 1} — ออกแรง!` : "😌 พัก"}</div>
+            <div style={{ fontFamily: "'Kanit',sans-serif", fontSize: 32, fontWeight: 800, color: t.text, marginTop: 6 }}>{fmtShort(phaseRemaining)}</div>
+            <div style={{ fontSize: 10.5, color: t.faint, marginTop: 2 }}>ทำสำเร็จแล้ว {setCount} เซ็ต</div>
+          </div>
+        )}
+
+        {!intervalActive ? (
+          <>
+            <div style={{ fontSize: 11.5, fontWeight: 800, color: t.sub, marginBottom: 6 }}>เวลาออกแรงต่อเซ็ต</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+              {WORK_PRESETS.map((s) => (
+                <button key={s} onClick={() => setWorkSec(s)} style={{ padding: "7px 12px", borderRadius: 10, border: `1.5px solid ${workSec === s ? t.accent : t.border}`, background: workSec === s ? t.accent : "transparent", color: workSec === s ? t.onAccent : t.sub, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>{s} วิ</button>
+              ))}
+            </div>
+            <div style={{ fontSize: 11.5, fontWeight: 800, color: t.sub, marginBottom: 6 }}>เวลาพักระหว่างเซ็ต</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 18 }}>
+              {REST_PRESETS.map((s) => (
+                <button key={s} onClick={() => setRestSec(s)} style={{ padding: "7px 12px", borderRadius: 10, border: `1.5px solid ${restSec === s ? t.accent : t.border}`, background: restSec === s ? t.accent : "transparent", color: restSec === s ? t.onAccent : t.sub, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>{s} วิ</button>
+              ))}
+            </div>
+            <button onClick={startInterval} style={{ width: "100%", padding: "13px 0", borderRadius: 14, border: "none", background: `linear-gradient(135deg,${t.accent2},${t.accent})`, color: t.onAccent, fontWeight: 800, fontSize: 14, cursor: "pointer", marginBottom: 10 }}>▶ เริ่มจับเวลาเซ็ต ({workSec}วิ ออกแรง / {restSec}วิ พัก)</button>
+          </>
+        ) : (
+          <button onClick={stopInterval} style={{ width: "100%", padding: "12px 0", borderRadius: 14, border: `1.5px solid ${t.border}`, background: "none", color: t.sub, fontWeight: 700, fontSize: 13, cursor: "pointer", marginBottom: 10 }}>หยุดจับเวลาเซ็ต (นาฬิการวมยังเดินต่อ)</button>
+        )}
+
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={() => setPaused((p) => !p)} style={{ flex: 1, padding: "12px 0", borderRadius: 12, border: `1.5px solid ${t.border}`, background: "none", color: t.text, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>{paused ? "เล่นต่อ" : "หยุดชั่วคราวทั้งหมด"}</button>
+          <button onClick={close} style={{ flex: 1, padding: "12px 0", borderRadius: 12, border: `1.5px solid ${t.border}`, background: "none", color: t.sub, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>จบเซสชัน</button>
+        </div>
+      </div>
+    </div>
+    </ModalPortal>
+  );
+}
+
 // 📐 ===== หน้ากฎการนับคะแนน =====
 // ⚠️ ต้องเรนเดอร์จากระดับบนสุดของแอปเท่านั้น (นอกกล่อง transform:scale) ไม่งั้น position:fixed เพี้ยน — บั๊กแบบเดียวกับ LeaderboardModal/AddGoalModal ที่เคยแก้ไป
 function ScoreRulesModal({ t, close }) {
@@ -4743,6 +4858,7 @@ function HomePage({ t, lang, M, quote, isNight, setMentorPick, balance, tx, goal
                 <div style={{ display: "flex", gap: 4, flexShrink: 0, marginTop: 2 }}>
                   <button onClick={() => setCommentingId(commentingId === g.id ? null : g.id)} style={ghost} title="เพิ่มคอมเมนต์/สถานะ"><MessageCircle size={14} color={g.comment ? t.accent : t.faint} /></button>
                   {g.timerMode && <button onClick={() => setGoalTimerTarget(g)} style={{ ...ghost, display: "flex", alignItems: "center", gap: 3, border: `1px solid ${t.accent}55`, background: `${t.accent}12`, padding: "5px 8px" }} title="เริ่มจับเวลา"><Timer size={13} color={t.accent} /><span style={{ fontSize: 10.5, fontWeight: 700, color: t.accent }}>{formatTimerBadge(g.timerSeconds, g.timerUnit)}</span></button>}
+                  <button onClick={() => setWorkoutTimerTarget(g)} style={{ ...ghost, display: "flex", alignItems: "center", gap: 3, border: `1px solid ${t.border}`, padding: "5px 8px" }} title="จับเวลาออกกำลังกาย (นาฬิกา+เซ็ต/พัก)"><Play size={12} color={t.sub} /><span style={{ fontSize: 10, fontWeight: 700, color: t.sub }}>จับเวลา</span></button>
                   <button onClick={() => openReminder("goal", g.id, g.text)} style={ghost} title="ตั้งเตือนเป้าหมายนี้"><Bell size={14} color={reminders.some((r) => r.targetType === "goal" && r.targetId === g.id) ? t.accent : t.faint} fill={reminders.some((r) => r.targetType === "goal" && r.targetId === g.id) ? t.accent : "none"} /></button>
                   <button onClick={() => askConfirm(`ลบเป้าหมาย "${g.text}" เลยไหม?`, () => { setGoals((gs) => gs.filter((x) => x.id !== g.id)); if (userId) { supabase.from("goals").delete().eq("id", g.id).then(() => {}, () => {}); logAudit(userId, "goals", "delete", "ลบเป้าหมาย"); } })} style={ghost}><Trash2 size={15} color={t.faint} /></button>
                 </div>
