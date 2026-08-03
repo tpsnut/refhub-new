@@ -2073,8 +2073,8 @@ export default function RefHub() {
   if (!authProfile || !authProfile.approved) return <PendingApprovalScreen profile={authProfile} onLogout={() => supabase.auth.signOut()} />;
 
   return (
-    <div style={{ minHeight: "100dvh", background: t.page, display: "flex", justifyContent: "center", fontFamily: "'IBM Plex Sans Thai','Segoe UI','Helvetica Neue',system-ui,sans-serif" }}>
-      <div style={{ width: "100%", maxWidth: 440, position: "relative", background: t.bg, minHeight: "100dvh", overflow: "hidden", transition: "background .5s" }}>
+    <div style={{ minHeight: vvh ? `${vvh}px` : "100dvh", background: t.page, display: "flex", justifyContent: "center", fontFamily: "'IBM Plex Sans Thai','Segoe UI','Helvetica Neue',system-ui,sans-serif" }}>
+      <div style={{ width: "100%", maxWidth: 440, position: "relative", background: t.bg, minHeight: vvh ? `${vvh}px` : "100dvh", overflow: "hidden", transition: "background .5s" }}>
         {t.star && <Stars />}
         {/* 📏 ขยายเฉพาะส่วนหัว+เนื้อหา ไม่รวมแถบเมนูด้านล่าง กันเมนูหาย/เพี้ยน — ใช้ transform:scale แทน zoom เพราะ zoom ใช้งานไม่ได้เลยบน iOS Safari (zoom ไม่รองรับ ทำให้ก่อนหน้านี้ iPhone ไม่ขยายเลย) */}
         <div style={{ transform: `scale(${fontScale / 100})`, transformOrigin: "top left", width: `${10000 / fontScale}%` }}>
@@ -8821,7 +8821,16 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
   };
   const deleteMsg = async (id) => { await supabase.from("chat_messages").delete().eq("id", id); setConfirmDeleteMsgId(null); setMsgMenuId(null); };
   // กดค้าง 380ms บนข้อความตัวเอง -> เปิดเมนูแก้ไข/ลบ (แทนที่จะโชว์ปุ่มค้างตลอดใต้ทุกข้อความ)
-  const startLongPress = (m) => { longPressRef.current = setTimeout(() => setMsgMenuId(m.id), 380); };
+  const [msgMenuPos, setMsgMenuPos] = useState(null); // ตำแหน่งจริงของข้อความที่กดค้าง (viewport coords) — ไว้ render popup ผ่าน portal กัน overflow:auto ของ container ข้อความ clip ทิ้ง
+  const [fullEmojiForMsg, setFullEmojiForMsg] = useState(null); // message id ที่กำลังเปิด grid อีโมจิเต็มอยู่ (กด + จากแถวรีแอคชันด่วน)
+  const startLongPress = (m, e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    longPressRef.current = setTimeout(() => {
+      setMsgMenuId(m.id);
+      setMsgMenuPos({ top: rect.bottom + 4, bottomOffset: window.innerHeight - rect.top + 4, left: rect.left, right: window.innerWidth - rect.right, placeAbove: spaceBelow < 170 });
+    }, 380);
+  };
   const cancelLongPress = () => { if (longPressRef.current) { clearTimeout(longPressRef.current); longPressRef.current = null; } };
 
   // 📎 แนบรูป/วิดีโอ/ไฟล์ในแชท — เก็บผ่าน Supabase Storage bucket "attachments" (ตัวเดียวกับที่ใช้ในโน้ต)
@@ -8939,10 +8948,10 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
                   return (
                   <div
                     onClick={isCallMsg ? openCallDetail : undefined}
-                    onMouseDown={!isCallMsg ? () => startLongPress(m) : undefined}
+                    onMouseDown={!isCallMsg ? (e) => startLongPress(m, e) : undefined}
                     onMouseUp={!isCallMsg ? cancelLongPress : undefined}
                     onMouseLeave={!isCallMsg ? cancelLongPress : undefined}
-                    onTouchStart={!isCallMsg ? () => startLongPress(m) : undefined}
+                    onTouchStart={!isCallMsg ? (e) => startLongPress(m, e) : undefined}
                     onTouchEnd={!isCallMsg ? cancelLongPress : undefined}
                     onTouchMove={!isCallMsg ? cancelLongPress : undefined}
                     style={{ background: mine ? t.accent : t.surface, color: mine ? t.onAccent : t.text, padding: m.attachment_url ? 6 : "10px 14px", borderRadius: 14, fontSize: 14.5, lineHeight: 1.5, border: mine ? "none" : `1px solid ${t.borderStrong}`, cursor: isCallMsg ? "pointer" : (mine ? "default" : "default"), userSelect: "none", WebkitUserSelect: "none" }}
@@ -8957,16 +8966,32 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
                   );
                 })()}
               </div>
-              {/* เมนูแตะค้าง: แถวอีโมจิรีแอคชัน (ทุกข้อความ) + แก้ไข/ลบ (เฉพาะข้อความตัวเอง) */}
-              {msgMenuId === m.id && (
-                <>
-                  <div onClick={() => { setMsgMenuId(null); setConfirmDeleteMsgId(null); }} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
-                  <div style={{ position: "absolute", top: "100%", [mine ? "right" : "left"]: 0, marginTop: 4, zIndex: 41, background: t.page, border: `1px solid ${t.border}`, borderRadius: 12, boxShadow: "0 6px 18px rgba(0,0,0,.18)", overflow: "hidden" }}>
-                    <div style={{ display: "flex", padding: "6px 8px", borderBottom: mine ? `1px solid ${t.border}` : "none" }}>
+              {/* เมนูแตะค้าง: แถวอีโมจิรีแอคชัน (ทุกข้อความ) + แก้ไข/ลบ (เฉพาะข้อความตัวเอง) — render ผ่าน portal เพราะถ้าอยู่ในนี้เฉยๆ ข้อความใกล้ล่างสุดจะโดน container ที่มี overflow:auto ครอบตัด ทำให้เมนูไม่โผล่/โดนบัง */}
+              {msgMenuId === m.id && msgMenuPos && (
+                <ModalPortal>
+                  <div onClick={() => { setMsgMenuId(null); setConfirmDeleteMsgId(null); setFullEmojiForMsg(null); }} style={{ position: "fixed", inset: 0, zIndex: 140 }} />
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    style={{
+                      position: "fixed",
+                      ...(msgMenuPos.placeAbove ? { bottom: msgMenuPos.bottomOffset } : { top: msgMenuPos.top }),
+                      ...(mine ? { right: msgMenuPos.right } : { left: msgMenuPos.left }),
+                      zIndex: 141, maxWidth: 280, background: t.page, border: `1px solid ${t.border}`, borderRadius: 12, boxShadow: "0 8px 22px rgba(0,0,0,.28)", overflow: "hidden",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", padding: "6px 6px", borderBottom: (mine || fullEmojiForMsg === m.id) ? `1px solid ${t.border}` : "none" }}>
                       {QUICK_REACTIONS.map((emo) => (
                         <button key={emo} onClick={() => toggleReaction(m.id, emo)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 19, padding: "2px 5px" }}>{emo}</button>
                       ))}
+                      <button onClick={() => setFullEmojiForMsg(fullEmojiForMsg === m.id ? null : m.id)} style={{ width: 26, height: 26, borderRadius: 13, background: t.inputBg, border: "none", cursor: "pointer", display: "grid", placeItems: "center", marginLeft: 3, flexShrink: 0 }} title="อีโมจิอื่นๆ"><Plus size={14} color={t.sub} /></button>
                     </div>
+                    {fullEmojiForMsg === m.id && (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 1, padding: 8, maxHeight: 150, overflowY: "auto", borderBottom: mine ? `1px solid ${t.border}` : "none" }}>
+                        {EMOJI_LIST.map((emo, i) => (
+                          <button key={i} onClick={() => toggleReaction(m.id, emo)} style={{ width: 28, height: 28, background: "none", border: "none", cursor: "pointer", fontSize: 16, display: "grid", placeItems: "center" }}>{emo}</button>
+                        ))}
+                      </div>
+                    )}
                     {mine && (
                       <div style={{ display: "flex" }}>
                         <button onClick={() => { startEdit(m); setMsgMenuId(null); }} style={{ padding: "9px 16px", background: "none", border: "none", cursor: "pointer", fontSize: 12.5, color: t.text, fontWeight: 600, borderRight: `1px solid ${t.border}` }}>แก้ไข</button>
@@ -8978,7 +9003,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
                       </div>
                     )}
                   </div>
-                </>
+                </ModalPortal>
               )}
               {reactions[m.id]?.length > 0 && (() => {
                 const counts = {};
@@ -9047,7 +9072,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
           <input ref={cameraRef} type="file" accept="image/*" capture="environment" onChange={pickFile} style={{ display: "none" }} />
           <input ref={videoRef} type="file" accept="video/*" onChange={pickFile} style={{ display: "none" }} />
           <input ref={docRef} type="file" accept=".pdf,.doc,.docx,.xlsx,.txt" onChange={pickFile} style={{ display: "none" }} />
-          <textarea value={text} onChange={(e) => { setText(e.target.value); notifyTyping(); }} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder="พิมพ์ข้อความ..." rows={1} style={{ ...input(t), resize: "none", maxHeight: 56, overflowY: "auto", fontFamily: "inherit", lineHeight: 1.4 }} onInput={(e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 56) + "px"; }} />
+          <textarea value={text} onChange={(e) => { setText(e.target.value); notifyTyping(); }} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder="พิมพ์ข้อความ..." rows={1} spellCheck={false} style={{ ...input(t), resize: "none", maxHeight: 56, overflowY: "auto", fontFamily: "inherit", lineHeight: 1.4 }} onInput={(e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 56) + "px"; }} />
           <button onClick={() => setEmojiPickerOpen((v) => !v)} style={{ width: 42, borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }} title="อีโมจิ">
             <Smile size={18} color={t.sub} />
           </button>
