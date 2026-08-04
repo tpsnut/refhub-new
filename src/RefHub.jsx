@@ -4711,7 +4711,7 @@ function HomeWidgetsBento({ t, lang, shp, M, isNight, setMentorPick, setChatOpen
           </button>
           <div style={{ fontSize: 22, fontWeight: 800, color: t.onAccent, marginTop: 6 }}>{fmt(balance)}</div>
           <div style={{ fontSize: 10.5, color: `${t.onAccent}CC`, marginTop: 4 }}>{todayNet >= 0 ? "▲ +" : "▼ "}{Math.abs(todayNet).toLocaleString()} วันนี้</div>
-          <button onClick={() => setChatOpen(true)} style={{ marginTop: 10, border: "none", cursor: "pointer", background: `${t.onAccent}2E`, color: t.onAccent, fontWeight: 700, fontSize: 11, padding: "6px 11px", borderRadius: shp.radius === 0 ? 0 : 14, display: "inline-flex", alignItems: "center", gap: 4 }}>{L(lang, "home_talk_coach")} <ChevronRight size={12} /></button>
+          <button onClick={() => setChatOpen(true)} style={{ marginTop: 10, border: "none", cursor: "pointer", background: `${t.onAccent}2E`, color: t.onAccent, fontWeight: 700, fontSize: 11, padding: "6px 11px", borderRadius: shp.radius === 0 ? 0 : 14, display: "inline-flex", alignItems: "center", gap: 4, position: "relative", zIndex: 3 }}>{L(lang, "home_talk_coach")} <ChevronRight size={12} /></button>
           {heroShortcuts.length > 0 && (
             <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
               {heroShortcuts.map((sid) => {
