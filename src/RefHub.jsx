@@ -4288,9 +4288,7 @@ function GoalTimerModal({ t, goal, close }) {
 // ใช้ได้กับกิจกรรมทั่วไป ไม่ผูกกับการออกกำลังกายโดยเฉพาะ (อ่านหนังสือ/ดูหนัง/ทำงาน ฯลฯ)
 // ต้องตั้งค่า "เวลารวมทั้งหมด" + (ถ้าต้องการ) แบ่งเป็นรอบทำ/พัก ก่อนกดเริ่มเสมอ — ไม่ auto-start เดาเอง
 function WorkoutTimerModal({ t, goal, userId, close }) {
-  const [configuring, setConfiguring] = useState(true);
   const [totalSec, setTotalSec] = useState(0); // 0 = ไม่กำหนดเพดาน (นับขึ้นเรื่อยๆ) — เก็บเป็นวินาทีเสมอ ไม่ผูกหน่วยเดียว
-  const [useIntervals, setUseIntervals] = useState(false);
   const [workSec, setWorkSec] = useState(30);
   const [restSec, setRestSec] = useState(10);
 
@@ -4346,16 +4344,21 @@ function WorkoutTimerModal({ t, goal, userId, close }) {
   const [stagedRound, setStagedRound] = useState(null); // { file, previewUrl }
   const [stagedRest, setStagedRest] = useState(null);
 
-  // ---- ตัวจับเวลาจริง (เริ่มหลังกด "เริ่มจับเวลา" เท่านั้น) ----
+  // ---- ตัวจับเวลาจริง — แยกอิสระ 2 ชุดจริงๆ (ไม่ใช่ configuring ตัวเดียวสลับทั้งจอเหมือนเดิม) ----
+  // เวลารวม: มี running/paused ของตัวเอง เดินได้แม้ฝั่งรอบยังไม่เริ่ม/หยุดไปแล้ว
+  const [totalRunning, setTotalRunning] = useState(false);
+  const [totalPaused, setTotalPaused] = useState(false);
   const [elapsedSec, setElapsedSec] = useState(0);
-  const [paused, setPaused] = useState(false);
   const [reachedTarget, setReachedTarget] = useState(false);
+  // แบ่งรอบ: มี running/paused ของตัวเอง แยกจากเวลารวมโดยสิ้นเชิง
+  const [roundsRunning, setRoundsRunning] = useState(false);
+  const [roundsPaused, setRoundsPaused] = useState(false);
   const [phase, setPhase] = useState(null); // 'work' | 'rest' | null
   const [phaseRemaining, setPhaseRemaining] = useState(0);
   const [setCount, setSetCount] = useState(0);
 
   useEffect(() => {
-    if (configuring || paused || reachedTarget) return;
+    if (!totalRunning || totalPaused || reachedTarget) return;
     const timer = setTimeout(() => {
       setElapsedSec((s) => {
         const next = s + 1;
@@ -4364,10 +4367,10 @@ function WorkoutTimerModal({ t, goal, userId, close }) {
       });
     }, 1000);
     return () => clearTimeout(timer);
-  }, [elapsedSec, paused, configuring, reachedTarget]);
+  }, [elapsedSec, totalPaused, totalRunning, reachedTarget]);
 
   useEffect(() => {
-    if (configuring || paused || reachedTarget || phase === null) return;
+    if (!roundsRunning || roundsPaused || phase === null) return;
     if (phaseRemaining <= 0) {
       if (phase === "work") { setSetCount((c) => c + 1); playRoundSound(); setPhase("rest"); setPhaseRemaining(restSec); }
       else { playRestSound(); setPhase("work"); setPhaseRemaining(workSec); }
@@ -4375,11 +4378,13 @@ function WorkoutTimerModal({ t, goal, userId, close }) {
     }
     const timer = setTimeout(() => setPhaseRemaining((s) => s - 1), 1000);
     return () => clearTimeout(timer);
-  }, [phaseRemaining, paused, configuring, reachedTarget, phase, roundSoundUrl, restSoundUrl, roundPreset, restPreset]);
+  }, [phaseRemaining, roundsRunning, roundsPaused, phase, roundSoundUrl, restSoundUrl, roundPreset, restPreset]);
 
-  // ▶️ 2 ปุ่มเริ่มแยกอิสระจากกันจริงๆ ตามที่ขอ — กดฝั่งไหนก็เริ่มแค่ส่วนนั้น อีกฝั่งไม่ทำงานแม้จะตั้งค่าไว้ก็ตาม
-  const startTotalOnly = () => { setConfiguring(false); setElapsedSec(0); setReachedTarget(false); setPhase(null); };
-  const startWithRounds = () => { setConfiguring(false); setElapsedSec(0); setReachedTarget(false); setPhase("work"); setPhaseRemaining(workSec); setSetCount(0); };
+  // ▶️ ปุ่มเริ่ม/หยุดของแต่ละฝั่ง แยกกันเด็ดขาด — เริ่มเวลารวมแล้วยังกดเริ่มแบ่งรอบต่อได้เลย เดินพร้อมกันได้จริง
+  const startTotal = () => { setTotalRunning(true); setTotalPaused(false); setElapsedSec(0); setReachedTarget(false); };
+  const stopTotal = () => { setTotalRunning(false); setTotalPaused(false); setElapsedSec(0); setReachedTarget(false); };
+  const startRounds = () => { setRoundsRunning(true); setRoundsPaused(false); setPhase("work"); setPhaseRemaining(workSec); setSetCount(0); };
+  const stopRounds = () => { setRoundsRunning(false); setRoundsPaused(false); setPhase(null); setPhaseRemaining(0); setSetCount(0); };
   const continuePastTarget = () => setReachedTarget(false);
 
   const fmtShort = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
@@ -4461,82 +4466,83 @@ function WorkoutTimerModal({ t, goal, userId, close }) {
     <ModalPortal>
     <div style={overlay} onClick={close}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "90vh", overflowY: "auto" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: configuring ? 14 : 4 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
           <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>⏱️ {goal.text}</div>
           <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
         </div>
 
-        {configuring ? (
-          <>
-            <div style={{ ...card(t), padding: 14, marginBottom: 14 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 800, color: t.text, marginBottom: 2 }}>1️⃣ เวลารวมทั้งหมด</div>
-              <div style={{ fontSize: 10.5, color: t.faint, marginBottom: 10 }}>เวลาเป้าหมายของทั้งเซสชัน (แยกอิสระจากเวลาต่อรอบด้านล่าง คนละปุ่มเริ่มกันเลย)</div>
+        {/* 1️⃣ การ์ดเวลารวม — เดินอิสระ ไม่เกี่ยวกับการ์ดแบ่งรอบด้านล่างเลย เปิดพร้อมกันได้ */}
+        <div style={{ ...card(t), padding: 14, marginBottom: 14 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 800, color: t.text, marginBottom: 2 }}>1️⃣ เวลารวมทั้งหมด</div>
+          <div style={{ fontSize: 10.5, color: t.faint, marginBottom: 10 }}>แยกอิสระจากเวลาต่อรอบด้านล่างจริง — เริ่มพร้อมกันได้ คนละตัวจับเวลา คนละเสียงแจ้งเตือน</div>
+
+          {!totalRunning ? (
+            <>
               <TimeSetting presetsSec={TOTAL_PRESETS_SEC} seconds={totalSec} setSeconds={setTotalSec} />
-              <button onClick={startTotalOnly} style={{ width: "100%", padding: "12px 0", borderRadius: 12, border: "none", background: `linear-gradient(135deg,${t.accent2},${t.accent})`, color: t.onAccent, fontWeight: 800, fontSize: 13.5, cursor: "pointer", marginTop: 14 }}>▶ เริ่มจับเวลารวม (ไม่แบ่งรอบ)</button>
-            </div>
-
-            <div style={{ ...card(t), padding: 14, marginBottom: 14 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div>
-                  <div style={{ fontSize: 12.5, fontWeight: 800, color: t.text }}>2️⃣ แบ่งเป็นรอบทำ/พัก</div>
-                  <div style={{ fontSize: 10.5, color: t.faint }}>คนละโหมดกับข้อ 1 — มีปุ่มเริ่มของตัวเอง</div>
-                </div>
-                <button onClick={() => setUseIntervals((v) => !v)} style={{ width: 44, height: 26, borderRadius: 13, border: "none", background: useIntervals ? t.accent : t.border, position: "relative", cursor: "pointer", flexShrink: 0 }}>
-                  <div style={{ width: 20, height: 20, borderRadius: 10, background: "#fff", position: "absolute", top: 3, left: useIntervals ? 21 : 3, transition: "left .15s" }} />
-                </button>
+              <button onClick={startTotal} style={{ width: "100%", padding: "12px 0", borderRadius: 12, border: "none", background: `linear-gradient(135deg,${t.accent2},${t.accent})`, color: t.onAccent, fontWeight: 800, fontSize: 13.5, cursor: "pointer", marginTop: 14 }}>▶ เริ่มจับเวลารวม</button>
+            </>
+          ) : (
+            <>
+              <div style={{ textAlign: "center", padding: "10px 0 4px" }}>
+                <div style={{ fontFamily: "'Kanit',sans-serif", fontSize: 40, fontWeight: 800, color: t.text, letterSpacing: 1 }}>{fmtElapsed(elapsedSec)}</div>
+                {totalSec > 0 && (
+                  <>
+                    <div style={{ height: 6, borderRadius: 3, background: t.border, overflow: "hidden", margin: "10px auto 4px", maxWidth: 240 }}>
+                      <div style={{ height: "100%", width: `${Math.min(100, (elapsedSec / totalSec) * 100)}%`, background: t.accent, borderRadius: 3 }} />
+                    </div>
+                    <div style={{ fontSize: 11, color: t.faint }}>จากเป้าหมาย {fmtElapsed(totalSec)}</div>
+                  </>
+                )}
+                {totalPaused && <div style={{ fontSize: 11, color: "#E8894A", fontWeight: 700, marginTop: 4 }}>หยุดชั่วคราวอยู่</div>}
               </div>
-              {useIntervals && (
-                <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${t.border}` }}>
-                  <div style={{ fontSize: 11.5, fontWeight: 800, color: t.sub, marginBottom: 8 }}>เวลาต่อรอบ</div>
-                  <TimeSetting presetsSec={WORK_PRESETS_SEC} seconds={workSec} setSeconds={setWorkSec} />
-                  <div style={{ fontSize: 11.5, fontWeight: 800, color: t.sub, margin: "14px 0 8px" }}>เวลาพักระหว่างรอบ</div>
-                  <TimeSetting presetsSec={REST_PRESETS_SEC} seconds={restSec} setSeconds={setRestSec} />
-                  <button onClick={startWithRounds} style={{ width: "100%", padding: "12px 0", borderRadius: 12, border: "none", background: `linear-gradient(135deg,${t.accent2},${t.accent})`, color: t.onAccent, fontWeight: 800, fontSize: 13.5, cursor: "pointer", marginTop: 14 }}>▶ เริ่มจับเวลาแบบแบ่งรอบ</button>
+              {reachedTarget && (
+                <div style={{ textAlign: "center", padding: 14, borderRadius: 16, margin: "8px 0", background: "#2E9E6B18", border: "1.5px solid #2E9E6B" }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 800, color: "#2E9E6B" }}>🎉 ครบเวลาที่ตั้งไว้แล้ว!</div>
+                  <button onClick={continuePastTarget} style={{ marginTop: 8, padding: "7px 14px", borderRadius: 10, border: "none", background: "#2E9E6B", color: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>ทำต่ออีกหน่อย</button>
                 </div>
               )}
-            </div>
-
-            <div style={{ fontSize: 11, fontWeight: 800, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>3️⃣ เสียงแจ้งเตือน (เลือกผสมกันได้)</div>
-            <SoundSection title="ตอนจบรอบ → พัก" preset={roundPreset} savePreset={saveRoundPreset} url={roundSoundUrl} kind="round" fileRef={roundFileRef} staged={stagedRound} setStaged={setStagedRound} />
-            <SoundSection title="ตอนพักครบ → เริ่มรอบใหม่" preset={restPreset} savePreset={saveRestPreset} url={restSoundUrl} kind="rest" fileRef={restFileRef} staged={stagedRest} setStaged={setStagedRest} />
-          </>
-        ) : (
-          <>
-            <div style={{ textAlign: "center", padding: "18px 0 6px" }}>
-              <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 4 }}>เวลาที่ใช้ไป</div>
-              <div style={{ fontFamily: "'Kanit',sans-serif", fontSize: 44, fontWeight: 800, color: t.text, letterSpacing: 1 }}>{fmtElapsed(elapsedSec)}</div>
-              {totalSec > 0 && (
-                <>
-                  <div style={{ height: 6, borderRadius: 3, background: t.border, overflow: "hidden", margin: "10px auto 4px", maxWidth: 260 }}>
-                    <div style={{ height: "100%", width: `${Math.min(100, (elapsedSec / totalSec) * 100)}%`, background: t.accent, borderRadius: 3 }} />
-                  </div>
-                  <div style={{ fontSize: 11, color: t.faint }}>จากเป้าหมาย {fmtElapsed(totalSec)}</div>
-                </>
-              )}
-              {paused && <div style={{ fontSize: 11, color: "#E8894A", fontWeight: 700, marginTop: 4 }}>หยุดชั่วคราวอยู่</div>}
-            </div>
-
-            {reachedTarget && (
-              <div style={{ textAlign: "center", padding: 16, borderRadius: 18, marginBottom: 14, background: "#2E9E6B18", border: "1.5px solid #2E9E6B" }}>
-                <div style={{ fontSize: 14, fontWeight: 800, color: "#2E9E6B" }}>🎉 ครบเวลาที่ตั้งไว้แล้ว!</div>
-                <button onClick={continuePastTarget} style={{ marginTop: 8, padding: "8px 16px", borderRadius: 10, border: "none", background: "#2E9E6B", color: "#fff", fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}>ทำต่ออีกหน่อย</button>
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <button onClick={() => setTotalPaused((p) => !p)} style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: `1.5px solid ${t.border}`, background: "none", color: t.text, fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}>{totalPaused ? "เล่นต่อ" : "หยุดชั่วคราว"}</button>
+                <button onClick={stopTotal} style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: `1.5px solid ${t.border}`, background: "none", color: t.sub, fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}>หยุด/รีเซ็ต</button>
               </div>
-            )}
+            </>
+          )}
+        </div>
 
-            {!reachedTarget && phase && (
-              <div style={{ textAlign: "center", padding: "16px 0", borderRadius: 18, marginBottom: 16, background: phase === "work" ? "#E8894A18" : "#3DA5D918", border: `1.5px solid ${phase === "work" ? "#E8894A" : "#3DA5D9"}` }}>
+        {/* 2️⃣ การ์ดแบ่งรอบ — เดินอิสระจากการ์ดเวลารวมข้างบนโดยสิ้นเชิง */}
+        <div style={{ ...card(t), padding: 14, marginBottom: 14 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 800, color: t.text, marginBottom: 2 }}>2️⃣ แบ่งเป็นรอบทำ/พัก</div>
+          <div style={{ fontSize: 10.5, color: t.faint, marginBottom: 10 }}>คนละโหมดกับข้อ 1 — กดเริ่มพร้อมกับเวลารวมได้เลย ไม่ตัดกัน</div>
+
+          {!roundsRunning ? (
+            <>
+              <div style={{ fontSize: 11.5, fontWeight: 800, color: t.sub, marginBottom: 8 }}>เวลาต่อรอบ</div>
+              <TimeSetting presetsSec={WORK_PRESETS_SEC} seconds={workSec} setSeconds={setWorkSec} />
+              <div style={{ fontSize: 11.5, fontWeight: 800, color: t.sub, margin: "14px 0 8px" }}>เวลาพักระหว่างรอบ</div>
+              <TimeSetting presetsSec={REST_PRESETS_SEC} seconds={restSec} setSeconds={setRestSec} />
+              <button onClick={startRounds} style={{ width: "100%", padding: "12px 0", borderRadius: 12, border: "none", background: `linear-gradient(135deg,${t.accent2},${t.accent})`, color: t.onAccent, fontWeight: 800, fontSize: 13.5, cursor: "pointer", marginTop: 14 }}>▶ เริ่มจับเวลาแบบแบ่งรอบ</button>
+            </>
+          ) : (
+            <>
+              <div style={{ textAlign: "center", padding: "8px 0", borderRadius: 16, background: phase === "work" ? "#E8894A18" : "#3DA5D918", border: `1.5px solid ${phase === "work" ? "#E8894A" : "#3DA5D9"}` }}>
                 <div style={{ fontSize: 13, fontWeight: 800, color: phase === "work" ? "#E8894A" : "#3DA5D9" }}>{phase === "work" ? `🎯 รอบที่ ${setCount + 1} — ลุยเลย!` : "😌 พัก"}</div>
                 <div style={{ fontFamily: "'Kanit',sans-serif", fontSize: 32, fontWeight: 800, color: t.text, marginTop: 6 }}>{fmtShort(phaseRemaining)}</div>
                 <div style={{ fontSize: 10.5, color: t.faint, marginTop: 2 }}>ทำสำเร็จแล้ว {setCount} รอบ</div>
+                {roundsPaused && <div style={{ fontSize: 11, color: "#E8894A", fontWeight: 700, marginTop: 4 }}>หยุดชั่วคราวอยู่</div>}
               </div>
-            )}
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <button onClick={() => setRoundsPaused((p) => !p)} style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: `1.5px solid ${t.border}`, background: "none", color: t.text, fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}>{roundsPaused ? "เล่นต่อ" : "หยุดชั่วคราว"}</button>
+                <button onClick={stopRounds} style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: `1.5px solid ${t.border}`, background: "none", color: t.sub, fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}>หยุด/รีเซ็ต</button>
+              </div>
+            </>
+          )}
+        </div>
 
-            <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={() => setPaused((p) => !p)} style={{ flex: 1, padding: "12px 0", borderRadius: 12, border: `1.5px solid ${t.border}`, background: "none", color: t.text, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>{paused ? "เล่นต่อ" : "หยุดชั่วคราว"}</button>
-              <button onClick={close} style={{ flex: 1, padding: "12px 0", borderRadius: 12, border: `1.5px solid ${t.border}`, background: "none", color: t.sub, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>จบเซสชัน</button>
-            </div>
-          </>
-        )}
+        <div style={{ fontSize: 11, fontWeight: 800, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>3️⃣ เสียงแจ้งเตือน (เลือกผสมกันได้)</div>
+        <SoundSection title="ตอนจบรอบ → พัก" preset={roundPreset} savePreset={saveRoundPreset} url={roundSoundUrl} kind="round" fileRef={roundFileRef} staged={stagedRound} setStaged={setStagedRound} />
+        <SoundSection title="ตอนพักครบ → เริ่มรอบใหม่" preset={restPreset} savePreset={saveRestPreset} url={restSoundUrl} kind="rest" fileRef={restFileRef} staged={stagedRest} setStaged={setStagedRest} />
+
+        <button onClick={close} style={{ width: "100%", padding: "12px 0", borderRadius: 12, border: `1.5px solid ${t.border}`, background: "none", color: t.sub, fontWeight: 700, fontSize: 13, cursor: "pointer", marginTop: 4 }}>ปิดหน้านี้ (ตัวจับเวลาจะหยุดถ้าปิด)</button>
       </div>
     </div>
     </ModalPortal>
