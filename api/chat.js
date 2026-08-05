@@ -1,13 +1,14 @@
 // 🤖 RefHub — AI Mentor จริง
-// ลำดับ: Gemini ฟรี → Groq ฟรี → [เฉพาะคนมีสิทธิ์พรีเมียม] Gemini จ่ายเงิน → DeepSeek (จ่ายเงิน)
+// ลำดับ: Gemini ฟรี (ทุกคน) → DeepSeek จ่ายเงิน (ทุกคน) → [เฉพาะพรีเมียม] Gemini จ่ายเงิน (สำรองสุดท้าย)
+// หมายเหตุ: ตัด Groq ออกแล้ว (เลิกใช้), DeepSeek เปิดให้เป็นตัวสำรองของทุกคนแล้ว ไม่จำกัดแค่พรีเมียม
+//           — ความเสี่ยงค่าใช้จ่ายถูกกันด้วย daily_ai_limit (default 200/วัน) ที่เช็คก่อนถึง provider ใดๆอยู่แล้ว
 // ไฟล์นี้วางไว้ที่ /api/chat.js
 //
 // Environment Variables:
 //   GEMINI_API_KEY       — key ฟรีเดิม (aistudio.google.com) ห้ามเปิดบิลลิ่งบนโปรเจกต์นี้เด็ดขาด
-//   GROQ_API_KEY         — ฟรีจาก console.groq.com ไม่ต้องผูกบัตร
-//   GEMINI_API_KEY_PAID  — (ไม่บังคับ) key จากโปรเจกต์ Google Cloud แยกต่างหากที่เปิดบิลลิ่งไว้แล้ว
-//   DEEPSEEK_API_KEY     — (ไม่บังคับ) จาก platform.deepseek.com
-//   VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY — ใช้ยืนยันตัวตนผู้เรียก (เช็คสิทธิ์พรีเมียม)
+//   DEEPSEEK_API_KEY     — จาก platform.deepseek.com (ตัวสำรองหลัก เปิดให้ทุกคน)
+//   GEMINI_API_KEY_PAID  — (ไม่บังคับ) key จากโปรเจกต์ Google Cloud แยกต่างหากที่เปิดบิลลิ่งไว้แล้ว (สำรองสุดท้าย เฉพาะพรีเมียม)
+//   VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY — ใช้ยืนยันตัวตนผู้เรียก (เช็คสิทธิ์พรีเมียม/โควตา)
 
 import { createClient } from "@supabase/supabase-js";
 
@@ -58,32 +59,12 @@ async function callGemini(apiKey, system, messages) {
   return text;
 }
 
-async function callGroq(system, messages) {
-  const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
-    body: JSON.stringify({
-      model: "llama-3.1-8b-instant",
-      messages: [
-        { role: "system", content: system },
-        ...messages.map((m) => ({ role: m.who === "u" ? "user" : "assistant", content: m.text || "(ส่งรูปภาพมา แต่โหมดนี้มองไม่เห็นรูป ตอบตามข้อความที่มีได้เลย)" })),
-      ],
-      max_tokens: 1500,
-    }),
-  });
-  const data = await r.json();
-  if (!r.ok) throw new Error(data?.error?.message || "Groq API error");
-  const text = data.choices?.[0]?.message?.content?.trim();
-  if (!text) throw new Error("Groq ไม่ตอบกลับเนื้อหา");
-  return text;
-}
-
 async function callDeepSeek(system, messages) {
   const r = await fetch("https://api.deepseek.com/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}` },
     body: JSON.stringify({
-      model: "deepseek-chat",
+      model: "deepseek-v4-flash",
       messages: [
         { role: "system", content: system },
         ...messages.map((m) => ({ role: m.who === "u" ? "user" : "assistant", content: m.text || "(ส่งรูปภาพมา แต่โหมดนี้มองไม่เห็นรูป ตอบตามข้อความที่มีได้เลย)" })),
@@ -152,33 +133,31 @@ export default async function handler(req, res) {
     catch (e) { errors.push(`Gemini: ${e.message}`); console.error("Gemini พัง สลับตัวถัดไป:", e.message); }
   } else errors.push("Gemini: ยังไม่ได้ตั้งค่า GEMINI_API_KEY");
 
-  if (process.env.GROQ_API_KEY) {
+  // DeepSeek — สำรองตัวแรก เปิดให้ทุกคน (ไม่จำกัดแค่พรีเมียม) เพราะราคาถูกมากและมี daily_ai_limit กันไว้อยู่แล้ว
+  if (process.env.DEEPSEEK_API_KEY) {
     try {
-      const text = await callGroq(system, messages);
-      await logAiUsage("groq", verifiedUserId);
-      return res.status(200).json({ text, source: "groq" });
+      const text = await callDeepSeek(system, messages);
+      await logAiUsage("deepseek", verifiedUserId);
+      return res.status(200).json({ text, source: "deepseek" });
     }
-    catch (e) { errors.push(`Groq: ${e.message}`); console.error("Groq พัง สลับตัวถัดไป:", e.message); }
-  } else errors.push("Groq: ยังไม่ได้ตั้งค่า GROQ_API_KEY");
+    catch (e) { errors.push(`DeepSeek: ${e.message}`); console.error("DeepSeek พัง สลับตัวถัดไป:", e.message); }
+  } else errors.push("DeepSeek: ยังไม่ได้ตั้งค่า DEEPSEEK_API_KEY");
 
-  if (isPremium) {
-    if (process.env.DEEPSEEK_API_KEY) {
-      try {
-        const text = await callDeepSeek(system, messages);
-        await logAiUsage("deepseek", verifiedUserId);
-        return res.status(200).json({ text, source: "deepseek" });
-      }
-      catch (e) { errors.push(`DeepSeek: ${e.message}`); console.error("DeepSeek พัง สลับตัวถัดไป:", e.message); }
+  // Gemini (จ่ายเงิน) — สำรองสุดท้าย เฉพาะพรีเมียมเท่านั้น (แพงกว่า ไม่เปิดให้ทุกคน)
+  if (isPremium && process.env.GEMINI_API_KEY_PAID) {
+    try {
+      const text = await callGemini(process.env.GEMINI_API_KEY_PAID, system, messages);
+      await logAiUsage("gemini_paid", verifiedUserId);
+      return res.status(200).json({ text, source: "gemini_paid" });
     }
-    if (process.env.GEMINI_API_KEY_PAID) {
-      try {
-        const text = await callGemini(process.env.GEMINI_API_KEY_PAID, system, messages);
-        await logAiUsage("gemini_paid", verifiedUserId);
-        return res.status(200).json({ text, source: "gemini_paid" });
-      }
-      catch (e) { errors.push(`Gemini (จ่ายเงิน): ${e.message}`); console.error("Gemini จ่ายเงิน พัง:", e.message); }
-    }
+    catch (e) { errors.push(`Gemini (จ่ายเงิน): ${e.message}`); console.error("Gemini จ่ายเงิน พัง:", e.message); }
   }
 
-  return res.status(500).json({ error: errors.join(" | ") });
+  // AI ทุกตัวพังหมด — ส่งข้อความที่มีคำว่า "โควตา" กลับไปชัดๆ ให้ frontend โชว์ตรงๆ ให้ผู้ใช้เห็น
+  // (ไม่ปล่อยให้หลุดไปโชว์ mock reply แทน เพราะฝั่ง RefHub.jsx เช็คคำว่า "โควตา" ในข้อความ error อยู่)
+  console.error("AI ทุกตัวพังหมด (รายละเอียดจริงสำหรับแอดมิน):", errors.join(" | "));
+  return res.status(500).json({
+    error: "ตอนนี้ AI โค้ชเต็มโควตาการใช้งานชั่วคราว กรุณาลองใหม่อีกครั้งในอีกสักครู่นะครับ",
+    allFailed: true,
+  });
 }
