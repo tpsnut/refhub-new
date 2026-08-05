@@ -2657,6 +2657,7 @@ function AuthPage() {
 }
 
 // 🕘 ประวัติการใช้งานของฉัน — ทุกคนดูของตัวเองได้ (ไม่ใช่แค่แอดมิน) กรองตามช่วงเวลาได้เหมือนหน้าการเงิน
+// หน้าแรกจัดกลุ่มเป็นหมวดหมู่ (ล็อกอิน/โน้ต/แชทโค้ช ฯลฯ) แทนที่จะแสดงทุกรายการรวมกันเป็นพรืด — คลิกเข้าไปค่อยเห็นรายการจริงพร้อมเวลา
 function MyActivityModal({ t, userId, close }) {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -2664,6 +2665,7 @@ function MyActivityModal({ t, userId, close }) {
   const [anchor, setAnchor] = useState(todayStr());
   const [rangeStart, setRangeStart] = useState(todayStr());
   const [rangeEnd, setRangeEnd] = useState(todayStr());
+  const [selectedModule, setSelectedModule] = useState(null); // null = หน้าแรก (หมวดหมู่), ไม่ null = ดูรายการจริงในหมวดนั้น
 
   const weekRangeOf = (dateStr) => {
     const d = new Date(dateStr + "T00:00:00");
@@ -2711,6 +2713,20 @@ function MyActivityModal({ t, userId, close }) {
     })();
   }, [userId, rangeFrom, rangeTo]);
 
+  // 🔴 เรียลไทม์: รายการใหม่ขึ้นทันทีไม่ต้องปิดเปิด modal ใหม่ (กรองเฉพาะของตัวเอง + อยู่ในช่วงเวลาที่กำลังดูอยู่)
+  useEffect(() => {
+    if (!userId) return;
+    const channel = supabase
+      .channel(`my-activity-${userId}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "activity_log", filter: `user_id=eq.${userId}` }, (payload) => {
+        const row = payload.new;
+        const d = (row.created_at || "").slice(0, 10);
+        if (d >= rangeFrom && d <= rangeTo) setLogs((prev) => [row, ...prev]);
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [userId, rangeFrom, rangeTo]);
+
   const moduleMeta = {
     finance: { label: "การเงิน", icon: Wallet, color: "#E8894A" },
     goals: { label: "เป้าหมาย", icon: Target, color: "#3DA5D9" },
@@ -2718,21 +2734,39 @@ function MyActivityModal({ t, userId, close }) {
     community: { label: "ชุมชน", icon: Users, color: "#C0658C" },
     mentor: { label: "แชทโค้ช", icon: Sparkles, color: "#2E9E6B" },
     auth: { label: "บัญชี", icon: KeyRound, color: "#8A93A8" },
+    vault: { label: "Drive ส่วนตัว", icon: Lock, color: "#C9A227" },
   };
+  const metaOf = (m) => moduleMeta[m] || { label: m, icon: Clock, color: t.faint };
 
-  // จัดกลุ่มตามวันที่ ให้อ่านง่ายเหมือนหน้าการเงิน
+  // 📦 หน้าแรก: จัดกลุ่มเป็นหมวดหมู่ — นับจำนวน + ล่าสุดคือของแต่ละหมวด (logs เรียงใหม่ล่าสุดก่อนอยู่แล้ว)
+  const summaryByModule = {};
+  logs.forEach((l) => {
+    if (!summaryByModule[l.module]) summaryByModule[l.module] = { count: 0, latest: l };
+    summaryByModule[l.module].count++;
+  });
+  const summaryList = Object.keys(summaryByModule)
+    .map((m) => ({ module: m, ...summaryByModule[m] }))
+    .sort((a, b) => new Date(b.latest.created_at) - new Date(a.latest.created_at));
+
+  // 🔎 หน้ารายละเอียด: เฉพาะ log ของหมวดที่เลือก จัดกลุ่มตามวันที่เหมือนเดิม
+  const filteredLogs = selectedModule ? logs.filter((l) => l.module === selectedModule) : [];
   const groups = {};
-  logs.forEach((l) => { const d = (l.created_at || "").slice(0, 10); (groups[d] = groups[d] || []).push(l); });
+  filteredLogs.forEach((l) => { const d = (l.created_at || "").slice(0, 10); (groups[d] = groups[d] || []).push(l); });
 
   return (
     <ModalPortal>
     <div style={overlay} onClick={close}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-          <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>ประวัติการใช้งานของฉัน</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+            {selectedModule && (
+              <button onClick={() => setSelectedModule(null)} style={ghost}><ChevronLeft size={20} color={t.sub} /></button>
+            )}
+            <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>{selectedModule ? metaOf(selectedModule).label : "ประวัติการใช้งานของฉัน"}</div>
+          </div>
           <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
         </div>
-        <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 14 }}>สรุปสิ่งที่คุณทำในแอป</div>
+        <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 14 }}>{selectedModule ? "รายการทั้งหมดในหมวดนี้" : "สรุปสิ่งที่คุณทำในแอป — แตะหมวดไหนก็ได้เพื่อดูรายการจริง"}</div>
 
         <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
           {[["day", "วัน"], ["week", "สัปดาห์"], ["month", "เดือน"], ["range", "กำหนดเอง"]].map(([v, lb]) => (
@@ -2757,19 +2791,35 @@ function MyActivityModal({ t, userId, close }) {
         {loading && <Empty t={t} text="กำลังโหลด..." />}
         {!loading && logs.length === 0 && <Empty t={t} text="ช่วงนี้ยังไม่มีประวัติการใช้งาน" />}
 
-        {Object.keys(groups).map((d) => (
+        {!selectedModule && !loading && summaryList.map(({ module, count, latest }) => {
+          const meta = metaOf(module);
+          const Ic = meta.icon;
+          return (
+            <button key={module} onClick={() => setSelectedModule(module)} style={{ ...card(t), width: "100%", textAlign: "left", padding: "12px 12px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", marginBottom: 8 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 11, background: `${meta.color}22`, display: "grid", placeItems: "center", flexShrink: 0 }}><Ic size={16} color={meta.color} /></div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, color: t.text, fontWeight: 700 }}>{meta.label}</div>
+                <div style={{ fontSize: 10.5, color: t.faint }}>ล่าสุด {new Date(latest.created_at).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}</div>
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 800, color: meta.color, background: `${meta.color}18`, borderRadius: 999, padding: "3px 10px", flexShrink: 0 }}>{count} ครั้ง</div>
+              <ChevronRight size={16} color={t.faint} style={{ flexShrink: 0 }} />
+            </button>
+          );
+        })}
+
+        {selectedModule && Object.keys(groups).map((d) => (
           <div key={d} style={{ marginBottom: 14 }}>
             <div style={{ fontSize: 11.5, fontWeight: 700, color: t.faint, marginBottom: 6 }}>{dateLabel(d)}</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {groups[d].map((l) => {
-                const meta = moduleMeta[l.module] || { label: l.module, icon: Clock, color: t.faint };
+                const meta = metaOf(l.module);
                 const Ic = meta.icon;
                 return (
                   <div key={l.id} style={{ ...card(t), padding: "10px 12px", display: "flex", alignItems: "center", gap: 10 }}>
                     <div style={{ width: 30, height: 30, borderRadius: 10, background: `${meta.color}22`, display: "grid", placeItems: "center", flexShrink: 0 }}><Ic size={14} color={meta.color} /></div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 12.5, color: t.text, fontWeight: 600 }}>{l.summary}</div>
-                      <div style={{ fontSize: 10.5, color: t.faint }}>{meta.label} · {new Date(l.created_at).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}</div>
+                      <div style={{ fontSize: 10.5, color: t.faint }}>{new Date(l.created_at).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}</div>
                     </div>
                   </div>
                 );
@@ -5563,6 +5613,7 @@ function AdminActivityPanel({ t, members }) {
   const [logs, setLogs] = useState([]);
   const [feedback, setFeedback] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedModule, setSelectedModule] = useState(null); // null = หน้าแรกจัดกลุ่มตามหมวด, ไม่ null = ดูรายการจริงพร้อมชื่อคน
 
   useEffect(() => {
     (async () => {
@@ -5576,8 +5627,28 @@ function AdminActivityPanel({ t, members }) {
     })();
   }, []);
 
+  // 🔴 เรียลไทม์: ความเคลื่อนไหวใหม่ของทุกคนขึ้นทันที ไม่ต้องกดรีเฟรชแท็บ
+  useEffect(() => {
+    const channel = supabase
+      .channel("admin-activity-feed")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "activity_log" }, (payload) => {
+        setLogs((prev) => [payload.new, ...prev].slice(0, 300));
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
   const memberOf = (id) => members.find((m) => m.id === id);
-  const moduleLabel = { finance: "การเงิน", goals: "เป้าหมาย", notes: "โน้ต", community: "ชุมชน", mentor: "แชทโค้ช", vault: "Drive ส่วนตัว" };
+  const moduleMeta = {
+    finance: { label: "การเงิน", icon: Wallet, color: "#E8894A" },
+    goals: { label: "เป้าหมาย", icon: Target, color: "#3DA5D9" },
+    notes: { label: "โน้ต", icon: StickyNote, color: "#7B6CB0" },
+    community: { label: "ชุมชน", icon: Users, color: "#C0658C" },
+    mentor: { label: "แชทโค้ช", icon: Sparkles, color: "#2E9E6B" },
+    auth: { label: "บัญชี (ล็อกอิน)", icon: KeyRound, color: "#8A93A8" },
+    vault: { label: "Drive ส่วนตัว", icon: Lock, color: "#C9A227" },
+  };
+  const metaOf = (m) => moduleMeta[m] || { label: m, icon: Clock, color: t.faint };
 
   const days = []; for (let i = 13; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); days.push(d.toISOString().slice(0, 10)); }
   const chartData = days.map((d) => {
@@ -5613,20 +5684,59 @@ function AdminActivityPanel({ t, members }) {
       </div>
 
       <div>
-        <div style={{ fontSize: 12.5, fontWeight: 800, color: t.sub, marginBottom: 8 }}>รายการล่าสุด</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+          {selectedModule && (
+            <button onClick={() => setSelectedModule(null)} style={ghost}><ChevronLeft size={18} color={t.sub} /></button>
+          )}
+          <div style={{ fontSize: 12.5, fontWeight: 800, color: t.sub }}>{selectedModule ? `รายการล่าสุด · ${metaOf(selectedModule).label}` : "รายการล่าสุด"}</div>
+        </div>
         {loading && <Empty t={t} text="กำลังโหลด..." />}
         {!loading && logs.length === 0 && <Empty t={t} text="ยังไม่มีความเคลื่อนไหว" />}
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {logs.slice(0, 40).map((l) => { const m = memberOf(l.user_id); return (
-            <div key={l.id} style={{ ...card(t), padding: "10px 12px", display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ width: 28, height: 28, borderRadius: 9, background: colorFor(m?.name || "?"), color: "#fff", display: "grid", placeItems: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{(m?.name || "?")[0]?.toUpperCase()}</div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12.5, color: t.text }}><b>{m?.name || "ไม่ทราบชื่อ"}</b> — {l.summary}</div>
-                <div style={{ fontSize: 10.5, color: t.faint }}>{moduleLabel[l.module] || l.module} · {new Date(l.created_at).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}</div>
-              </div>
+
+        {!selectedModule && !loading && (() => {
+          const summaryByModule = {};
+          logs.forEach((l) => {
+            if (!summaryByModule[l.module]) summaryByModule[l.module] = { count: 0, latest: l };
+            summaryByModule[l.module].count++;
+          });
+          const summaryList = Object.keys(summaryByModule)
+            .map((m) => ({ module: m, ...summaryByModule[m] }))
+            .sort((a, b) => new Date(b.latest.created_at) - new Date(a.latest.created_at));
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {summaryList.map(({ module, count, latest }) => {
+                const meta = metaOf(module);
+                const Ic = meta.icon;
+                const m = memberOf(latest.user_id);
+                return (
+                  <button key={module} onClick={() => setSelectedModule(module)} style={{ ...card(t), width: "100%", textAlign: "left", padding: "10px 12px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+                    <div style={{ width: 30, height: 30, borderRadius: 10, background: `${meta.color}22`, display: "grid", placeItems: "center", flexShrink: 0 }}><Ic size={14} color={meta.color} /></div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12.5, color: t.text, fontWeight: 700 }}>{meta.label}</div>
+                      <div style={{ fontSize: 10.5, color: t.faint }}>ล่าสุด {m?.name || "ไม่ทราบชื่อ"} · {new Date(latest.created_at).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}</div>
+                    </div>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: meta.color, background: `${meta.color}18`, borderRadius: 999, padding: "3px 10px", flexShrink: 0 }}>{count}</div>
+                    <ChevronRight size={16} color={t.faint} style={{ flexShrink: 0 }} />
+                  </button>
+                );
+              })}
             </div>
-          ); })}
-        </div>
+          );
+        })()}
+
+        {selectedModule && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {logs.filter((l) => l.module === selectedModule).slice(0, 60).map((l) => { const m = memberOf(l.user_id); return (
+              <div key={l.id} style={{ ...card(t), padding: "10px 12px", display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ width: 28, height: 28, borderRadius: 9, background: colorFor(m?.name || "?"), color: "#fff", display: "grid", placeItems: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{(m?.name || "?")[0]?.toUpperCase()}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12.5, color: t.text }}><b>{m?.name || "ไม่ทราบชื่อ"}</b> — {l.summary}</div>
+                  <div style={{ fontSize: 10.5, color: t.faint }}>{new Date(l.created_at).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}</div>
+                </div>
+              </div>
+            ); })}
+          </div>
+        )}
       </div>
 
       <div>
