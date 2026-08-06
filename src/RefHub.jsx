@@ -4243,6 +4243,33 @@ function formatTimerBadge(totalSeconds, unit) {
   return `${Number.isInteger(val) ? val : val.toFixed(1)}${label}`;
 }
 
+// 🔒 ล็อกหน้าจอไม่ให้ดับระหว่างจับเวลาทำงานอยู่ — กันปัญหาจอดับแล้วเบราว์เซอร์หยุด/เคลียร์ JS ทิ้งจนตัวจับเวลาตัดไปเอง (ต้นเหตุจริงของบั๊ก "จับเวลาแล้วปิดจอ ตัดไปเอง")
+// ใช้ Wake Lock API (รองรับ Chrome/Edge ทุกแพลตฟอร์ม + Safari 16.4+) เบราว์เซอร์เก่ากว่านั้นจะเงียบๆข้ามไป ไม่กระทบการทำงานหลัก (ยังมีชั้นคำนวณจาก timestamp กันสำรองอยู่ในแต่ละ modal)
+function useWakeLock(active) {
+  const lockRef = useRef(null);
+  useEffect(() => {
+    if (!active || !("wakeLock" in navigator)) return;
+    let cancelled = false;
+    const requestLock = async () => {
+      try {
+        const lock = await navigator.wakeLock.request("screen");
+        if (cancelled) { lock.release().catch(() => {}); return; }
+        lockRef.current = lock;
+      } catch (e) { /* ขอไม่ได้ (เช่น battery saver/ไม่รองรับ) — ปล่อยผ่านเงียบๆ ไม่กระทบการทำงานหลัก */ }
+    };
+    requestLock();
+    // เบราว์เซอร์ปล่อยล็อกอัตโนมัติเมื่อสลับแท็บ/จอดับ ต้องขอใหม่เองตอนกลับมา visible
+    const onVis = () => { if (document.visibilityState === "visible" && !lockRef.current) requestLock(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVis);
+      lockRef.current?.release().catch(() => {});
+      lockRef.current = null;
+    };
+  }, [active]);
+}
+
 function GoalTimerModal({ t, goal, close }) {
   const totalSegments = goal.timerMode === "interval" ? (Number(goal.timerRepeatCount) || 1) : 1;
   const segmentSeconds = Number(goal.timerSeconds) || 60;
@@ -4253,12 +4280,22 @@ function GoalTimerModal({ t, goal, close }) {
   const [ringInfo, setRingInfo] = useState({ count: 0, total: 5 });
   const alarmRef = useRef(null);
 
+  useWakeLock(!paused && !ringing);
+
+  // ⏱️ อิงเวลาจริง (timestamp) แทนนับไล่ทีละ tick — ถ้าจอดับ/แท็บถูกหน่วงไปแวบนึง กลับมาจะคำนวณเวลาที่เหลือถูกต้องทันที ไม่ค้าง/ไม่หลุด
   useEffect(() => {
     if (paused || ringing) return;
-    if (remainingSec <= 0) { setRinging(true); alarmRef.current = startTimerAlarm((count) => setRingInfo({ count, total: 5 }), 5); return; }
-    const timer = setTimeout(() => setRemainingSec((s) => s - 1), 1000);
-    return () => clearTimeout(timer);
-  }, [remainingSec, paused, ringing]);
+    const endAt = Date.now() + remainingSec * 1000;
+    const tick = () => {
+      const remain = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
+      if (remain <= 0) { setRemainingSec(0); setRinging(true); alarmRef.current = startTimerAlarm((count) => setRingInfo({ count, total: 5 }), 5); }
+      else setRemainingSec(remain);
+    };
+    const id = setInterval(tick, 1000);
+    const onVis = () => { if (document.visibilityState === "visible") tick(); }; // กลับมาเปิดจอ ให้คำนวณใหม่ทันที ไม่ต้องรอ tick ถัดไป
+    document.addEventListener("visibilitychange", onVis);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVis); };
+  }, [paused, ringing]);
 
   useEffect(() => () => { alarmRef.current?.stop(); }, []); // ปิด modal ระหว่างเสียงกำลังดัง ก็ต้องหยุดเสียงด้วย ไม่ปล่อยค้างเล่นต่อเบื้องหลัง
 
@@ -4407,28 +4444,42 @@ function WorkoutTimerModal({ t, goal, userId, close }) {
   const [phaseRemaining, setPhaseRemaining] = useState(0);
   const [setCount, setSetCount] = useState(0);
 
+  // ⏱️ ล็อกหน้าจอไม่ให้ดับตอนตัวไหนกำลังนับอยู่ (ไม่ว่าเวลารวมหรือแบ่งรอบ) — กันต้นเหตุปัญหาจอดับแล้วตัดไปเอง
+  useWakeLock((totalRunning && !totalPaused && !reachedTarget) || (roundsRunning && !roundsPaused));
+
+  // เวลารวม: อิงเวลาจริง (timestamp) แทนนับไล่ทีละ tick — จอดับ/แท็บโดนหน่วงมา กลับมาคำนวณค่าที่ถูกต้องทันที ไม่ค้าง/ไม่หลุด
   useEffect(() => {
     if (!totalRunning || totalPaused || reachedTarget) return;
-    const timer = setTimeout(() => {
-      setElapsedSec((s) => {
-        const next = s + 1;
-        if (totalSec > 0 && next >= totalSec) { setReachedTarget(true); playCompleteSound(); }
-        return next;
-      });
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, [elapsedSec, totalPaused, totalRunning, reachedTarget]);
+    const startAt = Date.now() - elapsedSec * 1000;
+    const tick = () => {
+      const next = Math.floor((Date.now() - startAt) / 1000);
+      setElapsedSec(next);
+      if (totalSec > 0 && next >= totalSec) { setReachedTarget(true); playCompleteSound(); }
+    };
+    const id = setInterval(tick, 1000);
+    const onVis = () => { if (document.visibilityState === "visible") tick(); }; // กลับมาเปิดจอ คำนวณใหม่ทันที ไม่ต้องรอ tick ถัดไป
+    document.addEventListener("visibilitychange", onVis);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVis); };
+  }, [totalPaused, totalRunning, reachedTarget]);
 
+  // แบ่งรอบ: อิงเวลาจริงเหมือนกัน — endAt คำนวณครั้งเดียวตอนเริ่ม/สลับเฟส จากนั้นแค่เทียบกับเวลาจริงทุก tick
   useEffect(() => {
     if (!roundsRunning || roundsPaused || phase === null) return;
-    if (phaseRemaining <= 0) {
-      if (phase === "work") { setSetCount((c) => c + 1); playRoundSound(); setPhase("rest"); setPhaseRemaining(restSec); }
-      else { playRestSound(); setPhase("work"); setPhaseRemaining(workSec); }
-      return;
-    }
-    const timer = setTimeout(() => setPhaseRemaining((s) => s - 1), 1000);
-    return () => clearTimeout(timer);
-  }, [phaseRemaining, roundsRunning, roundsPaused, phase, roundSoundUrl, restSoundUrl, roundPreset, restPreset]);
+    const endAt = Date.now() + phaseRemaining * 1000;
+    const tick = () => {
+      const remain = Math.max(0, Math.round((endAt - Date.now()) / 1000));
+      if (remain <= 0) {
+        if (phase === "work") { setSetCount((c) => c + 1); playRoundSound(); setPhase("rest"); setPhaseRemaining(restSec); }
+        else { playRestSound(); setPhase("work"); setPhaseRemaining(workSec); }
+      } else {
+        setPhaseRemaining(remain);
+      }
+    };
+    const id = setInterval(tick, 1000);
+    const onVis = () => { if (document.visibilityState === "visible") tick(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVis); };
+  }, [roundsRunning, roundsPaused, phase, roundSoundUrl, restSoundUrl, roundPreset, restPreset]);
 
   // ▶️ ปุ่มเริ่ม/หยุดของแต่ละฝั่ง แยกกันเด็ดขาด — เริ่มเวลารวมแล้วยังกดเริ่มแบ่งรอบต่อได้เลย เดินพร้อมกันได้จริง
   const startTotal = () => { setTotalRunning(true); setTotalPaused(false); setElapsedSec(0); setReachedTarget(false); };
