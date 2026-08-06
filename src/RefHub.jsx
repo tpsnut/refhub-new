@@ -11656,10 +11656,11 @@ function VocabWordModal({ t, table = "vocab_words", mode = "word", topics = VOCA
   const save = async () => {
     if (!word.trim() || saving) return;
     setSaving(true); setErr("");
-    const examples = isWord
-      ? (example.trim() ? [{ en: example.trim(), th: exampleTh.trim() }, ...(initial?.examples || []).slice(1)] : (initial?.examples || []).slice(1))
-      : [];
-    const payload = { word: word.trim(), pronunciation: pronunciation.trim(), meaning: meaning.trim(), examples, category, level: initial?.level ?? null };
+    // 🐛 แก้บั๊กเดียวกับ saveAll ของ batch gen: โหมดประโยคต้องไม่มีคีย์ examples เลย (ตาราง vocab_sentences ไม่มีคอลัมน์นี้)
+    const base = { word: word.trim(), pronunciation: pronunciation.trim(), meaning: meaning.trim(), category, level: initial?.level ?? null };
+    const payload = isWord
+      ? { ...base, examples: example.trim() ? [{ en: example.trim(), th: exampleTh.trim() }, ...(initial?.examples || []).slice(1)] : (initial?.examples || []).slice(1) }
+      : base;
     try {
       if (initial?.id) {
         const { error } = await supabase.from(table).update(payload).eq("id", initial.id);
@@ -11773,7 +11774,11 @@ function VocabBatchGenModal({ t, table = "vocab_words", mode = "word", topics = 
   const saveAll = async () => {
     if (!preview?.length || saving) return;
     setSaving(true);
-    const rows = preview.map((p) => ({ id: crypto.randomUUID(), user_id: userId, word: p.word, pronunciation: p.pronunciation, meaning: p.meaning, examples: isWord && p.exampleEn ? [{ en: p.exampleEn, th: p.exampleTh }] : [], category, level: p.level, status: "learning", review_count: 0, created_at: new Date().toISOString() }));
+    // 🐛 แก้บั๊ก: เดิมยัด examples: [] ติดไปทุกแถวแม้โหมดประโยค แต่ตาราง vocab_sentences ไม่มีคอลัมน์นี้ → บันทึกไม่ผ่านทั้งชุด
+    const rows = preview.map((p) => {
+      const base = { id: crypto.randomUUID(), user_id: userId, word: p.word, pronunciation: p.pronunciation, meaning: p.meaning, category, level: p.level, status: "learning", review_count: 0, created_at: new Date().toISOString() };
+      return isWord ? { ...base, examples: p.exampleEn ? [{ en: p.exampleEn, th: p.exampleTh }] : [] } : base;
+    });
     try {
       const { error } = await supabase.from(table).insert(rows);
       if (error) throw error;
