@@ -580,7 +580,7 @@ function CallVideoTile({ tile, big, t, onExpand, attachLocalVideo, attachRemoteV
   );
 }
 
-function CallModal({ t, threadId, userId, displayName, myAvatar, otherMemberIds, roomName, session, minimized, onMinimize, onClose }) {
+function CallModal({ t, threadId, userId, displayName, myAvatar, otherMemberIds, roomName, session, minimized, onMinimize, onClose, startWithCamera }) {
   const [participants, setParticipants] = useState([]); // [{sid, identity, name, hasVideo}]
   const [muted, setMuted] = useState(false);
   const [cameraOn, setCameraOn] = useState(false);
@@ -701,6 +701,11 @@ function CallModal({ t, threadId, userId, displayName, myAvatar, otherMemberIds,
 
         // เปิดไมค์ให้เลย (เสียงเริ่มต้นดังปกติ) พร้อมตัดเสียงสะท้อน/เสียงรบกวน
         await room.localParticipant.setMicrophoneEnabled(true, { echoCancellation: true, noiseSuppression: true, autoGainControl: true });
+
+        // 🎥 เริ่มจากปุ่ม "วิดีโอคอล" -> เปิดกล้องอัตโนมัติทันที ไม่ต้องกดปุ่มกล้องเองอีกที
+        if (startWithCamera) {
+          try { await room.localParticipant.setCameraEnabled(true); if (!cancelled) setCameraOn(true); } catch (e) {}
+        }
 
         // มีคนอยู่ในห้องอยู่ก่อนแล้ว -> subscribe เสียงเขาที่มีอยู่ (กันเคสเข้าห้องทีหลังแล้วไม่ได้ยินคนเก่า)
         room.remoteParticipants.forEach((participant) => {
@@ -2402,7 +2407,7 @@ export default function RefHub() {
         {communityOpen && <CommunityOverlay t={t} cardShape={cardShape} userId={userId} authProfile={authProfile} session={session} openThread={() => {}} close={() => setCommunityOpen(false)} />}
         {chatOpen && <ChatModal t={t} M={M} mentor={mentor} setMentor={setMentor} authProfile={authProfile} setAuthProfile={setAuthProfile} customMentors={customMentors} setCustomMentors={setCustomMentors} userId={userId} session={session} goals={goals} askAiTopic={askAiTopic} close={() => { setChatOpen(false); setAskAiTopic(null); }} />}
         {activeCall && (
-          <CallModal t={t} threadId={activeCall.threadId} userId={userId} displayName={profile?.name} myAvatar={profile?.avatar} otherMemberIds={activeCall.otherMemberIds} roomName={activeCall.roomName} session={session} minimized={callMinimized} onMinimize={() => setCallMinimized(true)} onClose={() => { setActiveCall(null); setCallMinimized(false); }} />
+          <CallModal t={t} threadId={activeCall.threadId} userId={userId} displayName={profile?.name} myAvatar={profile?.avatar} otherMemberIds={activeCall.otherMemberIds} roomName={activeCall.roomName} session={session} minimized={callMinimized} startWithCamera={!!activeCall.video} onMinimize={() => setCallMinimized(true)} onClose={() => { setActiveCall(null); setCallMinimized(false); }} />
         )}
         {activeCall && callMinimized && (
           <button onClick={() => setCallMinimized(false)} style={{ position: "fixed", bottom: 90, right: 16, zIndex: 90, background: "#2E9E6B", border: "none", borderRadius: 24, padding: "10px 16px", display: "flex", alignItems: "center", gap: 8, cursor: "pointer", boxShadow: "0 6px 18px rgba(0,0,0,.25)" }}>
@@ -8838,6 +8843,9 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
   const [otherMembers, setOtherMembers] = useState([]); // [{id, name}] สมาชิกคนอื่นในห้อง (ไม่รวมตัวเอง) ใช้ทำ "อ่านแล้ว"
   const [reads, setReads] = useState({}); // user_id -> last_read_at ของคนอื่นในห้อง
   const [lightbox, setLightbox] = useState(null); // url รูปที่กำลังดูเต็มจอ (null = ไม่ได้เปิดดู)
+  const [playingVideoId, setPlayingVideoId] = useState(null); // message id ของวิดีโอที่กำลังกดเล่นอยู่ (โชว์ controls จริง) — อันอื่นโชว์แค่ thumbnail+ปุ่ม play
+  const [videoDurations, setVideoDurations] = useState({}); // message id -> ความยาววิดีโอ (วินาที) อ่านจาก metadata จริง ไว้โชว์ badge มุมขวาล่าง
+  const fmtDur = (s) => (!s || !isFinite(s)) ? "" : `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
   const [confirmLeave, setConfirmLeave] = useState(false); // "ยืนยัน" | "" -> โหมด: "leave" (ออกจากห้อง) หรือ "delete" (ลบถาวร)
   const [showMembers, setShowMembers] = useState(false);
   const [callParticipants, setCallParticipants] = useState([]); // คนที่กำลังอยู่ในสายเสียงของห้องนี้ตอนนี้ (ไม่รวมตัวเอง ไว้โชว์แบนเนอร์เตือน)
@@ -8886,6 +8894,8 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
   // 😀 ชุดอีโมจิที่ใช้บ่อย — เลือกแล้วแทรกเข้าช่องพิมพ์ ไม่ปิด picker ทันทีเผื่อเลือกต่อหลายตัว
   const EMOJI_LIST = ["😀","😂","🤣","😅","😊","😍","🥰","😘","😉","😎","🤩","🥳","😇","🙂","😏","😢","😭","😡","😱","😴","🤔","🙄","😬","😅","👍","👎","🙏","👏","💪","🤝","👋","✌️","🤞","❤️","🧡","💛","💚","💙","💜","🖤","💔","💯","🔥","✨","🎉","🎊","🥳","😅","🍀","⭐","☀️","🌙","🌧️","☕","🍕","🍺","🎂","😴","🐱","🐶","💤","👀","🤗","😌","🥺","😤","😐"];
 
+  // 🟢 ออนไลน์อยู่ = ping heartbeat ล่าสุดไม่เกิน 2 นาที (สูตรเดียวกับที่ใช้ในหน้า Admin)
+  const isOnline = (lastSeen) => lastSeen && (Date.now() - new Date(lastSeen).getTime()) < 2 * 60 * 1000;
   const markRead = () => supabase.from("chat_reads").upsert({ user_id: userId, thread_id: thread.id, last_read_at: new Date().toISOString() }, { onConflict: "user_id,thread_id" }).then(({ error }) => { if (error) console.error("บันทึก 'อ่านแล้ว' ไม่สำเร็จ:", error.message); }, () => {});
 
   // 👥 ดึงสมาชิกคนอื่นในห้อง + เวลาที่แต่ละคนอ่านล่าสุด (สำหรับทำ "อ่านแล้ว") + ฟังการเปลี่ยนแปลงแบบสด
@@ -8894,7 +8904,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
       const { data: members } = await supabase.from("chat_thread_members").select("user_id").eq("thread_id", thread.id).neq("user_id", userId);
       const otherIds = (members || []).map((m) => m.user_id);
       if (!otherIds.length) return;
-      const { data: profiles } = await supabase.from("profiles").select("id, name, status_message").in("id", otherIds);
+      const { data: profiles } = await supabase.from("profiles").select("id, name, status_message, last_seen").in("id", otherIds);
       setOtherMembers(profiles || []);
       const { data: readRows } = await supabase.from("chat_reads").select("user_id, last_read_at").eq("thread_id", thread.id).in("user_id", otherIds);
       setReads(Object.fromEntries((readRows || []).map((r) => [r.user_id, r.last_read_at])));
@@ -9035,35 +9045,33 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-        <button onClick={onBack} style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 17, background: t.surface, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }} title="กลับไปรายการห้อง"><ArrowLeft size={18} color={t.text} /></button>
-        {thread.avatarUrl ? (
-          <img src={thread.avatarUrl} alt="" onClick={() => setLightbox(thread.avatarUrl)} style={{ width: 32, height: 32, borderRadius: 10, objectFit: "cover", cursor: "pointer" }} />
-        ) : (
-          <div style={{ width: 32, height: 32, borderRadius: 10, background: colorFor(thread.name), color: "#fff", display: "grid", placeItems: "center", fontSize: 13, fontWeight: 700 }}>{thread.name[0]}</div>
-        )}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>{thread.name}</div>
-          {!thread.isGroup && otherMembers[0]?.status_message && <div style={{ fontSize: 11, color: t.sub, fontStyle: "italic" }}>{otherMembers[0].status_message}</div>}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+        <button onClick={onBack} style={{ flexShrink: 0, width: 32, height: 32, borderRadius: 16, background: "none", border: "none", cursor: "pointer", display: "grid", placeItems: "center" }} title="กลับไปรายการห้อง"><ArrowLeft size={18} color={t.text} /></button>
+        <div style={{ position: "relative", flexShrink: 0 }}>
+          {thread.avatarUrl ? (
+            <img src={thread.avatarUrl} alt="" onClick={() => setLightbox(thread.avatarUrl)} style={{ width: 44, height: 44, borderRadius: 14, objectFit: "cover", cursor: "pointer" }} />
+          ) : (
+            <div style={{ width: 44, height: 44, borderRadius: 14, background: colorFor(thread.name), color: "#fff", display: "grid", placeItems: "center", fontSize: 17, fontWeight: 800 }}>{thread.name[0]}</div>
+          )}
+          {/* จุดสถานะออนไลน์จริง (ดึงจาก last_seen ของแอป ไม่ใช่ของปลอม) — โชว์เฉพาะห้องคุย 1:1 ห้องกลุ่มไม่มีคนคนเดียวให้บอกสถานะ */}
+          {!thread.isGroup && (
+            <div style={{ position: "absolute", bottom: -1, right: -1, width: 12, height: 12, borderRadius: 6, background: isOnline(otherMembers[0]?.last_seen) ? "#2E9E6B" : t.faint, border: `2.5px solid ${t.page}` }} />
+          )}
         </div>
-        <button onClick={() => { setActiveCall({ threadId: thread.id, roomName: thread.name, otherMemberIds: otherMembers.map((m) => m.id) }); setCallMinimized(false); }} style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 17, background: "#2E9E6B18", border: "1px solid #2E9E6B55", cursor: "pointer", display: "grid", placeItems: "center" }} title="เริ่ม/เข้าร่วมคุยด้วยเสียง"><Phone size={15} color="#2E9E6B" /></button>
-        {isCreator && (
-          <button onClick={() => setShowMembers(true)} style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 17, background: t.surface, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }} title="จัดการสมาชิกห้อง"><Users size={16} color={t.sub} /></button>
-        )}
-        {confirmLeave === "leave" ? (
-          <button onClick={leaveRoom} style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 5, padding: "7px 12px", borderRadius: 10, border: "none", background: "#D9534F", color: "#fff", cursor: "pointer", fontSize: 11.5, fontWeight: 700 }}>ยืนยันออก?</button>
-        ) : confirmLeave === "delete" ? (
-          <button onClick={deleteRoomForever} style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 5, padding: "7px 12px", borderRadius: 10, border: "none", background: "#D9534F", color: "#fff", cursor: "pointer", fontSize: 11.5, fontWeight: 700 }}>ยืนยันลบถาวร?</button>
-        ) : confirmLeave === "menu" ? (
-          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-            <button onClick={() => setConfirmLeave("leave")} style={{ padding: "7px 10px", borderRadius: 10, border: `1px solid ${t.border}`, background: "none", color: t.sub, cursor: "pointer", fontSize: 11, fontWeight: 700 }}>ออกจากห้อง</button>
-            <button onClick={() => setConfirmLeave("delete")} style={{ padding: "7px 10px", borderRadius: 10, border: "1px solid #D9534F", background: "#D9534F18", color: "#D9534F", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>ลบถาวร</button>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 15.5, fontWeight: 800, color: t.text }}>{thread.name}</div>
+          <div style={{ fontSize: 11.5, color: !thread.isGroup && isOnline(otherMembers[0]?.last_seen) ? "#2E9E6B" : t.sub, fontWeight: !thread.isGroup && isOnline(otherMembers[0]?.last_seen) ? 700 : 400 }}>
+            {thread.isGroup
+              ? `${otherMembers.length + 1} คนในห้อง`
+              : isOnline(otherMembers[0]?.last_seen)
+                ? "🟢 ออนไลน์อยู่"
+                : otherMembers[0]?.status_message || (otherMembers[0]?.last_seen ? `ใช้งานล่าสุด ${timeAgo(otherMembers[0].last_seen)}` : "")}
           </div>
-        ) : (
-          <button onClick={() => setConfirmLeave(isCreator ? "menu" : "leave")} style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 17, background: "#D9534F18", border: "1px solid #D9534F55", cursor: "pointer", display: "grid", placeItems: "center" }} title={isCreator ? "ออกจากห้อง / ลบห้อง" : "ออกจากห้อง"}><LogOut size={17} color="#D9534F" /></button>
-        )}
+        </div>
+        <button onClick={() => { setActiveCall({ threadId: thread.id, roomName: thread.name, otherMemberIds: otherMembers.map((m) => m.id) }); setCallMinimized(false); }} style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 18, background: "#2E9E6B18", border: "1px solid #2E9E6B55", cursor: "pointer", display: "grid", placeItems: "center" }} title="เริ่ม/เข้าร่วมคุยด้วยเสียง"><Phone size={15} color="#2E9E6B" /></button>
+        <button onClick={() => { setActiveCall({ threadId: thread.id, roomName: thread.name, otherMemberIds: otherMembers.map((m) => m.id), video: true }); setCallMinimized(false); }} style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 18, background: "#2E9E6B18", border: "1px solid #2E9E6B55", cursor: "pointer", display: "grid", placeItems: "center" }} title="เริ่ม/เข้าร่วมวิดีโอคอล"><Video size={15} color="#2E9E6B" /></button>
+        <button onClick={() => setShowMembers(true)} style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 18, background: t.surface, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }} title="ข้อมูลห้อง/สมาชิก"><Info size={16} color={t.sub} /></button>
       </div>
-      {leaveErr && <div style={{ fontSize: 11.5, color: "#D9534F", marginBottom: 10 }}>{leaveErr}</div>}
       {callParticipants.length > 0 && (
         <button onClick={() => { setActiveCall({ threadId: thread.id, roomName: thread.name, otherMemberIds: otherMembers.map((m) => m.id) }); setCallMinimized(false); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: "#2E9E6B18", border: "1px solid #2E9E6B55", borderRadius: 14, padding: "10px 14px", marginBottom: 10, cursor: "pointer" }}>
           <Phone size={16} color="#2E9E6B" style={{ flexShrink: 0 }} />
@@ -9124,23 +9132,42 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
                     const maxDur = durations.length ? Math.max(...durations) : 0;
                     setCallDetail({ timeline, durationMins: maxDur, at: group[0]?.created_at });
                   };
+                  const isMedia = m.attachment_type === "image" || m.attachment_type === "video";
+                  const longPressHandlers = !isCallMsg ? {
+                    onMouseDown: (e) => startLongPress(m, e), onMouseUp: cancelLongPress, onMouseLeave: cancelLongPress,
+                    onTouchStart: (e) => startLongPress(m, e), onTouchEnd: cancelLongPress, onTouchMove: cancelLongPress,
+                  } : {};
                   return (
                   <div
                     onClick={isCallMsg ? openCallDetail : undefined}
-                    onMouseDown={!isCallMsg ? (e) => startLongPress(m, e) : undefined}
-                    onMouseUp={!isCallMsg ? cancelLongPress : undefined}
-                    onMouseLeave={!isCallMsg ? cancelLongPress : undefined}
-                    onTouchStart={!isCallMsg ? (e) => startLongPress(m, e) : undefined}
-                    onTouchEnd={!isCallMsg ? cancelLongPress : undefined}
-                    onTouchMove={!isCallMsg ? cancelLongPress : undefined}
-                    style={{ background: mine ? t.accent : t.surface, color: mine ? t.onAccent : t.text, padding: m.attachment_url ? 6 : "7px 11px", borderRadius: 14, fontSize: 14.5, lineHeight: 1.4, border: mine ? "none" : `1px solid ${t.borderStrong}`, cursor: isCallMsg ? "pointer" : (mine ? "default" : "default"), userSelect: "none", WebkitUserSelect: "none" }}
+                    {...longPressHandlers}
+                    style={isMedia
+                      ? { position: "relative", borderRadius: 14, overflow: "hidden", cursor: "pointer", userSelect: "none", WebkitUserSelect: "none" }
+                      : { background: mine ? t.accent : t.surface, color: mine ? t.onAccent : t.text, padding: "7px 11px", borderRadius: 14, fontSize: 14.5, lineHeight: 1.4, border: mine ? "none" : `1px solid ${t.borderStrong}`, cursor: isCallMsg ? "pointer" : "default", userSelect: "none", WebkitUserSelect: "none" }}
                   >
-                    {m.attachment_type === "image" && <img src={m.attachment_url} alt="" onClick={() => setLightbox(m.attachment_url)} style={{ maxWidth: 200, borderRadius: 10, display: "block", cursor: "pointer" }} />}
-                    {m.attachment_type === "video" && <video src={m.attachment_url} controls style={{ maxWidth: 220, borderRadius: 10, display: "block" }} />}
+                    {m.attachment_type === "image" && <img src={m.attachment_url} alt="" onClick={() => setLightbox(m.attachment_url)} style={{ maxWidth: 240, maxHeight: 320, display: "block", cursor: "pointer" }} />}
+                    {m.attachment_type === "video" && (
+                      playingVideoId === m.id ? (
+                        <video src={m.attachment_url} controls autoPlay playsInline style={{ maxWidth: 260, maxHeight: 340, display: "block" }} />
+                      ) : (
+                        <div onClick={() => setPlayingVideoId(m.id)} style={{ position: "relative" }}>
+                          <video
+                            src={m.attachment_url} muted playsInline preload="metadata" style={{ maxWidth: 260, maxHeight: 340, display: "block", background: "#000" }}
+                            onLoadedMetadata={(e) => setVideoDurations((d) => ({ ...d, [m.id]: e.target.duration }))}
+                          />
+                          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <div style={{ width: 52, height: 52, borderRadius: 26, background: "rgba(0,0,0,.42)", display: "grid", placeItems: "center" }}><Play size={22} color="#fff" fill="#fff" /></div>
+                          </div>
+                          {fmtDur(videoDurations[m.id]) && (
+                            <div style={{ position: "absolute", bottom: 8, right: 8, background: "rgba(0,0,0,.55)", color: "#fff", fontSize: 10.5, fontWeight: 700, padding: "2px 8px", borderRadius: 10 }}>{fmtDur(videoDurations[m.id])}</div>
+                          )}
+                        </div>
+                      )
+                    )}
                     {m.attachment_type === "file" && (
                       <a href={m.attachment_url} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: 6, color: "inherit", textDecoration: "underline", padding: "3px 7px" }}><FileText size={14} /> {m.attachment_name}</a>
                     )}
-                    {m.text && <div style={{ padding: m.attachment_url ? "6px 7px 2px" : 0 }}>{m.text}{m.edited_at && <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 6 }}>(แก้ไขแล้ว)</span>}{isCallMsg && <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 6 }}>· ดูรายละเอียด</span>}</div>}
+                    {m.text && <div>{m.text}{m.edited_at && <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 6 }}>(แก้ไขแล้ว)</span>}{isCallMsg && <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 6 }}>· ดูรายละเอียด</span>}</div>}
                   </div>
                   );
                 })()}
@@ -9149,9 +9176,9 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
                   reactions[m.id].forEach((r) => { counts[r.emoji] = (counts[r.emoji] || 0) + 1; });
                   const myEmoji = reactions[m.id].find((r) => r.user_id === userId)?.emoji;
                   return (
-                    <div style={{ position: "absolute", bottom: -9, [mine ? "left" : "right"]: -4, display: "flex", gap: 2, zIndex: 5 }}>
+                    <div style={{ position: "absolute", bottom: -10, [mine ? "left" : "right"]: -4, display: "flex", gap: 3, zIndex: 5 }}>
                       {Object.entries(counts).map(([emo, count]) => (
-                        <button key={emo} onClick={() => toggleReaction(m.id, emo)} style={{ display: "flex", alignItems: "center", gap: 2, padding: "1px 6px", borderRadius: 9, border: `1.5px solid ${t.page}`, background: myEmoji === emo ? `${t.accent}22` : t.surface, cursor: "pointer", fontSize: 11.5, boxShadow: "0 1px 3px rgba(0,0,0,.15)" }}>
+                        <button key={emo} onClick={() => toggleReaction(m.id, emo)} style={{ display: "flex", alignItems: "center", gap: 2, padding: "2px 7px", borderRadius: 11, border: `2px solid ${t.page}`, background: myEmoji === emo ? `${t.accent}22` : t.surface, cursor: "pointer", fontSize: 12, boxShadow: "0 2px 6px rgba(0,0,0,.2)" }}>
                           <span>{emo}</span>{count > 1 && <span style={{ fontSize: 9.5, color: t.sub, fontWeight: 700 }}>{count}</span>}
                         </button>
                       ))}
@@ -9218,16 +9245,16 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
         {attachMenuOpen && (
           <>
             <div onClick={() => setAttachMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
-            <div style={{ position: "absolute", bottom: "100%", left: 0, marginBottom: 8, zIndex: 41, display: "flex", gap: 8, background: t.page, border: `1px solid ${t.border}`, borderRadius: 16, padding: 10, boxShadow: "0 6px 18px rgba(0,0,0,.18)" }}>
+            <div style={{ position: "absolute", bottom: "100%", left: 0, marginBottom: 8, zIndex: 41, width: 210, background: t.page, border: `1px solid ${t.border}`, borderRadius: 16, overflow: "hidden", boxShadow: "0 10px 30px rgba(0,0,0,.3)" }}>
               {[
                 { Ic: Camera, label: "ถ่ายรูป", onClick: () => cameraRef.current?.click() },
                 { Ic: ImageIcon, label: "รูปภาพ", onClick: () => fileRef.current?.click() },
                 { Ic: Video, label: "วิดีโอ", onClick: () => videoRef.current?.click() },
                 { Ic: FileText, label: "ไฟล์", onClick: () => docRef.current?.click() },
-              ].map(({ Ic, label, onClick }) => (
-                <button key={label} onClick={onClick} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "6px 8px", width: 62 }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 20, background: t.inputBg, display: "grid", placeItems: "center" }}><Ic size={18} color={t.accent} /></div>
-                  <span style={{ fontSize: 9.5, color: t.sub, fontWeight: 700 }}>{label}</span>
+              ].map(({ Ic, label, onClick }, i) => (
+                <button key={label} onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "11px 14px", background: "none", border: "none", borderTop: i > 0 ? `1px solid ${t.border}` : "none", cursor: "pointer", textAlign: "left" }}>
+                  <div style={{ width: 34, height: 34, borderRadius: 17, background: `${t.accent}22`, display: "grid", placeItems: "center", flexShrink: 0 }}><Ic size={16} color={t.accent} /></div>
+                  <span style={{ fontSize: 13.5, fontWeight: 700, color: t.text }}>{label}</span>
                 </button>
               ))}
             </div>
@@ -9290,13 +9317,13 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
         </div>
         </ModalPortal>
       )}
-      {showMembers && <RoomMembersModal t={t} threadId={thread.id} session={session} close={() => setShowMembers(false)} />}
+      {showMembers && <RoomMembersModal t={t} threadId={thread.id} session={session} isCreator={isCreator} confirmLeave={confirmLeave} setConfirmLeave={setConfirmLeave} leaveRoom={leaveRoom} deleteRoomForever={deleteRoomForever} leaveErr={leaveErr} close={() => { setShowMembers(false); setConfirmLeave(false); }} />}
 
     </div>
   );
 }
 
-function RoomMembersModal({ t, threadId, session, close }) {
+function RoomMembersModal({ t, threadId, session, isCreator, confirmLeave, setConfirmLeave, leaveRoom, deleteRoomForever, leaveErr, close }) {
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
@@ -9327,9 +9354,9 @@ function RoomMembersModal({ t, threadId, session, close }) {
   return (
     <ModalPortal>
       <div style={overlay} onClick={close}>
-        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "80vh", overflowY: "auto" }}>
-          <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 4 }}>จัดการสมาชิกห้อง</div>
-          <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 16 }}>เตะออก หรือปิดไม่ให้พิมพ์ (mute) ได้เฉพาะคนที่ไม่ใช่ตัวคุณเอง</div>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 4 }}>ข้อมูลห้อง</div>
+          <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 16 }}>{isCreator ? "เตะออก หรือปิดไม่ให้พิมพ์ (mute) ได้เฉพาะคนที่ไม่ใช่ตัวคุณเอง" : "สมาชิกทั้งหมดในห้องนี้"}</div>
           {err && <div style={{ fontSize: 12, color: "#D9534F", marginBottom: 10 }}>{err}</div>}
           {loading && <Empty t={t} text="กำลังโหลด..." />}
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -9347,7 +9374,7 @@ function RoomMembersModal({ t, threadId, session, close }) {
                   </div>
                   {m.muted && <div style={{ fontSize: 10.5, color: "#D9534F" }}>ปิดไม่ให้พิมพ์อยู่</div>}
                 </div>
-                {!m.isCreator && (
+                {isCreator && !m.isCreator && (
                   <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                     <button onClick={() => toggleMute(m.userId, !m.muted)} style={{ padding: "6px 10px", borderRadius: 9, border: `1px solid ${m.muted ? "#D9534F" : t.border}`, background: m.muted ? "#D9534F18" : "none", color: m.muted ? "#D9534F" : t.sub, cursor: "pointer", fontSize: 11, fontWeight: 700 }}>{m.muted ? "เปิดพิมพ์" : "ปิดพิมพ์"}</button>
                     {confirmKickId === m.userId ? (
@@ -9359,6 +9386,23 @@ function RoomMembersModal({ t, threadId, session, close }) {
                 )}
               </div>
             ))}
+          </div>
+
+          {/* 🚪 ออกจากห้อง/ลบห้อง — ย้ายมาจากหัวห้องเดิม รวมไว้ในข้อมูลห้องที่เดียว */}
+          <div style={{ borderTop: `1px solid ${t.border}`, marginTop: 18, paddingTop: 16 }}>
+            {leaveErr && <div style={{ fontSize: 11.5, color: "#D9534F", marginBottom: 10 }}>{leaveErr}</div>}
+            {confirmLeave === "leave" ? (
+              <button onClick={leaveRoom} style={{ width: "100%", padding: "12px 0", borderRadius: 12, border: "none", background: "#D9534F", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 700 }}>ยืนยันออกจากห้อง?</button>
+            ) : confirmLeave === "delete" ? (
+              <button onClick={deleteRoomForever} style={{ width: "100%", padding: "12px 0", borderRadius: 12, border: "none", background: "#D9534F", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 700 }}>ยืนยันลบห้องถาวร? (ลบข้อความทั้งหมด กู้คืนไม่ได้)</button>
+            ) : (
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => setConfirmLeave("leave")} style={{ flex: 1, padding: "11px 0", borderRadius: 12, border: `1.5px solid ${t.border}`, background: "none", color: t.sub, cursor: "pointer", fontSize: 12.5, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><LogOut size={14} /> ออกจากห้อง</button>
+                {isCreator && (
+                  <button onClick={() => setConfirmLeave("delete")} style={{ flex: 1, padding: "11px 0", borderRadius: 12, border: "1.5px solid #D9534F", background: "#D9534F14", color: "#D9534F", cursor: "pointer", fontSize: 12.5, fontWeight: 700 }}>ลบห้องถาวร</button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
