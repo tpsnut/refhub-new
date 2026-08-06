@@ -13409,7 +13409,7 @@ function ChatModal({ t, M, mentor, setMentor, authProfile, setAuthProfile, custo
         <div style={{ padding: 16, display: "flex", alignItems: "center", gap: 12, background: t.hero }}>
           <button onClick={() => setSwitchPick(true)} style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0, background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}>
             {M.avatarUrl ? (
-              <img src={M.avatarUrl} alt="" style={{ width: 40, height: 40, borderRadius: 20, objectFit: "cover", flexShrink: 0 }} />
+              <img src={M.avatarUrl} alt="" draggable={false} style={{ width: 40, height: 40, borderRadius: 20, objectFit: "cover", flexShrink: 0, pointerEvents: "none" }} />
             ) : (
               <span style={{ width: 40, height: 40, borderRadius: 20, background: `linear-gradient(135deg,${M.accent2},${M.accent})`, color: M.onAccent, display: "grid", placeItems: "center", fontWeight: 800, flexShrink: 0 }}>{M.letter}</span>
             )}
@@ -13557,7 +13557,7 @@ function MentorPicker({ t, mentor, setMentor, authProfile, setAuthProfile, userI
           <button key={k} onClick={() => pick(k)} style={{ display: "flex", alignItems: "center", gap: 14, padding: 14, borderRadius: 18, cursor: "pointer", textAlign: "left", background: t.surface, border: `2px solid ${mentor === k ? m.accent : t.border}` }}>
             <div style={{ position: "relative", flexShrink: 0 }}>
               {savedAva ? (
-                <img src={savedAva} alt="" style={{ width: 46, height: 46, borderRadius: 23, objectFit: "cover" }} />
+                <img src={savedAva} alt="" draggable={false} style={{ width: 46, height: 46, borderRadius: 23, objectFit: "cover", pointerEvents: "none" }} />
               ) : (
                 <span style={{ width: 46, height: 46, borderRadius: 23, background: `linear-gradient(135deg,${m.accent2},${m.accent})`, color: m.onAccent, display: "grid", placeItems: "center", fontWeight: 800, fontSize: 18 }}>{m.letter}</span>
               )}
@@ -13573,7 +13573,7 @@ function MentorPicker({ t, mentor, setMentor, authProfile, setAuthProfile, userI
         <button onClick={() => pick("none")} style={{ display: "flex", alignItems: "center", gap: 14, padding: 14, borderRadius: 18, cursor: "pointer", textAlign: "left", background: t.surface, border: `2px solid ${mentor === "none" ? MENTORS.none.accent : t.border}` }}>
           <div style={{ position: "relative", flexShrink: 0 }}>
             {authProfile?.assistant_avatar_url ? (
-              <img src={authProfile.assistant_avatar_url} alt="" style={{ width: 46, height: 46, borderRadius: 23, objectFit: "cover" }} />
+              <img src={authProfile.assistant_avatar_url} alt="" draggable={false} style={{ width: 46, height: 46, borderRadius: 23, objectFit: "cover", pointerEvents: "none" }} />
             ) : (
               <span style={{ width: 46, height: 46, borderRadius: 23, background: `linear-gradient(135deg,${MENTORS.none.accent2},${MENTORS.none.accent})`, color: "#fff", display: "grid", placeItems: "center", fontWeight: 800, fontSize: 18 }}>{MENTORS.none.letter}</span>
             )}
@@ -13588,7 +13588,7 @@ function MentorPicker({ t, mentor, setMentor, authProfile, setAuthProfile, userI
           <button key={c.id} onClick={() => pick(c.id)} style={{ display: "flex", alignItems: "center", gap: 14, padding: 14, borderRadius: 18, cursor: "pointer", textAlign: "left", background: t.surface, border: `2px solid ${mentor === c.id ? "#8A93A8" : t.border}` }}>
             <div style={{ position: "relative", flexShrink: 0 }}>
               {c.avatarUrl ? (
-                <img src={c.avatarUrl} alt="" style={{ width: 46, height: 46, borderRadius: 23, objectFit: "cover" }} />
+                <img src={c.avatarUrl} alt="" draggable={false} style={{ width: 46, height: 46, borderRadius: 23, objectFit: "cover", pointerEvents: "none" }} />
               ) : (
                 <span style={{ width: 46, height: 46, borderRadius: 23, background: "linear-gradient(135deg,#A7ADB8,#8A93A8)", color: "#fff", display: "grid", placeItems: "center", fontWeight: 800, fontSize: 18 }}>{(c.name || "?")[0].toUpperCase()}</span>
               )}
