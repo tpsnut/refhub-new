@@ -936,28 +936,28 @@ function ModalPortal({ children }) {
 
 // 📝 render ข้อความ AI เป็น Markdown จริง (หัวข้อ/ตัวหนา/bullet/ตาราง/โค้ด) แทนที่จะโชว์ตัวอักษรดิบๆ มั่วๆ
 // color = สีตัวอักษรหลัก (bubble ผู้ใช้กับ AI ใช้สีต่างกัน), accent = สีเน้น (ลิงก์/โค้ด/เส้นตาราง)
-function MarkdownText({ text, color, accent }) {
+function MarkdownText({ text, color, accent, size = 14.5, lineHeight = 1.6 }) {
   if (!text) return null;
   return (
-    <div style={{ color, fontSize: 14.5, lineHeight: 1.6 }}>
+    <div style={{ color, fontSize: size, lineHeight }}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
           p: ({ children }) => <p style={{ margin: "0 0 8px", whiteSpace: "pre-wrap" }}>{children}</p>,
-          h1: ({ children }) => <div style={{ fontSize: 17, fontWeight: 800, margin: "10px 0 6px" }}>{children}</div>,
-          h2: ({ children }) => <div style={{ fontSize: 15.5, fontWeight: 800, margin: "10px 0 6px" }}>{children}</div>,
-          h3: ({ children }) => <div style={{ fontSize: 14.5, fontWeight: 700, margin: "8px 0 4px" }}>{children}</div>,
+          h1: ({ children }) => <div style={{ fontSize: size + 2.5, fontWeight: 800, margin: "10px 0 6px" }}>{children}</div>,
+          h2: ({ children }) => <div style={{ fontSize: size + 1, fontWeight: 800, margin: "10px 0 6px" }}>{children}</div>,
+          h3: ({ children }) => <div style={{ fontSize: size, fontWeight: 700, margin: "8px 0 4px" }}>{children}</div>,
           strong: ({ children }) => <strong style={{ fontWeight: 800 }}>{children}</strong>,
           em: ({ children }) => <em>{children}</em>,
           ul: ({ children }) => <ul style={{ margin: "4px 0 8px", paddingLeft: 20 }}>{children}</ul>,
           ol: ({ children }) => <ol style={{ margin: "4px 0 8px", paddingLeft: 20 }}>{children}</ol>,
           li: ({ children }) => <li style={{ marginBottom: 3 }}>{children}</li>,
-          code: ({ children }) => <code style={{ background: `${accent}22`, color: accent, padding: "1px 6px", borderRadius: 5, fontSize: 13 }}>{children}</code>,
-          pre: ({ children }) => <pre style={{ background: `${accent}18`, padding: 10, borderRadius: 10, overflowX: "auto", fontSize: 12.5, margin: "6px 0" }}>{children}</pre>,
+          code: ({ children }) => <code style={{ background: `${accent}22`, color: accent, padding: "1px 6px", borderRadius: 5, fontSize: size - 1.5 }}>{children}</code>,
+          pre: ({ children }) => <pre style={{ background: `${accent}18`, padding: 10, borderRadius: 10, overflowX: "auto", fontSize: size - 2, margin: "6px 0" }}>{children}</pre>,
           a: ({ children, href }) => <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: accent, textDecoration: "underline" }}>{children}</a>,
           blockquote: ({ children }) => <div style={{ borderLeft: `3px solid ${accent}`, paddingLeft: 10, margin: "6px 0", opacity: 0.85 }}>{children}</div>,
           hr: () => <hr style={{ border: "none", borderTop: `1px solid ${accent}44`, margin: "10px 0" }} />,
-          table: ({ children }) => <div style={{ overflowX: "auto", margin: "6px 0" }}><table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5 }}>{children}</table></div>,
+          table: ({ children }) => <div style={{ overflowX: "auto", margin: "6px 0" }}><table style={{ borderCollapse: "collapse", width: "100%", fontSize: size - 2 }}>{children}</table></div>,
           thead: ({ children }) => <thead>{children}</thead>,
           th: ({ children }) => <th style={{ border: `1px solid ${accent}44`, padding: "5px 8px", textAlign: "left", fontWeight: 800, background: `${accent}14` }}>{children}</th>,
           td: ({ children }) => <td style={{ border: `1px solid ${accent}44`, padding: "5px 8px" }}>{children}</td>,
@@ -13439,16 +13439,44 @@ function ChatModal({ t, M, mentor, setMentor, authProfile, setAuthProfile, custo
             </div>
           );
         })()}
-        <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 16 }}>
           {histLoading && <div style={{ alignSelf: "center", color: t.sub, fontSize: 12.5, padding: "20px 0" }}>กำลังโหลดประวัติแชท...</div>}
-          {!histLoading && msgs.map((m, i) => (
-            <div key={i} style={{ alignSelf: m.who === "u" ? "flex-end" : "flex-start", maxWidth: "88%", background: m.who === "u" ? M.accent : t.surface, color: m.who === "u" ? M.onAccent : t.text, padding: "11px 15px", borderRadius: 16, fontSize: 14.5, lineHeight: 1.5, border: m.who === "u" ? "none" : `1px solid ${t.borderStrong}` }}>
-              {m.image && <img src={m.image} alt="" style={{ maxWidth: "100%", borderRadius: 10, marginBottom: m.text ? 6 : 0, display: "block" }} />}
-              {m.who === "u" ? <span style={{ whiteSpace: "pre-wrap" }}>{m.text}</span> : <MarkdownText text={m.text} color={t.text} accent={M.accent} />}
-              {m.isMock && <div style={{ fontSize: 9.5, opacity: 0.55, marginTop: 4 }}>⚠️ โหมดสำรอง (AI ตอบไม่สำเร็จ ดูสาเหตุใน Console)</div>}
+          {!histLoading && msgs.map((m, i) => {
+            if (m.who === "u") {
+              return (
+                <div key={i} style={{ alignSelf: "flex-end", maxWidth: "82%", background: M.accent, color: M.onAccent, padding: "11px 15px", borderRadius: "18px 18px 4px 18px", fontSize: 14.5, lineHeight: 1.5 }}>
+                  {m.image && <img src={m.image} alt="" style={{ maxWidth: "100%", borderRadius: 10, marginBottom: m.text ? 6 : 0, display: "block" }} />}
+                  <span style={{ whiteSpace: "pre-wrap" }}>{m.text}</span>
+                </div>
+              );
+            }
+            // 🎨 คำตอบโค้ช/AI — ไม่มีกรอบ/พื้นหลังแล้ว ลงกับพื้นหลังหน้าจอตรงๆ เต็มความกว้าง สไตล์ Gemini (mockup อนุมัติแล้ว 06/08/2026)
+            return (
+              <div key={i} style={{ alignSelf: "stretch", width: "100%" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
+                  {M.avatarUrl ? (
+                    <img src={M.avatarUrl} alt="" draggable={false} style={{ width: 22, height: 22, borderRadius: 11, objectFit: "cover", flexShrink: 0, pointerEvents: "none" }} />
+                  ) : (
+                    <span style={{ width: 22, height: 22, borderRadius: 11, background: `linear-gradient(135deg,${M.accent2},${M.accent})`, color: M.onAccent, display: "grid", placeItems: "center", fontWeight: 800, fontSize: 10, flexShrink: 0 }}>{M.letter}</span>
+                  )}
+                  <span style={{ fontSize: 11.5, fontWeight: 700, color: t.sub }}>{M.name}</span>
+                </div>
+                {m.image && <img src={m.image} alt="" style={{ maxWidth: "100%", borderRadius: 10, marginBottom: m.text ? 8 : 0, display: "block" }} />}
+                <MarkdownText text={m.text} color={t.text} accent={M.accent} size={16} lineHeight={1.75} />
+                {m.isMock && <div style={{ fontSize: 9.5, opacity: 0.55, marginTop: 2 }}>⚠️ โหมดสำรอง (AI ตอบไม่สำเร็จ ดูสาเหตุใน Console)</div>}
+              </div>
+            );
+          })}
+          {loading && (
+            <div style={{ alignSelf: "stretch", display: "flex", alignItems: "center", gap: 7 }}>
+              {M.avatarUrl ? (
+                <img src={M.avatarUrl} alt="" draggable={false} style={{ width: 22, height: 22, borderRadius: 11, objectFit: "cover", flexShrink: 0, pointerEvents: "none" }} />
+              ) : (
+                <span style={{ width: 22, height: 22, borderRadius: 11, background: `linear-gradient(135deg,${M.accent2},${M.accent})`, color: M.onAccent, display: "grid", placeItems: "center", fontWeight: 800, fontSize: 10, flexShrink: 0 }}>{M.letter}</span>
+              )}
+              <span style={{ color: t.sub, fontSize: 12.5 }}>{M.name} กำลังพิมพ์...</span>
             </div>
-          ))}
-          {loading && <div style={{ alignSelf: "flex-start", color: t.sub, fontSize: 12.5, padding: "4px 14px" }}>{M.name} กำลังพิมพ์...</div>}
+          )}
           <div ref={endRef} />
         </div>
         <div style={{ padding: 12, background: t.page }}>
