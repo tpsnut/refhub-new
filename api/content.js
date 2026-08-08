@@ -487,7 +487,22 @@ export default async function handler(req, res) {
         if (!data.bidPrice || !data.askPrice) return res.status(500).json({ error: "ไม่พบข้อมูล bid/ask ของเหรียญนี้" });
         return res.status(200).json({ bidUsd: parseFloat(data.bidPrice), askUsd: parseFloat(data.askPrice) });
       }
-      return res.status(400).json({ error: "view ไม่ถูกต้อง (overview/crypto/currency/th/world/history/quotes/cryptobidask)" });
+      // 📈 bid/ask จริงของหุ้นโลก (สหรัฐฯ) ผ่าน Finnhub — ต้องตั้ง FINNHUB_API_KEY ไว้ก่อน
+      // ⚠️ free tier ของ Finnhub รองรับแค่หุ้นสหรัฐฯ เท่านั้น หุ้นไทย (.BK) ไม่มีทางได้ข้อมูลจากตรงนี้แม้จะมี key แล้วก็ตาม
+      if (view === "stockbidask") {
+        const symbol = req.query.symbol;
+        if (!symbol) return res.status(400).json({ error: "ระบุ symbol มาด้วย" });
+        const key = process.env.FINNHUB_API_KEY;
+        if (!key) return res.status(500).json({ error: "ยังไม่ได้ตั้งค่า FINNHUB_API_KEY บน Vercel" });
+        const r = await fetch(`https://finnhub.io/api/v1/stock/bidask?symbol=${encodeURIComponent(symbol)}&token=${key}`, { headers: BROWSER_HEADERS });
+        if (!r.ok) return res.status(500).json({ error: `Finnhub ดึง bid/ask ไม่สำเร็จ (HTTP ${r.status})` });
+        const data = await r.json();
+        const bid = data.b ?? data.bidPrice ?? data.bid;
+        const ask = data.a ?? data.askPrice ?? data.ask;
+        if (bid == null || ask == null) return res.status(500).json({ error: "ไม่พบข้อมูล bid/ask (Finnhub free tier รองรับแค่หุ้นสหรัฐฯ เท่านั้น)" });
+        return res.status(200).json({ bid, ask });
+      }
+      return res.status(400).json({ error: "view ไม่ถูกต้อง (overview/crypto/currency/th/world/history/quotes/cryptobidask/stockbidask)" });
     }
     if (type === "vocab") {
       return res.status(501).json({ error: "ยังไม่ได้ทำส่วนคำศัพท์" });

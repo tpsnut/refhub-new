@@ -11934,6 +11934,8 @@ function TradeDetailModal({ t, item, tabCtx, close, userId, portfolio, holdings,
   // 🔴 ราคาสด — ดึงซ้ำทุก ~12 วิ ตอนเปิดหน้านี้อยู่ ไม่ใช่ WebSocket จริงแต่ผลลัพธ์คือราคาขยับให้เห็นสดๆเหมือนกัน
   const [livePrice, setLivePrice] = useState(null);
   const [bidAsk, setBidAsk] = useState(null); // เฉพาะคริปโต — bid/ask จริงจาก Binance (คู่ USDT แปลงเป็นบาทด้วย usdThb)
+  const [stockBidAsk, setStockBidAsk] = useState(null); // เฉพาะหุ้นโลก — { bid, ask } เป็นดอลลาร์ตรงๆ (Finnhub free tier รองรับแค่หุ้นสหรัฐฯ)
+  const [stockBidAskErr, setStockBidAskErr] = useState("");
   useEffect(() => {
     if (item.closed || (!isStockTab && !isCrypto)) return;
     let active = true;
@@ -11950,6 +11952,15 @@ function TradeDetailModal({ t, item, tabCtx, close, userId, portfolio, holdings,
           const r2 = await fetch(`/api/content?type=stocks&view=cryptobidask&symbol=${encodeURIComponent(item.symbol)}`, { cache: "no-store" });
           const data2 = await r2.json();
           if (active && data2.bidUsd) setBidAsk(data2);
+        } catch (e) {}
+      }
+      if (tabCtx === "world") {
+        try {
+          const r3 = await fetch(`/api/content?type=stocks&view=stockbidask&symbol=${encodeURIComponent(item.key)}`, { cache: "no-store" });
+          const data3 = await r3.json();
+          if (!active) return;
+          if (data3.bid != null && data3.ask != null) { setStockBidAsk(data3); setStockBidAskErr(""); }
+          else setStockBidAskErr(data3.error || "ไม่มีข้อมูล bid/ask");
         } catch (e) {}
       }
     };
@@ -12031,8 +12042,23 @@ function TradeDetailModal({ t, item, tabCtx, close, userId, portfolio, holdings,
               {isCrypto && !bidThb && (
                 <div style={{ fontSize: 10.5, color: t.faint, marginBottom: 18 }}>กำลังโหลด bid/ask จาก Binance... (บางเหรียญอาจไม่มีคู่เทรด USDT ให้)</div>
               )}
-              {isStockTab && (
-                <div style={{ fontSize: 10.5, color: t.faint, marginBottom: 18 }}>* หุ้นไทย/หุ้นโลกแสดงราคาล่าสุด (ไม่ใช่ bid/ask แยก) เพราะข้อมูล bid/ask จริงของตลาดหุ้นต้องสมัครขอ API key เพิ่มเติม</div>
+              {tabCtx === "world" && stockBidAsk && (
+                <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+                  <div style={{ ...card(t), flex: 1, padding: 10, textAlign: "center" }}>
+                    <div style={{ fontSize: 10, color: t.faint, marginBottom: 2 }}>รับซื้อ (Bid)</div>
+                    <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 13.5, fontWeight: 700, color: "#D9534F" }}>${fmt(stockBidAsk.bid, 2)}</div>
+                  </div>
+                  <div style={{ ...card(t), flex: 1, padding: 10, textAlign: "center" }}>
+                    <div style={{ fontSize: 10, color: t.faint, marginBottom: 2 }}>ขายออก (Ask)</div>
+                    <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 13.5, fontWeight: 700, color: "#2E9E6B" }}>${fmt(stockBidAsk.ask, 2)}</div>
+                  </div>
+                </div>
+              )}
+              {tabCtx === "world" && !stockBidAsk && (
+                <div style={{ fontSize: 10.5, color: t.faint, marginBottom: 18 }}>{stockBidAskErr || "กำลังโหลด bid/ask จาก Finnhub..."}</div>
+              )}
+              {tabCtx === "th" && (
+                <div style={{ fontSize: 10.5, color: t.faint, marginBottom: 18 }}>* หุ้นไทยแสดงราคาล่าสุด (ไม่ใช่ bid/ask แยก) เพราะข้อมูล bid/ask จริงของตลาดหุ้นไทยทางการคิดค่าบริการหลักหมื่นบาท/เดือน ไม่มีทางเลี่ยงแบบฟรีได้เลย</div>
               )}
             </>
           )}
