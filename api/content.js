@@ -229,16 +229,31 @@ async function withCache(key, fetcher, force) {
 }
 
 async function fetchGoldPrice() {
-  // สมาคมค้าทองคำ (goldtraders.or.th) ผ่าน API ชุมชนที่ยัง maintain อยู่ — ทองคำแท่ง 96.5% ราคาขายออก
-  const r = await fetch("https://api.chnwt.dev/thai-gold-api/latest", { headers: BROWSER_HEADERS });
-  const raw = await r.text();
-  if (!r.ok) throw new Error(`ดึงราคาทองไม่สำเร็จ (HTTP ${r.status})`);
-  let data;
-  try { data = JSON.parse(raw); } catch { throw new Error(`ราคาทอง: อ่านผลลัพธ์ไม่ใช่ JSON (${raw.slice(0, 80)})`); }
-  if (data.status !== "success") throw new Error(`ราคาทองไม่พร้อมใช้งาน (status: ${data.status})`);
-  const price = numFromComma(data.response?.price?.gold_bar?.sell);
-  if (!isFinite(price)) throw new Error(`อ่านราคาทองไม่ได้ (โครงสร้างข้อมูลอาจเปลี่ยน: ${JSON.stringify(data.response?.price || {}).slice(0, 100)})`);
-  return { key: "gold", name: "ทองคำแท่ง 96.5% (ขายออก)", price, unit: "บาท/บาททองคำ", change: null, updatedText: `${data.response.update_date} ${data.response.update_time}` };
+  try {
+    // สมาคมค้าทองคำ (goldtraders.or.th) ผ่าน API ชุมชนที่ยัง maintain อยู่ — ทองคำแท่ง 96.5% ราคาขายออก (แหล่งหลัก แม่นสุด)
+    const r = await fetch("https://api.chnwt.dev/thai-gold-api/latest", { headers: BROWSER_HEADERS });
+    const raw = await r.text();
+    if (!r.ok) throw new Error(`ดึงราคาทองไม่สำเร็จ (HTTP ${r.status})`);
+    let data;
+    try { data = JSON.parse(raw); } catch { throw new Error(`ราคาทอง: อ่านผลลัพธ์ไม่ใช่ JSON (${raw.slice(0, 80)})`); }
+    if (data.status !== "success") throw new Error(`ราคาทองไม่พร้อมใช้งาน (status: ${data.status})`);
+    const price = numFromComma(data.response?.price?.gold_bar?.sell);
+    if (!isFinite(price)) throw new Error(`อ่านราคาทองไม่ได้ (แหล่งข้อมูลต้นทางส่งค่าว่างมา — ปัญหาฝั่งเขา ไม่ใช่โค้ดเรา)`);
+    return { key: "gold", name: "ทองคำแท่ง 96.5% (ขายออก)", price, unit: "บาท/บาททองคำ", change: null, updatedText: `${data.response.update_date} ${data.response.update_time}` };
+  } catch (mainErr) {
+    // 🔁 แหล่งหลักพัง — สำรองด้วยราคาทองคำโลก (COMEX Gold Futures) แปลงเป็นบาท/บาททองคำโดยประมาณ (1 บาททองคำ = 15.244 กรัม, 1 ออนซ์ = 31.1035 กรัม)
+    // ราคานี้ไม่รวมค่ากำเหน็จ/ส่วนต่างร้านทอง จะต่างจากราคาสมาคมจริงเล็กน้อย แจ้งไว้ให้ผู้ใช้เห็นชัดเจน
+    try {
+      const goldUsd = await fetchYahooChartOne("GC=F");
+      const fxRows = await fetchTopCurrencies();
+      const usdThb = fxRows.find((c) => c.symbol === "USD")?.price;
+      if (!usdThb) throw new Error("แปลงสกุลเงินไม่ได้");
+      const price = (goldUsd.price / 31.1035) * 15.244 * usdThb;
+      return { key: "gold", name: "ทองคำ (ประมาณการจากตลาดโลก)", price, unit: "บาท/บาททองคำ · ไม่รวมค่ากำเหน็จ", change: goldUsd.change, updatedText: "แหล่งหลัก (สมาคมค้าทองคำ) มีปัญหาชั่วคราว ใช้ราคาแปลงจากตลาดโลกแทน" };
+    } catch (fallbackErr) {
+      throw new Error(`${mainErr.message} | สำรองก็พัง: ${fallbackErr.message}`);
+    }
+  }
 }
 
 async function fetchSetIndex() {
@@ -358,6 +373,25 @@ async function fetchYahooQuotesBatch(list) {
   return items;
 }
 
+// 📈 กราฟราคาย้อนหลัง — ใช้ v8/chart ตัวเดียวกับราคาปัจจุบัน แค่ขยาย range/interval
+// interval ยิ่งช่วงยาว ยิ่งต้องห่างขึ้น กันข้อมูลเยอะเกินไป (Yahoo เองก็บังคับเพดานนี้อยู่แล้วเหมือนกัน)
+const HISTORY_RANGES = {
+  "1mo": { interval: "1d" }, "6mo": { interval: "1d" }, "1y": { interval: "1wk" }, "5y": { interval: "1wk" }, "max": { interval: "1mo" },
+};
+async function fetchYahooHistory(symbol, range) {
+  const interval = HISTORY_RANGES[range]?.interval || "1wk";
+  const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=${interval}&range=${range}`, { headers: BROWSER_HEADERS });
+  if (!r.ok) throw new Error(`ดึงราคาย้อนหลังไม่สำเร็จ (HTTP ${r.status})`);
+  const data = await r.json();
+  const result = data?.chart?.result?.[0];
+  if (!result) throw new Error("ไม่พบข้อมูลราคาย้อนหลังของสัญลักษณ์นี้");
+  const timestamps = result.timestamp || [];
+  const closes = result.indicators?.quote?.[0]?.close || [];
+  const points = timestamps.map((ts, i) => ({ t: ts * 1000, p: closes[i] })).filter((pt) => pt.p != null && isFinite(pt.p));
+  if (points.length === 0) throw new Error("ไม่มีข้อมูลราคาย้อนหลังในช่วงที่เลือก");
+  return points;
+}
+
 async function fetchStockList(market) {
   const list = market === "th" ? THAI_STOCKS : WORLD_STOCKS;
   const indexFetcher = market === "th" ? fetchSetIndex : fetchSP500Index;
@@ -421,7 +455,14 @@ export default async function handler(req, res) {
         const { data, fetchedAt, fromCache } = await withCache(`trade_${view}`, () => fetchStockList(view), doForce);
         return res.status(200).json({ index: data.index, items: data.items, fetchedAt, fromCache });
       }
-      return res.status(400).json({ error: "view ไม่ถูกต้อง (overview/crypto/currency/th/world)" });
+      if (view === "history") {
+        const symbol = req.query.symbol;
+        if (!symbol) return res.status(400).json({ error: "ระบุ symbol มาด้วย" });
+        const range = Object.keys(HISTORY_RANGES).includes(req.query.range) ? req.query.range : "1y";
+        const { data, fetchedAt, fromCache } = await withCache(`trade_hist_${symbol}_${range}`, () => fetchYahooHistory(symbol, range), doForce);
+        return res.status(200).json({ points: data, fetchedAt, fromCache });
+      }
+      return res.status(400).json({ error: "view ไม่ถูกต้อง (overview/crypto/currency/th/world/history)" });
     }
     if (type === "vocab") {
       return res.status(501).json({ error: "ยังไม่ได้ทำส่วนคำศัพท์" });

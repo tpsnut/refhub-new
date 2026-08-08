@@ -10,7 +10,7 @@ import {
   Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi, MessageCircle, MoreVertical, KeyRound, MapPin, Copy, LockKeyhole, LogOut, LayoutGrid, Maximize2, Volume1, Settings, Bookmark, Share2, Repeat2, Heart, User, Pin,
   Heading1, Heading3, ListOrdered, ListTree, Quote, Code2, Minus, Table2, Video, Smile, RotateCcw, GripVertical, ChevronLeft, ChevronUp, ChevronDown, Repeat, Repeat1, Shuffle, Timer, Lock, HelpCircle, Info, CreditCard, Crown, Unlock, Activity, CheckCircle2, XCircle
 } from "lucide-react";
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, ResponsiveContainer, Tooltip } from "recharts";
+import { PieChart, Pie, Cell, BarChart, Bar, LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
 // 🔀 dnd-kit — ใช้ทำ "ลากวางจัดเรียงจริง" (drag & drop) ทั่วแอป แทนปุ่มขึ้น/ลง — รองรับ touch บนมือถือมาให้เลย
 import { DndContext, PointerSensor, useSensor, useSensors, closestCenter } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
@@ -11538,13 +11538,15 @@ function TradePage({ t, lang }) {
     : items;
 
   // 👆 ปัดซ้าย/ขวาเปลี่ยนแท็บได้เหมือนเลื่อนดูหน้าจอ ไม่ต้องกดแท็บด้านบนอย่างเดียว
+  // touchAction: "pan-y" ที่ใส่ไว้ตรง wrapper (ด้านล่าง) สำคัญมาก — บอกเบราว์เซอร์ว่าเลื่อนจอขึ้นลงให้จัดการเองตามปกติ
+  // แต่ปล่อยให้ JS ตรงนี้จัดการท่าทางแนวนอนเอง ไม่งั้นบางเบราว์เซอร์จะแย่งจัดการท่าทางทั้งหมดจนตรวจจับปัดซ้าย-ขวาไม่ได้เลย
   const onTouchStart = (e) => { touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }; };
   const onTouchEnd = (e) => {
     if (!touchStartRef.current) return;
     const dx = e.changedTouches[0].clientX - touchStartRef.current.x;
     const dy = e.changedTouches[0].clientY - touchStartRef.current.y;
     touchStartRef.current = null;
-    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy)) return; // ปัดแนวนอนชัดเจนพอเท่านั้น ไม่ชนกับการเลื่อนจอขึ้นลงปกติ
+    if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy) * 1.2) return; // ปัดแนวนอนชัดเจนพอเท่านั้น ไม่ชนกับการเลื่อนจอขึ้นลงปกติ
     const i = TRADE_TABS.findIndex((x) => x.v === tab);
     const next = dx < 0 ? i + 1 : i - 1; // ปัดซ้าย -> แท็บถัดไป, ปัดขวา -> แท็บก่อนหน้า
     if (next >= 0 && next < TRADE_TABS.length) setTab(TRADE_TABS[next].v);
@@ -11565,7 +11567,7 @@ function TradePage({ t, lang }) {
       ))}
     </div>
 
-    <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+    <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{ touchAction: "pan-y", minHeight: "60vh" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
         <div style={{ fontSize: 10.5, color: t.faint }}>{cur?.fetchedAt ? `อัปเดตล่าสุด ${new Date(cur.fetchedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}` : ""}</div>
         <button onClick={() => load(tab, true)} disabled={loading} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: loading ? "default" : "pointer", color: t.accent, fontSize: 11.5, fontWeight: 700 }}>
@@ -11626,7 +11628,8 @@ function TradePage({ t, lang }) {
   </>);
 }
 
-// 🔎 รายละเอียดแบบเต็มของแถวที่กด — ใช้ข้อมูลที่มีอยู่แล้วในลิสต์ ไม่ต้องยิง API เพิ่ม
+// 🔎 รายละเอียดแบบเต็มของแถวที่กด — ราคา/เปลี่ยนแปลงใช้ข้อมูลที่มีอยู่แล้ว ไม่ยิงซ้ำ ส่วนกราฟย้อนหลัง (เฉพาะหุ้น) ค่อยดึงตอนเปิดจริง
+const HISTORY_RANGE_OPTIONS = [["1mo", "1 เดือน"], ["6mo", "6 เดือน"], ["1y", "1 ปี"], ["5y", "5 ปี"], ["max", "สูงสุด"]];
 function TradeDetailModal({ t, item, tabCtx, close }) {
   const isStockTab = tabCtx === "th" || tabCtx === "world";
   const priceSymbol = tabCtx === "world" ? "$" : "฿";
@@ -11635,10 +11638,33 @@ function TradeDetailModal({ t, item, tabCtx, close }) {
   const title = isStockTab || tabCtx === "crypto" ? item.symbol : item.name;
   const sub = isStockTab || tabCtx === "crypto" ? item.name : item.unit;
 
+  const [range, setRange] = useState("1y");
+  const [histPoints, setHistPoints] = useState(null);
+  const [histLoading, setHistLoading] = useState(false);
+  const [histError, setHistError] = useState("");
+
+  const loadHistory = async (r) => {
+    setHistLoading(true); setHistError("");
+    try {
+      const res = await fetch(`/api/content?type=stocks&view=history&symbol=${encodeURIComponent(item.key)}&range=${r}`, { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "โหลดกราฟไม่สำเร็จ");
+      setHistPoints(data.points || []);
+    } catch (e) { setHistError(e.message); }
+    setHistLoading(false);
+  };
+  useEffect(() => { if (isStockTab && !item.closed) loadHistory(range); }, [range]);
+
+  const chartData = (histPoints || []).map((p) => ({ t: p.t, price: p.p, label: new Date(p.t).toLocaleDateString("th-TH", { day: "2-digit", month: "short", year: range === "5y" || range === "max" ? "2-digit" : undefined }) }));
+  const firstPrice = chartData[0]?.price;
+  const lastPrice = chartData[chartData.length - 1]?.price;
+  const rangeChangePct = firstPrice && lastPrice ? ((lastPrice - firstPrice) / firstPrice) * 100 : null;
+  const lineColor = rangeChangePct == null || rangeChangePct >= 0 ? "#2E9E6B" : "#D9534F";
+
   return (
     <ModalPortal>
       <div style={overlay} onClick={close}>
-        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 24, paddingBottom: 32 }}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 24, paddingBottom: 32, maxHeight: "88vh", overflowY: "auto" }}>
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 4 }}>
             <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
           </div>
@@ -11661,6 +11687,33 @@ function TradeDetailModal({ t, item, tabCtx, close }) {
                 </div>
               )}
             </>
+          )}
+
+          {isStockTab && !item.closed && (
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ display: "flex", gap: 6, marginBottom: 10, overflowX: "auto" }}>
+                {HISTORY_RANGE_OPTIONS.map(([v, lb]) => (
+                  <button key={v} onClick={() => setRange(v)} style={{ flexShrink: 0, padding: "6px 12px", borderRadius: 9, cursor: "pointer", border: `1.5px solid ${range === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 11.5, background: range === v ? t.accent : "transparent", color: range === v ? t.onAccent : t.sub }}>{lb}</button>
+                ))}
+              </div>
+              {histLoading && <div style={{ height: 160, display: "grid", placeItems: "center" }}><span style={{ fontSize: 12, color: t.faint }}>กำลังโหลดกราฟ...</span></div>}
+              {histError && !histLoading && <div style={{ fontSize: 11.5, color: "#D9534F", padding: "10px 0" }}>{histError}</div>}
+              {!histLoading && !histError && chartData.length > 1 && (
+                <>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: lineColor, marginBottom: 6 }}>
+                    {rangeChangePct >= 0 ? "▲ +" : "▼ "}{rangeChangePct.toFixed(2)}% <span style={{ color: t.faint, fontWeight: 600 }}>ในช่วงที่เลือก</span>
+                  </div>
+                  <ResponsiveContainer width="100%" height={160}>
+                    <LineChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
+                      <XAxis dataKey="label" tick={{ fontSize: 9, fill: t.faint }} interval="preserveStartEnd" minTickGap={30} />
+                      <YAxis domain={["auto", "auto"]} tick={{ fontSize: 9, fill: t.faint }} width={36} />
+                      <Tooltip formatter={(v) => [`${priceSymbol}${fmt(v, priceDecimals)}`, "ราคา"]} contentStyle={{ fontSize: 11, background: t.surface, border: `1px solid ${t.border}`, borderRadius: 8 }} />
+                      <Line type="monotone" dataKey="price" stroke={lineColor} strokeWidth={2} dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </>
+              )}
+            </div>
           )}
 
           {isStockTab && item.currency && (
