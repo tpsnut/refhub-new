@@ -11523,6 +11523,7 @@ function TradePage({ t, lang, userId }) {
   const [depositOpen, setDepositOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [leaderboardOpen, setLeaderboardOpen] = useState(false);
+  const [futuresOpen, setFuturesOpen] = useState(false); // ⚡ ฟิวเจอร์ส/เลเวอเรจ
   const [portfolioOpen, setPortfolioOpen] = useState(false); // 🎮 เปิดจากปุ่มลอยมุมล่างขวา ไม่ใช่แท็บบนอีกแล้ว
   const [missionStats, setMissionStats] = useState(null); // { buyCount, sellCount, depositCount } — ใช้เช็คภารกิจมือใหม่
   const [totalDeposited, setTotalDeposited] = useState(0); // ยอดฝากรวมทุกครั้ง — ใช้คำนวณ % กำไรที่แท้จริงตั้งแต่เริ่มเล่น
@@ -11779,9 +11780,10 @@ function TradePage({ t, lang, userId }) {
     {depositOpen && <PaperDepositModal t={t} onConfirm={doDeposit} close={() => setDepositOpen(false)} />}
     {historyOpen && <PaperHistoryModal t={t} userId={userId} close={() => setHistoryOpen(false)} />}
     {leaderboardOpen && <PaperLeaderboardModal t={t} userId={userId} close={() => setLeaderboardOpen(false)} />}
+    {futuresOpen && <PaperFuturesModal t={t} userId={userId} portfolio={portfolio} onCashChange={loadPortfolio} close={() => setFuturesOpen(false)} />}
     {portfolioOpen && (
       <PaperPortfolioModal t={t} loading={portfolioLoading} portfolio={portfolio} holdings={holdings} liveByKey={liveByKey} usdThb={usdThb} missionStats={missionStats} totalDeposited={totalDeposited} setBenchmarkPct={setBenchmarkPct}
-        close={() => setPortfolioOpen(false)} onDeposit={() => setDepositOpen(true)} onHistory={() => setHistoryOpen(true)} onLeaderboard={() => setLeaderboardOpen(true)}
+        close={() => setPortfolioOpen(false)} onDeposit={() => setDepositOpen(true)} onHistory={() => setHistoryOpen(true)} onLeaderboard={() => setLeaderboardOpen(true)} onFutures={() => setFuturesOpen(true)}
         onOpenHolding={(h) => { setPortfolioOpen(false); setDetailItem({ item: { key: h.symbol, symbol: h.symbol.replace(".BK", ""), name: h.name, price: h.livePriceThb != null ? (h.market === "world" ? h.livePriceThb / (usdThb || 1) : h.livePriceThb) : Number(h.avg_cost_thb), change: null }, tabCtx: h.market }); }} />
     )}
   </>);
@@ -11805,7 +11807,7 @@ function PaperPortfolioModal({ t, close, ...viewProps }) {
   );
 }
 
-function PaperPortfolioView({ t, portfolio, holdings, liveByKey, usdThb, loading, missionStats, totalDeposited, setBenchmarkPct, onDeposit, onHistory, onLeaderboard, onOpenHolding }) {
+function PaperPortfolioView({ t, portfolio, holdings, liveByKey, usdThb, loading, missionStats, totalDeposited, setBenchmarkPct, onDeposit, onHistory, onLeaderboard, onFutures, onOpenHolding }) {
   const cash = portfolio?.cash_balance || 0;
   const holdingsWithValue = holdings.map((h) => {
     const live = liveByKey[`${h.market}:${h.symbol}`];
@@ -11878,7 +11880,8 @@ function PaperPortfolioView({ t, portfolio, holdings, liveByKey, usdThb, loading
         <button onClick={onDeposit} style={{ flex: 1, padding: "9px 0", borderRadius: 11, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 12, color: "#141414", background: "linear-gradient(160deg,#F5A050,#E27418)", boxShadow: "0 4px 12px -4px rgba(242,135,46,.5), inset 0 1px 0 rgba(255,255,255,.3)" }}>+ ฝากเพิ่ม</button>
         <button onClick={onHistory} style={{ flex: 1, padding: "9px 0", borderRadius: 11, cursor: "pointer", fontWeight: 700, fontSize: 12, color: t.sub, background: t.inputBg, border: `1px solid ${t.border}` }}>ประวัติ</button>
       </div>
-      <button onClick={onLeaderboard} style={{ width: "100%", padding: "9px 0", borderRadius: 11, cursor: "pointer", fontWeight: 700, fontSize: 12, color: t.sub, background: t.inputBg, border: `1px solid ${t.border}`, marginBottom: 18 }}>🏆 กระดานผู้นำในครอบครัว</button>
+      <button onClick={onLeaderboard} style={{ width: "100%", padding: "9px 0", borderRadius: 11, cursor: "pointer", fontWeight: 700, fontSize: 12, color: t.sub, background: t.inputBg, border: `1px solid ${t.border}`, marginBottom: 8 }}>🏆 กระดานผู้นำในครอบครัว</button>
+      <button onClick={onFutures} style={{ width: "100%", padding: "9px 0", borderRadius: 11, cursor: "pointer", fontWeight: 700, fontSize: 12, color: "#fff", background: "linear-gradient(160deg,#7C6CE8,#4E3FB8)", boxShadow: "0 4px 12px -4px rgba(124,108,232,.5), inset 0 1px 0 rgba(255,255,255,.2)", marginBottom: 18 }}>⚡ ฟิวเจอร์ส (เลเวอเรจ) — เสี่ยงสูง</button>
 
       {missions.length > 0 && (
         <div style={{ marginBottom: 18 }}>
@@ -12103,6 +12106,261 @@ function PaperLeaderboardModal({ t, userId, close }) {
               )}
             </div>
           ))}
+        </div>
+      </div>
+    </ModalPortal>
+  );
+}
+
+// ⚡ ฟิวเจอร์ส/เลเวอเรจ — เฉพาะคริปโต เงินจำลองล้วนๆ เสี่ยงสูงกว่า Spot ปกติมาก เพราะกำไร/ขาดทุนคูณด้วย leverage
+function PaperFuturesModal({ t, userId, portfolio, onCashChange, close }) {
+  const [positions, setPositions] = useState(null);
+  const [livePrices, setLivePrices] = useState({});
+  const [cryptoList, setCryptoList] = useState([]);
+  const [openFormOpen, setOpenFormOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [justLiquidated, setJustLiquidated] = useState([]); // ชื่อเหรียญที่เพิ่งโดนล้างพอร์ตตอนโหลดรอบนี้ ไว้เตือน
+  const monoFont = { fontFamily: "'IBM Plex Mono',monospace", fontVariantNumeric: "tabular-nums" };
+
+  const load = async () => {
+    setLoading(true);
+    const { data: allPos } = await supabase.from("paper_futures").select("*").eq("user_id", userId).order("opened_at", { ascending: false });
+    const openPos = (allPos || []).filter((p) => p.status === "open");
+    let liveMap = {};
+    if (openPos.length > 0) {
+      const ids = [...new Set(openPos.map((p) => p.symbol))];
+      try {
+        const r = await fetch(`/api/content?type=stocks&view=quotes&market=crypto&symbols=${ids.join(",")}`, { cache: "no-store" });
+        const data = await r.json();
+        (data.items || []).forEach((it) => { liveMap[it.key] = it.price; });
+      } catch (e) {}
+      // 🔴 เช็ค liquidation อัตโนมัติ (เช็คตอนโหลดหน้านี้ ไม่ใช่ real-time เฝ้าตลอดเวลา — ราคาระหว่างที่ไม่ได้เปิดแอปอาจแตะเส้นแล้วไม่ทันเห็นจนกว่าจะเข้ามาเช็คอีกที)
+      const liquidatedNow = [];
+      for (const p of openPos) {
+        const price = liveMap[p.symbol];
+        if (price == null) continue;
+        const hit = p.side === "long" ? price <= p.liquidation_price_thb : price >= p.liquidation_price_thb;
+        if (hit) {
+          await supabase.from("paper_futures").update({ status: "liquidated", close_price_thb: p.liquidation_price_thb, pnl_thb: -p.margin_thb, closed_at: new Date().toISOString() }).eq("id", p.id);
+          liquidatedNow.push(p.coin_symbol);
+        }
+      }
+      if (liquidatedNow.length > 0) setJustLiquidated(liquidatedNow);
+    }
+    setLivePrices(liveMap);
+    const { data: finalPos } = await supabase.from("paper_futures").select("*").eq("user_id", userId).order("opened_at", { ascending: false });
+    setPositions(finalPos || []);
+    setLoading(false);
+  };
+
+  const loadCryptoList = async () => {
+    try {
+      const r = await fetch("/api/content?type=stocks&view=crypto", { cache: "no-store" });
+      const data = await r.json();
+      setCryptoList(data.items || []);
+    } catch (e) {}
+  };
+
+  useEffect(() => { load(); loadCryptoList(); }, []);
+
+  const doOpen = async (coin, side, leverage, marginThb) => {
+    const cash = portfolio?.cash_balance || 0;
+    if (!(marginThb >= 100)) throw new Error("วางเงินค้ำประกันอย่างน้อย 100 บาท");
+    if (marginThb > cash) throw new Error(`เงินสดไม่พอ (มี ฿${cash.toLocaleString(undefined, { maximumFractionDigits: 0 })})`);
+    const entryPrice = coin.price;
+    const quantity = (marginThb * leverage) / entryPrice;
+    const liqPrice = side === "long" ? entryPrice * (1 - 1 / leverage) : entryPrice * (1 + 1 / leverage);
+    const { error } = await supabase.from("paper_futures").insert({
+      user_id: userId, symbol: coin.key, coin_symbol: coin.symbol, name: coin.name,
+      side, leverage, margin_thb: marginThb, entry_price_thb: entryPrice, quantity, liquidation_price_thb: liqPrice,
+    });
+    if (error) throw new Error(error.message);
+    await supabase.from("paper_portfolio").upsert({ user_id: userId, cash_balance: cash - marginThb, updated_at: new Date().toISOString() });
+    await onCashChange();
+    await load();
+  };
+
+  const doClose = async (position) => {
+    const currentPrice = livePrices[position.symbol];
+    if (currentPrice == null) throw new Error("ยังไม่มีราคาสด ลองรีเฟรชแล้วลองใหม่");
+    const pnl = position.side === "long"
+      ? Number(position.quantity) * (currentPrice - Number(position.entry_price_thb))
+      : Number(position.quantity) * (Number(position.entry_price_thb) - currentPrice);
+    const returnAmount = Math.max(0, Number(position.margin_thb) + pnl);
+    await supabase.from("paper_futures").update({ status: "closed", close_price_thb: currentPrice, pnl_thb: pnl, closed_at: new Date().toISOString() }).eq("id", position.id);
+    const cash = portfolio?.cash_balance || 0;
+    await supabase.from("paper_portfolio").upsert({ user_id: userId, cash_balance: cash + returnAmount, updated_at: new Date().toISOString() });
+    await onCashChange();
+    await load();
+  };
+
+  const openPositions = (positions || []).filter((p) => p.status === "open");
+  const closedPositions = (positions || []).filter((p) => p.status !== "open");
+
+  return (
+    <ModalPortal>
+      <div style={{ position: "fixed", inset: 0, zIndex: 100, background: t.page, overflowY: "auto" }}>
+        <div style={{ padding: "16px 16px 40px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+            <button onClick={close} style={{ width: 34, height: 34, borderRadius: 17, background: t.surface, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}><ArrowLeft size={18} color={t.text} /></button>
+            <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>⚡ ฟิวเจอร์ส (เลเวอเรจ)</div>
+          </div>
+
+          <div style={{ textAlign: "center", marginBottom: 14 }}>
+            <span style={{ fontSize: 10.5, fontWeight: 700, color: "#7C6CE8", background: "#7C6CE818", padding: "5px 12px", borderRadius: 20 }}>🎮 เงินจำลอง · เสี่ยงสูง เหมือนเทรดจริง</span>
+          </div>
+
+          {justLiquidated.length > 0 && (
+            <div style={{ background: "#D9534F18", border: "1px solid #D9534F55", borderRadius: 12, padding: 12, marginBottom: 14, fontSize: 12, color: "#D9534F", fontWeight: 600 }}>
+              💥 สถานะ {justLiquidated.join(", ")} โดนล้างพอร์ต (liquidated) เงินค้ำประกันหายหมดแล้ว
+            </div>
+          )}
+
+          <div style={{ fontSize: 10.5, fontWeight: 700, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+            <span>เงินสดคงเหลือ</span><span style={{ ...monoFont, color: t.sub }}>฿{(portfolio?.cash_balance || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+          </div>
+
+          <button onClick={() => setOpenFormOpen(true)} style={{ width: "100%", padding: "11px 0", borderRadius: 12, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13, color: "#fff", background: "linear-gradient(160deg,#7C6CE8,#4E3FB8)", boxShadow: "0 4px 14px -4px rgba(124,108,232,.5), inset 0 1px 0 rgba(255,255,255,.25)", marginBottom: 18 }}>+ เปิดสถานะใหม่</button>
+
+          {loading && <Empty t={t} text="กำลังโหลด..." />}
+
+          {!loading && openPositions.length > 0 && (
+            <>
+              <div style={{ fontSize: 10.5, fontWeight: 700, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>สถานะที่เปิดอยู่ ({openPositions.length})</div>
+              {openPositions.map((p) => {
+                const price = livePrices[p.symbol];
+                const pnl = price != null ? (p.side === "long" ? Number(p.quantity) * (price - Number(p.entry_price_thb)) : Number(p.quantity) * (Number(p.entry_price_thb) - price)) : null;
+                const pnlPct = pnl != null ? (pnl / Number(p.margin_thb)) * 100 : null;
+                const up = (pnl ?? 0) >= 0;
+                const distToLiqPct = price != null ? Math.abs((price - Number(p.liquidation_price_thb)) / price) * 100 : null;
+                return (
+                  <div key={p.id} style={{ borderRadius: 14, overflow: "hidden", background: t.surface, border: `1px solid ${t.border}`, marginBottom: 10 }}>
+                    <div style={{ padding: 12 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{p.coin_symbol}</span>
+                          <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 6, color: "#fff", background: p.side === "long" ? "#2E9E6B" : "#D9534F" }}>{p.side === "long" ? "LONG" : "SHORT"} {p.leverage}x</span>
+                        </div>
+                        {pnl != null && <div style={{ ...monoFont, fontSize: 13.5, fontWeight: 700, color: up ? "#2E9E6B" : "#D9534F" }}>{up ? "+" : ""}{pnlPct.toFixed(1)}%</div>}
+                      </div>
+                      <div style={{ fontSize: 10.5, color: t.faint, marginBottom: 2 }}>เข้าที่ ฿{fmtMoney(p.entry_price_thb)} · ตอนนี้ {price != null ? `฿${fmtMoney(price)}` : "..."}</div>
+                      <div style={{ fontSize: 10.5, color: t.faint, marginBottom: 8 }}>ค้ำประกัน ฿{fmtMoney(p.margin_thb)} · เส้นล้างพอร์ต ฿{fmtMoney(p.liquidation_price_thb)}{distToLiqPct != null && ` (ห่าง ${distToLiqPct.toFixed(1)}%)`}</div>
+                      <PaperFuturesCloseButton t={t} position={p} onClose={doClose} />
+                    </div>
+                  </div>
+                );
+              })}
+            </>
+          )}
+          {!loading && openPositions.length === 0 && <Empty t={t} text="ยังไม่มีสถานะที่เปิดอยู่" />}
+
+          {!loading && closedPositions.length > 0 && (
+            <>
+              <div style={{ fontSize: 10.5, fontWeight: 700, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, margin: "18px 0 8px" }}>ประวัติที่ปิดแล้ว</div>
+              {closedPositions.map((p) => (
+                <div key={p.id} style={{ ...card(t), padding: 12, display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                  <div style={{ width: 8, height: 8, borderRadius: 4, background: p.status === "liquidated" ? "#D9534F" : (Number(p.pnl_thb) >= 0 ? "#2E9E6B" : "#D9534F"), flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 700, color: t.text }}>{p.coin_symbol} {p.side === "long" ? "LONG" : "SHORT"} {p.leverage}x{p.status === "liquidated" && <span style={{ color: "#D9534F" }}> · ถูกล้างพอร์ต</span>}</div>
+                    <div style={{ fontSize: 10.5, color: t.faint }}>{new Date(p.closed_at).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}</div>
+                  </div>
+                  <div style={{ ...monoFont, fontSize: 13, fontWeight: 700, color: Number(p.pnl_thb) >= 0 ? "#2E9E6B" : "#D9534F", flexShrink: 0 }}>{Number(p.pnl_thb) >= 0 ? "+" : ""}฿{fmtMoney(p.pnl_thb)}</div>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      </div>
+      {openFormOpen && <PaperFuturesOpenModal t={t} cryptoList={cryptoList} cash={portfolio?.cash_balance || 0} onOpen={doOpen} close={() => setOpenFormOpen(false)} />}
+    </ModalPortal>
+  );
+}
+
+function fmtMoney(n) { return Number(n).toLocaleString("th-TH", { maximumFractionDigits: 2 }); }
+
+function PaperFuturesCloseButton({ t, position, onClose }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const submit = async () => {
+    setBusy(true); setErr("");
+    try { await onClose(position); } catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+  return (
+    <>
+      <button onClick={submit} disabled={busy} style={{ width: "100%", padding: "8px 0", borderRadius: 10, border: `1px solid ${t.border}`, background: t.inputBg, color: t.text, fontWeight: 700, fontSize: 12, cursor: busy ? "default" : "pointer" }}>{busy ? "กำลังปิด..." : "ปิดสถานะ"}</button>
+      {err && <div style={{ fontSize: 10.5, color: "#D9534F", marginTop: 6 }}>{err}</div>}
+    </>
+  );
+}
+
+// ⚡ ฟอร์มเปิดสถานะฟิวเจอร์สใหม่ — เลือกเหรียญ/ทิศทาง/เลเวอเรจ/เงินค้ำ โชว์เส้นล้างพอร์ตให้เห็นก่อนยืนยันเสมอ
+function PaperFuturesOpenModal({ t, cryptoList, cash, onOpen, close }) {
+  const [coinKey, setCoinKey] = useState(cryptoList[0]?.key || "");
+  const [side, setSide] = useState("long");
+  const [leverage, setLeverage] = useState(5);
+  const [margin, setMargin] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const monoFont = { fontFamily: "'IBM Plex Mono',monospace", fontVariantNumeric: "tabular-nums" };
+  const coin = cryptoList.find((c) => c.key === coinKey);
+  const marginN = Number(margin) || 0;
+  const liqPrice = coin ? (side === "long" ? coin.price * (1 - 1 / leverage) : coin.price * (1 + 1 / leverage)) : null;
+  const liqDistPct = coin ? Math.abs((coin.price - liqPrice) / coin.price) * 100 : null;
+  const notional = marginN * leverage;
+
+  const submit = async () => {
+    setErr("");
+    if (!coin) { setErr("เลือกเหรียญก่อน"); return; }
+    setBusy(true);
+    try { await onOpen(coin, side, leverage, marginN); close(); }
+    catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+
+  return (
+    <ModalPortal>
+      <div style={overlayHi} onClick={close}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 22, paddingBottom: 32, maxHeight: "88vh", overflowY: "auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>เปิดสถานะใหม่</div>
+            <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+          </div>
+
+          <div style={{ fontSize: 11, color: t.sub, marginBottom: 6 }}>เลือกเหรียญ</div>
+          <div style={{ display: "flex", gap: 6, marginBottom: 16, overflowX: "auto" }}>
+            {cryptoList.map((c) => (
+              <button key={c.key} onClick={() => setCoinKey(c.key)} style={{ flexShrink: 0, padding: "7px 12px", borderRadius: 10, cursor: "pointer", border: `1.5px solid ${coinKey === c.key ? "#7C6CE8" : t.border}`, background: coinKey === c.key ? "#7C6CE8" : "transparent", color: coinKey === c.key ? "#fff" : t.sub, fontWeight: 700, fontSize: 12 }}>{c.symbol}</button>
+            ))}
+          </div>
+
+          <div style={{ fontSize: 11, color: t.sub, marginBottom: 6 }}>ทิศทาง</div>
+          <div style={{ display: "flex", background: t.inputBg, borderRadius: 11, padding: 3, marginBottom: 16, border: `1px solid ${t.border}` }}>
+            <button onClick={() => setSide("long")} style={{ flex: 1, padding: "9px 0", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 700, background: side === "long" ? "linear-gradient(160deg,#3EBE85,#1F8A5C)" : "transparent", color: side === "long" ? "#fff" : t.sub }}>📈 Long (คิดว่าขึ้น)</button>
+            <button onClick={() => setSide("short")} style={{ flex: 1, padding: "9px 0", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 700, background: side === "short" ? "linear-gradient(160deg,#E86C64,#C2453D)" : "transparent", color: side === "short" ? "#fff" : t.sub }}>📉 Short (คิดว่าลง)</button>
+          </div>
+
+          <div style={{ fontSize: 11, color: t.sub, marginBottom: 6, display: "flex", justifyContent: "space-between" }}><span>เลเวอเรจ</span><span style={{ ...monoFont, color: "#7C6CE8", fontWeight: 700 }}>{leverage}x</span></div>
+          <input type="range" min={2} max={20} step={1} value={leverage} onChange={(e) => setLeverage(Number(e.target.value))} style={{ width: "100%", marginBottom: 16, accentColor: "#7C6CE8" }} />
+
+          <div style={{ fontSize: 11, color: t.sub, marginBottom: 6 }}>เงินค้ำประกัน (บาท)</div>
+          <input value={margin} onChange={(e) => setMargin(e.target.value.replace(/[^0-9]/g, ""))} inputMode="numeric" placeholder="0" style={{ ...input(t), ...monoFont, fontSize: 18, fontWeight: 700, textAlign: "center", marginBottom: 16 }} />
+
+          {coin && marginN > 0 && (
+            <div style={{ ...card(t), padding: 12, marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, color: t.sub, padding: "3px 0" }}><span>ราคาเข้า</span><span style={{ ...monoFont, color: t.text, fontWeight: 700 }}>฿{fmtMoney(coin.price)}</span></div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, color: t.sub, padding: "3px 0" }}><span>ขนาดสถานะ</span><span style={{ ...monoFont, color: t.text, fontWeight: 700 }}>฿{fmtMoney(notional)}</span></div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, color: "#D9534F", padding: "3px 0", fontWeight: 700 }}><span>⚠️ เส้นล้างพอร์ต</span><span style={monoFont}>฿{fmtMoney(liqPrice)} ({liqDistPct.toFixed(1)}% จากราคาเข้า)</span></div>
+              <div style={{ fontSize: 10, color: t.faint, marginTop: 6, lineHeight: 1.5 }}>ถ้าราคา{side === "long" ? "ลง" : "ขึ้น"}ไปแตะจุดนี้ เงินค้ำประกัน ฿{fmtMoney(marginN)} จะหายทั้งหมดทันที</div>
+            </div>
+          )}
+
+          {err && <div style={{ fontSize: 11.5, color: "#D9534F", marginBottom: 10 }}>{err}</div>}
+          <div style={{ textAlign: "center" }}>
+            <button onClick={submit} disabled={busy || !coin || marginN <= 0} style={{ display: "inline-block", padding: "10px 28px", borderRadius: 12, border: "none", cursor: busy ? "default" : "pointer", fontWeight: 700, fontSize: 13, color: "#fff", background: "linear-gradient(160deg,#7C6CE8,#4E3FB8)", boxShadow: "0 4px 14px -4px rgba(124,108,232,.5)" }}>
+              {busy ? "กำลังเปิด..." : `เปิด ${side === "long" ? "Long" : "Short"} ${leverage}x`}
+            </button>
+          </div>
         </div>
       </div>
     </ModalPortal>
