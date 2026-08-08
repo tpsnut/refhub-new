@@ -8,7 +8,7 @@ import {
   Sparkles, Clock, Search, Volume2, VolumeX, Pencil, Download, ArrowLeft, Users, Camera, Phone, Mic, MicOff, PhoneOff, RefreshCw,
   Utensils, Car, ShoppingBag, Receipt, Gamepad2, HeartPulse, Briefcase, Gift, Coffee, Music,
   Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi, MessageCircle, MoreVertical, KeyRound, MapPin, Copy, LockKeyhole, LogOut, LayoutGrid, Maximize2, Volume1, Settings, Bookmark, Share2, Repeat2, Heart, User, Pin,
-  Heading1, Heading3, ListOrdered, ListTree, Quote, Code2, Minus, Table2, Video, Smile, RotateCcw, GripVertical, ChevronLeft, ChevronUp, ChevronDown, Repeat, Repeat1, Shuffle, Timer, Lock, HelpCircle, Info, CreditCard, Crown, Unlock, Activity, CheckCircle2, XCircle
+  Heading1, Heading3, ListOrdered, ListTree, Quote, Code2, Minus, Table2, Video, Smile, RotateCcw, GripVertical, ChevronLeft, ChevronUp, ChevronDown, Repeat, Repeat1, Shuffle, Timer, Lock, HelpCircle, Info, CreditCard, Crown, Unlock, Activity, CheckCircle2, XCircle, ExternalLink
 } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
 // 🔀 dnd-kit — ใช้ทำ "ลากวางจัดเรียงจริง" (drag & drop) ทั่วแอป แทนปุ่มขึ้น/ลง — รองรับ touch บนมือถือมาให้เลย
@@ -12057,10 +12057,28 @@ function TradeDetailModal({ t, item, tabCtx, close, userId, portfolio, holdings,
               {tabCtx === "world" && !stockBidAsk && (
                 <div style={{ fontSize: 10.5, color: t.faint, marginBottom: 18 }}>{stockBidAskErr || "กำลังโหลด bid/ask จาก Finnhub..."}</div>
               )}
-              {tabCtx === "th" && (
-                <div style={{ fontSize: 10.5, color: t.faint, marginBottom: 18 }}>* หุ้นไทยแสดงราคาล่าสุด (ไม่ใช่ bid/ask แยก) เพราะข้อมูล bid/ask จริงของตลาดหุ้นไทยทางการคิดค่าบริการหลักหมื่นบาท/เดือน ไม่มีทางเลี่ยงแบบฟรีได้เลย</div>
+              {tabCtx === "th" && !item.closed && (
+                <>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+                    <div style={{ ...card(t), flex: 1, padding: 10, textAlign: "center" }}>
+                      <div style={{ fontSize: 10, color: t.faint, marginBottom: 2 }}>รับซื้อ (Bid)</div>
+                      <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 13.5, fontWeight: 700, color: "#D9534F" }}>฿{fmt(displayPrice * 0.999, 2)}</div>
+                    </div>
+                    <div style={{ ...card(t), flex: 1, padding: 10, textAlign: "center" }}>
+                      <div style={{ fontSize: 10, color: t.faint, marginBottom: 2 }}>ขายออก (Ask)</div>
+                      <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 13.5, fontWeight: 700, color: "#2E9E6B" }}>฿{fmt(displayPrice * 1.001, 2)}</div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 10, color: t.faint, marginBottom: 18 }}>* ราคารับซื้อ/ขายออกจำลองขึ้นเอง (ส่วนต่าง 0.1%) ไม่ใช่ตัวเลขจริงจากตลาด — ตลาดหุ้นไทยทางการคิดค่าบริการหลักหมื่นบาท/เดือนถึงจะได้ข้อมูลจริง</div>
+                </>
               )}
             </>
+          )}
+
+          {isStockTab && !item.closed && (
+            <a href={`https://finance.yahoo.com/quote/${encodeURIComponent(item.key)}`} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 11.5, fontWeight: 700, color: t.accent, textDecoration: "none", marginBottom: 16, padding: "8px 0" }}>
+              เปิดดูใน Yahoo Finance <ExternalLink size={13} />
+            </a>
           )}
 
           {isStockTab && !item.closed && (
