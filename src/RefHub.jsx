@@ -11924,11 +11924,44 @@ function PaperHistoryModal({ t, userId, close }) {
 const HISTORY_RANGE_OPTIONS = [["1mo", "1 เดือน"], ["6mo", "6 เดือน"], ["1y", "1 ปี"], ["5y", "5 ปี"], ["max", "สูงสุด"]];
 function TradeDetailModal({ t, item, tabCtx, close, userId, portfolio, holdings, usdThb, onBuy, onSell }) {
   const isStockTab = tabCtx === "th" || tabCtx === "world";
+  const isCrypto = tabCtx === "crypto";
   const priceSymbol = tabCtx === "world" ? "$" : "฿";
   const priceDecimals = tabCtx === "th" || tabCtx === "world" ? 2 : tabCtx === "currency" ? 3 : tabCtx === "overview" ? 2 : 0;
   const fmt = (n, d) => Number(n).toLocaleString("th-TH", { minimumFractionDigits: d, maximumFractionDigits: d });
-  const title = isStockTab || tabCtx === "crypto" ? item.symbol : item.name;
-  const sub = isStockTab || tabCtx === "crypto" ? item.name : item.unit;
+  const title = isStockTab || isCrypto ? item.symbol : item.name;
+  const sub = isStockTab || isCrypto ? item.name : item.unit;
+
+  // 🔴 ราคาสด — ดึงซ้ำทุก ~12 วิ ตอนเปิดหน้านี้อยู่ ไม่ใช่ WebSocket จริงแต่ผลลัพธ์คือราคาขยับให้เห็นสดๆเหมือนกัน
+  const [livePrice, setLivePrice] = useState(null);
+  const [bidAsk, setBidAsk] = useState(null); // เฉพาะคริปโต — bid/ask จริงจาก Binance (คู่ USDT แปลงเป็นบาทด้วย usdThb)
+  useEffect(() => {
+    if (item.closed || (!isStockTab && !isCrypto)) return;
+    let active = true;
+    const poll = async () => {
+      try {
+        const market = isCrypto ? "crypto" : tabCtx;
+        const r = await fetch(`/api/content?type=stocks&view=quotes&market=${market}&symbols=${encodeURIComponent(item.key)}`, { cache: "no-store" });
+        const data = await r.json();
+        const p = data.items?.[0]?.price;
+        if (active && p != null) setLivePrice(p);
+      } catch (e) {}
+      if (isCrypto) {
+        try {
+          const r2 = await fetch(`/api/content?type=stocks&view=cryptobidask&symbol=${encodeURIComponent(item.symbol)}`, { cache: "no-store" });
+          const data2 = await r2.json();
+          if (active && data2.bidUsd) setBidAsk(data2);
+        } catch (e) {}
+      }
+    };
+    poll();
+    const id = setInterval(poll, 12000);
+    return () => { active = false; clearInterval(id); };
+  }, [item.key]);
+
+  const displayPrice = livePrice ?? item.price;
+  const liveItem = { ...item, price: displayPrice };
+  const bidThb = bidAsk ? bidAsk.bidUsd * (usdThb || 0) : null;
+  const askThb = bidAsk ? bidAsk.askUsd * (usdThb || 0) : null;
 
   const [range, setRange] = useState("1y");
   const [histPoints, setHistPoints] = useState(null);
@@ -11957,7 +11990,12 @@ function TradeDetailModal({ t, item, tabCtx, close, userId, portfolio, holdings,
     <ModalPortal>
       <div style={overlay} onClick={close}>
         <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 24, paddingBottom: 32, maxHeight: "88vh", overflowY: "auto" }}>
-          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 4 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+            {!item.closed && (isStockTab || isCrypto) ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10, fontWeight: 700, color: "#2E9E6B" }}>
+                <span style={{ width: 6, height: 6, borderRadius: 3, background: "#2E9E6B", animation: "rh-fab-float 1.2s ease-in-out infinite" }} /> อัปเดตสด
+              </div>
+            ) : <div />}
             <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
@@ -11972,11 +12010,29 @@ function TradeDetailModal({ t, item, tabCtx, close, userId, portfolio, holdings,
             <div style={{ fontSize: 14, fontWeight: 700, color: t.faint, textAlign: "center", padding: "20px 0" }}>{item.updatedText}</div>
           ) : (
             <>
-              <div style={{ fontSize: 32, fontWeight: 800, color: t.text, marginBottom: 4 }}>{priceSymbol}{fmt(item.price, priceDecimals)}</div>
+              <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 32, fontWeight: 700, color: t.text, marginBottom: 4 }}>{priceSymbol}{fmt(displayPrice, priceDecimals)}</div>
               {item.change != null && (
                 <div style={{ fontSize: 15, fontWeight: 700, color: item.change >= 0 ? "#2E9E6B" : "#D9534F", marginBottom: 18 }}>
                   {item.change >= 0 ? "▲ +" : "▼ "}{item.change.toFixed(2)}% <span style={{ fontSize: 11.5, color: t.faint, fontWeight: 600 }}>(24 ชม.ที่ผ่านมา)</span>
                 </div>
+              )}
+              {isCrypto && bidThb != null && (
+                <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+                  <div style={{ ...card(t), flex: 1, padding: 10, textAlign: "center" }}>
+                    <div style={{ fontSize: 10, color: t.faint, marginBottom: 2 }}>รับซื้อ (Bid)</div>
+                    <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 13.5, fontWeight: 700, color: "#D9534F" }}>฿{fmt(bidThb, 0)}</div>
+                  </div>
+                  <div style={{ ...card(t), flex: 1, padding: 10, textAlign: "center" }}>
+                    <div style={{ fontSize: 10, color: t.faint, marginBottom: 2 }}>ขายออก (Ask)</div>
+                    <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 13.5, fontWeight: 700, color: "#2E9E6B" }}>฿{fmt(askThb, 0)}</div>
+                  </div>
+                </div>
+              )}
+              {isCrypto && !bidThb && (
+                <div style={{ fontSize: 10.5, color: t.faint, marginBottom: 18 }}>กำลังโหลด bid/ask จาก Binance... (บางเหรียญอาจไม่มีคู่เทรด USDT ให้)</div>
+              )}
+              {isStockTab && (
+                <div style={{ fontSize: 10.5, color: t.faint, marginBottom: 18 }}>* หุ้นไทย/หุ้นโลกแสดงราคาล่าสุด (ไม่ใช่ bid/ask แยก) เพราะข้อมูล bid/ask จริงของตลาดหุ้นต้องสมัครขอ API key เพิ่มเติม</div>
               )}
             </>
           )}
@@ -12019,7 +12075,7 @@ function TradeDetailModal({ t, item, tabCtx, close, userId, portfolio, holdings,
           )}
 
           {(isStockTab || tabCtx === "crypto") && userId && !item.closed && (
-            <TradeBuySellPanel t={t} item={item} market={tabCtx} usdThb={usdThb}
+            <TradeBuySellPanel t={t} item={liveItem} market={tabCtx} usdThb={usdThb}
               cash={portfolio?.cash_balance || 0}
               heldQty={holdings.find((h) => h.symbol === item.key && h.market === tabCtx)?.quantity || 0}
               onBuy={onBuy} onSell={onSell} />

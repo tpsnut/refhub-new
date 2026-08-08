@@ -477,7 +477,17 @@ export default async function handler(req, res) {
         const items = symbols.map((sym, i) => (results[i]?.status === "fulfilled" ? { key: sym, price: results[i].value.price, currency: results[i].value.currency } : { key: sym, price: null }));
         return res.status(200).json({ items });
       }
-      return res.status(400).json({ error: "view ไม่ถูกต้อง (overview/crypto/currency/th/world/history/quotes)" });
+      // 🪙 bid/ask จริงของคริปโต — Binance ให้ฟรีไม่ต้องใช้ key (คู่เทรด USDT) แปลงเป็นบาทฝั่ง frontend เอง
+      if (view === "cryptobidask") {
+        const symbol = (req.query.symbol || "").toUpperCase();
+        if (!symbol) return res.status(400).json({ error: "ระบุ symbol มาด้วย" });
+        const r = await fetch(`https://api.binance.com/api/v3/ticker/bookTicker?symbol=${symbol}USDT`, { headers: BROWSER_HEADERS });
+        if (!r.ok) return res.status(500).json({ error: `Binance ไม่มีคู่เทรด ${symbol}USDT หรือดึงไม่สำเร็จ (HTTP ${r.status})` });
+        const data = await r.json();
+        if (!data.bidPrice || !data.askPrice) return res.status(500).json({ error: "ไม่พบข้อมูล bid/ask ของเหรียญนี้" });
+        return res.status(200).json({ bidUsd: parseFloat(data.bidPrice), askUsd: parseFloat(data.askPrice) });
+      }
+      return res.status(400).json({ error: "view ไม่ถูกต้อง (overview/crypto/currency/th/world/history/quotes/cryptobidask)" });
     }
     if (type === "vocab") {
       return res.status(501).json({ error: "ยังไม่ได้ทำส่วนคำศัพท์" });
