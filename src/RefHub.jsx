@@ -5005,17 +5005,21 @@ function HeroBgUploadModal({ t, userId, onDone, close, imageOnly, pathPrefix, ti
             {linkErr && <div style={{ fontSize: 11.5, color: "#D9534F", marginBottom: 10 }}>{linkErr}</div>}
             <button onClick={submitLink} disabled={!linkUrl.trim()} style={{ width: "100%", padding: "10px 0", borderRadius: 12, border: "none", background: t.accent, color: t.onAccent, fontWeight: 700, fontSize: 12.5, cursor: "pointer", marginBottom: 16, opacity: linkUrl.trim() ? 1 : 0.5 }}>ใช้พื้นหลังนี้</button>
 
-            {/* 📌 ตัวอย่างแหล่งลิงก์ — กันคนงงว่าลิงก์แบบไหนใช้ได้/ไม่ได้ */}
+            {/* 📌 ตัวอย่างแหล่งลิงก์ — กันคนงงว่าลิงก์แบบไหนใช้ได้/ไม่ได้ กดเปิดเว็บได้เลยจากในนี้ */}
             <div style={{ ...card(t), padding: 12 }}>
               <div style={{ fontSize: 11.5, fontWeight: 800, color: t.text, marginBottom: 8 }}>ลิงก์แบบไหนใช้ได้บ้าง</div>
               <div style={{ fontSize: 10.5, color: "#2E9E6B", fontWeight: 700, marginBottom: 3 }}>✅ วางแล้วใช้ได้เลย</div>
-              <div style={{ fontSize: 10.5, color: t.sub, marginBottom: 8, lineHeight: 1.6 }}>
-                <b>Giphy</b> — เปิดรูปที่ต้องการ กด "Copy Link" แล้วเลือก "GIF Link" (ไม่ใช่ลิงก์หน้าเว็บ)<br />
-                <b>Imgur</b> — อัปโหลดรูปขึ้น imgur.com แล้วกดคัดลอกลิงก์ตรง (ขึ้นต้นด้วย i.imgur.com)
+              <div style={{ fontSize: 10.5, color: t.sub, marginBottom: 4, lineHeight: 1.7 }}>
+                <b>🖼️ Giphy</b> (รูป/GIF) — เปิด <a href="https://giphy.com/explore/ocean-loop" target="_blank" rel="noreferrer" style={{ color: t.accent }}>giphy.com</a> เลือกตัวที่ชอบ กด <b>Share</b> → หาช่องก็อปลิงก์ → เลือก <b>"GIF Link"</b> (เลือกโหมด "รูปภาพ" ในแอปเสมอ ต่อให้ขยับได้ก็ตาม)
               </div>
+              {!imageOnly && (
+                <div style={{ fontSize: 10.5, color: t.sub, marginBottom: 8, lineHeight: 1.7 }}>
+                  <b>🎥 Pexels</b> (วิดีโอ .mp4 แท้ๆ) — เปิด <a href="https://www.pexels.com/search/videos/ocean%20waves/" target="_blank" rel="noreferrer" style={{ color: t.accent }}>pexels.com</a> เลือกคลิป กดปุ่ม <b>Download</b> สีเขียว ได้ไฟล์ .mp4 มาเลย ฟรี ไม่ต้องสมัคร (เอาไฟล์ไปใช้โหมด "อัปโหลดไฟล์" แทน ไม่ใช่วางลิงก์)
+                </div>
+              )}
               <div style={{ fontSize: 10.5, color: "#D9534F", fontWeight: 700, marginBottom: 3 }}>❌ วางแล้วใช้ไม่ได้</div>
               <div style={{ fontSize: 10.5, color: t.sub, lineHeight: 1.6 }}>
-                <b>Pinterest, Instagram, TikTok</b> — ลิงก์ที่ก็อปมาเป็นลิงก์หน้าเว็บ ไม่ใช่ไฟล์ตรง ต้อง**เซฟรูป/วิดีโอลงเครื่องก่อน** แล้วสลับมาโหมด "อัปโหลดไฟล์" แทน
+                <b>Pinterest, Instagram, TikTok</b> — ลิงก์ที่ก็อปมาเป็นลิงก์หน้าเว็บ ไม่ใช่ไฟล์ตรง ต้องเซฟรูป/วิดีโอลงเครื่องก่อน แล้วสลับมาโหมด "อัปโหลดไฟล์" แทน
               </div>
             </div>
           </>)}
