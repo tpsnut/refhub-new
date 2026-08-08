@@ -11934,6 +11934,7 @@ function TradeDetailModal({ t, item, tabCtx, close, userId, portfolio, holdings,
   // 🔴 ราคาสด — ดึงซ้ำทุก ~12 วิ ตอนเปิดหน้านี้อยู่ ไม่ใช่ WebSocket จริงแต่ผลลัพธ์คือราคาขยับให้เห็นสดๆเหมือนกัน
   const [livePrice, setLivePrice] = useState(null);
   const [bidAsk, setBidAsk] = useState(null); // เฉพาะคริปโต — bid/ask จริงจาก Binance (คู่ USDT แปลงเป็นบาทด้วย usdThb)
+  const [glossaryOpen, setGlossaryOpen] = useState(false); // 🎓 มือใหม่กดดูคำอธิบายศัพท์ได้
   const [stockBidAsk, setStockBidAsk] = useState(null); // เฉพาะหุ้นโลก — { bid, ask } เป็นดอลลาร์ตรงๆ (Finnhub free tier รองรับแค่หุ้นสหรัฐฯ)
   const [stockBidAskErr, setStockBidAskErr] = useState("");
   useEffect(() => {
@@ -12007,15 +12008,21 @@ function TradeDetailModal({ t, item, tabCtx, close, userId, portfolio, holdings,
                 <span style={{ width: 6, height: 6, borderRadius: 3, background: "#2E9E6B", animation: "rh-fab-float 1.2s ease-in-out infinite" }} /> อัปเดตสด
               </div>
             ) : <div />}
-            <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+            <div style={{ display: "flex", gap: 4 }}>
+              {(isStockTab || isCrypto) && (
+                <button onClick={() => setGlossaryOpen(true)} style={ghost} title="คำศัพท์ที่ใช้ในหน้านี้"><HelpCircle size={18} color={t.sub} /></button>
+              )}
+              <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+            </div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: item.desc ? 6 : 18 }}>
             {tabCtx === "crypto" && item.image && <img src={item.image} alt="" style={{ width: 40, height: 40, borderRadius: 20 }} />}
             <div>
               <div style={{ fontSize: 18, fontWeight: 800, color: t.text }}>{title}</div>
               <div style={{ fontSize: 12.5, color: t.sub }}>{sub}</div>
             </div>
           </div>
+          {item.desc && <div style={{ fontSize: 11.5, color: t.faint, marginBottom: 18, lineHeight: 1.5 }}>{item.desc}</div>}
 
           {item.closed ? (
             <div style={{ fontSize: 14, fontWeight: 700, color: t.faint, textAlign: "center", padding: "20px 0" }}>{item.updatedText}</div>
@@ -12124,6 +12131,39 @@ function TradeDetailModal({ t, item, tabCtx, close, userId, portfolio, holdings,
               heldQty={holdings.find((h) => h.symbol === item.key && h.market === tabCtx)?.quantity || 0}
               onBuy={onBuy} onSell={onSell} />
           )}
+        </div>
+      </div>
+      {glossaryOpen && <TradeGlossaryModal t={t} close={() => setGlossaryOpen(false)} />}
+    </ModalPortal>
+  );
+}
+
+// 🎓 คำศัพท์พื้นฐานสำหรับมือใหม่ที่ไม่เคยเล่นหุ้น/คริปโตมาก่อน — อธิบายทุกคำที่โผล่ในหน้ารายละเอียด
+const TRADE_GLOSSARY = [
+  ["ราคาล่าสุด", "ราคาซื้อขายครั้งล่าสุดที่เกิดขึ้นจริงในตลาด"],
+  ["% เปลี่ยนแปลง", "ราคาขึ้นหรือลงกี่เปอร์เซ็นต์ เทียบกับเมื่อวาน/24 ชม.ที่แล้ว"],
+  ["รับซื้อ (Bid)", "ราคาสูงสุดที่ตอนนี้มีคนเสนอ 'จะซื้อ' จากคุณ — ถ้าคุณขายตอนนี้ จะได้ราคานี้"],
+  ["ขายออก (Ask)", "ราคาต่ำสุดที่ตอนนี้มีคนเสนอ 'จะขาย' ให้คุณ — ถ้าคุณซื้อตอนนี้ จะจ่ายราคานี้"],
+  ["ต้นทุนเฉลี่ย", "ราคาเฉลี่ยที่คุณซื้อของที่ถืออยู่ทั้งหมด (ถ้าซื้อหลายรอบ ราคาต่างกัน จะเฉลี่ยให้อัตโนมัติ)"],
+  ["กำไร/ขาดทุน", "มูลค่าปัจจุบัน (ราคาตลาดตอนนี้ x จำนวนที่ถือ) ลบด้วยต้นทุนที่จ่ายไป"],
+  ["ดัชนี (Index)", "ตัวเลขสรุปภาพรวมของตลาดทั้งตลาด ไม่ใช่หุ้นตัวใดตัวหนึ่ง เช่น SET Index = ภาพรวมหุ้นไทยทั้งตลาด"],
+];
+function TradeGlossaryModal({ t, close }) {
+  return (
+    <ModalPortal>
+      <div style={overlay} onClick={close}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 22, maxHeight: "80vh", overflowY: "auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>🎓 คำศัพท์ในหน้านี้</div>
+            <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+          </div>
+          <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 16 }}>สำหรับคนที่ไม่เคยเล่นหุ้น/คริปโตมาก่อน อธิบายแบบเข้าใจง่าย</div>
+          {TRADE_GLOSSARY.map(([term, exp]) => (
+            <div key={term} style={{ ...card(t), padding: 12, marginBottom: 8 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: t.accent, marginBottom: 3 }}>{term}</div>
+              <div style={{ fontSize: 12, color: t.sub, lineHeight: 1.6 }}>{exp}</div>
+            </div>
+          ))}
         </div>
       </div>
     </ModalPortal>
