@@ -1188,6 +1188,8 @@ export default function RefHub() {
   useEffect(() => { try { localStorage.setItem("refhub:heroCustomUrl", heroCustomUrl); localStorage.setItem("refhub:heroCustomType", heroCustomType); } catch (e) {} }, [heroCustomUrl, heroCustomType]);
   useEffect(() => { try { localStorage.setItem("refhub:heroTheme", heroTheme); } catch (e) {} }, [heroTheme]);
   const [appBgUrl, setAppBgUrl] = useState(() => { try { return localStorage.getItem("refhub:appBgUrl") || ""; } catch (e) { return ""; } }); // 🖼️ พื้นหลังภาพนิ่งทั้งแอป (ไม่รองรับวิดีโอ/gif — ตั้งใจให้เป็นแค่ภาพนิ่งเท่านั้นตามที่ตกลงกัน) โชว์ผ่านช่องว่างระหว่างการ์ด เพราะการ์ด/พื้นผิวต่างๆยังทึบแสงเหมือนเดิม
+  const [appBgOverlay, setAppBgOverlay] = useState(() => { try { const v = localStorage.getItem("refhub:appBgOverlay"); return v ? Number(v) : 45; } catch (e) { return 45; } }); // 🎚️ ความเข้มของเกรเดียนต์ที่คลุมภาพพื้นหลัง (0-100) — สีของเกรเดียนต์ปรับอัตโนมัติตามโหมดกลางวัน/กลางคืน (ขาวคลุมตอนกลางวันเพราะตัวหนังสือเข้ม, ดำคลุมตอนกลางคืนเพราะตัวหนังสือสว่าง) แต่ "ความเข้ม" ให้ผู้ใช้ปรับเองได้ตามภาพที่ใช้ — ตั้งใจไม่ไปแก้สีตัวอักษรทั่วแอปตรงๆ เพราะจะไปกระทบการ์ดทึบแสงอื่นๆที่อ่านง่ายอยู่แล้วให้พังไปด้วย วิธีนี้ปลอดภัยกว่าและได้ผลลัพธ์เดียวกัน
+  useEffect(() => { try { localStorage.setItem("refhub:appBgOverlay", String(appBgOverlay)); } catch (e) {} }, [appBgOverlay]);
   useEffect(() => { try { localStorage.setItem("refhub:appBgUrl", appBgUrl); } catch (e) {} }, [appBgUrl]);
   const [catColors, setCatColors] = useState(DEFAULT_CAT_COLORS); // 🎨 สีหมวดหมู่ (การเงิน/ความรู้/เป้าหมาย/โน้ต) ที่ user ปรับเองได้ทีละสี
   const [cardShape, setCardShape] = useState("soft"); // 🔲 ทรงกรอบการ์ด: sharp (เหลี่ยมคมแบบ SCB ไม่มีเงา) | soft (มนเบาๆ ใกล้ตัวอักษร) — default soft ตามที่ตกลง
@@ -2089,7 +2091,7 @@ export default function RefHub() {
 
   return (
     <div style={{ minHeight: vvh ? `${vvh}px` : "100dvh", background: t.page, display: "flex", justifyContent: "center", fontFamily: "'IBM Plex Sans Thai','Segoe UI','Helvetica Neue',system-ui,sans-serif" }}>
-      <div style={{ width: "100%", maxWidth: 440, position: "relative", background: t.bg, minHeight: vvh ? `${vvh}px` : "100dvh", overflow: "hidden", transition: "background .5s", ...(appBgUrl ? { backgroundImage: `url(${appBgUrl})`, backgroundSize: "cover", backgroundPosition: "center" } : {}) }}>
+      <div style={{ width: "100%", maxWidth: 440, position: "relative", background: t.bg, minHeight: vvh ? `${vvh}px` : "100dvh", overflow: "hidden", transition: "background .5s", ...(appBgUrl ? { backgroundImage: `linear-gradient(rgba(${isNight ? "0,0,0" : "255,255,255"},${appBgOverlay / 100}), rgba(${isNight ? "0,0,0" : "255,255,255"},${appBgOverlay / 100})), url(${appBgUrl})`, backgroundSize: "cover", backgroundPosition: "center" } : {}) }}>
         {t.star && <Stars />}
         {/* 📏 ขยายเฉพาะส่วนหัว+เนื้อหา ไม่รวมแถบเมนูด้านล่าง กันเมนูหาย/เพี้ยน — ใช้ transform:scale แทน zoom เพราะ zoom ใช้งานไม่ได้เลยบน iOS Safari (zoom ไม่รองรับ ทำให้ก่อนหน้านี้ iPhone ไม่ขยายเลย)
         พื้นหลังภาพนิ่งทั้งแอป (appBgUrl) ตั้งใจใส่ไว้ที่กรอบนี้ ซึ่งอยู่นอก scale wrapper ข้างล่าง — ใส่ในนี้ไม่ได้เพราะเจอบั๊ก transform:scale ซ้ำแบบเดียวกับ modal ที่เคยเจอมาก่อน (ดูคอมเมนต์ leaderboardOpen ด้านบน) */}
@@ -2308,7 +2310,7 @@ export default function RefHub() {
         )}
 
         {mentorPick && <MentorPicker t={t} mentor={mentor} setMentor={setMentor} authProfile={authProfile} setAuthProfile={setAuthProfile} userId={userId} customMentors={customMentors} setCustomMentors={setCustomMentors} close={() => setMentorPick(false)} />}
-        {themePick && <ThemePicker t={t} theme={theme} setTheme={setTheme} mode={mode} customAccent={customAccent} setCustomAccent={setCustomAccent} appBgUrl={appBgUrl} setAppBgUrl={setAppBgUrl} userId={userId} close={() => setThemePick(false)} />}
+        {themePick && <ThemePicker t={t} theme={theme} setTheme={setTheme} mode={mode} customAccent={customAccent} setCustomAccent={setCustomAccent} appBgUrl={appBgUrl} setAppBgUrl={setAppBgUrl} appBgOverlay={appBgOverlay} setAppBgOverlay={setAppBgOverlay} userId={userId} close={() => setThemePick(false)} />}
         {homeLayoutPick && <HomeLayoutPicker t={t} shp={shp} homeLayout={homeLayout} setHomeLayout={setHomeLayout} close={() => setHomeLayoutPick(false)} />}
         {cardShapePick && <CardShapePicker t={t} cardShape={cardShape} setCardShape={setCardShape} close={() => setCardShapePick(false)} />}
         {moreMenuOpen && (
@@ -15405,7 +15407,7 @@ function ColorPickerModal({ t, value, onChange, close }) {
   </div></div></ModalPortal>);
 }
 
-function ThemePicker({ t, theme, setTheme, mode, customAccent, setCustomAccent, appBgUrl, setAppBgUrl, userId, close }) {
+function ThemePicker({ t, theme, setTheme, mode, customAccent, setCustomAccent, appBgUrl, setAppBgUrl, appBgOverlay, setAppBgOverlay, userId, close }) {
   const [pendingColor, setPendingColor] = useState(customAccent);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [appBgUploadOpen, setAppBgUploadOpen] = useState(false);
@@ -15453,6 +15455,16 @@ function ThemePicker({ t, theme, setTheme, mode, customAccent, setCustomAccent, 
       <button onClick={() => setAppBgUploadOpen(true)} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px 0", borderRadius: 13, border: `2px dashed ${t.border}`, background: t.inputBg, color: t.sub, fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}>
         <Upload size={16} /> อัปโหลดพื้นหลังภาพนิ่ง
       </button>
+    )}
+
+    {appBgUrl && (
+      <div style={{ marginTop: 14 }}>
+        <div style={{ fontSize: 11, color: t.sub, marginBottom: 6, display: "flex", justifyContent: "space-between" }}>
+          <span>ความเข้มของฉากหลัง (กันตัวหนังสือกลืนกับภาพ)</span><span style={{ color: t.text, fontWeight: 700 }}>{appBgOverlay}%</span>
+        </div>
+        <input type="range" min={10} max={85} step={5} value={appBgOverlay} onChange={(e) => setAppBgOverlay(Number(e.target.value))} style={{ width: "100%", accentColor: t.accent }} />
+        <div style={{ fontSize: 10, color: t.faint, marginTop: 4, lineHeight: 1.5 }}>ลากไปทางซ้าย = เห็นภาพชัดขึ้น (ตัวหนังสืออาจอ่านยากขึ้น) · ลากไปทางขวา = ตัวหนังสือชัดขึ้น (เห็นภาพจางลง) — สีคลุมปรับอัตโนมัติตามโหมดกลางวัน/กลางคืนให้แล้ว</div>
+      </div>
     )}
 
     {pickerOpen && <ColorPickerModal t={t} value={pendingColor} onChange={setPendingColor} close={() => setPickerOpen(false)} />}
