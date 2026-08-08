@@ -4865,18 +4865,18 @@ function HeroAnimatedBg({ theme, customUrl, customType }) {
           @keyframes rh-hero-wave1 { 0% { transform: translateX(0) translateY(0); } 50% { transform: translateX(-6%) translateY(-3%); } 100% { transform: translateX(0) translateY(0); } }
           @keyframes rh-hero-wave2 { 0% { transform: translateX(0) translateY(0); } 50% { transform: translateX(5%) translateY(2%); } 100% { transform: translateX(0) translateY(0); } }
         `}</style>
-        <div style={{ position: "absolute", left: "-10%", bottom: "-30%", width: "120%", height: "80%", borderRadius: "45%", background: "radial-gradient(ellipse at center, rgba(255,255,255,.16), transparent 70%)", animation: "rh-hero-wave1 9s ease-in-out infinite" }} />
-        <div style={{ position: "absolute", left: "-15%", bottom: "-45%", width: "130%", height: "80%", borderRadius: "40%", background: "radial-gradient(ellipse at center, rgba(255,255,255,.10), transparent 70%)", animation: "rh-hero-wave2 12s ease-in-out infinite" }} />
+        <div style={{ position: "absolute", left: "-10%", bottom: "-30%", width: "120%", height: "80%", borderRadius: "45%", background: "radial-gradient(ellipse at center, rgba(255,255,255,.32), transparent 70%)", animation: "rh-hero-wave1 9s ease-in-out infinite" }} />
+        <div style={{ position: "absolute", left: "-15%", bottom: "-45%", width: "130%", height: "80%", borderRadius: "40%", background: "radial-gradient(ellipse at center, rgba(255,255,255,.22), transparent 70%)", animation: "rh-hero-wave2 12s ease-in-out infinite" }} />
       </div>
     );
   }
   if (theme === "stars") {
-    const stars = Array.from({ length: 22 }, (_, i) => ({ top: (i * 37) % 100, left: (i * 53) % 100, size: 1.5 + (i % 3), delay: (i % 7) * 0.5 }));
+    const stars = Array.from({ length: 22 }, (_, i) => ({ top: (i * 37) % 100, left: (i * 53) % 100, size: 3 + (i % 3) * 1.5, delay: (i % 7) * 0.5 }));
     return (
       <div style={wrap}>
-        <style>{`@keyframes rh-hero-twinkle { 0%,100% { opacity: .15; } 50% { opacity: .9; } }`}</style>
+        <style>{`@keyframes rh-hero-twinkle { 0%,100% { opacity: .25; } 50% { opacity: 1; } }`}</style>
         {stars.map((s, i) => (
-          <div key={i} style={{ position: "absolute", top: `${s.top}%`, left: `${s.left}%`, width: s.size, height: s.size, borderRadius: "50%", background: "#fff", animation: `rh-hero-twinkle ${2.5 + (i % 4)}s ease-in-out infinite`, animationDelay: `${s.delay}s` }} />
+          <div key={i} style={{ position: "absolute", top: `${s.top}%`, left: `${s.left}%`, width: s.size, height: s.size, borderRadius: "50%", background: "#fff", boxShadow: "0 0 6px 1px rgba(255,255,255,.6)", animation: `rh-hero-twinkle ${2.5 + (i % 4)}s ease-in-out infinite`, animationDelay: `${s.delay}s` }} />
         ))}
       </div>
     );
@@ -4888,17 +4888,17 @@ function HeroAnimatedBg({ theme, customUrl, customType }) {
           @keyframes rh-hero-aurora1 { 0%,100% { transform: translate(-10%,-10%) scale(1); } 50% { transform: translate(10%,5%) scale(1.15); } }
           @keyframes rh-hero-aurora2 { 0%,100% { transform: translate(10%,10%) scale(1); } 50% { transform: translate(-8%,-8%) scale(1.1); } }
         `}</style>
-        <div style={{ position: "absolute", top: "-20%", left: "-10%", width: "70%", height: "70%", borderRadius: "50%", background: "radial-gradient(circle, rgba(255,255,255,.22), transparent 65%)", filter: "blur(6px)", animation: "rh-hero-aurora1 10s ease-in-out infinite" }} />
-        <div style={{ position: "absolute", bottom: "-25%", right: "-10%", width: "75%", height: "75%", borderRadius: "50%", background: "radial-gradient(circle, rgba(255,255,255,.14), transparent 65%)", filter: "blur(6px)", animation: "rh-hero-aurora2 13s ease-in-out infinite" }} />
+        <div style={{ position: "absolute", top: "-20%", left: "-10%", width: "70%", height: "70%", borderRadius: "50%", background: "radial-gradient(circle, rgba(255,255,255,.4), transparent 65%)", filter: "blur(6px)", animation: "rh-hero-aurora1 10s ease-in-out infinite" }} />
+        <div style={{ position: "absolute", bottom: "-25%", right: "-10%", width: "75%", height: "75%", borderRadius: "50%", background: "radial-gradient(circle, rgba(255,255,255,.28), transparent 65%)", filter: "blur(6px)", animation: "rh-hero-aurora2 13s ease-in-out infinite" }} />
       </div>
     );
   }
   if (theme === "candle") {
     return (
       <div style={wrap}>
-        <style>{`@keyframes rh-hero-flicker { 0%,100% { opacity: .5; transform: scale(1); } 25% { opacity: .7; transform: scale(1.03); } 50% { opacity: .45; transform: scale(0.98); } 75% { opacity: .65; transform: scale(1.02); } }`}</style>
-        <div style={{ position: "absolute", top: "20%", left: "60%", width: "70%", height: "70%", borderRadius: "50%", background: "radial-gradient(circle, rgba(255,200,120,.35), transparent 70%)", animation: "rh-hero-flicker 4s ease-in-out infinite" }} />
-        <div style={{ position: "absolute", bottom: "10%", left: "10%", width: "55%", height: "55%", borderRadius: "50%", background: "radial-gradient(circle, rgba(255,180,90,.25), transparent 70%)", animation: "rh-hero-flicker 5s ease-in-out infinite", animationDelay: "1.2s" }} />
+        <style>{`@keyframes rh-hero-flicker { 0%,100% { opacity: .6; transform: scale(1); } 25% { opacity: .85; transform: scale(1.03); } 50% { opacity: .55; transform: scale(0.98); } 75% { opacity: .8; transform: scale(1.02); } }`}</style>
+        <div style={{ position: "absolute", top: "20%", left: "60%", width: "70%", height: "70%", borderRadius: "50%", background: "radial-gradient(circle, rgba(255,220,150,.5), transparent 70%)", animation: "rh-hero-flicker 4s ease-in-out infinite" }} />
+        <div style={{ position: "absolute", bottom: "10%", left: "10%", width: "55%", height: "55%", borderRadius: "50%", background: "radial-gradient(circle, rgba(255,190,110,.4), transparent 70%)", animation: "rh-hero-flicker 5s ease-in-out infinite", animationDelay: "1.2s" }} />
       </div>
     );
   }
@@ -5008,7 +5008,7 @@ function HomeWidgetsWallet({ t, lang, shp, M, isNight, setMentorPick, setChatOpe
   const sharp = shp.radius === 0;
   return (
     <>
-      <div style={{ marginTop: 8, background: t.hero, borderRadius: shp.radius, padding: sharp ? "18px 26px" : "18px 16px", position: "relative", overflow: "hidden" }}>
+      <div style={{ marginTop: 8, background: t.hero, borderRadius: shp.radius, padding: sharp ? "18px 26px" : "18px 16px", position: "relative", overflow: "hidden", zIndex: 0 }}>
         <HeroAnimatedBg theme={heroTheme} customUrl={heroCustomUrl} customType={heroCustomType} />
         <button onClick={onEditWidgets} style={{ position: "absolute", top: 14, right: sharp ? 26 : 16, background: `${t.onAccent}26`, border: "none", borderRadius: shp.radius === 0 ? 0 : 10, width: 28, height: 28, display: "grid", placeItems: "center", cursor: "pointer" }} title="ปรับการ์ดใหญ่"><Pencil size={14} color={t.onAccent} /></button>
         <button onClick={() => setMentorPick(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
@@ -5086,7 +5086,7 @@ function HomeWidgetsBento({ t, lang, shp, M, isNight, setMentorPick, setChatOpen
   return (
     <>
       <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 10, marginTop: 8 }}>
-        <div style={{ background: t.hero, borderRadius: shp.radius, padding: sharp ? "16px 16px 16px 26px" : 16, position: "relative", overflow: "hidden" }}>
+        <div style={{ background: t.hero, borderRadius: shp.radius, padding: sharp ? "16px 16px 16px 26px" : 16, position: "relative", overflow: "hidden", zIndex: 0 }}>
           <HeroAnimatedBg theme={heroTheme} customUrl={heroCustomUrl} customType={heroCustomType} />
           <button onClick={onEditWidgets} style={{ position: "absolute", top: 10, right: 10, background: `${t.onAccent}26`, border: "none", borderRadius: shp.radius === 0 ? 0 : 10, width: 26, height: 26, display: "grid", placeItems: "center", cursor: "pointer" }} title="ปรับการ์ดใหญ่"><Pencil size={13} color={t.onAccent} /></button>
           <button onClick={() => setMentorPick(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
@@ -5354,7 +5354,7 @@ function HomePage({ t, lang, M, quote, isNight, setMentorPick, balance, tx, goal
         <HomeWidgetsBento t={t} lang={lang} shp={shp} M={M} isNight={isNight} setMentorPick={setMentorPick} setChatOpen={setChatOpen} setMusicOpen={setMusicOpen} balance={balance} todayNet={todayNet} goalDone={goalDone} goals={goals} todayArticles={todayArticles} latestNote={latestNote} setPage={setPage} setCommunityOpen={setCommunityOpen} commPreview={commPreview} bentoWidgets={bentoWidgets} onEditWidgets={() => setEditWidgetsOpen(true)} heroShortcuts={heroShortcuts} heroTheme={heroTheme} heroCustomUrl={heroCustomUrl} heroCustomType={heroCustomType} />
       ) : (
         <>
-      <div style={{ marginTop: 8, background: t.hero, border: `1px solid ${t.heroBorder}`, borderRadius: shp.radius, padding: shp.radius === 0 ? 30 : 20, position: "relative", overflow: "hidden", boxShadow: isNight ? "none" : "0 10px 24px rgba(30,40,70,.18)" }}>
+      <div style={{ marginTop: 8, background: t.hero, border: `1px solid ${t.heroBorder}`, borderRadius: shp.radius, padding: shp.radius === 0 ? 30 : 20, position: "relative", overflow: "hidden", boxShadow: isNight ? "none" : "0 10px 24px rgba(30,40,70,.18)", zIndex: 0 }}>
         <HeroAnimatedBg theme={heroTheme} customUrl={heroCustomUrl} customType={heroCustomType} />
         <div style={{ position: "absolute", top: -34, right: -34, width: 130, height: 130, borderRadius: "50%", background: "rgba(255,255,255,.10)", pointerEvents: "none" }} />
         <div style={{ position: "absolute", bottom: -44, left: -24, width: 105, height: 105, borderRadius: "50%", background: "rgba(255,255,255,.06)", pointerEvents: "none" }} />
