@@ -2220,7 +2220,7 @@ export default function RefHub() {
           {page === "ledger" && <FinancePage {...{ t, lang, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt), userId, billReminders, billPayments, markBillPaid, setBillManagerOpen }} />}
           {page === "note" && <NotePage {...{ t, lang, notes, setNotes, isNight, userId, session, authProfile, reminders, openReminder }} />}
           {page === "ideas" && <IdeasPage t={t} lang={lang} M={M} userId={userId} session={session} authProfile={authProfile} setAuthProfile={setAuthProfile} setNotes={setNotes} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} />}
-          {page === "trade" && <TradePage t={t} lang={lang} userId={userId} />}
+          {page === "trade" && <TradePage t={t} lang={lang} userId={userId} scrollToTop={() => { if (contentScrollRef.current) contentScrollRef.current.scrollTop = 0; }} />}
           {page === "news" && <NewsPage t={t} lang={lang} userId={userId} authProfile={authProfile} setAuthProfile={setAuthProfile} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} hintDefs={hintDefs} seenHintKeys={seenHintKeys} dismissHint={dismissHint} setNotes={setNotes} scrollToTop={() => { if (contentScrollRef.current) contentScrollRef.current.scrollTop = 0; }} />}
           {page === "lang" && <LangPage t={t} lang={lang} userId={userId} session={session} authProfile={authProfile} scrollToTop={() => { if (contentScrollRef.current) contentScrollRef.current.scrollTop = 0; }} />}
           {page === "goalsReport" && <GoalsReportPage t={t} lang={lang} goals={goals} setGoals={setGoals} userId={userId} />}
@@ -11505,7 +11505,7 @@ const TRADE_TABS = [
   { v: "currency", lb: "ค่าเงิน" },
 ];
 
-function TradePage({ t, lang, userId }) {
+function TradePage({ t, lang, userId, scrollToTop }) {
   const [tab, setTab] = useState("overview");
   const [cacheByTab, setCacheByTab] = useState({}); // { [tab]: { items, index, fetchedAt } } กันโหลดซ้ำทุกครั้งที่สลับแท็บ
   const [loading, setLoading] = useState(true);
@@ -11664,6 +11664,7 @@ function TradePage({ t, lang, userId }) {
   };
   useEffect(() => {
     setQ("");
+    scrollToTop?.(); // 🐛 แท็บในหน้านี้เป็น state ภายใน ไม่ใช่ page ระดับบน — ตัว scroll-reset กลางของแอปที่ผูกกับ [page] เลยไม่ทำงานตอนสลับแท็บที่นี่ ต้องเรียกเองตรงนี้
     if (!cacheByTab[tab]) load(tab, false);
   }, [tab]);
 
