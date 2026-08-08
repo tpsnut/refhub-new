@@ -11503,7 +11503,6 @@ const TRADE_TABS = [
   { v: "world", lb: "หุ้นโลก" },
   { v: "crypto", lb: "คริปโต" },
   { v: "currency", lb: "ค่าเงิน" },
-  { v: "portfolio", lb: "🎮 พอร์ตจำลอง" },
 ];
 
 function TradePage({ t, lang, userId }) {
@@ -11523,6 +11522,8 @@ function TradePage({ t, lang, userId }) {
   const [portfolioLoading, setPortfolioLoading] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [portfolioOpen, setPortfolioOpen] = useState(false); // 🎮 เปิดจากปุ่มลอยมุมล่างขวา ไม่ใช่แท็บบนอีกแล้ว
+  useEffect(() => { if (portfolioOpen && userId) loadPortfolio(); }, [portfolioOpen]);
 
   const loadPortfolio = async () => {
     if (!userId) return;
@@ -11623,7 +11624,6 @@ function TradePage({ t, lang, userId }) {
   };
   useEffect(() => {
     setQ("");
-    if (tab === "portfolio") { loadPortfolio(); return; }
     if (!cacheByTab[tab]) load(tab, false);
   }, [tab]);
 
@@ -11669,63 +11669,64 @@ function TradePage({ t, lang, userId }) {
     </div>
 
     <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{ touchAction: "pan-y", minHeight: "60vh" }}>
-      {tab === "portfolio" ? (
-        <PaperPortfolioView t={t} portfolio={portfolio} holdings={holdings} liveByKey={liveByKey} usdThb={usdThb} loading={portfolioLoading}
-          onDeposit={() => setDepositOpen(true)} onHistory={() => setHistoryOpen(true)}
-          onOpenHolding={(h) => setDetailItem({ item: { key: h.symbol, symbol: h.symbol.replace(".BK", ""), name: h.name, price: h.livePriceThb != null ? (h.market === "world" ? h.livePriceThb / (usdThb || 1) : h.livePriceThb) : Number(h.avg_cost_thb), change: null }, tabCtx: h.market })} />
-      ) : (<>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-          <div style={{ fontSize: 10.5, color: t.faint }}>{cur?.fetchedAt ? `อัปเดตล่าสุด ${new Date(cur.fetchedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}` : ""}</div>
-          <button onClick={() => load(tab, true)} disabled={loading} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: loading ? "default" : "pointer", color: t.accent, fontSize: 11.5, fontWeight: 700 }}>
-            <RefreshCw size={12} style={loading ? { animation: "spin 1s linear infinite" } : undefined} /> รีเฟรช
-          </button>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <div style={{ fontSize: 10.5, color: t.faint }}>{cur?.fetchedAt ? `อัปเดตล่าสุด ${new Date(cur.fetchedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}` : ""}</div>
+        <button onClick={() => load(tab, true)} disabled={loading} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: loading ? "default" : "pointer", color: t.accent, fontSize: 11.5, fontWeight: 700 }}>
+          <RefreshCw size={12} style={loading ? { animation: "spin 1s linear infinite" } : undefined} /> รีเฟรช
+        </button>
+      </div>
+
+      {isStockTab && (
+        <div style={{ position: "relative", marginBottom: 10 }}>
+          <Search size={14} color={t.faint} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ค้นหาชื่อหุ้น/สัญลักษณ์..." style={{ ...input(t), paddingLeft: 32 }} />
         </div>
+      )}
 
-        {isStockTab && (
-          <div style={{ position: "relative", marginBottom: 10 }}>
-            <Search size={14} color={t.faint} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ค้นหาชื่อหุ้น/สัญลักษณ์..." style={{ ...input(t), paddingLeft: 32 }} />
-          </div>
-        )}
+      {loading && items.length === 0 && <Empty t={t} text="กำลังโหลดราคา..." />}
+      {error && items.length === 0 && <div style={{ fontSize: 12, color: "#D9534F", padding: "10px 0" }}>{error}</div>}
 
-        {loading && items.length === 0 && <Empty t={t} text="กำลังโหลดราคา..." />}
-        {error && items.length === 0 && <div style={{ fontSize: 12, color: "#D9534F", padding: "10px 0" }}>{error}</div>}
+      {isStockTab && index && (
+        <button onClick={() => setDetailItem({ item: index, tabCtx: tab })} style={{ ...card(t), width: "100%", textAlign: "left", padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, border: `1.5px solid ${t.accent}55`, cursor: "pointer" }}>
+          <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text }}>{index.name}</div>
+          {index.closed ? (
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: t.faint, textAlign: "right", maxWidth: 160 }}>{index.updatedText}</div>
+          ) : (
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: t.accent }}>{fmt(index.price, 2)}</div>
+              {index.change != null && <div style={{ fontSize: 11.5, fontWeight: 700, color: index.change >= 0 ? "#2E9E6B" : "#D9534F" }}>{index.change >= 0 ? "▲ +" : "▼ "}{index.change.toFixed(2)}%</div>}
+            </div>
+          )}
+        </button>
+      )}
 
-        {isStockTab && index && (
-          <button onClick={() => setDetailItem({ item: index, tabCtx: tab })} style={{ ...card(t), width: "100%", textAlign: "left", padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, border: `1.5px solid ${t.accent}55`, cursor: "pointer" }}>
-            <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text }}>{index.name}</div>
-            {index.closed ? (
-              <div style={{ fontSize: 11.5, fontWeight: 700, color: t.faint, textAlign: "right", maxWidth: 160 }}>{index.updatedText}</div>
-            ) : (
-              <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: 16, fontWeight: 800, color: t.accent }}>{fmt(index.price, 2)}</div>
-                {index.change != null && <div style={{ fontSize: 11.5, fontWeight: 700, color: index.change >= 0 ? "#2E9E6B" : "#D9534F" }}>{index.change >= 0 ? "▲ +" : "▼ "}{index.change.toFixed(2)}%</div>}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {filteredItems.map((x) => (
+          <button key={x.key} onClick={() => setDetailItem({ item: x, tabCtx: tab })} style={{ ...card(t), width: "100%", textAlign: "left", padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+            {tab === "crypto" && x.image && <img src={x.image} alt="" style={{ width: 26, height: 26, borderRadius: 13, flexShrink: 0 }} />}
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: t.text }}>{rowLabel(x)}</div>
+              <div style={{ fontSize: 10, color: t.faint, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.closed ? x.updatedText : rowSub(x)}</div>
+            </div>
+            {!x.closed && (
+              <div style={{ textAlign: "right", flexShrink: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 800, color: t.text }}>{priceSymbol}{fmt(x.price, priceDecimals)}</div>
+                {x.change != null && <div style={{ fontSize: 11, fontWeight: 700, color: x.change >= 0 ? "#2E9E6B" : "#D9534F" }}>{x.change >= 0 ? "▲ +" : "▼ "}{x.change.toFixed(2)}%</div>}
               </div>
             )}
+            <ChevronRight size={15} color={t.faint} style={{ flexShrink: 0 }} />
           </button>
-        )}
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {filteredItems.map((x) => (
-            <button key={x.key} onClick={() => setDetailItem({ item: x, tabCtx: tab })} style={{ ...card(t), width: "100%", textAlign: "left", padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
-              {tab === "crypto" && x.image && <img src={x.image} alt="" style={{ width: 26, height: 26, borderRadius: 13, flexShrink: 0 }} />}
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 700, color: t.text }}>{rowLabel(x)}</div>
-                <div style={{ fontSize: 10, color: t.faint, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.closed ? x.updatedText : rowSub(x)}</div>
-              </div>
-              {!x.closed && (
-                <div style={{ textAlign: "right", flexShrink: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 800, color: t.text }}>{priceSymbol}{fmt(x.price, priceDecimals)}</div>
-                  {x.change != null && <div style={{ fontSize: 11, fontWeight: 700, color: x.change >= 0 ? "#2E9E6B" : "#D9534F" }}>{x.change >= 0 ? "▲ +" : "▼ "}{x.change.toFixed(2)}%</div>}
-                </div>
-              )}
-              <ChevronRight size={15} color={t.faint} style={{ flexShrink: 0 }} />
-            </button>
-          ))}
-          {!loading && isStockTab && filteredItems.length === 0 && items.length > 0 && <Empty t={t} text="ไม่พบหุ้นที่ค้นหา" />}
-        </div>
-      </>)}
+        ))}
+        {!loading && isStockTab && filteredItems.length === 0 && items.length > 0 && <Empty t={t} text="ไม่พบหุ้นที่ค้นหา" />}
+      </div>
     </div>
+
+    {/* 🎮 ปุ่มลอยเข้าพอร์ตจำลอง มุมล่างขวา แทนการอยู่ในแท็บบน (ตามที่ปรับ) */}
+    {userId && (
+      <button onClick={() => setPortfolioOpen(true)} title="พอร์ตจำลอง" style={{ position: "fixed", right: 20, bottom: 96, width: 54, height: 54, borderRadius: 27, border: "none", cursor: "pointer", display: "grid", placeItems: "center", fontSize: 22, background: "linear-gradient(160deg,#F5A050,#E27418)", boxShadow: "0 8px 20px -6px rgba(242,135,46,.6), inset 0 1px 0 rgba(255,255,255,.3)", zIndex: 40 }}>
+        🎮
+      </button>
+    )}
 
     <div style={{ fontSize: 9.5, color: t.faint, textAlign: "center", marginTop: 16, lineHeight: 1.6, padding: "0 10px" }}>
       ราคาทองอ้างอิงสมาคมค้าทองคำ ส่วนดัชนี/หุ้น/คริปโต/ค่าเงิน มาจากแหล่งข้อมูลสาธารณะฟรี อาจคลาดเคลื่อนจากราคาซื้อขายจริงเล็กน้อยและดีเลย์ได้ ใช้เพื่อการอ้างอิงทั่วไปเท่านั้น ไม่ใช่คำแนะนำการลงทุน
@@ -11737,10 +11738,32 @@ function TradePage({ t, lang, userId }) {
     )}
     {depositOpen && <PaperDepositModal t={t} onConfirm={doDeposit} close={() => setDepositOpen(false)} />}
     {historyOpen && <PaperHistoryModal t={t} userId={userId} close={() => setHistoryOpen(false)} />}
+    {portfolioOpen && (
+      <PaperPortfolioModal t={t} loading={portfolioLoading} portfolio={portfolio} holdings={holdings} liveByKey={liveByKey} usdThb={usdThb}
+        close={() => setPortfolioOpen(false)} onDeposit={() => setDepositOpen(true)} onHistory={() => setHistoryOpen(true)}
+        onOpenHolding={(h) => { setPortfolioOpen(false); setDetailItem({ item: { key: h.symbol, symbol: h.symbol.replace(".BK", ""), name: h.name, price: h.livePriceThb != null ? (h.market === "world" ? h.livePriceThb / (usdThb || 1) : h.livePriceThb) : Number(h.avg_cost_thb), change: null }, tabCtx: h.market }); }} />
+    )}
   </>);
 }
 
 // 🎮 หน้าพอร์ตจำลอง — มูลค่ารวมเรืองแสงตามกำไร/ขาดทุน + ลิสต์ถือครองแบบแถบสีข้าง
+// 🎮 ครอบ PaperPortfolioView เป็นโมดัลเต็มจอ เปิดจากปุ่มลอยมุมล่างขวาของหน้าหุ้น
+function PaperPortfolioModal({ t, close, ...viewProps }) {
+  return (
+    <ModalPortal>
+      <div style={{ position: "fixed", inset: 0, zIndex: 100, background: t.page, overflowY: "auto" }}>
+        <div style={{ padding: "16px 16px 40px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+            <button onClick={close} style={{ width: 34, height: 34, borderRadius: 17, background: t.surface, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}><ArrowLeft size={18} color={t.text} /></button>
+            <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>พอร์ตจำลอง</div>
+          </div>
+          <PaperPortfolioView t={t} {...viewProps} />
+        </div>
+      </div>
+    </ModalPortal>
+  );
+}
+
 function PaperPortfolioView({ t, portfolio, holdings, liveByKey, usdThb, loading, onDeposit, onHistory, onOpenHolding }) {
   const cash = portfolio?.cash_balance || 0;
   const holdingsWithValue = holdings.map((h) => {
