@@ -462,7 +462,22 @@ export default async function handler(req, res) {
         const { data, fetchedAt, fromCache } = await withCache(`trade_hist_${symbol}_${range}`, () => fetchYahooHistory(symbol, range), doForce);
         return res.status(200).json({ points: data, fetchedAt, fromCache });
       }
-      return res.status(400).json({ error: "view ไม่ถูกต้อง (overview/crypto/currency/th/world/history)" });
+      // 🎮 ราคาสดของสัญลักษณ์ที่ระบุเจาะจง (ไม่ใช่ทั้งลิสต์ 50 ตัว) — ใช้ตีมูลค่าพอร์ตจำลองแบบเรียลไทม์ ไม่ต้อง cache นานเพราะจำนวนคำขอน้อยอยู่แล้ว
+      if (view === "quotes") {
+        const market = req.query.market;
+        const symbols = (req.query.symbols || "").split(",").map((s) => s.trim()).filter(Boolean);
+        if (!symbols.length) return res.status(400).json({ error: "ระบุ symbols มาด้วย" });
+        if (market === "crypto") {
+          const r = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${symbols.join(",")}&vs_currencies=thb`, { headers: BROWSER_HEADERS });
+          if (!r.ok) return res.status(500).json({ error: `ดึงราคาคริปโตไม่สำเร็จ (HTTP ${r.status})` });
+          const data = await r.json();
+          return res.status(200).json({ items: symbols.map((id) => ({ key: id, price: data[id]?.thb ?? null })) });
+        }
+        const results = await mapWithConcurrency(symbols.map((s) => ({ symbol: s })), 10, (s) => fetchYahooChartOne(s.symbol));
+        const items = symbols.map((sym, i) => (results[i]?.status === "fulfilled" ? { key: sym, price: results[i].value.price, currency: results[i].value.currency } : { key: sym, price: null }));
+        return res.status(200).json({ items });
+      }
+      return res.status(400).json({ error: "view ไม่ถูกต้อง (overview/crypto/currency/th/world/history/quotes)" });
     }
     if (type === "vocab") {
       return res.status(501).json({ error: "ยังไม่ได้ทำส่วนคำศัพท์" });

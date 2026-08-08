@@ -2220,7 +2220,7 @@ export default function RefHub() {
           {page === "ledger" && <FinancePage {...{ t, lang, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt), userId, billReminders, billPayments, markBillPaid, setBillManagerOpen }} />}
           {page === "note" && <NotePage {...{ t, lang, notes, setNotes, isNight, userId, session, authProfile, reminders, openReminder }} />}
           {page === "ideas" && <IdeasPage t={t} lang={lang} M={M} userId={userId} session={session} authProfile={authProfile} setAuthProfile={setAuthProfile} setNotes={setNotes} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} />}
-          {page === "trade" && <TradePage t={t} lang={lang} />}
+          {page === "trade" && <TradePage t={t} lang={lang} userId={userId} />}
           {page === "news" && <NewsPage t={t} lang={lang} userId={userId} authProfile={authProfile} setAuthProfile={setAuthProfile} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} hintDefs={hintDefs} seenHintKeys={seenHintKeys} dismissHint={dismissHint} setNotes={setNotes} scrollToTop={() => { if (contentScrollRef.current) contentScrollRef.current.scrollTop = 0; }} />}
           {page === "lang" && <LangPage t={t} lang={lang} userId={userId} session={session} authProfile={authProfile} scrollToTop={() => { if (contentScrollRef.current) contentScrollRef.current.scrollTop = 0; }} />}
           {page === "goalsReport" && <GoalsReportPage t={t} lang={lang} goals={goals} setGoals={setGoals} userId={userId} />}
@@ -11503,9 +11503,10 @@ const TRADE_TABS = [
   { v: "world", lb: "หุ้นโลก" },
   { v: "crypto", lb: "คริปโต" },
   { v: "currency", lb: "ค่าเงิน" },
+  { v: "portfolio", lb: "🎮 พอร์ตจำลอง" },
 ];
 
-function TradePage({ t, lang }) {
+function TradePage({ t, lang, userId }) {
   const [tab, setTab] = useState("overview");
   const [cacheByTab, setCacheByTab] = useState({}); // { [tab]: { items, index, fetchedAt } } กันโหลดซ้ำทุกครั้งที่สลับแท็บ
   const [loading, setLoading] = useState(true);
@@ -11513,6 +11514,102 @@ function TradePage({ t, lang }) {
   const [q, setQ] = useState(""); // ค้นหาในลิสต์หุ้น (เฉพาะแท็บหุ้นไทย/หุ้นโลก ที่มี 50 ตัว)
   const [detailItem, setDetailItem] = useState(null); // แถวที่กดดูรายละเอียด { item, tabCtx }
   const touchStartRef = useRef(null); // 👆 จุดเริ่มสัมผัสตอนปัดเปลี่ยนแท็บ
+
+  // 🎮 พอร์ตจำลอง — เงินปลอมล้วนๆ ไม่แตะเงินจริง
+  const [portfolio, setPortfolio] = useState(null); // { cash_balance }
+  const [holdings, setHoldings] = useState([]);
+  const [liveByKey, setLiveByKey] = useState({}); // "market:symbol" -> { price, currency }
+  const [usdThb, setUsdThb] = useState(null);
+  const [portfolioLoading, setPortfolioLoading] = useState(false);
+  const [depositOpen, setDepositOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  const loadPortfolio = async () => {
+    if (!userId) return;
+    setPortfolioLoading(true);
+    const [{ data: p }, { data: h }] = await Promise.all([
+      supabase.from("paper_portfolio").select("*").eq("user_id", userId).maybeSingle(),
+      supabase.from("paper_holdings").select("*").eq("user_id", userId).order("created_at", { ascending: false }),
+    ]);
+    setPortfolio(p || { cash_balance: 0 });
+    setHoldings(h || []);
+    if (h && h.length > 0) {
+      const byMarket = {};
+      h.forEach((row) => { (byMarket[row.market] = byMarket[row.market] || []).push(row.symbol); });
+      const results = {};
+      await Promise.all(Object.entries(byMarket).map(async ([market, syms]) => {
+        try {
+          const r = await fetch(`/api/content?type=stocks&view=quotes&market=${market}&symbols=${syms.join(",")}`, { cache: "no-store" });
+          const data = await r.json();
+          (data.items || []).forEach((it) => { results[`${market}:${it.key}`] = it; });
+        } catch (e) {}
+      }));
+      setLiveByKey(results);
+    }
+    try {
+      const r = await fetch("/api/content?type=stocks&view=currency", { cache: "no-store" });
+      const data = await r.json();
+      setUsdThb((data.items || []).find((c) => c.symbol === "USD")?.price || null);
+    } catch (e) {}
+    setPortfolioLoading(false);
+  };
+
+  // 🎮 ฝากเงินจำลอง — เขียนตรงผ่าน Supabase (RLS คุ้มครองข้อมูลของแต่ละคนอยู่แล้ว ไม่ต้องผ่าน API แยก)
+  const doDeposit = async (amount) => {
+    if (!(amount >= 500 && amount <= 5000000)) throw new Error("ฝากได้ครั้งละ 500 – 5,000,000 บาทเท่านั้น");
+    const newBalance = (portfolio?.cash_balance || 0) + amount;
+    const { error } = await supabase.from("paper_portfolio").upsert({ user_id: userId, cash_balance: newBalance, updated_at: new Date().toISOString() });
+    if (error) throw new Error(error.message);
+    await supabase.from("paper_transactions").insert({ user_id: userId, type: "deposit", amount_thb: amount });
+    await loadPortfolio();
+  };
+
+  // item: { key, symbol, name, price, currency } (จาก list/detail), market: 'th'|'world'|'crypto', qty: จำนวนหน่วยที่ซื้อ/ขาย
+  const priceToThb = (item, market) => (market === "world" ? item.price * (usdThb || 0) : item.price);
+
+  const doBuy = async (item, market, qty) => {
+    if (!(qty > 0)) throw new Error("จำนวนต้องมากกว่า 0");
+    if (market === "world" && !usdThb) throw new Error("ยังไม่มีอัตราแลกเปลี่ยน ลองรีเฟรชแล้วลองใหม่");
+    const priceThb = priceToThb(item, market);
+    const amountThb = priceThb * qty;
+    const cash = portfolio?.cash_balance || 0;
+    if (amountThb > cash) throw new Error(`เงินสดไม่พอ (มี ฿${cash.toLocaleString(undefined, { maximumFractionDigits: 0 })} ต้องใช้ ฿${amountThb.toLocaleString(undefined, { maximumFractionDigits: 0 })})`);
+    const existing = holdings.find((hh) => hh.symbol === item.key && hh.market === market);
+    if (existing) {
+      const newQty = Number(existing.quantity) + qty;
+      const newAvgCost = (Number(existing.quantity) * Number(existing.avg_cost_thb) + amountThb) / newQty;
+      const { error } = await supabase.from("paper_holdings").update({ quantity: newQty, avg_cost_thb: newAvgCost, updated_at: new Date().toISOString() }).eq("id", existing.id);
+      if (error) throw new Error(error.message);
+    } else {
+      const { error } = await supabase.from("paper_holdings").insert({ user_id: userId, symbol: item.key, market, name: item.name, quantity: qty, avg_cost_thb: priceThb });
+      if (error) throw new Error(error.message);
+    }
+    const { error: cashErr } = await supabase.from("paper_portfolio").upsert({ user_id: userId, cash_balance: cash - amountThb, updated_at: new Date().toISOString() });
+    if (cashErr) throw new Error(cashErr.message);
+    await supabase.from("paper_transactions").insert({ user_id: userId, type: "buy", symbol: item.key, market, name: item.name, quantity: qty, price_thb: priceThb, amount_thb: amountThb });
+    await loadPortfolio();
+  };
+
+  const doSell = async (item, market, qty) => {
+    const existing = holdings.find((hh) => hh.symbol === item.key && hh.market === market);
+    if (!existing || qty > Number(existing.quantity)) throw new Error("จำนวนที่ขายมากกว่าที่ถืออยู่");
+    if (market === "world" && !usdThb) throw new Error("ยังไม่มีอัตราแลกเปลี่ยน ลองรีเฟรชแล้วลองใหม่");
+    const priceThb = priceToThb(item, market);
+    const proceedsThb = priceThb * qty;
+    const remainingQty = Number(existing.quantity) - qty;
+    if (remainingQty <= 0) {
+      const { error } = await supabase.from("paper_holdings").delete().eq("id", existing.id);
+      if (error) throw new Error(error.message);
+    } else {
+      const { error } = await supabase.from("paper_holdings").update({ quantity: remainingQty, updated_at: new Date().toISOString() }).eq("id", existing.id);
+      if (error) throw new Error(error.message);
+    }
+    const cash = portfolio?.cash_balance || 0;
+    const { error: cashErr } = await supabase.from("paper_portfolio").upsert({ user_id: userId, cash_balance: cash + proceedsThb, updated_at: new Date().toISOString() });
+    if (cashErr) throw new Error(cashErr.message);
+    await supabase.from("paper_transactions").insert({ user_id: userId, type: "sell", symbol: item.key, market, name: item.name, quantity: qty, price_thb: priceThb, amount_thb: proceedsThb });
+    await loadPortfolio();
+  };
 
   const load = async (targetTab, force) => {
     setLoading(true); setError("");
@@ -11524,7 +11621,11 @@ function TradePage({ t, lang }) {
     } catch (e) { setError(e.message); }
     setLoading(false);
   };
-  useEffect(() => { setQ(""); if (!cacheByTab[tab]) load(tab, false); }, [tab]);
+  useEffect(() => {
+    setQ("");
+    if (tab === "portfolio") { loadPortfolio(); return; }
+    if (!cacheByTab[tab]) load(tab, false);
+  }, [tab]);
 
   const fmt = (n, decimals) => Number(n).toLocaleString("th-TH", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
   const priceDecimals = tab === "th" || tab === "world" ? 2 : tab === "currency" ? 3 : tab === "overview" ? 2 : 0;
@@ -11568,69 +11669,236 @@ function TradePage({ t, lang }) {
     </div>
 
     <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{ touchAction: "pan-y", minHeight: "60vh" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-        <div style={{ fontSize: 10.5, color: t.faint }}>{cur?.fetchedAt ? `อัปเดตล่าสุด ${new Date(cur.fetchedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}` : ""}</div>
-        <button onClick={() => load(tab, true)} disabled={loading} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: loading ? "default" : "pointer", color: t.accent, fontSize: 11.5, fontWeight: 700 }}>
-          <RefreshCw size={12} style={loading ? { animation: "spin 1s linear infinite" } : undefined} /> รีเฟรช
-        </button>
-      </div>
-
-      {isStockTab && (
-        <div style={{ position: "relative", marginBottom: 10 }}>
-          <Search size={14} color={t.faint} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ค้นหาชื่อหุ้น/สัญลักษณ์..." style={{ ...input(t), paddingLeft: 32 }} />
+      {tab === "portfolio" ? (
+        <PaperPortfolioView t={t} portfolio={portfolio} holdings={holdings} liveByKey={liveByKey} usdThb={usdThb} loading={portfolioLoading}
+          onDeposit={() => setDepositOpen(true)} onHistory={() => setHistoryOpen(true)}
+          onOpenHolding={(h) => setDetailItem({ item: { key: h.symbol, symbol: h.symbol.replace(".BK", ""), name: h.name, price: h.livePriceThb != null ? (h.market === "world" ? h.livePriceThb / (usdThb || 1) : h.livePriceThb) : Number(h.avg_cost_thb), change: null }, tabCtx: h.market })} />
+      ) : (<>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <div style={{ fontSize: 10.5, color: t.faint }}>{cur?.fetchedAt ? `อัปเดตล่าสุด ${new Date(cur.fetchedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}` : ""}</div>
+          <button onClick={() => load(tab, true)} disabled={loading} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: loading ? "default" : "pointer", color: t.accent, fontSize: 11.5, fontWeight: 700 }}>
+            <RefreshCw size={12} style={loading ? { animation: "spin 1s linear infinite" } : undefined} /> รีเฟรช
+          </button>
         </div>
-      )}
 
-      {loading && items.length === 0 && <Empty t={t} text="กำลังโหลดราคา..." />}
-      {error && items.length === 0 && <div style={{ fontSize: 12, color: "#D9534F", padding: "10px 0" }}>{error}</div>}
+        {isStockTab && (
+          <div style={{ position: "relative", marginBottom: 10 }}>
+            <Search size={14} color={t.faint} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ค้นหาชื่อหุ้น/สัญลักษณ์..." style={{ ...input(t), paddingLeft: 32 }} />
+          </div>
+        )}
 
-      {isStockTab && index && (
-        <button onClick={() => setDetailItem({ item: index, tabCtx: tab })} style={{ ...card(t), width: "100%", textAlign: "left", padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, border: `1.5px solid ${t.accent}55`, cursor: "pointer" }}>
-          <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text }}>{index.name}</div>
-          {index.closed ? (
-            <div style={{ fontSize: 11.5, fontWeight: 700, color: t.faint, textAlign: "right", maxWidth: 160 }}>{index.updatedText}</div>
-          ) : (
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 16, fontWeight: 800, color: t.accent }}>{fmt(index.price, 2)}</div>
-              {index.change != null && <div style={{ fontSize: 11.5, fontWeight: 700, color: index.change >= 0 ? "#2E9E6B" : "#D9534F" }}>{index.change >= 0 ? "▲ +" : "▼ "}{index.change.toFixed(2)}%</div>}
-            </div>
-          )}
-        </button>
-      )}
+        {loading && items.length === 0 && <Empty t={t} text="กำลังโหลดราคา..." />}
+        {error && items.length === 0 && <div style={{ fontSize: 12, color: "#D9534F", padding: "10px 0" }}>{error}</div>}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {filteredItems.map((x) => (
-          <button key={x.key} onClick={() => setDetailItem({ item: x, tabCtx: tab })} style={{ ...card(t), width: "100%", textAlign: "left", padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
-            {tab === "crypto" && x.image && <img src={x.image} alt="" style={{ width: 26, height: 26, borderRadius: 13, flexShrink: 0 }} />}
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 700, color: t.text }}>{rowLabel(x)}</div>
-              <div style={{ fontSize: 10, color: t.faint, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.closed ? x.updatedText : rowSub(x)}</div>
-            </div>
-            {!x.closed && (
-              <div style={{ textAlign: "right", flexShrink: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 800, color: t.text }}>{priceSymbol}{fmt(x.price, priceDecimals)}</div>
-                {x.change != null && <div style={{ fontSize: 11, fontWeight: 700, color: x.change >= 0 ? "#2E9E6B" : "#D9534F" }}>{x.change >= 0 ? "▲ +" : "▼ "}{x.change.toFixed(2)}%</div>}
+        {isStockTab && index && (
+          <button onClick={() => setDetailItem({ item: index, tabCtx: tab })} style={{ ...card(t), width: "100%", textAlign: "left", padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, border: `1.5px solid ${t.accent}55`, cursor: "pointer" }}>
+            <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text }}>{index.name}</div>
+            {index.closed ? (
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: t.faint, textAlign: "right", maxWidth: 160 }}>{index.updatedText}</div>
+            ) : (
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 16, fontWeight: 800, color: t.accent }}>{fmt(index.price, 2)}</div>
+                {index.change != null && <div style={{ fontSize: 11.5, fontWeight: 700, color: index.change >= 0 ? "#2E9E6B" : "#D9534F" }}>{index.change >= 0 ? "▲ +" : "▼ "}{index.change.toFixed(2)}%</div>}
               </div>
             )}
-            <ChevronRight size={15} color={t.faint} style={{ flexShrink: 0 }} />
           </button>
-        ))}
-        {!loading && isStockTab && filteredItems.length === 0 && items.length > 0 && <Empty t={t} text="ไม่พบหุ้นที่ค้นหา" />}
-      </div>
+        )}
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {filteredItems.map((x) => (
+            <button key={x.key} onClick={() => setDetailItem({ item: x, tabCtx: tab })} style={{ ...card(t), width: "100%", textAlign: "left", padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+              {tab === "crypto" && x.image && <img src={x.image} alt="" style={{ width: 26, height: 26, borderRadius: 13, flexShrink: 0 }} />}
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: t.text }}>{rowLabel(x)}</div>
+                <div style={{ fontSize: 10, color: t.faint, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.closed ? x.updatedText : rowSub(x)}</div>
+              </div>
+              {!x.closed && (
+                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: t.text }}>{priceSymbol}{fmt(x.price, priceDecimals)}</div>
+                  {x.change != null && <div style={{ fontSize: 11, fontWeight: 700, color: x.change >= 0 ? "#2E9E6B" : "#D9534F" }}>{x.change >= 0 ? "▲ +" : "▼ "}{x.change.toFixed(2)}%</div>}
+                </div>
+              )}
+              <ChevronRight size={15} color={t.faint} style={{ flexShrink: 0 }} />
+            </button>
+          ))}
+          {!loading && isStockTab && filteredItems.length === 0 && items.length > 0 && <Empty t={t} text="ไม่พบหุ้นที่ค้นหา" />}
+        </div>
+      </>)}
     </div>
 
     <div style={{ fontSize: 9.5, color: t.faint, textAlign: "center", marginTop: 16, lineHeight: 1.6, padding: "0 10px" }}>
       ราคาทองอ้างอิงสมาคมค้าทองคำ ส่วนดัชนี/หุ้น/คริปโต/ค่าเงิน มาจากแหล่งข้อมูลสาธารณะฟรี อาจคลาดเคลื่อนจากราคาซื้อขายจริงเล็กน้อยและดีเลย์ได้ ใช้เพื่อการอ้างอิงทั่วไปเท่านั้น ไม่ใช่คำแนะนำการลงทุน
     </div>
 
-    {detailItem && <TradeDetailModal t={t} item={detailItem.item} tabCtx={detailItem.tabCtx} close={() => setDetailItem(null)} />}
+    {detailItem && (
+      <TradeDetailModal t={t} item={detailItem.item} tabCtx={detailItem.tabCtx} close={() => setDetailItem(null)}
+        userId={userId} portfolio={portfolio} holdings={holdings} usdThb={usdThb} onBuy={doBuy} onSell={doSell} />
+    )}
+    {depositOpen && <PaperDepositModal t={t} onConfirm={doDeposit} close={() => setDepositOpen(false)} />}
+    {historyOpen && <PaperHistoryModal t={t} userId={userId} close={() => setHistoryOpen(false)} />}
   </>);
 }
 
-// 🔎 รายละเอียดแบบเต็มของแถวที่กด — ราคา/เปลี่ยนแปลงใช้ข้อมูลที่มีอยู่แล้ว ไม่ยิงซ้ำ ส่วนกราฟย้อนหลัง (เฉพาะหุ้น) ค่อยดึงตอนเปิดจริง
+// 🎮 หน้าพอร์ตจำลอง — มูลค่ารวมเรืองแสงตามกำไร/ขาดทุน + ลิสต์ถือครองแบบแถบสีข้าง
+function PaperPortfolioView({ t, portfolio, holdings, liveByKey, usdThb, loading, onDeposit, onHistory, onOpenHolding }) {
+  const cash = portfolio?.cash_balance || 0;
+  const holdingsWithValue = holdings.map((h) => {
+    const live = liveByKey[`${h.market}:${h.symbol}`];
+    const livePriceThb = live?.price != null ? (h.market === "world" ? live.price * (usdThb || 0) : live.price) : null;
+    const value = livePriceThb != null ? livePriceThb * Number(h.quantity) : null;
+    const cost = Number(h.avg_cost_thb) * Number(h.quantity);
+    const pnl = value != null ? value - cost : null;
+    const pnlPct = value != null && cost > 0 ? (pnl / cost) * 100 : null;
+    return { ...h, livePriceThb, value, pnl, pnlPct };
+  });
+  const holdingsValue = holdingsWithValue.reduce((s, h) => s + (h.value || 0), 0);
+  const totalValue = cash + holdingsValue;
+  const totalCost = holdingsWithValue.reduce((s, h) => s + Number(h.avg_cost_thb) * Number(h.quantity), 0);
+  const totalPnl = holdingsValue - totalCost;
+  const totalPnlPct = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
+  const isUp = totalPnl >= 0;
+  const monoFont = { fontFamily: "'IBM Plex Mono',monospace", fontVariantNumeric: "tabular-nums" };
+
+  return (
+    <div>
+      <div style={{ textAlign: "center", marginBottom: 4 }}>
+        <span style={{ fontSize: 10.5, fontWeight: 700, color: t.accent, background: `${t.accent}18`, padding: "5px 12px", borderRadius: 20 }}>🎮 เงินจำลอง ไม่ใช่เงินจริง</span>
+      </div>
+      <div style={{ textAlign: "center", padding: "22px 0 12px", position: "relative" }}>
+        {holdings.length > 0 && (
+          <div style={{ position: "absolute", top: "30%", left: "50%", transform: "translate(-50%,-50%)", width: 220, height: 110, background: `radial-gradient(ellipse, ${isUp ? "#2E9E6B55" : "#D9534F55"} 0%, transparent 70%)`, filter: "blur(20px)", pointerEvents: "none" }} />
+        )}
+        <div style={{ fontSize: 11.5, color: t.sub, position: "relative" }}>มูลค่าพอร์ตรวม</div>
+        <div style={{ ...monoFont, fontSize: 32, fontWeight: 700, color: t.text, margin: "8px 0 4px", position: "relative" }}>฿{totalValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+        {holdings.length > 0 ? (
+          <div style={{ ...monoFont, fontSize: 13, fontWeight: 700, color: isUp ? "#2E9E6B" : "#D9534F", position: "relative" }}>
+            {isUp ? "▲ +" : "▼ "}{Math.abs(totalPnl).toLocaleString(undefined, { maximumFractionDigits: 0 })} ({totalPnlPct.toFixed(2)}%)
+          </div>
+        ) : (
+          <div style={{ fontSize: 11, color: t.faint, position: "relative", marginTop: 4 }}>ยังไม่มีเงินในพอร์ต ฝากเงินจำลองเพื่อเริ่มเล่น</div>
+        )}
+      </div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+        <button onClick={onDeposit} style={{ flex: 1, padding: "9px 0", borderRadius: 11, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 12, color: "#141414", background: "linear-gradient(160deg,#F5A050,#E27418)", boxShadow: "0 4px 12px -4px rgba(242,135,46,.5), inset 0 1px 0 rgba(255,255,255,.3)" }}>+ ฝากเพิ่ม</button>
+        <button onClick={onHistory} style={{ flex: 1, padding: "9px 0", borderRadius: 11, cursor: "pointer", fontWeight: 700, fontSize: 12, color: t.sub, background: t.inputBg, border: `1px solid ${t.border}` }}>ประวัติ</button>
+      </div>
+
+      {loading && <Empty t={t} text="กำลังโหลดพอร์ต..." />}
+      {!loading && (
+        <>
+          <div style={{ fontSize: 10.5, fontWeight: 700, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+            <span>เงินสดคงเหลือ</span><span style={{ ...monoFont, color: t.sub }}>฿{cash.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+          </div>
+          {holdingsWithValue.length > 0 && <div style={{ fontSize: 10.5, fontWeight: 700, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>ถือครองอยู่ ({holdingsWithValue.length})</div>}
+          {holdingsWithValue.map((h) => {
+            const up = (h.pnl ?? 0) >= 0;
+            return (
+              <button key={h.id} onClick={() => onOpenHolding(h)} style={{ width: "100%", textAlign: "left", display: "flex", alignItems: "stretch", marginBottom: 8, borderRadius: 14, overflow: "hidden", background: t.surface, border: `1px solid ${t.border}`, cursor: "pointer" }}>
+                <div style={{ width: 4, flexShrink: 0, background: up ? "linear-gradient(#4ADE9A,#2E9E6B)" : "linear-gradient(#F0776F,#D9534F)" }} />
+                <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", minWidth: 0 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: t.text }}>{h.symbol.replace(".BK", "")}</div>
+                    <div style={{ fontSize: 10.5, color: t.faint, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{h.name} · {Number(h.quantity).toLocaleString()} หน่วย</div>
+                  </div>
+                  <div style={{ textAlign: "right", flexShrink: 0 }}>
+                    <div style={{ ...monoFont, fontSize: 13.5, fontWeight: 700, color: t.text }}>{h.value != null ? `฿${h.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "-"}</div>
+                    {h.pnlPct != null && <div style={{ ...monoFont, fontSize: 10.5, fontWeight: 700, color: up ? "#2E9E6B" : "#D9534F" }}>{up ? "▲ +" : "▼ "}{h.pnlPct.toFixed(2)}%</div>}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </>
+      )}
+    </div>
+  );
+}
+
+// 🎮 ฝากเงินจำลอง — 500 – 5,000,000 บาท/ครั้ง
+function PaperDepositModal({ t, onConfirm, close }) {
+  const [amount, setAmount] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const quickAmounts = [1000, 10000, 100000, 1000000];
+
+  const submit = async () => {
+    const n = Number(amount);
+    if (!n || n < 500 || n > 5000000) { setErr("ฝากได้ครั้งละ 500 – 5,000,000 บาทเท่านั้น"); return; }
+    setBusy(true); setErr("");
+    try { await onConfirm(n); close(); }
+    catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+
+  return (
+    <ModalPortal>
+      <div style={overlay} onClick={close}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 24, paddingBottom: 32 }}>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: -6 }}>
+            <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+          </div>
+          <div style={{ textAlign: "center", marginBottom: 4 }}>
+            <span style={{ fontSize: 10.5, fontWeight: 700, color: t.accent, background: `${t.accent}18`, padding: "5px 12px", borderRadius: 20 }}>🎮 เงินจำลอง ไม่ตัดบัตร/บัญชีจริง</span>
+          </div>
+          <div style={{ textAlign: "center", margin: "18px 0" }}>
+            <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ""))} inputMode="numeric" placeholder="0" autoFocus
+              style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 34, fontWeight: 700, color: t.text, background: "none", border: "none", textAlign: "center", width: "100%", outline: "none" }} />
+          </div>
+          <div style={{ display: "flex", gap: 6, marginBottom: 18 }}>
+            {quickAmounts.map((a) => (
+              <button key={a} onClick={() => setAmount(String((Number(amount) || 0) + a))} style={{ flex: 1, textAlign: "center", padding: "7px 0", borderRadius: 9, background: t.inputBg, border: `1px solid ${t.border}`, color: t.sub, fontSize: 10.5, fontWeight: 700, fontFamily: "'IBM Plex Mono',monospace", cursor: "pointer" }}>+{a >= 1000000 ? a / 1000000 + "M" : a.toLocaleString()}</button>
+            ))}
+          </div>
+          {err && <div style={{ fontSize: 11.5, color: "#D9534F", textAlign: "center", marginBottom: 10 }}>{err}</div>}
+          <div style={{ textAlign: "center" }}>
+            <button onClick={submit} disabled={busy} style={{ display: "inline-block", padding: "9px 20px", borderRadius: 11, border: "none", background: "linear-gradient(160deg,#F5A050,#E27418)", color: "#141414", fontWeight: 700, fontSize: 12, cursor: busy ? "default" : "pointer", boxShadow: "0 4px 12px -4px rgba(242,135,46,.5), inset 0 1px 0 rgba(255,255,255,.3)" }}>
+              {busy ? "กำลังฝาก..." : `ยืนยันฝาก ฿${amount ? Number(amount).toLocaleString() : 0}`}
+            </button>
+          </div>
+          <div style={{ fontSize: 10.5, color: t.faint, textAlign: "center", marginTop: 12 }}>ฝากได้ครั้งละ 500 – 5,000,000 บาท (จำลองเท่านั้น)</div>
+        </div>
+      </div>
+    </ModalPortal>
+  );
+}
+
+// 🎮 ประวัติการทำรายการพอร์ตจำลอง
+function PaperHistoryModal({ t, userId, close }) {
+  const [rows, setRows] = useState(null);
+  useEffect(() => {
+    supabase.from("paper_transactions").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(100).then(({ data }) => setRows(data || []));
+  }, []);
+  const typeLabel = { deposit: "ฝากเงิน", buy: "ซื้อ", sell: "ขาย" };
+  const typeColor = { deposit: "#F2872E", buy: "#2E9E6B", sell: "#D9534F" };
+  return (
+    <ModalPortal>
+      <div style={overlay} onClick={close}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "80vh", overflowY: "auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>ประวัติการทำรายการ</div>
+            <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+          </div>
+          {rows === null && <Empty t={t} text="กำลังโหลด..." />}
+          {rows && rows.length === 0 && <Empty t={t} text="ยังไม่มีประวัติ" />}
+          {rows && rows.map((r) => (
+            <div key={r.id} style={{ ...card(t), padding: 12, display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+              <div style={{ width: 8, height: 8, borderRadius: 4, background: typeColor[r.type], flexShrink: 0 }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: t.text }}>{typeLabel[r.type]}{r.symbol ? ` · ${r.symbol.replace(".BK", "")}` : ""}</div>
+                <div style={{ fontSize: 10.5, color: t.faint }}>{r.quantity ? `${Number(r.quantity).toLocaleString()} หน่วย · ` : ""}{new Date(r.created_at).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}</div>
+              </div>
+              <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 13, fontWeight: 700, color: typeColor[r.type], flexShrink: 0 }}>{r.type === "buy" ? "-" : "+"}฿{Number(r.amount_thb).toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </ModalPortal>
+  );
+}
+
 const HISTORY_RANGE_OPTIONS = [["1mo", "1 เดือน"], ["6mo", "6 เดือน"], ["1y", "1 ปี"], ["5y", "5 ปี"], ["max", "สูงสุด"]];
-function TradeDetailModal({ t, item, tabCtx, close }) {
+function TradeDetailModal({ t, item, tabCtx, close, userId, portfolio, holdings, usdThb, onBuy, onSell }) {
   const isStockTab = tabCtx === "th" || tabCtx === "world";
   const priceSymbol = tabCtx === "world" ? "$" : "฿";
   const priceDecimals = tabCtx === "th" || tabCtx === "world" ? 2 : tabCtx === "currency" ? 3 : tabCtx === "overview" ? 2 : 0;
@@ -11725,9 +11993,65 @@ function TradeDetailModal({ t, item, tabCtx, close }) {
           {item.updatedText && !item.closed && (
             <div style={{ fontSize: 10.5, color: t.faint, textAlign: "center", marginTop: 14 }}>{item.updatedText}</div>
           )}
+
+          {(isStockTab || tabCtx === "crypto") && userId && !item.closed && (
+            <TradeBuySellPanel t={t} item={item} market={tabCtx} usdThb={usdThb}
+              cash={portfolio?.cash_balance || 0}
+              heldQty={holdings.find((h) => h.symbol === item.key && h.market === tabCtx)?.quantity || 0}
+              onBuy={onBuy} onSell={onSell} />
+          )}
         </div>
       </div>
     </ModalPortal>
+  );
+}
+
+// 🎮 แผงซื้อ/ขายจำลอง — สลับซื้อ/ขายในหน้าเดียว คำนวณยอดรวม+เงินคงเหลือให้ดูก่อนกดยืนยัน
+function TradeBuySellPanel({ t, item, market, usdThb, cash, heldQty, onBuy, onSell }) {
+  const [side, setSide] = useState("buy");
+  const [qty, setQty] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [msg, setMsg] = useState("");
+  const monoFont = { fontFamily: "'IBM Plex Mono',monospace", fontVariantNumeric: "tabular-nums" };
+  const priceThb = market === "world" ? item.price * (usdThb || 0) : item.price;
+  const n = Number(qty) || 0;
+  const totalThb = priceThb * n;
+
+  const submit = async () => {
+    setErr(""); setMsg("");
+    if (!(n > 0)) { setErr("กรอกจำนวนก่อน"); return; }
+    setBusy(true);
+    try {
+      if (side === "buy") await onBuy(item, market, n);
+      else await onSell(item, market, n);
+      setMsg(side === "buy" ? "ซื้อสำเร็จ ✅" : "ขายสำเร็จ ✅");
+      setQty("");
+    } catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+
+  return (
+    <div style={{ marginTop: 20, paddingTop: 18, borderTop: `1px solid ${t.border}` }}>
+      <div style={{ marginBottom: 10 }}>
+        <span style={{ fontSize: 10.5, fontWeight: 700, color: t.accent, background: `${t.accent}18`, padding: "4px 10px", borderRadius: 20 }}>🎮 จำลอง</span>
+      </div>
+      <div style={{ display: "flex", background: t.inputBg, borderRadius: 11, padding: 3, marginBottom: 14, border: `1px solid ${t.border}` }}>
+        <button onClick={() => setSide("buy")} style={{ flex: 1, padding: "7px 0", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 700, background: side === "buy" ? "linear-gradient(160deg,#3EBE85,#1F8A5C)" : "transparent", color: side === "buy" ? "#fff" : t.sub, boxShadow: side === "buy" ? "0 3px 10px -3px rgba(46,158,107,.6)" : "none" }}>ซื้อ</button>
+        <button onClick={() => setSide("sell")} style={{ flex: 1, padding: "7px 0", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 700, background: side === "sell" ? "linear-gradient(160deg,#E86C64,#C2453D)" : "transparent", color: side === "sell" ? "#fff" : t.sub, boxShadow: side === "sell" ? "0 3px 10px -3px rgba(217,83,79,.5)" : "none" }}>ขาย</button>
+      </div>
+      {side === "sell" && <div style={{ fontSize: 11, color: t.sub, marginBottom: 8 }}>ถืออยู่ <span style={monoFont}>{heldQty.toLocaleString()}</span> หน่วย</div>}
+      <input value={qty} onChange={(e) => setQty(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0" style={{ ...input(t), ...monoFont, fontSize: 18, fontWeight: 700, textAlign: "center", marginBottom: 10 }} />
+      <div style={{ fontSize: 11.5, color: t.sub, display: "flex", justifyContent: "space-between", padding: "4px 0" }}><span>ราคา/หน่วย</span><span style={{ ...monoFont, color: t.text, fontWeight: 700 }}>฿{priceThb.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></div>
+      <div style={{ fontSize: 11.5, color: t.sub, display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: `1px solid ${t.border}`, marginBottom: 12 }}><span>รวมทั้งหมด</span><span style={{ ...monoFont, color: t.text, fontWeight: 700 }}>฿{totalThb.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></div>
+      {err && <div style={{ fontSize: 11.5, color: "#D9534F", marginBottom: 8 }}>{err}</div>}
+      {msg && <div style={{ fontSize: 11.5, color: "#2E9E6B", marginBottom: 8 }}>{msg}</div>}
+      <div style={{ textAlign: "center" }}>
+        <button onClick={submit} disabled={busy} style={{ display: "inline-block", padding: "9px 24px", borderRadius: 11, border: "none", cursor: busy ? "default" : "pointer", fontWeight: 700, fontSize: 12, color: "#fff", background: side === "buy" ? "linear-gradient(160deg,#3EBE85,#1F8A5C)" : "linear-gradient(160deg,#E86C64,#C2453D)", boxShadow: side === "buy" ? "0 4px 12px -4px rgba(46,158,107,.6)" : "0 4px 12px -4px rgba(217,83,79,.5)" }}>
+          {busy ? "กำลังทำรายการ..." : `ยืนยัน${side === "buy" ? "ซื้อ" : "ขาย"}${n ? ` ${n.toLocaleString()} หน่วย` : ""}`}
+        </button>
+      </div>
+    </div>
   );
 }
 const NEWS_CATEGORIES = [
