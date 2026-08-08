@@ -11511,6 +11511,8 @@ function TradePage({ t, lang }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [q, setQ] = useState(""); // ค้นหาในลิสต์หุ้น (เฉพาะแท็บหุ้นไทย/หุ้นโลก ที่มี 50 ตัว)
+  const [detailItem, setDetailItem] = useState(null); // แถวที่กดดูรายละเอียด { item, tabCtx }
+  const touchStartRef = useRef(null); // 👆 จุดเริ่มสัมผัสตอนปัดเปลี่ยนแท็บ
 
   const load = async (targetTab, force) => {
     setLoading(true); setError("");
@@ -11525,6 +11527,8 @@ function TradePage({ t, lang }) {
   useEffect(() => { setQ(""); if (!cacheByTab[tab]) load(tab, false); }, [tab]);
 
   const fmt = (n, decimals) => Number(n).toLocaleString("th-TH", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  const priceDecimals = tab === "th" || tab === "world" ? 2 : tab === "currency" ? 3 : tab === "overview" ? 2 : 0;
+  const priceSymbol = tab === "world" ? "$" : "฿";
   const cur = cacheByTab[tab];
   const items = cur?.items || [];
   const index = cur?.index || null;
@@ -11532,6 +11536,22 @@ function TradePage({ t, lang }) {
   const filteredItems = isStockTab && q.trim()
     ? items.filter((x) => x.symbol.toLowerCase().includes(q.trim().toLowerCase()) || x.name.toLowerCase().includes(q.trim().toLowerCase()))
     : items;
+
+  // 👆 ปัดซ้าย/ขวาเปลี่ยนแท็บได้เหมือนเลื่อนดูหน้าจอ ไม่ต้องกดแท็บด้านบนอย่างเดียว
+  const onTouchStart = (e) => { touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }; };
+  const onTouchEnd = (e) => {
+    if (!touchStartRef.current) return;
+    const dx = e.changedTouches[0].clientX - touchStartRef.current.x;
+    const dy = e.changedTouches[0].clientY - touchStartRef.current.y;
+    touchStartRef.current = null;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy)) return; // ปัดแนวนอนชัดเจนพอเท่านั้น ไม่ชนกับการเลื่อนจอขึ้นลงปกติ
+    const i = TRADE_TABS.findIndex((x) => x.v === tab);
+    const next = dx < 0 ? i + 1 : i - 1; // ปัดซ้าย -> แท็บถัดไป, ปัดขวา -> แท็บก่อนหน้า
+    if (next >= 0 && next < TRADE_TABS.length) setTab(TRADE_TABS[next].v);
+  };
+
+  const rowLabel = (x) => (isStockTab || tab === "crypto" ? x.symbol : x.name);
+  const rowSub = (x) => (isStockTab || tab === "crypto" ? x.name : x.unit);
 
   return (<>
     <PageHead t={t} title={L(lang, "ph_trade_title")} sub={L(lang, "ph_trade_sub")} icon={<TrendingUp size={20} color={t.accent} />} />
@@ -11545,54 +11565,117 @@ function TradePage({ t, lang }) {
       ))}
     </div>
 
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-      <div style={{ fontSize: 10.5, color: t.faint }}>{cur?.fetchedAt ? `อัปเดตล่าสุด ${new Date(cur.fetchedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}` : ""}</div>
-      <button onClick={() => load(tab, true)} disabled={loading} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: loading ? "default" : "pointer", color: t.accent, fontSize: 11.5, fontWeight: 700 }}>
-        <RefreshCw size={12} style={loading ? { animation: "spin 1s linear infinite" } : undefined} /> รีเฟรช
-      </button>
-    </div>
-
-    {isStockTab && (
-      <div style={{ position: "relative", marginBottom: 10 }}>
-        <Search size={14} color={t.faint} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ค้นหาชื่อหุ้น/สัญลักษณ์..." style={{ ...input(t), paddingLeft: 32 }} />
+    <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <div style={{ fontSize: 10.5, color: t.faint }}>{cur?.fetchedAt ? `อัปเดตล่าสุด ${new Date(cur.fetchedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}` : ""}</div>
+        <button onClick={() => load(tab, true)} disabled={loading} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: loading ? "default" : "pointer", color: t.accent, fontSize: 11.5, fontWeight: 700 }}>
+          <RefreshCw size={12} style={loading ? { animation: "spin 1s linear infinite" } : undefined} /> รีเฟรช
+        </button>
       </div>
-    )}
 
-    {loading && items.length === 0 && <Empty t={t} text="กำลังโหลดราคา..." />}
-    {error && items.length === 0 && <div style={{ fontSize: 12, color: "#D9534F", padding: "10px 0" }}>{error}</div>}
-
-    {isStockTab && index && (
-      <div style={{ ...card(t), padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, border: `1.5px solid ${t.accent}55` }}>
-        <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text }}>{index.name}</div>
-        <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 16, fontWeight: 800, color: t.accent }}>{fmt(index.price, 2)}</div>
-          {index.change != null && <div style={{ fontSize: 11.5, fontWeight: 700, color: index.change >= 0 ? "#2E9E6B" : "#D9534F" }}>{index.change >= 0 ? "▲ +" : "▼ "}{index.change.toFixed(2)}%</div>}
+      {isStockTab && (
+        <div style={{ position: "relative", marginBottom: 10 }}>
+          <Search size={14} color={t.faint} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ค้นหาชื่อหุ้น/สัญลักษณ์..." style={{ ...input(t), paddingLeft: 32 }} />
         </div>
+      )}
+
+      {loading && items.length === 0 && <Empty t={t} text="กำลังโหลดราคา..." />}
+      {error && items.length === 0 && <div style={{ fontSize: 12, color: "#D9534F", padding: "10px 0" }}>{error}</div>}
+
+      {isStockTab && index && (
+        <button onClick={() => setDetailItem({ item: index, tabCtx: tab })} style={{ ...card(t), width: "100%", textAlign: "left", padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, border: `1.5px solid ${t.accent}55`, cursor: "pointer" }}>
+          <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text }}>{index.name}</div>
+          {index.closed ? (
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: t.faint, textAlign: "right", maxWidth: 160 }}>{index.updatedText}</div>
+          ) : (
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: t.accent }}>{fmt(index.price, 2)}</div>
+              {index.change != null && <div style={{ fontSize: 11.5, fontWeight: 700, color: index.change >= 0 ? "#2E9E6B" : "#D9534F" }}>{index.change >= 0 ? "▲ +" : "▼ "}{index.change.toFixed(2)}%</div>}
+            </div>
+          )}
+        </button>
+      )}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {filteredItems.map((x) => (
+          <button key={x.key} onClick={() => setDetailItem({ item: x, tabCtx: tab })} style={{ ...card(t), width: "100%", textAlign: "left", padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+            {tab === "crypto" && x.image && <img src={x.image} alt="" style={{ width: 26, height: 26, borderRadius: 13, flexShrink: 0 }} />}
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: t.text }}>{rowLabel(x)}</div>
+              <div style={{ fontSize: 10, color: t.faint, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.closed ? x.updatedText : rowSub(x)}</div>
+            </div>
+            {!x.closed && (
+              <div style={{ textAlign: "right", flexShrink: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 800, color: t.text }}>{priceSymbol}{fmt(x.price, priceDecimals)}</div>
+                {x.change != null && <div style={{ fontSize: 11, fontWeight: 700, color: x.change >= 0 ? "#2E9E6B" : "#D9534F" }}>{x.change >= 0 ? "▲ +" : "▼ "}{x.change.toFixed(2)}%</div>}
+              </div>
+            )}
+            <ChevronRight size={15} color={t.faint} style={{ flexShrink: 0 }} />
+          </button>
+        ))}
+        {!loading && isStockTab && filteredItems.length === 0 && items.length > 0 && <Empty t={t} text="ไม่พบหุ้นที่ค้นหา" />}
       </div>
-    )}
-
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      {filteredItems.map((x) => (
-        <div key={x.key} style={{ ...card(t), padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
-          {tab === "crypto" && x.image && <img src={x.image} alt="" style={{ width: 26, height: 26, borderRadius: 13, flexShrink: 0 }} />}
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: 13.5, fontWeight: 700, color: t.text }}>{isStockTab || tab === "crypto" ? x.symbol : x.name}</div>
-            <div style={{ fontSize: 10, color: t.faint, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{isStockTab || tab === "crypto" ? x.name : x.unit}</div>
-          </div>
-          <div style={{ textAlign: "right", flexShrink: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 800, color: t.text }}>{tab === "th" ? "฿" : tab === "world" ? "$" : "฿"}{fmt(x.price, tab === "th" || tab === "world" ? 2 : tab === "currency" ? 3 : 0)}</div>
-            {x.change != null && <div style={{ fontSize: 11, fontWeight: 700, color: x.change >= 0 ? "#2E9E6B" : "#D9534F" }}>{x.change >= 0 ? "▲ +" : "▼ "}{x.change.toFixed(2)}%</div>}
-          </div>
-        </div>
-      ))}
-      {!loading && isStockTab && filteredItems.length === 0 && items.length > 0 && <Empty t={t} text="ไม่พบหุ้นที่ค้นหา" />}
     </div>
 
     <div style={{ fontSize: 9.5, color: t.faint, textAlign: "center", marginTop: 16, lineHeight: 1.6, padding: "0 10px" }}>
       ราคาทองอ้างอิงสมาคมค้าทองคำ ส่วนดัชนี/หุ้น/คริปโต/ค่าเงิน มาจากแหล่งข้อมูลสาธารณะฟรี อาจคลาดเคลื่อนจากราคาซื้อขายจริงเล็กน้อยและดีเลย์ได้ ใช้เพื่อการอ้างอิงทั่วไปเท่านั้น ไม่ใช่คำแนะนำการลงทุน
     </div>
+
+    {detailItem && <TradeDetailModal t={t} item={detailItem.item} tabCtx={detailItem.tabCtx} close={() => setDetailItem(null)} />}
   </>);
+}
+
+// 🔎 รายละเอียดแบบเต็มของแถวที่กด — ใช้ข้อมูลที่มีอยู่แล้วในลิสต์ ไม่ต้องยิง API เพิ่ม
+function TradeDetailModal({ t, item, tabCtx, close }) {
+  const isStockTab = tabCtx === "th" || tabCtx === "world";
+  const priceSymbol = tabCtx === "world" ? "$" : "฿";
+  const priceDecimals = tabCtx === "th" || tabCtx === "world" ? 2 : tabCtx === "currency" ? 3 : tabCtx === "overview" ? 2 : 0;
+  const fmt = (n, d) => Number(n).toLocaleString("th-TH", { minimumFractionDigits: d, maximumFractionDigits: d });
+  const title = isStockTab || tabCtx === "crypto" ? item.symbol : item.name;
+  const sub = isStockTab || tabCtx === "crypto" ? item.name : item.unit;
+
+  return (
+    <ModalPortal>
+      <div style={overlay} onClick={close}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 24, paddingBottom: 32 }}>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 4 }}>
+            <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
+            {tabCtx === "crypto" && item.image && <img src={item.image} alt="" style={{ width: 40, height: 40, borderRadius: 20 }} />}
+            <div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: t.text }}>{title}</div>
+              <div style={{ fontSize: 12.5, color: t.sub }}>{sub}</div>
+            </div>
+          </div>
+
+          {item.closed ? (
+            <div style={{ fontSize: 14, fontWeight: 700, color: t.faint, textAlign: "center", padding: "20px 0" }}>{item.updatedText}</div>
+          ) : (
+            <>
+              <div style={{ fontSize: 32, fontWeight: 800, color: t.text, marginBottom: 4 }}>{priceSymbol}{fmt(item.price, priceDecimals)}</div>
+              {item.change != null && (
+                <div style={{ fontSize: 15, fontWeight: 700, color: item.change >= 0 ? "#2E9E6B" : "#D9534F", marginBottom: 18 }}>
+                  {item.change >= 0 ? "▲ +" : "▼ "}{item.change.toFixed(2)}% <span style={{ fontSize: 11.5, color: t.faint, fontWeight: 600 }}>(24 ชม.ที่ผ่านมา)</span>
+                </div>
+              )}
+            </>
+          )}
+
+          {isStockTab && item.currency && (
+            <div style={{ ...card(t), padding: 12, display: "flex", justifyContent: "space-between", marginTop: 8 }}>
+              <span style={{ fontSize: 12.5, color: t.sub }}>สกุลเงินที่ซื้อขาย</span>
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: t.text }}>{item.currency}</span>
+            </div>
+          )}
+          {item.updatedText && !item.closed && (
+            <div style={{ fontSize: 10.5, color: t.faint, textAlign: "center", marginTop: 14 }}>{item.updatedText}</div>
+          )}
+        </div>
+      </div>
+    </ModalPortal>
+  );
 }
 const NEWS_CATEGORIES = [
   { id: "tech", label: "💻 เทคโนโลยี" },

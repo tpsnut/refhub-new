@@ -248,20 +248,35 @@ async function fetchSetIndex() {
   if (!r.ok) throw new Error(`ดึง SET Index ไม่สำเร็จ (HTTP ${r.status})`);
   let data;
   try { data = JSON.parse(raw); } catch { throw new Error(`SET Index: อ่านผลลัพธ์ไม่ใช่ JSON (${raw.slice(0, 80)})`); }
-  const price = numFromComma(data.live?.set);
+  const rawSet = data.live?.set;
+  // ตลาดปิด (นอกเวลา 10:00-16:30 น. วันทำการ) API ตัวนี้ส่ง "--" กลับมาแทนค่าจริง — ไม่ใช่ error ให้โชว์สถานะปิดตลาดแทน
+  if (!rawSet || rawSet === "--") {
+    return { key: "set", name: "SET Index", price: null, unit: "จุด", change: null, updatedText: "ตลาดปิดอยู่ (เปิดทำการ 10:00–16:30 น. วันทำการ)", closed: true };
+  }
+  const price = numFromComma(rawSet);
   if (!isFinite(price)) throw new Error(`อ่านค่า SET Index ไม่ได้ (${JSON.stringify(data).slice(0, 100)})`);
   return { key: "set", name: "SET Index", price, unit: "จุด", change: null, updatedText: data.live?.time || "" };
 }
 
+// 🔧 Yahoo Finance v7/finance/quote เริ่มบล็อก (HTTP 401 Invalid Crumb) ตั้งแต่ปี 2025 เป็นต้นมา ต้องล็อกอิน/มี cookie ถึงจะใช้ได้
+// ทางออก: ใช้ v8/finance/chart แทน (ยังไม่ต้อง auth ณ ตอนที่เขียน) แต่ดึงได้ทีละสัญลักษณ์ ไม่รองรับ batch เหมือน v7 เดิม
+async function fetchYahooChartOne(symbol) {
+  const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`, { headers: BROWSER_HEADERS });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const data = await r.json();
+  const meta = data?.chart?.result?.[0]?.meta;
+  if (!meta || meta.regularMarketPrice == null) throw new Error("ไม่พบราคา");
+  const price = meta.regularMarketPrice;
+  const prevClose = meta.previousClose ?? meta.chartPreviousClose;
+  const change = prevClose ? ((price - prevClose) / prevClose) * 100 : null;
+  return { price, change, currency: meta.currency || null };
+}
+
 async function fetchSP500Index() {
-  const r = await fetch("https://query1.finance.yahoo.com/v7/finance/quote?symbols=%5EGSPC", { headers: BROWSER_HEADERS });
-  const raw = await r.text();
-  if (!r.ok) throw new Error(`ดึง S&P 500 ไม่สำเร็จ (HTTP ${r.status})`);
-  let data;
-  try { data = JSON.parse(raw); } catch { throw new Error(`S&P 500: อ่านผลลัพธ์ไม่ใช่ JSON (${raw.slice(0, 80)})`); }
-  const q = data?.quoteResponse?.result?.[0];
-  if (!q?.regularMarketPrice) throw new Error("ไม่พบข้อมูล S&P 500");
-  return { key: "sp500", name: "S&P 500 Index", price: q.regularMarketPrice, unit: "จุด", change: q.regularMarketChangePercent ?? null, updatedText: "" };
+  try {
+    const q = await fetchYahooChartOne("^GSPC");
+    return { key: "sp500", name: "S&P 500 Index", price: q.price, unit: "จุด", change: q.change, updatedText: "" };
+  } catch (e) { throw new Error(`ดึง S&P 500 ไม่สำเร็จ (${e.message})`); }
 }
 
 async function fetchTopCrypto() {
@@ -290,47 +305,63 @@ async function fetchTopCurrencies() {
   }).filter(Boolean);
 }
 
-// หุ้นไทย 50 ตัว (SET) กระจายหลายกลุ่มอุตสาหกรรม — ticker ต่อท้าย .BK ตามมาตรฐาน Yahoo Finance
+// หุ้นไทย 50 ตัว (SET) กระจายหลายกลุ่มอุตสาหกรรม — ชื่อบริษัทใส่ไว้เองเลย ไม่พึ่ง Yahoo (v8/chart ไม่ให้ชื่อบริษัทมาด้วย)
 const THAI_STOCKS = [
-  "KBANK.BK","SCB.BK","BBL.BK","KTB.BK","TTB.BK","TISCO.BK",
-  "PTT.BK","PTTEP.BK","GULF.BK","BGRIM.BK","EGCO.BK","RATCH.BK","GPSC.BK",
-  "ADVANC.BK","TRUE.BK","INTUCH.BK",
-  "CPALL.BK","HMPRO.BK","CRC.BK","COM7.BK","MAKRO.BK","GLOBAL.BK",
-  "LH.BK","AP.BK","SPALI.BK","SIRI.BK","ORIGIN.BK",
-  "AOT.BK","MINT.BK","ERW.BK","BEM.BK","BTS.BK",
-  "CPF.BK","TU.BK","OSP.BK","TFG.BK",
-  "SCC.BK","SCGP.BK","IVL.BK","IRPC.BK","TOP.BK",
-  "BDMS.BK","BH.BK","BCH.BK",
-  "DELTA.BK","KCE.BK","HANA.BK",
-  "KTC.BK","MTC.BK","SAWAD.BK",
+  { symbol: "KBANK.BK", name: "ธนาคารกสิกรไทย" }, { symbol: "SCB.BK", name: "ธนาคารไทยพาณิชย์" }, { symbol: "BBL.BK", name: "ธนาคารกรุงเทพ" }, { symbol: "KTB.BK", name: "ธนาคารกรุงไทย" }, { symbol: "TTB.BK", name: "ทีเอ็มบีธนชาต" }, { symbol: "TISCO.BK", name: "ทิสโก้" },
+  { symbol: "PTT.BK", name: "ปตท." }, { symbol: "PTTEP.BK", name: "ปตท.สำรวจและผลิตฯ" }, { symbol: "GULF.BK", name: "กัลฟ์ เอ็นเนอร์จี" }, { symbol: "BGRIM.BK", name: "บี.กริม เพาเวอร์" }, { symbol: "EGCO.BK", name: "เอ็กโก กรุ๊ป" }, { symbol: "RATCH.BK", name: "ราช กรุ๊ป" }, { symbol: "GPSC.BK", name: "โกลบอล เพาเวอร์ ซินเนอร์ยี่" },
+  { symbol: "ADVANC.BK", name: "เอไอเอส" }, { symbol: "TRUE.BK", name: "ทรู คอร์ปอเรชั่น" }, { symbol: "INTUCH.BK", name: "อินทัช โฮลดิ้งส์" },
+  { symbol: "CPALL.BK", name: "ซีพี ออลล์ (7-Eleven)" }, { symbol: "HMPRO.BK", name: "โฮมโปร" }, { symbol: "CRC.BK", name: "เซ็นทรัล รีเทล" }, { symbol: "COM7.BK", name: "คอมเซเว่น" }, { symbol: "MAKRO.BK", name: "สยามแม็คโคร" }, { symbol: "GLOBAL.BK", name: "สยามโกลบอลเฮ้าส์" },
+  { symbol: "LH.BK", name: "แลนด์แอนด์เฮ้าส์" }, { symbol: "AP.BK", name: "เอพี ไทยแลนด์" }, { symbol: "SPALI.BK", name: "ศุภาลัย" }, { symbol: "SIRI.BK", name: "แสนสิริ" }, { symbol: "ORIGIN.BK", name: "ออริจิ้น พร็อพเพอร์ตี้" },
+  { symbol: "AOT.BK", name: "ท่าอากาศยานไทย" }, { symbol: "MINT.BK", name: "ไมเนอร์ อินเตอร์เนชั่นแนล" }, { symbol: "ERW.BK", name: "ดิ เอราวัณ กรุ๊ป" }, { symbol: "BEM.BK", name: "ทางด่วนและรถไฟฟ้ากรุงเทพ" }, { symbol: "BTS.BK", name: "บีทีเอส กรุ๊ป" },
+  { symbol: "CPF.BK", name: "เจริญโภคภัณฑ์อาหาร" }, { symbol: "TU.BK", name: "ไทยยูเนี่ยน กรุ๊ป" }, { symbol: "OSP.BK", name: "โอสถสภา" }, { symbol: "TFG.BK", name: "ไทยฟู้ดส์ กรุ๊ป" },
+  { symbol: "SCC.BK", name: "ปูนซิเมนต์ไทย" }, { symbol: "SCGP.BK", name: "เอสซีจี แพคเกจจิ้ง" }, { symbol: "IVL.BK", name: "อินโดรามา เวนเจอร์ส" }, { symbol: "IRPC.BK", name: "ไออาร์พีซี" }, { symbol: "TOP.BK", name: "ไทยออยล์" },
+  { symbol: "BDMS.BK", name: "กรุงเทพดุสิตเวชการ" }, { symbol: "BH.BK", name: "โรงพยาบาลบำรุงราษฎร์" }, { symbol: "BCH.BK", name: "บางกอก เชน ฮอสปิทอล" },
+  { symbol: "DELTA.BK", name: "เดลต้า อีเลคโทรนิคส์" }, { symbol: "KCE.BK", name: "เคซีอี อีเลคโทรนิคส์" }, { symbol: "HANA.BK", name: "ฮานา ไมโครอิเล็คโทรนิคส" },
+  { symbol: "KTC.BK", name: "บัตรกรุงไทย" }, { symbol: "MTC.BK", name: "เมืองไทย แคปปิตอล" }, { symbol: "SAWAD.BK", name: "ศรีสวัสดิ์ คอร์ปอเรชั่น" },
 ];
 // หุ้นโลก 50 ตัว (ส่วนใหญ่จดทะเบียนในสหรัฐฯ) บริษัทที่คนรู้จักกว้างที่สุดในแต่ละกลุ่ม
 const WORLD_STOCKS = [
-  "AAPL","MSFT","GOOGL","AMZN","META","NVDA","TSLA","AVGO","ORCL","ADBE",
-  "CRM","AMD","INTC","CSCO","QCOM","IBM","NFLX","PYPL","UBER","NOW",
-  "JPM","V","MA","BAC","WFC","GS","MS","AXP",
-  "WMT","PG","KO","PEP","COST","MCD","NKE","HD","SBUX","DIS",
-  "JNJ","UNH","PFE","LLY","ABBV","MRK",
-  "XOM","CVX","BA","CAT","GE",
-  "BRK-B",
+  { symbol: "AAPL", name: "Apple" }, { symbol: "MSFT", name: "Microsoft" }, { symbol: "GOOGL", name: "Alphabet (Google)" }, { symbol: "AMZN", name: "Amazon" }, { symbol: "META", name: "Meta Platforms" }, { symbol: "NVDA", name: "Nvidia" }, { symbol: "TSLA", name: "Tesla" }, { symbol: "AVGO", name: "Broadcom" }, { symbol: "ORCL", name: "Oracle" }, { symbol: "ADBE", name: "Adobe" },
+  { symbol: "CRM", name: "Salesforce" }, { symbol: "AMD", name: "AMD" }, { symbol: "INTC", name: "Intel" }, { symbol: "CSCO", name: "Cisco" }, { symbol: "QCOM", name: "Qualcomm" }, { symbol: "IBM", name: "IBM" }, { symbol: "NFLX", name: "Netflix" }, { symbol: "PYPL", name: "PayPal" }, { symbol: "UBER", name: "Uber" }, { symbol: "NOW", name: "ServiceNow" },
+  { symbol: "JPM", name: "JPMorgan Chase" }, { symbol: "V", name: "Visa" }, { symbol: "MA", name: "Mastercard" }, { symbol: "BAC", name: "Bank of America" }, { symbol: "WFC", name: "Wells Fargo" }, { symbol: "GS", name: "Goldman Sachs" }, { symbol: "MS", name: "Morgan Stanley" }, { symbol: "AXP", name: "American Express" },
+  { symbol: "WMT", name: "Walmart" }, { symbol: "PG", name: "Procter & Gamble" }, { symbol: "KO", name: "Coca-Cola" }, { symbol: "PEP", name: "PepsiCo" }, { symbol: "COST", name: "Costco" }, { symbol: "MCD", name: "McDonald's" }, { symbol: "NKE", name: "Nike" }, { symbol: "HD", name: "Home Depot" }, { symbol: "SBUX", name: "Starbucks" }, { symbol: "DIS", name: "Disney" },
+  { symbol: "JNJ", name: "Johnson & Johnson" }, { symbol: "UNH", name: "UnitedHealth" }, { symbol: "PFE", name: "Pfizer" }, { symbol: "LLY", name: "Eli Lilly" }, { symbol: "ABBV", name: "AbbVie" }, { symbol: "MRK", name: "Merck" },
+  { symbol: "XOM", name: "ExxonMobil" }, { symbol: "CVX", name: "Chevron" }, { symbol: "BA", name: "Boeing" }, { symbol: "CAT", name: "Caterpillar" }, { symbol: "GE", name: "General Electric" },
+  { symbol: "BRK-B", name: "Berkshire Hathaway" },
 ];
 
-async function fetchYahooQuotes(symbols) {
-  const r = await fetch(`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbols.join(",")}`, { headers: BROWSER_HEADERS });
-  if (!r.ok) throw new Error(`ดึงข้อมูลหุ้นไม่สำเร็จ (HTTP ${r.status} — Yahoo อาจบล็อกการเข้าถึงชั่วคราว)`);
-  const data = await r.json();
-  const results = data?.quoteResponse?.result || [];
-  if (results.length === 0) throw new Error("ไม่พบข้อมูลหุ้น");
-  return results.map((q) => ({
-    key: q.symbol, symbol: (q.symbol || "").replace(".BK", ""), name: q.shortName || q.longName || q.symbol,
-    price: q.regularMarketPrice, change: q.regularMarketChangePercent ?? null, currency: q.currency,
-  }));
+// ยิงพร้อมกันทีละไม่เกิน N ตัว (ไม่ใช่ทั้ง 50 พร้อมกันหมด) กัน Yahoo มองว่าเป็นการโจมตี/รัว request จนบล็อก
+async function mapWithConcurrency(items, limit, fn) {
+  const results = new Array(items.length);
+  let idx = 0;
+  async function worker() {
+    while (idx < items.length) {
+      const i = idx++;
+      try { results[i] = { status: "fulfilled", value: await fn(items[i]) }; }
+      catch (e) { results[i] = { status: "rejected", reason: e }; }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()));
+  return results;
+}
+
+async function fetchYahooQuotesBatch(list) {
+  // ดึงทีละตัวแบบขนานจำกัดจำนวน (v8/chart ไม่รองรับ batch เหมือน v7 เดิมที่โดนบล็อกไปแล้ว) ตัวไหนพังข้ามไปเงียบๆ
+  const results = await mapWithConcurrency(list, 10, (s) => fetchYahooChartOne(s.symbol));
+  const items = [];
+  results.forEach((r, i) => {
+    if (r.status === "fulfilled") {
+      items.push({ key: list[i].symbol, symbol: list[i].symbol.replace(".BK", ""), name: list[i].name, price: r.value.price, change: r.value.change, currency: r.value.currency });
+    }
+  });
+  if (items.length === 0) throw new Error("ดึงข้อมูลหุ้นไม่สำเร็จทั้งหมด (Yahoo อาจบล็อกการเข้าถึงชั่วคราว)");
+  return items;
 }
 
 async function fetchStockList(market) {
-  const symbols = market === "th" ? THAI_STOCKS : WORLD_STOCKS;
+  const list = market === "th" ? THAI_STOCKS : WORLD_STOCKS;
   const indexFetcher = market === "th" ? fetchSetIndex : fetchSP500Index;
-  const [stocksR, indexR] = await Promise.allSettled([fetchYahooQuotes(symbols), indexFetcher()]);
+  const [stocksR, indexR] = await Promise.allSettled([fetchYahooQuotesBatch(list), indexFetcher()]);
   const items = stocksR.status === "fulfilled" ? stocksR.value : [];
   const index = indexR.status === "fulfilled" ? indexR.value : null;
   if (items.length === 0 && !index) throw new Error([stocksR.reason?.message, indexR.reason?.message].filter(Boolean).join(" | "));
