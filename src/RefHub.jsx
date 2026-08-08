@@ -11900,7 +11900,7 @@ function PaperDepositModal({ t, onConfirm, close }) {
 
   return (
     <ModalPortal>
-      <div style={overlay} onClick={close}>
+      <div style={overlayHi} onClick={close}>
         <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 24, paddingBottom: 32 }}>
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: -6 }}>
             <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
@@ -11940,7 +11940,7 @@ function PaperHistoryModal({ t, userId, close }) {
   const typeColor = { deposit: "#F2872E", buy: "#2E9E6B", sell: "#D9534F" };
   return (
     <ModalPortal>
-      <div style={overlay} onClick={close}>
+      <div style={overlayHi} onClick={close}>
         <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "80vh", overflowY: "auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>ประวัติการทำรายการ</div>
