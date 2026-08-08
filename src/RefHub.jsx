@@ -5031,27 +5031,28 @@ function HeroBgUploadModal({ t, userId, onDone, close, imageOnly, pathPrefix, ti
 
 function HomeWidgetsWallet({ t, lang, shp, M, isNight, setMentorPick, setChatOpen, setMusicOpen, balance, todayNet, goalDone, goals, todayArticles, latestNote, setPage, setCommunityOpen, commPreview, walletWidgets, onEditWidgets, heroShortcuts, heroTheme, heroCustomUrl, heroCustomType }) {
   const sharp = shp.radius === 0;
+  const heroText = (heroTheme === "custom" && heroCustomUrl) ? "#FFFFFF" : t.onAccent; // 🖼️ พื้นหลังที่อัปโหลดเอง มีเกรเดียนต์มืดคลุมอยู่แล้วเสมอ (ดู HeroAnimatedBg) ตัวหนังสือใช้ขาวได้ชัวร์ ไม่ต้องพึ่งสีคอนทราสต์ที่คำนวณจากธีมสี ซึ่งบางธีมออกมาเป็นสีเข้มจนอ่านไม่ออกบนภาพมืด
   return (
     <>
       <div style={{ marginTop: 8, background: t.hero, borderRadius: shp.radius, padding: sharp ? "18px 26px" : "18px 16px", position: "relative", overflow: "hidden", zIndex: 0 }}>
         <HeroAnimatedBg theme={heroTheme} customUrl={heroCustomUrl} customType={heroCustomType} />
-        <button onClick={onEditWidgets} style={{ position: "absolute", top: 14, right: sharp ? 26 : 16, background: `${t.onAccent}26`, border: "none", borderRadius: shp.radius === 0 ? 0 : 10, width: 28, height: 28, display: "grid", placeItems: "center", cursor: "pointer" }} title="ปรับการ์ดใหญ่"><Pencil size={14} color={t.onAccent} /></button>
+        <button onClick={onEditWidgets} style={{ position: "absolute", top: 14, right: sharp ? 26 : 16, background: `${heroText}26`, border: "none", borderRadius: shp.radius === 0 ? 0 : 10, width: 28, height: 28, display: "grid", placeItems: "center", cursor: "pointer" }} title="ปรับการ์ดใหญ่"><Pencil size={14} color={heroText} /></button>
         <button onClick={() => setMentorPick(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: `${t.onAccent}CC` }}>{isNight ? "โค้ชคืนนี้" : "โค้ชวันนี้"} · {M.name.toUpperCase()} ▾</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: `${heroText}CC` }}>{isNight ? "โค้ชคืนนี้" : "โค้ชวันนี้"} · {M.name.toUpperCase()} ▾</span>
         </button>
-        <div style={{ fontSize: 30, fontWeight: 800, color: t.onAccent, marginTop: 8, letterSpacing: -0.5 }}>{fmt(balance)}</div>
-        <div style={{ fontSize: 11, color: `${t.onAccent}CC`, marginTop: 6 }}>{todayNet >= 0 ? "▲ +" : "▼ "}{Math.abs(todayNet).toLocaleString()} วันนี้ · เป้าหมายสำเร็จ {goalDone}/{goals.length || 0}</div>
-        <button onClick={() => setChatOpen(true)} style={{ marginTop: 12, border: "none", cursor: "pointer", background: `${t.onAccent}2E`, color: t.onAccent, fontWeight: 700, fontSize: 12.5, padding: "8px 14px", borderRadius: shp.radius === 0 ? 0 : 18, display: "inline-flex", alignItems: "center", gap: 6 }}>{L(lang, "home_talk_coach")} <ChevronRight size={14} /></button>
+        <div style={{ fontSize: 30, fontWeight: 800, color: heroText, marginTop: 8, letterSpacing: -0.5 }}>{fmt(balance)}</div>
+        <div style={{ fontSize: 11, color: `${heroText}CC`, marginTop: 6 }}>{todayNet >= 0 ? "▲ +" : "▼ "}{Math.abs(todayNet).toLocaleString()} วันนี้ · เป้าหมายสำเร็จ {goalDone}/{goals.length || 0}</div>
+        <button onClick={() => setChatOpen(true)} style={{ marginTop: 12, border: "none", cursor: "pointer", background: `${heroText}2E`, color: heroText, fontWeight: 700, fontSize: 12.5, padding: "8px 14px", borderRadius: shp.radius === 0 ? 0 : 18, display: "inline-flex", alignItems: "center", gap: 6 }}>{L(lang, "home_talk_coach")} <ChevronRight size={14} /></button>
         {heroShortcuts.length > 0 && (
-          <div style={{ display: "flex", gap: 10, marginTop: 14, paddingTop: 12, borderTop: `1px solid ${t.onAccent}22` }}>
+          <div style={{ display: "flex", gap: 10, marginTop: 14, paddingTop: 12, borderTop: `1px solid ${heroText}22` }}>
             {heroShortcuts.map((sid) => {
               const s = HERO_SHORTCUTS_META.find((x) => x.id === sid); if (!s) return null;
               const SIcon = s.icon;
               const onClick = sid === "chat" ? () => setPage("chat") : sid === "community" ? () => setCommunityOpen(true) : () => setMusicOpen(true);
               return (
                 <button key={sid} onClick={onClick} style={{ flex: 1, background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                  <span style={{ width: 32, height: 32, borderRadius: shp.radius === 0 ? 0 : 10, background: `${t.onAccent}22`, display: "grid", placeItems: "center" }}><SIcon size={14} color={t.onAccent} /></span>
-                  <span style={{ fontSize: 9, fontWeight: 700, color: `${t.onAccent}CC` }}>{s.label}</span>
+                  <span style={{ width: 32, height: 32, borderRadius: shp.radius === 0 ? 0 : 10, background: `${heroText}22`, display: "grid", placeItems: "center" }}><SIcon size={14} color={heroText} /></span>
+                  <span style={{ fontSize: 9, fontWeight: 700, color: `${heroText}CC` }}>{s.label}</span>
                 </button>
               );
             })}
@@ -5097,6 +5098,7 @@ function WalletRow({ t, shp, icon, title, sub, onClick }) {
 // 🧱 โครง Home แบบ "โมเสก" — บล็อกยอดเงินใหญ่เด่น + บล็อกเล็กล้อมรอบ (ปรับ/ลบ/เพิ่ม/ลากสลับลำดับเองได้ ใช้สี solid ไม่จางแล้ว)
 function HomeWidgetsBento({ t, lang, shp, M, isNight, setMentorPick, setChatOpen, setMusicOpen, balance, todayNet, goalDone, goals, todayArticles, latestNote, setPage, setCommunityOpen, commPreview, bentoWidgets, onEditWidgets, heroShortcuts, heroTheme, heroCustomUrl, heroCustomType }) {
   const sharp = shp.radius === 0;
+  const heroText = (heroTheme === "custom" && heroCustomUrl) ? "#FFFFFF" : t.onAccent; // ดูคอมเมนต์เดียวกันใน HomeWidgetsWallet
   const data = { balance, todayNet, goalDone, goals, todayArticles, latestNote, commPreview };
   const resolve = (id) => {
     const meta = AVAILABLE_WIDGETS.find((w) => w.id === id);
@@ -5113,20 +5115,20 @@ function HomeWidgetsBento({ t, lang, shp, M, isNight, setMentorPick, setChatOpen
       <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 10, marginTop: 8 }}>
         <div style={{ background: t.hero, borderRadius: shp.radius, padding: sharp ? "16px 16px 16px 26px" : 16, position: "relative", overflow: "hidden", zIndex: 0 }}>
           <HeroAnimatedBg theme={heroTheme} customUrl={heroCustomUrl} customType={heroCustomType} />
-          <button onClick={onEditWidgets} style={{ position: "absolute", top: 10, right: 10, background: `${t.onAccent}26`, border: "none", borderRadius: shp.radius === 0 ? 0 : 10, width: 26, height: 26, display: "grid", placeItems: "center", cursor: "pointer" }} title="ปรับการ์ดใหญ่"><Pencil size={13} color={t.onAccent} /></button>
+          <button onClick={onEditWidgets} style={{ position: "absolute", top: 10, right: 10, background: `${heroText}26`, border: "none", borderRadius: shp.radius === 0 ? 0 : 10, width: 26, height: 26, display: "grid", placeItems: "center", cursor: "pointer" }} title="ปรับการ์ดใหญ่"><Pencil size={13} color={heroText} /></button>
           <button onClick={() => setMentorPick(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-            <span style={{ fontSize: 10.5, fontWeight: 700, color: `${t.onAccent}CC` }}>{isNight ? "โค้ชคืนนี้" : "โค้ชวันนี้"}</span>
+            <span style={{ fontSize: 10.5, fontWeight: 700, color: `${heroText}CC` }}>{isNight ? "โค้ชคืนนี้" : "โค้ชวันนี้"}</span>
           </button>
-          <div style={{ fontSize: 22, fontWeight: 800, color: t.onAccent, marginTop: 6 }}>{fmt(balance)}</div>
-          <div style={{ fontSize: 10.5, color: `${t.onAccent}CC`, marginTop: 4 }}>{todayNet >= 0 ? "▲ +" : "▼ "}{Math.abs(todayNet).toLocaleString()} วันนี้</div>
-          <button onClick={() => setChatOpen(true)} style={{ marginTop: 10, border: "none", cursor: "pointer", background: `${t.onAccent}2E`, color: t.onAccent, fontWeight: 700, fontSize: 11, padding: "6px 11px", borderRadius: shp.radius === 0 ? 0 : 14, display: "inline-flex", alignItems: "center", gap: 4, position: "relative", zIndex: 3 }}>{L(lang, "home_talk_coach")} <ChevronRight size={12} /></button>
+          <div style={{ fontSize: 22, fontWeight: 800, color: heroText, marginTop: 6 }}>{fmt(balance)}</div>
+          <div style={{ fontSize: 10.5, color: `${heroText}CC`, marginTop: 4 }}>{todayNet >= 0 ? "▲ +" : "▼ "}{Math.abs(todayNet).toLocaleString()} วันนี้</div>
+          <button onClick={() => setChatOpen(true)} style={{ marginTop: 10, border: "none", cursor: "pointer", background: `${heroText}2E`, color: heroText, fontWeight: 700, fontSize: 11, padding: "6px 11px", borderRadius: shp.radius === 0 ? 0 : 14, display: "inline-flex", alignItems: "center", gap: 4, position: "relative", zIndex: 3 }}>{L(lang, "home_talk_coach")} <ChevronRight size={12} /></button>
           {heroShortcuts.length > 0 && (
             <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
               {heroShortcuts.map((sid) => {
                 const s = HERO_SHORTCUTS_META.find((x) => x.id === sid); if (!s) return null;
                 const SIcon = s.icon;
                 const onClick = sid === "chat" ? () => setPage("chat") : sid === "community" ? () => setCommunityOpen(true) : () => setMusicOpen(true);
-                return <button key={sid} onClick={onClick} style={{ width: 24, height: 24, background: `${t.onAccent}22`, border: "none", borderRadius: shp.radius === 0 ? 0 : 8, display: "grid", placeItems: "center", cursor: "pointer" }}><SIcon size={12} color={t.onAccent} /></button>;
+                return <button key={sid} onClick={onClick} style={{ width: 24, height: 24, background: `${heroText}22`, border: "none", borderRadius: shp.radius === 0 ? 0 : 8, display: "grid", placeItems: "center", cursor: "pointer" }}><SIcon size={12} color={heroText} /></button>;
               })}
             </div>
           )}
@@ -5292,6 +5294,7 @@ function HomePage({ t, lang, M, quote, isNight, setMentorPick, balance, tx, goal
   const latestNote = notes[0];
   const todayNet = tx.filter((x) => x.date === todayStr()).reduce((s, x) => s + (x.type === "in" ? x.amount : -x.amount), 0);
   const shp = shapeTokens(cardShape, t); // 🔲 ทรงกรอบการ์ดที่ user เลือก (sharp/soft) ใช้กับ hero/CatCard/การ์ดชุมชนในหน้านี้
+  const heroText = (heroTheme === "custom" && heroCustomUrl) ? "#FFFFFF" : t.onAccent; // ดูคอมเมนต์เดียวกันใน HomeWidgetsWallet
   const [editWidgetsOpen, setEditWidgetsOpen] = useState(false); // 🔀 modal ปรับวิดเจ็ตของ layout โฟกัส/โมเสก (เปิดจากปุ่มดินสอในแต่ละ layout)
   const [pinnedExpanded, setPinnedExpanded] = useState(false); // 📎 การ์ด "สื่อที่ปักหมุดไว้" — พับไว้ก่อน กดลูกศรถึงกางลงมาดู (แทนที่จะโชว์ค้างกินที่หน้าจอตลอด)
 
@@ -5384,30 +5387,30 @@ function HomePage({ t, lang, M, quote, isNight, setMentorPick, balance, tx, goal
         <HeroAnimatedBg theme={heroTheme} customUrl={heroCustomUrl} customType={heroCustomType} />
         <div style={{ position: "absolute", top: -34, right: -34, width: 130, height: 130, borderRadius: "50%", background: "rgba(255,255,255,.10)", pointerEvents: "none" }} />
         <div style={{ position: "absolute", bottom: -44, left: -24, width: 105, height: 105, borderRadius: "50%", background: "rgba(255,255,255,.06)", pointerEvents: "none" }} />
-        <button onClick={() => setEditWidgetsOpen(true)} style={{ position: "absolute", top: 14, right: 14, background: `${t.onAccent}26`, border: "none", borderRadius: shp.radius === 0 ? 0 : 10, width: 28, height: 28, display: "grid", placeItems: "center", cursor: "pointer", zIndex: 1 }} title="ปรับการ์ดใหญ่"><Pencil size={14} color={t.onAccent} /></button>
+        <button onClick={() => setEditWidgetsOpen(true)} style={{ position: "absolute", top: 14, right: 14, background: `${heroText}26`, border: "none", borderRadius: shp.radius === 0 ? 0 : 10, width: 28, height: 28, display: "grid", placeItems: "center", cursor: "pointer", zIndex: 1 }} title="ปรับการ์ดใหญ่"><Pencil size={14} color={heroText} /></button>
         <div style={{ position: "relative" }}>
           <button onClick={() => setMentorPick(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontSize: 14.5, fontWeight: 800, color: t.onAccent, letterSpacing: .5 }}>{isNight ? "โค้ชคืนนี้" : "โค้ชวันนี้"} · {M.name.toUpperCase()}</span>
+            <span style={{ fontSize: 14.5, fontWeight: 800, color: heroText, letterSpacing: .5 }}>{isNight ? "โค้ชคืนนี้" : "โค้ชวันนี้"} · {M.name.toUpperCase()}</span>
             <span style={{ fontSize: 10, fontWeight: 800, color: "#D9302F" }}>เปลี่ยน ▾</span>
           </button>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, gap: 14 }}>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 16.5, fontWeight: 700, color: t.onAccent, lineHeight: 1.4, minHeight: 46 }}>“{quote}”</div>
+              <div style={{ fontSize: 16.5, fontWeight: 700, color: heroText, lineHeight: 1.4, minHeight: 46 }}>“{quote}”</div>
               <style>{`@keyframes rh-coach-nudge { 0%,88%,100% { transform: translateX(0) rotate(0); } 90% { transform: translateX(-2px) rotate(-1.5deg); } 92% { transform: translateX(2px) rotate(1.5deg); } 94% { transform: translateX(-2px) rotate(-1deg); } 96% { transform: translateX(2px) rotate(1deg); } 98% { transform: translateX(0) rotate(0); } }`}</style>
-              <button onClick={() => setChatOpen(true)} style={{ marginTop: 14, border: "none", cursor: "pointer", background: `${t.onAccent}2E`, color: t.onAccent, fontWeight: 700, fontSize: 13, padding: "9px 16px", borderRadius: shp.radius === 0 ? 0 : 18, display: "inline-flex", alignItems: "center", gap: 6, animation: "rh-coach-nudge 3s ease-in-out infinite" }}>{L(lang, "home_talk_coach")} <ChevronRight size={15} /></button>
+              <button onClick={() => setChatOpen(true)} style={{ marginTop: 14, border: "none", cursor: "pointer", background: `${heroText}2E`, color: heroText, fontWeight: 700, fontSize: 13, padding: "9px 16px", borderRadius: shp.radius === 0 ? 0 : 18, display: "inline-flex", alignItems: "center", gap: 6, animation: "rh-coach-nudge 3s ease-in-out infinite" }}>{L(lang, "home_talk_coach")} <ChevronRight size={15} /></button>
             </div>
-            <Ring pct={goalPct} color={t.onAccent} label="เป้าหมาย" />
+            <Ring pct={goalPct} color={heroText} label="เป้าหมาย" />
           </div>
           {heroShortcuts.length > 0 && (
-            <div style={{ display: "flex", gap: 10, marginTop: 14, paddingTop: 12, borderTop: `1px solid ${t.onAccent}22` }}>
+            <div style={{ display: "flex", gap: 10, marginTop: 14, paddingTop: 12, borderTop: `1px solid ${heroText}22` }}>
               {heroShortcuts.map((sid) => {
                 const s = HERO_SHORTCUTS_META.find((x) => x.id === sid); if (!s) return null;
                 const SIcon = s.icon;
                 const onClick = sid === "chat" ? () => setPage("chat") : sid === "community" ? () => setCommunityOpen(true) : () => setMusicOpen(true);
                 return (
                   <button key={sid} onClick={onClick} style={{ flex: 1, background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                    <span style={{ width: 32, height: 32, borderRadius: shp.radius === 0 ? 0 : 10, background: `${t.onAccent}22`, display: "grid", placeItems: "center" }}><SIcon size={14} color={t.onAccent} /></span>
-                    <span style={{ fontSize: 9, fontWeight: 700, color: `${t.onAccent}CC` }}>{s.label}</span>
+                    <span style={{ width: 32, height: 32, borderRadius: shp.radius === 0 ? 0 : 10, background: `${heroText}22`, display: "grid", placeItems: "center" }}><SIcon size={14} color={heroText} /></span>
+                    <span style={{ fontSize: 9, fontWeight: 700, color: `${heroText}CC` }}>{s.label}</span>
                   </button>
                 );
               })}
