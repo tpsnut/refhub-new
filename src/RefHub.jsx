@@ -1172,6 +1172,7 @@ export default function RefHub() {
 
   // 🔐 ระบบล็อกอินจริง (Supabase Auth) — แทนที่ userId คงที่เดิมจาก .env
   const [session, setSession] = useState(null);       // session ของ Supabase Auth (null = ยังไม่ล็อกอิน)
+  const [passwordRecovery, setPasswordRecovery] = useState(false); // true ระหว่างที่มาจากลิงก์ "ลืมรหัสผ่าน" ในอีเมล — ต้องบังคับตั้งรหัสใหม่ก่อน เข้าแอปปกติไม่ได้
   const [authChecked, setAuthChecked] = useState(false); // true เมื่อเช็ค session ครั้งแรกเสร็จแล้ว (กันจอกระพริบ)
   const [authProfile, setAuthProfile] = useState(null);  // แถวในตาราง profiles: { approved, role, name, ... }
   const [authProfileChecked, setAuthProfileChecked] = useState(false); // true เมื่อเช็ค authProfile ครั้งแรกเสร็จแล้ว (กันโชว์ "รออนุมัติ" ผิดๆ ระหว่างกำลังโหลดจริง)
@@ -1638,6 +1639,7 @@ export default function RefHub() {
     const { data: listener } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s); setAuthChecked(true);
       if (_event === "SIGNED_IN" && s?.user?.id) logAudit(s.user.id, "auth", "login", "เข้าสู่ระบบ");
+      if (_event === "PASSWORD_RECOVERY") setPasswordRecovery(true); // มาจากลิงก์ในอีเมล "ลืมรหัสผ่าน" — ต้องบังคับตั้งรหัสใหม่ก่อนเข้าแอป
     });
     return () => listener.subscription.unsubscribe();
   }, []);
@@ -2074,6 +2076,7 @@ export default function RefHub() {
   // 🔐 เกตระบบล็อกอิน — เช็คก่อนแสดงแอปจริง
   if (!authChecked) return <AuthLoadingScreen />;
   if (!session) return <AuthPage />;
+  if (passwordRecovery) return <SetNewPasswordPage onDone={() => setPasswordRecovery(false)} />;
   if (!authProfileChecked) return <AuthLoadingScreen />;
   if (!authProfile || !authProfile.approved) return <PendingApprovalScreen profile={authProfile} onLogout={() => supabase.auth.signOut()} />;
 
@@ -2523,6 +2526,8 @@ function AuthPage() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const [info, setInfo] = useState("");
+  const [forgotOpen, setForgotOpen] = useState(false); // 🔑 เปิดฟอร์ม "ลืมรหัสผ่าน" (เฉพาะบัญชีอีเมล — บัญชี PIN ให้แอดมินรีเซ็ตให้แทน)
+  const [forgotSending, setForgotSending] = useState(false);
 
   // 🛡️ พิมพ์รหัสผิดครบ 5 ครั้ง -> บังคับผ่าน CAPTCHA ก่อนถึงจะลองใหม่ได้ (กันสคริปต์เดา PIN/รหัสผ่านซ้ำๆ)
   const [failCount, setFailCount] = useState(() => +(localStorage.getItem("refhub_login_fails") || 0));
@@ -2555,6 +2560,19 @@ function AuthPage() {
   const clearFails = () => { setFailCount(0); localStorage.removeItem("refhub_login_fails"); };
 
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+  const sendResetLink = async () => {
+    setErr(""); setInfo("");
+    if (!emailOk) { setErr("กรอกอีเมลให้ถูกต้องก่อน"); return; }
+    setForgotSending(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
+      if (error) throw error;
+      setInfo("ส่งลิงก์ตั้งรหัสผ่านใหม่ไปที่อีเมลแล้ว เช็คกล่องจดหมาย (รวมถึงถังขยะ/สแปมด้วยนะ)");
+      setForgotOpen(false);
+    } catch (e) { setErr(e.message); }
+    setForgotSending(false);
+  };
 
   const submit = async () => {
     setErr(""); setInfo("");
@@ -2619,7 +2637,8 @@ function AuthPage() {
         {mode === "login" && loginWith === "pin" ? (
           <>
             <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="ชื่อผู้ใช้ที่แอดมินตั้งให้ เช่น mom" style={{ background: "#1C1A18", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, marginBottom: 10, outline: "none", color: "#F2EDE6" }} />
-            <input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} type="password" inputMode="numeric" placeholder="PIN 4-6 หลัก" style={{ background: "#1C1A18", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, marginBottom: 14, outline: "none", letterSpacing: 3, color: "#F2EDE6" }} />
+            <input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} type="password" inputMode="numeric" placeholder="PIN 4-6 หลัก" style={{ background: "#1C1A18", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, marginBottom: 6, outline: "none", letterSpacing: 3, color: "#F2EDE6" }} />
+            <div style={{ fontSize: 11, color: "#6B655F", marginBottom: 14 }}>ลืม PIN? ให้แอดมินในบ้านช่วยรีเซ็ตให้จากหน้าตั้งค่าได้เลย</div>
           </>
         ) : (
           <>
@@ -2636,6 +2655,18 @@ function AuthPage() {
             </div>
 
             <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="รหัสผ่าน (อย่างน้อย 6 ตัว)" style={{ background: "#1C1A18", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, marginBottom: 10, outline: "none", color: "#F2EDE6" }} />
+
+            {mode === "login" && (
+              <div style={{ textAlign: "right", marginTop: -4, marginBottom: 10 }}>
+                <button type="button" onClick={() => { setForgotOpen((v) => !v); setErr(""); setInfo(""); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11.5, color: "#8C857C", fontWeight: 600, padding: 0 }}>ลืมรหัสผ่าน?</button>
+              </div>
+            )}
+            {mode === "login" && forgotOpen && (
+              <div style={{ background: "#1C1A18", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: 12, marginBottom: 10 }}>
+                <div style={{ fontSize: 11.5, color: "#8C857C", marginBottom: 8, lineHeight: 1.5 }}>กรอกอีเมลด้านบนให้ถูกต้องก่อน แล้วกดปุ่มนี้ ระบบจะส่งลิงก์ตั้งรหัสผ่านใหม่ไปให้ทางอีเมล</div>
+                <button type="button" onClick={sendResetLink} disabled={forgotSending} style={{ width: "100%", padding: "9px 0", borderRadius: 10, border: "none", background: "#F2872E", color: "#141414", fontSize: 12.5, fontWeight: 700, cursor: forgotSending ? "default" : "pointer" }}>{forgotSending ? "กำลังส่ง..." : "ส่งลิงก์ตั้งรหัสผ่านใหม่"}</button>
+              </div>
+            )}
 
             {mode === "signup" && (
               <input value={familyCode} onChange={(e) => setFamilyCode(e.target.value)} placeholder="รหัสเชิญครอบครัว (ถ้ามี)" style={{ background: "#1C1A18", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, marginBottom: 14, outline: "none", color: "#F2EDE6" }} />
@@ -2656,6 +2687,42 @@ function AuthPage() {
         <button onClick={submit} disabled={loading || (needsCaptcha && !captchaToken)} style={{ background: loading || (needsCaptcha && !captchaToken) ? "#4A362A" : "#F2872E", border: "none", borderRadius: 14, padding: "13px 0", fontSize: 14, fontWeight: 700, color: "#141414", cursor: loading ? "default" : "pointer", marginTop: 6 }}>
           {loading ? "กำลังดำเนินการ..." : mode === "login" ? "เข้าสู่ระบบ" : "สมัครสมาชิก"}
         </button>
+      </div>
+    </div>
+  );
+}
+
+// 🔑 หน้าตั้งรหัสผ่านใหม่ — โผล่อัตโนมัติหลังกดลิงก์ "ลืมรหัสผ่าน" จากอีเมล (event PASSWORD_RECOVERY)
+// บังคับตั้งรหัสใหม่ก่อนถึงจะเข้าแอปได้ กันไม่ให้หลุดเข้าแอปด้วย session ชั่วคราวจากลิงก์เฉยๆ
+function SetNewPasswordPage({ onDone }) {
+  const [pw1, setPw1] = useState("");
+  const [pw2, setPw2] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  const submit = async () => {
+    setErr("");
+    if (pw1.length < 6) { setErr("รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร"); return; }
+    if (pw1 !== pw2) { setErr("รหัสผ่านยืนยันไม่ตรงกัน"); return; }
+    setBusy(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: pw1 });
+      if (error) throw error;
+      onDone();
+    } catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+
+  return (
+    <div style={{ minHeight: "100dvh", display: "flex", justifyContent: "center", background: "#0D0C0B", fontFamily: "'IBM Plex Sans Thai',sans-serif" }}>
+      <div style={{ width: "100%", maxWidth: 440, padding: "80px 24px", display: "flex", flexDirection: "column" }}>
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 32 }}><PKnowLockup width={200} /></div>
+        <div style={{ fontSize: 17, fontWeight: 800, color: "#F2EDE6", marginBottom: 6, textAlign: "center" }}>ตั้งรหัสผ่านใหม่</div>
+        <div style={{ fontSize: 12.5, color: "#8C857C", marginBottom: 24, textAlign: "center", lineHeight: 1.6 }}>มาจากลิงก์ในอีเมล ตั้งรหัสผ่านใหม่ให้เรียบร้อยก่อนเข้าใช้งานต่อ</div>
+        <input value={pw1} onChange={(e) => setPw1(e.target.value)} type="password" placeholder="รหัสผ่านใหม่ (อย่างน้อย 6 ตัว)" style={{ background: "#1C1A18", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, marginBottom: 10, outline: "none", color: "#F2EDE6" }} />
+        <input value={pw2} onChange={(e) => setPw2(e.target.value)} type="password" placeholder="ยืนยันรหัสผ่านใหม่อีกครั้ง" onKeyDown={(e) => e.key === "Enter" && submit()} style={{ background: "#1C1A18", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, marginBottom: 14, outline: "none", color: "#F2EDE6" }} />
+        {err && <div style={{ fontSize: 12, color: "#E8685A", marginBottom: 10, textAlign: "center" }}>{err}</div>}
+        <button onClick={submit} disabled={busy} style={{ background: busy ? "#4A362A" : "#F2872E", border: "none", borderRadius: 14, padding: "13px 0", fontSize: 14, fontWeight: 700, color: "#141414", cursor: busy ? "default" : "pointer" }}>{busy ? "กำลังบันทึก..." : "บันทึกรหัสผ่านใหม่"}</button>
       </div>
     </div>
   );
@@ -6546,7 +6613,7 @@ function AdminPage({ t, lang, session, userId, adminAlerts, setAdminAlerts, auth
       {detailMember && (
         <ModalPortal>
           <MemberDetailModal
-            t={t} m={detailMember} isSelf={detailMember.id === userId}
+            t={t} m={detailMember} isSelf={detailMember.id === userId} session={session}
             isOnline={isOnline(detailMember.last_seen)}
             setApproved={setApproved} setRole={setRole} setCanChat={setCanChat} setCanUseCommunity={setCanUseCommunity} setCanViewLocations={setCanViewLocations} remindNotification={remindNotification} setPremiumAi={setPremiumAi}
             setMentorLimit={setMentorLimit} setTopicLimit={setTopicLimit} setDailyArticleLimit={setDailyArticleLimit} setCanRefreshArticles={setCanRefreshArticles} resetMentorPick={resetMentorPick}
@@ -6559,8 +6626,25 @@ function AdminPage({ t, lang, session, userId, adminAlerts, setAdminAlerts, auth
   );
 }
 
-function MemberDetailModal({ t, m, isSelf, isOnline, setApproved, setRole, setCanChat, setCanUseCommunity, setCanViewLocations, setMentorLimit, setTopicLimit, setDailyArticleLimit, setCanRefreshArticles, resetMentorPick, removeMember, remindNotification, setPremiumAi, close }) {
+function MemberDetailModal({ t, m, isSelf, isOnline, session, setApproved, setRole, setCanChat, setCanUseCommunity, setCanViewLocations, setMentorLimit, setTopicLimit, setDailyArticleLimit, setCanRefreshArticles, resetMentorPick, removeMember, remindNotification, setPremiumAi, close }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [resetPinOpen, setResetPinOpen] = useState(false);
+  const [newPinVal, setNewPinVal] = useState("");
+  const [resettingPin, setResettingPin] = useState(false);
+  const [resetPinMsg, setResetPinMsg] = useState("");
+  const doResetPin = async () => {
+    setResetPinMsg("");
+    if (!/^[0-9]{4,6}$/.test(newPinVal)) { setResetPinMsg("PIN ต้องเป็นตัวเลข 4-6 หลัก"); return; }
+    setResettingPin(true);
+    try {
+      const r = await fetch("/api/admin-create-user", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "reset_pin", targetUserId: m.id, newPin: newPinVal, callerToken: session?.access_token }) });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error);
+      setResetPinMsg("✅ ตั้ง PIN ใหม่ให้แล้ว แจ้ง " + (m.name || "สมาชิก") + " ให้ใช้ PIN ใหม่นี้ล็อกอินได้เลย");
+      setNewPinVal("");
+    } catch (e) { setResetPinMsg("รีเซ็ตไม่สำเร็จ: " + e.message); }
+    setResettingPin(false);
+  };
   const Row = ({ label, children }) => (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: `1px solid ${t.border}` }}>
       <span style={{ fontSize: 13, color: t.sub }}>{label}</span>
@@ -6596,6 +6680,23 @@ function MemberDetailModal({ t, m, isSelf, isOnline, setApproved, setRole, setCa
 
         <div style={{ fontSize: 11.5, fontWeight: 800, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>ข้อมูลบัญชี</div>
         <Row label="เข้าสู่ระบบด้วย"><span style={{ fontSize: 12.5, color: t.text, fontWeight: 600 }}>{m.login_type === "pin" ? `ชื่อผู้ใช้: ${m.username}` : m.email}</span></Row>
+        {m.login_type === "pin" && !isSelf && (
+          <div style={{ padding: "10px 0", borderBottom: `1px solid ${t.border}` }}>
+            {!resetPinOpen ? (
+              <button onClick={() => { setResetPinOpen(true); setResetPinMsg(""); }} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", fontSize: 12.5, color: t.accent, fontWeight: 700, padding: 0 }}><KeyRound size={14} /> รีเซ็ต PIN (ลืม PIN)</button>
+            ) : (
+              <div>
+                <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 8 }}>ตั้ง PIN ใหม่ให้ {m.name || "สมาชิกคนนี้"} แล้วแจ้งให้เขาไปล็อกอินด้วย PIN ใหม่นี้</div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input value={newPinVal} onChange={(e) => setNewPinVal(e.target.value.replace(/\D/g, ""))} type="text" inputMode="numeric" placeholder="PIN ใหม่ 4-6 หลัก" style={{ ...input(t), flex: 1, letterSpacing: 2 }} />
+                  <button onClick={doResetPin} disabled={resettingPin} style={{ padding: "0 14px", borderRadius: 10, border: "none", background: t.accent, color: t.onAccent, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{resettingPin ? "..." : "ยืนยัน"}</button>
+                  <button onClick={() => { setResetPinOpen(false); setResetPinMsg(""); }} style={ghost}><X size={15} color={t.sub} /></button>
+                </div>
+                {resetPinMsg && <div style={{ fontSize: 11.5, color: resetPinMsg.startsWith("✅") ? "#2E9E6B" : "#D9534F", marginTop: 6 }}>{resetPinMsg}</div>}
+              </div>
+            )}
+          </div>
+        )}
         <Row label="สมัครเมื่อ"><span style={{ fontSize: 12.5, color: t.text }}>{m.created_at ? new Date(m.created_at).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" }) : "-"}</span></Row>
         <Row label="ล็อกอินล่าสุด"><span style={{ fontSize: 12.5, color: t.text }}>{m.last_login ? new Date(m.last_login).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" }) : "ยังไม่เคย"}</span></Row>
         <Row label="ออนไลน์ล่าสุด"><span style={{ fontSize: 12.5, color: t.text }}>{m.last_seen ? new Date(m.last_seen).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" }) : "ยังไม่เคย"}</span></Row>

@@ -1,4 +1,6 @@
 // 👑 RefHub — แอดมินสร้างบัญชี "ชื่อ + PIN" ให้คนอื่นโดยตรง (ไม่ต้องมีอีเมล)
+// + แอดมินรีเซ็ต PIN ให้สมาชิกที่ลืมได้ (action: "reset_pin") — รวมไว้ไฟล์เดียวกัน ไม่สร้างไฟล์ใหม่
+//   เพราะ Vercel Hobby plan จำกัดที่ 12 serverless functions อยู่แล้ว (ดูรายละเอียดเพดานนี้ในไฟล์อื่นๆที่ใช้ /api)
 // ไฟล์นี้วางไว้ที่ /api/admin-create-user.js ที่ root ของโปรเจกต์ (ข้างๆ src/)
 //
 // ต้องตั้งค่า Environment Variable ใหม่บน Vercel: SUPABASE_SERVICE_ROLE_KEY
@@ -11,10 +13,7 @@ import { createClient } from "@supabase/supabase-js";
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { name, username, pin, callerToken } = req.body || {};
-  if (!name?.trim() || !username?.trim() || !pin) return res.status(400).json({ error: "กรอกข้อมูลไม่ครบ" });
-  if (!/^[0-9]{4,6}$/.test(pin)) return res.status(400).json({ error: "PIN ต้องเป็นตัวเลข 4-6 หลักเท่านั้น" });
-  if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) return res.status(400).json({ error: "ชื่อผู้ใช้ต้องเป็นตัวอักษร/ตัวเลขภาษาอังกฤษ 3-20 ตัว" });
+  const { action, name, username, pin, callerToken, targetUserId, newPin } = req.body || {};
 
   const supabaseUrl = process.env.VITE_SUPABASE_URL;
   const anonKey = process.env.VITE_SUPABASE_ANON_KEY;
@@ -23,17 +22,32 @@ export default async function handler(req, res) {
   if (!callerToken) return res.status(401).json({ error: "ไม่พบข้อมูลยืนยันตัวตนของผู้เรียก" });
 
   try {
-    // 1) ยืนยันว่าคนเรียก API นี้ล็อกอินอยู่จริง และเป็น "แอดมิน" เท่านั้น (กันคนอื่นยิง API ตรงๆ มาสร้างบัญชีเอง)
+    // ยืนยันว่าคนเรียก API นี้ล็อกอินอยู่จริง และเป็น "แอดมิน" เท่านั้น (ใช้ร่วมกันทั้ง 2 action)
     const callerClient = createClient(supabaseUrl, anonKey);
     const { data: userData, error: userErr } = await callerClient.auth.getUser(callerToken);
     if (userErr || !userData?.user) return res.status(401).json({ error: "ยืนยันตัวตนไม่สำเร็จ ลองล็อกอินใหม่" });
 
-    // ใช้ service role เช็ค role แทน (callerClient ไม่มี auth header แนบไปตอน query ทำให้ RLS มองเป็น anon แล้วเห็นข้อมูลว่างเปล่าเสมอ)
     const admin = createClient(supabaseUrl, serviceKey);
     const { data: callerProfile } = await admin.from("profiles").select("role").eq("id", userData.user.id).single();
-    if (callerProfile?.role !== "admin") return res.status(403).json({ error: "เฉพาะแอดมินเท่านั้นที่สร้างบัญชีแบบนี้ได้" });
+    if (callerProfile?.role !== "admin") return res.status(403).json({ error: "เฉพาะแอดมินเท่านั้นที่ทำรายการนี้ได้" });
 
-    // 2) ใช้ service role (สิทธิ์เต็ม) สร้างบัญชีจริง + แถว profile ให้
+    // 🔑 action: "reset_pin" — สมาชิกลืม PIN ให้แอดมินตั้งใหม่ให้ (PIN ก็คือรหัสผ่านจริงของบัญชี @refhub.local เบื้องหลัง)
+    if (action === "reset_pin") {
+      if (!targetUserId || !newPin) return res.status(400).json({ error: "กรอกข้อมูลไม่ครบ" });
+      if (!/^[0-9]{4,6}$/.test(newPin)) return res.status(400).json({ error: "PIN ต้องเป็นตัวเลข 4-6 หลักเท่านั้น" });
+      const { data: targetProfile } = await admin.from("profiles").select("login_type").eq("id", targetUserId).single();
+      if (targetProfile?.login_type !== "pin") return res.status(400).json({ error: "บัญชีนี้ไม่ใช่บัญชี PIN รีเซ็ตแบบนี้ไม่ได้" });
+      const { error: updErr } = await admin.auth.admin.updateUserById(targetUserId, { password: newPin });
+      if (updErr) return res.status(400).json({ error: updErr.message });
+      return res.status(200).json({ ok: true });
+    }
+
+    // สร้างบัญชีใหม่ (ค่าเริ่มต้นเดิม ไม่ได้ส่ง action มาก็ยังทำงานแบบเดิมได้)
+    if (!name?.trim() || !username?.trim() || !pin) return res.status(400).json({ error: "กรอกข้อมูลไม่ครบ" });
+    if (!/^[0-9]{4,6}$/.test(pin)) return res.status(400).json({ error: "PIN ต้องเป็นตัวเลข 4-6 หลักเท่านั้น" });
+    if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) return res.status(400).json({ error: "ชื่อผู้ใช้ต้องเป็นตัวอักษร/ตัวเลขภาษาอังกฤษ 3-20 ตัว" });
+
+    // ใช้ service role (สิทธิ์เต็ม) สร้างบัญชีจริง + แถว profile ให้
     const email = `${username.toLowerCase().trim()}@refhub.local`; // อีเมลปลอมภายใน ใช้แค่เป็น key ล็อกอิน ไม่มีการส่งเมลจริง
 
     const { data: created, error: createErr } = await admin.auth.admin.createUser({
