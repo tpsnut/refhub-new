@@ -11536,9 +11536,12 @@ function TradePage({ t, lang }) {
   return (<>
     <PageHead t={t} title={L(lang, "ph_trade_title")} sub={L(lang, "ph_trade_sub")} icon={<TrendingUp size={20} color={t.accent} />} />
 
-    <div style={{ display: "flex", gap: 6, marginTop: 4, marginBottom: 10, overflowX: "auto" }}>
+    <div style={{ display: "flex", gap: 18, marginTop: 4, marginBottom: 14, overflowX: "auto", borderBottom: `1px solid ${t.border}` }}>
       {TRADE_TABS.map((x) => (
-        <button key={x.v} onClick={() => setTab(x.v)} style={{ flexShrink: 0, padding: "7px 14px", borderRadius: 10, cursor: "pointer", border: `1.5px solid ${tab === x.v ? t.accent : t.border}`, fontWeight: 700, fontSize: 12, background: tab === x.v ? t.accent : "transparent", color: tab === x.v ? t.onAccent : t.sub }}>{x.lb}</button>
+        <button key={x.v} onClick={() => setTab(x.v)} style={{ flexShrink: 0, padding: "4px 2px 12px", background: "none", border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13.5, color: tab === x.v ? t.accent : t.sub, position: "relative" }}>
+          {x.lb}
+          {tab === x.v && <div style={{ position: "absolute", left: 0, right: 0, bottom: -1, height: 3, borderRadius: 3, background: `linear-gradient(90deg,${t.accent}CC,${t.accent})` }} />}
+        </button>
       ))}
     </div>
 
