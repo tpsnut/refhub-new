@@ -11722,11 +11722,12 @@ function TradePage({ t, lang, userId }) {
     </div>
 
     {/* 🎮 ปุ่มลอยเข้าพอร์ตจำลอง มุมล่างขวา แทนการอยู่ในแท็บบน (ตามที่ปรับ) */}
-    {userId && (
-      <button onClick={() => setPortfolioOpen(true)} title="พอร์ตจำลอง" style={{ position: "fixed", right: 20, bottom: 96, width: 54, height: 54, borderRadius: 27, border: "none", cursor: "pointer", display: "grid", placeItems: "center", fontSize: 22, background: "linear-gradient(160deg,#F5A050,#E27418)", boxShadow: "0 8px 20px -6px rgba(242,135,46,.6), inset 0 1px 0 rgba(255,255,255,.3)", zIndex: 40 }}>
+    {userId && (<>
+      <button onClick={() => setPortfolioOpen(true)} title="พอร์ตจำลอง" style={{ position: "fixed", right: 20, bottom: 96, width: 54, height: 54, borderRadius: 27, cursor: "pointer", display: "grid", placeItems: "center", fontSize: 22, background: "rgba(255,255,255,.08)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border: "1.5px solid rgba(255,255,255,.28)", boxShadow: "0 8px 24px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.18)", zIndex: 40, animation: "rh-fab-float 2.4s ease-in-out infinite" }}>
         🎮
       </button>
-    )}
+      <style>{`@keyframes rh-fab-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }`}</style>
+    </>)}
 
     <div style={{ fontSize: 9.5, color: t.faint, textAlign: "center", marginTop: 16, lineHeight: 1.6, padding: "0 10px" }}>
       ราคาทองอ้างอิงสมาคมค้าทองคำ ส่วนดัชนี/หุ้น/คริปโต/ค่าเงิน มาจากแหล่งข้อมูลสาธารณะฟรี อาจคลาดเคลื่อนจากราคาซื้อขายจริงเล็กน้อยและดีเลย์ได้ ใช้เพื่อการอ้างอิงทั่วไปเท่านั้น ไม่ใช่คำแนะนำการลงทุน
