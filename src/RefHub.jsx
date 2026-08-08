@@ -1295,6 +1295,30 @@ export default function RefHub() {
   // ใช้ class บน document.body แทนการไล่แก้ borderRadius ทีละจุดเป็นพันจุด เพราะ modal บางตัว portal ออกไปนอก DOM tree ของแอป
   // การใส่ class ที่ body จะครอบคลุมถึง modal ที่ portal ออกไปด้วย (portal ยังอยู่ใต้ body เสมอ)
   useEffect(() => { document.body.classList.toggle("rh-sharp", cardShape === "sharp"); }, [cardShape]);
+
+  // 🔙 ปุ่มกลับของมือถือ (Android back gesture/ปุ่ม) — ให้ถอยกลับในแอปก่อน ไม่ใช่ปิดแอปทันที
+  // กลไก: ดัน history entry กันไว้ 1 ชั้นเสมอ ("guard") กดกลับ = เบราว์เซอร์ยิง popstate มา
+  // ถ้าตอนนั้น page ไม่ใช่ "home" -> พากลับไป home ในแอป (ไม่ปิดแอป) แล้วดัน guard คืนเข้าไปใหม่
+  // ถ้า page เป็น "home" อยู่แล้ว (ไม่มีที่ให้ถอยต่อในแอป) -> ถามยืนยันว่าจะออกจากแอปไหม
+  // ⚠️ ข้อจำกัดจริงของเว็บ/PWA: โค้ดสั่งปิดแอปเองไม่ได้เด็ดขาด (เบราว์เซอร์กันไว้ด้วยเหตุผลความปลอดภัย)
+  // ตอนกดยืนยัน "ออกจากแอป" ทำได้แค่เอา guard ที่กันไว้ออก ให้ปุ่มกลับครั้งถัดไปหลุดออกจากแอปได้ตามธรรมชาติจริงๆ
+  const [askConfirm, ConfirmUI] = useConfirm(t);
+  const allowExitRef = useRef(false); // true = ยืนยันจะออกแล้ว ครั้งถัดไปปล่อยผ่านไม่ต้องกันอีก
+  useEffect(() => { window.history.pushState({ rhGuard: true }, "", ""); }, []); // ดัน guard ไว้ตั้งแต่เปิดแอปครั้งแรก
+  useEffect(() => {
+    const onPopState = () => {
+      if (allowExitRef.current) return; // ยืนยันออกไปแล้วรอบก่อน ปล่อยผ่านให้หลุดออกจากแอปจริง
+      if (page !== "home") {
+        setPage("home");
+      } else {
+        askConfirm("ต้องการออกจากแอปใช่ไหม?", () => { allowExitRef.current = true; window.history.back(); }, "ออกจากแอป");
+      }
+      window.history.pushState({ rhGuard: true }, "", ""); // เติม guard กลับเข้าไปเสมอ (ยกเว้นตอนกำลังจะออกจริง)
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [page]);
+
   const customMentorObj = customMentors.find((c) => c.id === mentor);
   // ⚠️ เดิมเช็ค MENTORS[mentor] || (...) แต่ MENTORS.none มีอยู่จริงในอ็อบเจกต์ เลยชนะ || ก่อนเสมอ
   // ทำให้ไม่มีวันไปถึงส่วนที่เอารูปที่ user ตั้งเองมาใส่ — ต้องเช็ค "none" แยกเป็นเคสแรกสุด
@@ -2310,6 +2334,7 @@ export default function RefHub() {
         )}
 
         {mentorPick && <MentorPicker t={t} mentor={mentor} setMentor={setMentor} authProfile={authProfile} setAuthProfile={setAuthProfile} userId={userId} customMentors={customMentors} setCustomMentors={setCustomMentors} close={() => setMentorPick(false)} />}
+        {ConfirmUI}
         {themePick && <ThemePicker t={t} theme={theme} setTheme={setTheme} mode={mode} customAccent={customAccent} setCustomAccent={setCustomAccent} appBgUrl={appBgUrl} setAppBgUrl={setAppBgUrl} appBgOverlay={appBgOverlay} setAppBgOverlay={setAppBgOverlay} userId={userId} close={() => setThemePick(false)} />}
         {homeLayoutPick && <HomeLayoutPicker t={t} shp={shp} homeLayout={homeLayout} setHomeLayout={setHomeLayout} close={() => setHomeLayoutPick(false)} />}
         {cardShapePick && <CardShapePicker t={t} cardShape={cardShape} setCardShape={setCardShape} close={() => setCardShapePick(false)} />}
