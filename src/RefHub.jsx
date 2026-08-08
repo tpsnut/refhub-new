@@ -1182,7 +1182,10 @@ export default function RefHub() {
   const [customMentors, setCustomMentors] = useState([]); // โค้ชที่ user สร้างเอง (ไม่ใช่แอดมิน) [{id, name, description, avatarUrl}]
   const [theme, setTheme] = useState("default"); // 🎨 ธีมสีแอป: gray | default | red | navy | twilight | custom — แยกอิสระจาก mentor
   const [customAccent, setCustomAccent] = useState("#F2872E"); // 🎨 สีที่ user กำหนดเอง ใช้เมื่อ theme === "custom" (accent2/onAccent คำนวณอัตโนมัติจากสีนี้)
-  const [heroTheme, setHeroTheme] = useState(() => { try { return localStorage.getItem("refhub:heroTheme") || "none"; } catch (e) { return "none"; } }); // 🌊 พื้นหลังเคลื่อนไหวของการ์ดฮีโร่หน้าแรก (none/ocean/stars/aurora/candle) — เก็บ local อย่างเดียวพอ ไม่ต้อง sync ข้ามอุปกรณ์
+  const [heroTheme, setHeroTheme] = useState(() => { try { return localStorage.getItem("refhub:heroTheme") || "none"; } catch (e) { return "none"; } }); // 🌊 พื้นหลังเคลื่อนไหวของการ์ดฮีโร่หน้าแรก (none/ocean/stars/aurora/candle/custom) — เก็บ local อย่างเดียวพอ ไม่ต้อง sync ข้ามอุปกรณ์
+  const [heroCustomUrl, setHeroCustomUrl] = useState(() => { try { return localStorage.getItem("refhub:heroCustomUrl") || ""; } catch (e) { return ""; } });
+  const [heroCustomType, setHeroCustomType] = useState(() => { try { return localStorage.getItem("refhub:heroCustomType") || ""; } catch (e) { return ""; } }); // "video" | "gif"
+  useEffect(() => { try { localStorage.setItem("refhub:heroCustomUrl", heroCustomUrl); localStorage.setItem("refhub:heroCustomType", heroCustomType); } catch (e) {} }, [heroCustomUrl, heroCustomType]);
   useEffect(() => { try { localStorage.setItem("refhub:heroTheme", heroTheme); } catch (e) {} }, [heroTheme]);
   const [catColors, setCatColors] = useState(DEFAULT_CAT_COLORS); // 🎨 สีหมวดหมู่ (การเงิน/ความรู้/เป้าหมาย/โน้ต) ที่ user ปรับเองได้ทีละสี
   const [cardShape, setCardShape] = useState("soft"); // 🔲 ทรงกรอบการ์ด: sharp (เหลี่ยมคมแบบ SCB ไม่มีเงา) | soft (มนเบาๆ ใกล้ตัวอักษร) — default soft ตามที่ตกลง
@@ -2218,7 +2221,7 @@ export default function RefHub() {
 
         {/* CONTENT — ความสูงหารด้วยสเกลชดเชย transform:scale ข้างบน กันตอนขยายฟอนต์แล้วท้ายเนื้อหาจมใต้ Dock */}
         <div ref={contentScrollRef} onScroll={(e) => setAtTop(e.currentTarget.scrollTop < 80)} style={{ position: "relative", zIndex: 2, padding: `8px 10px ${page === "chat" || page === "chatRoom" ? 16 : 120}px`, height: vvh ? `${(vvh * 100 / fontScale - 76).toFixed(2)}px` : `calc(${(10000 / fontScale).toFixed(2)}dvh - 76px)`, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
-          {page === "home" && <ErrorCatcher t={t}><HomePage {...{ t, lang, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, allGoals: goals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, setMusicOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget, setWorkoutTimerTarget, setAddGoalOpen, setScoreRulesOpen, cardShape, homeLayout, walletWidgets, setWalletWidgets, bentoWidgets, setBentoWidgets, classicWidgets, setClassicWidgets, catColors, setCatColors, heroShortcuts, setHeroShortcuts, heroTheme }} /></ErrorCatcher>}
+          {page === "home" && <ErrorCatcher t={t}><HomePage {...{ t, lang, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, allGoals: goals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, setMusicOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget, setWorkoutTimerTarget, setAddGoalOpen, setScoreRulesOpen, cardShape, homeLayout, walletWidgets, setWalletWidgets, bentoWidgets, setBentoWidgets, classicWidgets, setClassicWidgets, catColors, setCatColors, heroShortcuts, setHeroShortcuts, heroTheme, heroCustomUrl, heroCustomType }} /></ErrorCatcher>}
           {page === "ledger" && <FinancePage {...{ t, lang, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt), userId, billReminders, billPayments, markBillPaid, setBillManagerOpen }} />}
           {page === "note" && <NotePage {...{ t, lang, notes, setNotes, isNight, userId, session, authProfile, reminders, openReminder }} />}
           {page === "ideas" && <IdeasPage t={t} lang={lang} M={M} userId={userId} session={session} authProfile={authProfile} setAuthProfile={setAuthProfile} setNotes={setNotes} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} />}
@@ -2302,7 +2305,7 @@ export default function RefHub() {
         )}
 
         {mentorPick && <MentorPicker t={t} mentor={mentor} setMentor={setMentor} authProfile={authProfile} setAuthProfile={setAuthProfile} userId={userId} customMentors={customMentors} setCustomMentors={setCustomMentors} close={() => setMentorPick(false)} />}
-        {themePick && <ThemePicker t={t} theme={theme} setTheme={setTheme} mode={mode} customAccent={customAccent} setCustomAccent={setCustomAccent} heroTheme={heroTheme} setHeroTheme={setHeroTheme} close={() => setThemePick(false)} />}
+        {themePick && <ThemePicker t={t} theme={theme} setTheme={setTheme} mode={mode} customAccent={customAccent} setCustomAccent={setCustomAccent} heroTheme={heroTheme} setHeroTheme={setHeroTheme} heroCustomUrl={heroCustomUrl} setHeroCustomUrl={setHeroCustomUrl} heroCustomType={heroCustomType} setHeroCustomType={setHeroCustomType} userId={userId} close={() => setThemePick(false)} />}
         {homeLayoutPick && <HomeLayoutPicker t={t} shp={shp} homeLayout={homeLayout} setHomeLayout={setHomeLayout} close={() => setHomeLayoutPick(false)} />}
         {cardShapePick && <CardShapePicker t={t} cardShape={cardShape} setCardShape={setCardShape} close={() => setCardShapePick(false)} />}
         {moreMenuOpen && (
@@ -4841,9 +4844,19 @@ function widgetBentoData(id, t, { balance, todayNet, goalDone, goals, todayArtic
 // 🏠 โครง Home แบบ "โฟกัส" — ยอดเงินตัวใหญ่บนสุด + แถวไอคอนฟังก์ชันลัด (ปรับ/ลบ/เพิ่ม/ลากสลับลำดับเองได้) + list เรียบ
 // 🌊 พื้นหลังเคลื่อนไหวการ์ดฮีโร่ — CSS/SVG ล้วนๆ ไม่มีไฟล์วิดีโอ/gif ภายนอกเลย (โหลดเร็ว ไม่กินพื้นที่เก็บข้อมูล ไม่มีปัญหาลิขสิทธิ์)
 // ตั้งใจให้ "นิ่งเนิบ ไม่วูบวาบ" ใช้แค่ transform/opacity (เบาเครื่อง ไม่ทำให้ตัวหนังสือบนการ์ดอ่านยาก)
-function HeroAnimatedBg({ theme }) {
+function HeroAnimatedBg({ theme, customUrl, customType }) {
   if (!theme || theme === "none") return null;
   const wrap = { position: "absolute", inset: 0, overflow: "hidden", borderRadius: "inherit", pointerEvents: "none", zIndex: -1 };
+
+  if (theme === "custom" && customUrl) {
+    return (
+      <div style={wrap}>
+        {customType === "video" ? <HeroCustomVideo url={customUrl} /> : <img src={customUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+        {/* เกรเดียนต์มืดคลุมเบาๆ กันตัวหนังสือบนการ์ดอ่านไม่ออก — ไฟล์ที่อัปโหลดเองคุมสี/ความสว่างไม่ได้เหมือนธีมสำเร็จรูป */}
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,.2), rgba(0,0,0,.42))" }} />
+      </div>
+    );
+  }
 
   if (theme === "ocean") {
     return (
@@ -4897,14 +4910,106 @@ const HERO_THEMES = [
   { id: "stars", label: "ดาวลอยเบาๆ", emoji: "✨" },
   { id: "aurora", label: "ออโรร่าไล่สี", emoji: "🌅" },
   { id: "candle", label: "แสงเทียนอุ่นๆ", emoji: "🕯️" },
+  { id: "custom", label: "อัปโหลดของตัวเอง", emoji: "📤" },
 ];
+const HERO_UPLOAD_MAX_MB = 15;
+const HERO_VIDEO_LOOP_SECONDS = 8; // ไม่ได้ตัดไฟล์จริง แค่คุมให้เล่นวนเฉพาะช่วงต้นของวิดีโอ กันไฟล์ยาวเกินจนดูแปลก/หนักเครื่อง
 
-function HomeWidgetsWallet({ t, lang, shp, M, isNight, setMentorPick, setChatOpen, setMusicOpen, balance, todayNet, goalDone, goals, todayArticles, latestNote, setPage, setCommunityOpen, commPreview, walletWidgets, onEditWidgets, heroShortcuts, heroTheme }) {
+// 🎬 วิดีโอพื้นหลังที่อัปโหลดเอง — เล่นวนแค่ 8 วิแรกเสมอ (reset currentTime กลับ 0 เมื่อเกิน)
+function HeroCustomVideo({ url }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const v = ref.current; if (!v) return;
+    const onTime = () => { if (v.currentTime > HERO_VIDEO_LOOP_SECONDS) v.currentTime = 0; };
+    v.addEventListener("timeupdate", onTime);
+    return () => v.removeEventListener("timeupdate", onTime);
+  }, [url]);
+  return <video ref={ref} src={url} autoPlay muted loop playsInline style={{ width: "100%", height: "100%", objectFit: "cover" }} />;
+}
+
+// 📤 อัปโหลดพื้นหลังของตัวเอง — ครอปให้เต็มการ์ดอัตโนมัติด้วย object-fit:cover (ไม่แก้ไฟล์จริง แค่ครอปตอนแสดงผล)
+// วิดีโอ: เล่นวนแค่ 8 วิแรก (ดูคอมเมนต์ HeroCustomVideo) — ไม่ได้ตัด/re-encode ไฟล์จริง เพื่อไม่ต้องพึ่งไลบรารีตัดต่อวิดีโอฝั่ง client ที่หนักมาก (เช่น ffmpeg.wasm ~25MB)
+function HeroBgUploadModal({ t, userId, onDone, close }) {
+  const [file, setFile] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const fileRef = useRef(null);
+
+  const onPick = (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setErr("");
+    const isVideo = f.type === "video/mp4";
+    const isGif = f.type === "image/gif";
+    if (!isVideo && !isGif) { setErr("รองรับแค่ไฟล์ .mp4 หรือ .gif เท่านั้น"); return; }
+    if (f.size > HERO_UPLOAD_MAX_MB * 1024 * 1024) { setErr(`ไฟล์ใหญ่เกิน ${HERO_UPLOAD_MAX_MB}MB ลองไฟล์เล็กกว่านี้`); return; }
+    setFile(f);
+    setPreview(URL.createObjectURL(f));
+  };
+
+  const submit = async () => {
+    if (!file) return;
+    setBusy(true); setErr("");
+    try {
+      const isVideo = file.type === "video/mp4";
+      const ext = isVideo ? "mp4" : "gif";
+      const path = `hero-bg/${userId}-${crypto.randomUUID()}.${ext}`;
+      const { error } = await supabase.storage.from("attachments").upload(path, file, { contentType: file.type });
+      if (error) throw new Error(error.message);
+      const { data } = supabase.storage.from("attachments").getPublicUrl(path);
+      onDone(data.publicUrl, isVideo ? "video" : "gif");
+      close();
+    } catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+
+  return (
+    <ModalPortal>
+      <div style={overlayHi} onClick={close}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 22, paddingBottom: 30 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>อัปโหลดพื้นหลังของตัวเอง</div>
+            <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+          </div>
+          <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 14, lineHeight: 1.6 }}>
+            รองรับไฟล์ .mp4 หรือ .gif ขนาดไม่เกิน {HERO_UPLOAD_MAX_MB}MB<br />
+            ระบบครอปให้เต็มการ์ดอัตโนมัติ ถ้าเป็นวิดีโอจะเล่นวนแค่ {HERO_VIDEO_LOOP_SECONDS} วินาทีแรก (ไม่ตัดไฟล์จริง แค่เล่นวนแค่ช่วงนั้น)
+          </div>
+          {!preview ? (
+            <button onClick={() => fileRef.current?.click()} style={{ width: "100%", padding: "34px 0", borderRadius: 16, border: `2px dashed ${t.border}`, background: t.inputBg, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+              <Upload size={24} color={t.sub} />
+              <span style={{ fontSize: 12.5, color: t.sub, fontWeight: 700 }}>แตะเพื่อเลือกไฟล์</span>
+            </button>
+          ) : (
+            <div style={{ borderRadius: 16, overflow: "hidden", marginBottom: 14, aspectRatio: "16/7", background: "#000" }}>
+              {file.type === "video/mp4" ? (
+                <video src={preview} autoPlay muted loop playsInline style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              ) : (
+                <img src={preview} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              )}
+            </div>
+          )}
+          <input ref={fileRef} type="file" accept="video/mp4,image/gif" onChange={onPick} style={{ display: "none" }} />
+          {err && <div style={{ fontSize: 11.5, color: "#D9534F", marginBottom: 10 }}>{err}</div>}
+          {preview && (
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => { setFile(null); setPreview(null); }} style={{ flex: 1, padding: "10px 0", borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, color: t.sub, fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}>เลือกใหม่</button>
+              <button onClick={submit} disabled={busy} style={{ flex: 1, padding: "10px 0", borderRadius: 12, border: "none", background: t.accent, color: t.onAccent, fontWeight: 700, fontSize: 12.5, cursor: busy ? "default" : "pointer" }}>{busy ? "กำลังอัปโหลด..." : "ใช้พื้นหลังนี้"}</button>
+            </div>
+          )}
+        </div>
+      </div>
+    </ModalPortal>
+  );
+}
+
+function HomeWidgetsWallet({ t, lang, shp, M, isNight, setMentorPick, setChatOpen, setMusicOpen, balance, todayNet, goalDone, goals, todayArticles, latestNote, setPage, setCommunityOpen, commPreview, walletWidgets, onEditWidgets, heroShortcuts, heroTheme, heroCustomUrl, heroCustomType }) {
   const sharp = shp.radius === 0;
   return (
     <>
       <div style={{ marginTop: 8, background: t.hero, borderRadius: shp.radius, padding: sharp ? "18px 26px" : "18px 16px", position: "relative", overflow: "hidden" }}>
-        <HeroAnimatedBg theme={heroTheme} />
+        <HeroAnimatedBg theme={heroTheme} customUrl={heroCustomUrl} customType={heroCustomType} />
         <button onClick={onEditWidgets} style={{ position: "absolute", top: 14, right: sharp ? 26 : 16, background: `${t.onAccent}26`, border: "none", borderRadius: shp.radius === 0 ? 0 : 10, width: 28, height: 28, display: "grid", placeItems: "center", cursor: "pointer" }} title="ปรับการ์ดใหญ่"><Pencil size={14} color={t.onAccent} /></button>
         <button onClick={() => setMentorPick(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: `${t.onAccent}CC` }}>{isNight ? "โค้ชคืนนี้" : "โค้ชวันนี้"} · {M.name.toUpperCase()} ▾</span>
@@ -4965,7 +5070,7 @@ function WalletRow({ t, shp, icon, title, sub, onClick }) {
 }
 
 // 🧱 โครง Home แบบ "โมเสก" — บล็อกยอดเงินใหญ่เด่น + บล็อกเล็กล้อมรอบ (ปรับ/ลบ/เพิ่ม/ลากสลับลำดับเองได้ ใช้สี solid ไม่จางแล้ว)
-function HomeWidgetsBento({ t, lang, shp, M, isNight, setMentorPick, setChatOpen, setMusicOpen, balance, todayNet, goalDone, goals, todayArticles, latestNote, setPage, setCommunityOpen, commPreview, bentoWidgets, onEditWidgets, heroShortcuts, heroTheme }) {
+function HomeWidgetsBento({ t, lang, shp, M, isNight, setMentorPick, setChatOpen, setMusicOpen, balance, todayNet, goalDone, goals, todayArticles, latestNote, setPage, setCommunityOpen, commPreview, bentoWidgets, onEditWidgets, heroShortcuts, heroTheme, heroCustomUrl, heroCustomType }) {
   const sharp = shp.radius === 0;
   const data = { balance, todayNet, goalDone, goals, todayArticles, latestNote, commPreview };
   const resolve = (id) => {
@@ -4982,7 +5087,7 @@ function HomeWidgetsBento({ t, lang, shp, M, isNight, setMentorPick, setChatOpen
     <>
       <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 10, marginTop: 8 }}>
         <div style={{ background: t.hero, borderRadius: shp.radius, padding: sharp ? "16px 16px 16px 26px" : 16, position: "relative", overflow: "hidden" }}>
-          <HeroAnimatedBg theme={heroTheme} />
+          <HeroAnimatedBg theme={heroTheme} customUrl={heroCustomUrl} customType={heroCustomType} />
           <button onClick={onEditWidgets} style={{ position: "absolute", top: 10, right: 10, background: `${t.onAccent}26`, border: "none", borderRadius: shp.radius === 0 ? 0 : 10, width: 26, height: 26, display: "grid", placeItems: "center", cursor: "pointer" }} title="ปรับการ์ดใหญ่"><Pencil size={13} color={t.onAccent} /></button>
           <button onClick={() => setMentorPick(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
             <span style={{ fontSize: 10.5, fontWeight: 700, color: `${t.onAccent}CC` }}>{isNight ? "โค้ชคืนนี้" : "โค้ชวันนี้"}</span>
@@ -5128,7 +5233,7 @@ function WidgetOrderModal({ t, title, hint, selected, setSelected, close, catCol
   </div></div></ModalPortal>);
 }
 
-function HomePage({ t, lang, M, quote, isNight, setMentorPick, balance, tx, goals, allGoals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, setMusicOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget, setWorkoutTimerTarget, setAddGoalOpen, setScoreRulesOpen, cardShape, homeLayout, walletWidgets, setWalletWidgets, bentoWidgets, setBentoWidgets, classicWidgets, setClassicWidgets, catColors, setCatColors, heroShortcuts, setHeroShortcuts, heroTheme }) {
+function HomePage({ t, lang, M, quote, isNight, setMentorPick, balance, tx, goals, allGoals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, setMusicOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget, setWorkoutTimerTarget, setAddGoalOpen, setScoreRulesOpen, cardShape, homeLayout, walletWidgets, setWalletWidgets, bentoWidgets, setBentoWidgets, classicWidgets, setClassicWidgets, catColors, setCatColors, heroShortcuts, setHeroShortcuts, heroTheme, heroCustomUrl, heroCustomType }) {
   const [askConfirm, ConfirmUI] = useConfirm(t);
   const [viewingPinned, setViewingPinned] = useState(null);
   const [commentingId, setCommentingId] = useState(null);
@@ -5220,13 +5325,13 @@ function HomePage({ t, lang, M, quote, isNight, setMentorPick, balance, tx, goal
       ))}
       <div style={{ margin: cardShape === "sharp" ? "0 -10px" : 0 }}>
       {homeLayout === "wallet" ? (
-        <HomeWidgetsWallet t={t} lang={lang} shp={shp} M={M} isNight={isNight} setMentorPick={setMentorPick} setChatOpen={setChatOpen} setMusicOpen={setMusicOpen} balance={balance} todayNet={todayNet} goalDone={goalDone} goals={goals} todayArticles={todayArticles} latestNote={latestNote} setPage={setPage} setCommunityOpen={setCommunityOpen} commPreview={commPreview} walletWidgets={walletWidgets} onEditWidgets={() => setEditWidgetsOpen(true)} heroShortcuts={heroShortcuts} heroTheme={heroTheme} />
+        <HomeWidgetsWallet t={t} lang={lang} shp={shp} M={M} isNight={isNight} setMentorPick={setMentorPick} setChatOpen={setChatOpen} setMusicOpen={setMusicOpen} balance={balance} todayNet={todayNet} goalDone={goalDone} goals={goals} todayArticles={todayArticles} latestNote={latestNote} setPage={setPage} setCommunityOpen={setCommunityOpen} commPreview={commPreview} walletWidgets={walletWidgets} onEditWidgets={() => setEditWidgetsOpen(true)} heroShortcuts={heroShortcuts} heroTheme={heroTheme} heroCustomUrl={heroCustomUrl} heroCustomType={heroCustomType} />
       ) : homeLayout === "bento" ? (
-        <HomeWidgetsBento t={t} lang={lang} shp={shp} M={M} isNight={isNight} setMentorPick={setMentorPick} setChatOpen={setChatOpen} setMusicOpen={setMusicOpen} balance={balance} todayNet={todayNet} goalDone={goalDone} goals={goals} todayArticles={todayArticles} latestNote={latestNote} setPage={setPage} setCommunityOpen={setCommunityOpen} commPreview={commPreview} bentoWidgets={bentoWidgets} onEditWidgets={() => setEditWidgetsOpen(true)} heroShortcuts={heroShortcuts} heroTheme={heroTheme} />
+        <HomeWidgetsBento t={t} lang={lang} shp={shp} M={M} isNight={isNight} setMentorPick={setMentorPick} setChatOpen={setChatOpen} setMusicOpen={setMusicOpen} balance={balance} todayNet={todayNet} goalDone={goalDone} goals={goals} todayArticles={todayArticles} latestNote={latestNote} setPage={setPage} setCommunityOpen={setCommunityOpen} commPreview={commPreview} bentoWidgets={bentoWidgets} onEditWidgets={() => setEditWidgetsOpen(true)} heroShortcuts={heroShortcuts} heroTheme={heroTheme} heroCustomUrl={heroCustomUrl} heroCustomType={heroCustomType} />
       ) : (
         <>
       <div style={{ marginTop: 8, background: t.hero, border: `1px solid ${t.heroBorder}`, borderRadius: shp.radius, padding: shp.radius === 0 ? 30 : 20, position: "relative", overflow: "hidden", boxShadow: isNight ? "none" : "0 10px 24px rgba(30,40,70,.18)" }}>
-        <HeroAnimatedBg theme={heroTheme} />
+        <HeroAnimatedBg theme={heroTheme} customUrl={heroCustomUrl} customType={heroCustomType} />
         <div style={{ position: "absolute", top: -34, right: -34, width: 130, height: 130, borderRadius: "50%", background: "rgba(255,255,255,.10)", pointerEvents: "none" }} />
         <div style={{ position: "absolute", bottom: -44, left: -24, width: 105, height: 105, borderRadius: "50%", background: "rgba(255,255,255,.06)", pointerEvents: "none" }} />
         <button onClick={() => setEditWidgetsOpen(true)} style={{ position: "absolute", top: 14, right: 14, background: `${t.onAccent}26`, border: "none", borderRadius: shp.radius === 0 ? 0 : 10, width: 28, height: 28, display: "grid", placeItems: "center", cursor: "pointer", zIndex: 1 }} title="ปรับการ์ดใหญ่"><Pencil size={14} color={t.onAccent} /></button>
@@ -15247,9 +15352,10 @@ function ColorPickerModal({ t, value, onChange, close }) {
   </div></div></ModalPortal>);
 }
 
-function ThemePicker({ t, theme, setTheme, mode, customAccent, setCustomAccent, heroTheme, setHeroTheme, close }) {
+function ThemePicker({ t, theme, setTheme, mode, customAccent, setCustomAccent, heroTheme, setHeroTheme, heroCustomUrl, setHeroCustomUrl, heroCustomType, setHeroCustomType, userId, close }) {
   const [pendingColor, setPendingColor] = useState(customAccent);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [heroUploadOpen, setHeroUploadOpen] = useState(false);
   return (<ModalPortal><div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
     <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 4 }}>เลือกธีมสีแอป</div>
     <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>แต่ละธีมมีเวอร์ชันกลางวัน/กลางคืนของตัวเอง สลับได้อิสระจากโค้ช</div>
@@ -15284,15 +15390,21 @@ function ThemePicker({ t, theme, setTheme, mode, customAccent, setCustomAccent, 
     <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 12 }}>ใส่ลูกเล่นเคลื่อนไหวเบาๆ ให้การ์ดใหญ่สุดหน้าแรกเท่านั้น</div>
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
       {HERO_THEMES.map((h) => (
-        <button key={h.id} onClick={() => setHeroTheme(h.id)} style={{ display: "flex", alignItems: "center", gap: 8, padding: 12, borderRadius: 14, cursor: "pointer", textAlign: "left", background: t.surface, border: `2px solid ${heroTheme === h.id ? t.accent : t.border}` }}>
+        <button key={h.id} onClick={() => { if (h.id === "custom") setHeroUploadOpen(true); else setHeroTheme(h.id); }} style={{ display: "flex", alignItems: "center", gap: 8, padding: 12, borderRadius: 14, cursor: "pointer", textAlign: "left", background: t.surface, border: `2px solid ${heroTheme === h.id ? t.accent : t.border}` }}>
           <span style={{ fontSize: 18 }}>{h.emoji}</span>
           <span style={{ fontSize: 11.5, fontWeight: 700, color: t.text, flex: 1 }}>{h.label}</span>
           {heroTheme === h.id && <Check size={16} color={t.accent} />}
         </button>
       ))}
     </div>
+    {heroTheme === "custom" && heroCustomUrl && (
+      <div style={{ fontSize: 11, color: t.faint, marginTop: 8, display: "flex", alignItems: "center", gap: 6 }}>
+        <CheckCircle2 size={13} color="#2E9E6B" /> ใช้ไฟล์ที่อัปโหลดไว้อยู่ — กด "อัปโหลดของตัวเอง" อีกครั้งเพื่อเปลี่ยน
+      </div>
+    )}
 
     {pickerOpen && <ColorPickerModal t={t} value={pendingColor} onChange={setPendingColor} close={() => setPickerOpen(false)} />}
+    {heroUploadOpen && <HeroBgUploadModal t={t} userId={userId} close={() => setHeroUploadOpen(false)} onDone={(url, type) => { setHeroCustomUrl(url); setHeroCustomType(type); setHeroTheme("custom"); }} />}
   </div></div></ModalPortal>);
 }
 
