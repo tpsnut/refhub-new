@@ -11377,15 +11377,55 @@ function IdeasPage({ t, lang, M, userId, session, authProfile, setAuthProfile, s
   );
 }
 function TradePage({ t, lang }) {
-  const rows = [{ n: "ทองคำ (Gold Spot)", p: "฿52,400", c: +0.8 }, { n: "SET Index", p: "1,342.50", c: -0.4 }, { n: "Bitcoin", p: "฿2,380,000", c: +2.1 }, { n: "กองทุน SSF/RMF", p: "฿75,025", c: +0.6 }];
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [fetchedAt, setFetchedAt] = useState(null);
+
+  const load = async (force) => {
+    setLoading(true); setError("");
+    try {
+      const r = await fetch(`/api/content?type=stocks${force ? "&force=1" : ""}`, { cache: "no-store" });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "โหลดราคาไม่สำเร็จ");
+      setItems(data.items || []);
+      setFetchedAt(data.fetchedAt);
+    } catch (e) { setError(e.message); }
+    setLoading(false);
+  };
+  useEffect(() => { load(false); }, []);
+
+  const fmt = (n, decimals) => Number(n).toLocaleString("th-TH", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+
   return (<>
     <PageHead t={t} title={L(lang, "ph_trade_title")} sub={L(lang, "ph_trade_sub")} icon={<TrendingUp size={20} color={t.accent} />} />
-    <MockBanner t={t} text="ตัวอย่าง — ต่อ API ราคาจริง (ฟรี) ภายหลัง" />
-    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
-      {rows.map((x, i) => (<div key={i} style={{ ...card(t), padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{x.n}</div>
-        <div style={{ textAlign: "right" }}><div style={{ fontSize: 14.5, fontWeight: 800, color: t.text }}>{x.p}</div><div style={{ fontSize: 11.5, fontWeight: 700, color: x.c >= 0 ? "#2E9E6B" : "#D9534F" }}>{x.c >= 0 ? "▲ +" : "▼ "}{x.c}%</div></div>
-      </div>))}
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 2, marginBottom: 8 }}>
+      <div style={{ fontSize: 10.5, color: t.faint }}>{fetchedAt ? `อัปเดตล่าสุด ${new Date(fetchedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}` : ""}</div>
+      <button onClick={() => load(true)} disabled={loading} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: loading ? "default" : "pointer", color: t.accent, fontSize: 11.5, fontWeight: 700 }}>
+        <RefreshCw size={12} style={loading ? { animation: "spin 1s linear infinite" } : undefined} /> รีเฟรช
+      </button>
+    </div>
+
+    {loading && items.length === 0 && <Empty t={t} text="กำลังโหลดราคา..." />}
+    {error && items.length === 0 && <div style={{ fontSize: 12, color: "#D9534F", padding: "10px 0" }}>{error}</div>}
+
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {items.map((x) => (
+        <div key={x.key} style={{ ...card(t), padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{x.name}</div>
+            <div style={{ fontSize: 10, color: t.faint }}>{x.unit}</div>
+          </div>
+          <div style={{ textAlign: "right", flexShrink: 0 }}>
+            <div style={{ fontSize: 14.5, fontWeight: 800, color: t.text }}>฿{fmt(x.price, x.key === "usdthb" ? 3 : x.key === "btc" ? 0 : 2)}</div>
+            {x.change != null && <div style={{ fontSize: 11.5, fontWeight: 700, color: x.change >= 0 ? "#2E9E6B" : "#D9534F" }}>{x.change >= 0 ? "▲ +" : "▼ "}{x.change.toFixed(2)}%</div>}
+          </div>
+        </div>
+      ))}
+    </div>
+
+    <div style={{ fontSize: 9.5, color: t.faint, textAlign: "center", marginTop: 16, lineHeight: 1.6, padding: "0 10px" }}>
+      ราคาทองอ้างอิงสมาคมค้าทองคำ ส่วน SET Index/Bitcoin/USD-THB มาจากแหล่งข้อมูลสาธารณะฟรี อาจคลาดเคลื่อนจากราคาซื้อขายจริงเล็กน้อยและดีเลย์ได้ ใช้เพื่อการอ้างอิงทั่วไปเท่านั้น ไม่ใช่คำแนะนำการลงทุน
     </div>
   </>);
 }

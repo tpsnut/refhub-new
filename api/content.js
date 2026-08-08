@@ -7,7 +7,7 @@
 // วิธีเรียก: GET /api/content?type=news&category=tech
 //
 // type=news   -> ดึง RSS ตามหมวด แปลงเป็น JSON (ใช้งานตอนนี้)
-// type=stocks -> (ยังไม่ทำ — เผื่อไว้สำหรับ TradePage)
+// type=stocks -> ราคาทอง/SET/บิตคอยน์/USD-THB จาก 4 แหล่งฟรีรวมกัน (ใช้งานตอนนี้ — TradePage)
 // type=vocab  -> (ยังไม่ทำ — เผื่อไว้สำหรับ LangPage)
 
 // แหล่ง RSS ต่อหมวด — Beartai (สายเทค/ธุรกิจ/เกม/ไลฟ์สไตล์) + Thairath (เสริมบันเทิง/ต่างประเทศ ที่ Beartai ไม่มี)
@@ -213,6 +213,62 @@ function googleNewsSourceFromQuery(q) {
   return { url: `https://news.google.com/rss/search?q=${encodeURIComponent(q)}+when:2d&hl=th&gl=TH&ceid=TH:th`, label: "Google News", isGoogleNews: true };
 }
 
+// 💰 TradePage — ราคาจริงจาก 4 แหล่งฟรี (ไม่ใช้ key) รวมกัน ถ้าแหล่งไหนล่มข้ามไปเงียบๆ เหมือนระบบข่าว ตราบใดที่เหลืออย่างน้อย 1 แหล่ง
+const numFromComma = (s) => parseFloat(String(s ?? "").replace(/,/g, ""));
+
+async function fetchGoldPrice() {
+  // สมาคมค้าทองคำ (goldtraders.or.th) ผ่าน API ชุมชนที่ยัง maintain อยู่ — ทองคำแท่ง 96.5% ราคาขายออก
+  const r = await fetch("https://api.chnwt.dev/thai-gold-api/latest");
+  if (!r.ok) throw new Error("ดึงราคาทองไม่สำเร็จ");
+  const data = await r.json();
+  if (data.status !== "success") throw new Error("ราคาทองไม่พร้อมใช้งาน");
+  const price = numFromComma(data.response.price?.gold_bar?.sell);
+  if (!isFinite(price)) throw new Error("อ่านราคาทองไม่ได้");
+  return { key: "gold", name: "ทองคำแท่ง 96.5% (ขายออก)", price, unit: "บาท/บาททองคำ", change: null, updatedText: `${data.response.update_date} ${data.response.update_time}` };
+}
+
+async function fetchSetIndex() {
+  // ดัชนี SET สด — API ชุมชน (ไม่ใช่ SET อย่างเป็นทางการ ของจริงคิดค่าบริการหลักหมื่น/เดือน) เผื่อวันไหนพังไม่มีการรับประกัน uptime
+  const r = await fetch("https://api.thaistock2d.com/live");
+  if (!r.ok) throw new Error("ดึง SET Index ไม่สำเร็จ");
+  const data = await r.json();
+  const price = numFromComma(data.live?.set);
+  if (!isFinite(price)) throw new Error("อ่านค่า SET Index ไม่ได้");
+  return { key: "set", name: "SET Index", price, unit: "จุด", change: null, updatedText: data.live?.time || "" };
+}
+
+async function fetchBitcoin() {
+  const r = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=thb&include_24hr_change=true");
+  if (!r.ok) throw new Error("ดึงราคา Bitcoin ไม่สำเร็จ");
+  const data = await r.json();
+  if (!data.bitcoin) throw new Error("ไม่พบข้อมูล Bitcoin");
+  return { key: "btc", name: "Bitcoin (BTC)", price: data.bitcoin.thb, unit: "บาท", change: data.bitcoin.thb_24h_change ?? null, updatedText: "" };
+}
+
+async function fetchUsdThb() {
+  const r = await fetch("https://open.er-api.com/v6/latest/USD");
+  if (!r.ok) throw new Error("ดึงอัตราแลกเปลี่ยนไม่สำเร็จ");
+  const data = await r.json();
+  const price = data?.rates?.THB;
+  if (!price) throw new Error("ไม่พบอัตรา USD/THB");
+  return { key: "usdthb", name: "USD/THB", price, unit: "บาท/ดอลลาร์", change: null, updatedText: data.time_last_update_utc || "" };
+}
+
+async function fetchStocksData(force) {
+  const cacheKey = "trade_stocks";
+  const cached = cache[cacheKey];
+  if (!force && cached && Date.now() - cached.ts < CACHE_TTL_MS) return { items: cached.data, fetchedAt: cached.ts, fromCache: true, failures: [] };
+
+  const results = await Promise.allSettled([fetchGoldPrice(), fetchSetIndex(), fetchBitcoin(), fetchUsdThb()]);
+  const items = [];
+  const failures = [];
+  results.forEach((r) => { if (r.status === "fulfilled") items.push(r.value); else failures.push(r.reason.message); });
+  if (items.length === 0) throw new Error(failures.join(" | "));
+  const ts = Date.now();
+  cache[cacheKey] = { data: items, ts };
+  return { items, fetchedAt: ts, fromCache: false, failures };
+}
+
 export default async function handler(req, res) {
   const { type, category, force, q, limit } = req.query || {};
   res.setHeader("Cache-Control", "no-store"); // กัน browser/edge เก็บ cache response นี้ไว้เอง (ปัญหาที่เคยเจอ: กดรีเฟรชแล้วดูเหมือนไม่ได้ข้อมูลใหม่)
@@ -241,7 +297,8 @@ export default async function handler(req, res) {
 
     // เผื่อไว้สำหรับอนาคต — TradePage / LangPage จะมาเพิ่ม branch ตรงนี้
     if (type === "stocks") {
-      return res.status(501).json({ error: "ยังไม่ได้ทำส่วนหุ้น" });
+      const { items, fetchedAt, fromCache, failures } = await fetchStocksData(force === "1" || force === "true");
+      return res.status(200).json({ items, fetchedAt, fromCache, failures });
     }
     if (type === "vocab") {
       return res.status(501).json({ error: "ยังไม่ได้ทำส่วนคำศัพท์" });
