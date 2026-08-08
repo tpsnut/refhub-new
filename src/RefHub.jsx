@@ -11522,8 +11522,11 @@ function TradePage({ t, lang, userId }) {
   const [portfolioLoading, setPortfolioLoading] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [leaderboardOpen, setLeaderboardOpen] = useState(false);
   const [portfolioOpen, setPortfolioOpen] = useState(false); // 🎮 เปิดจากปุ่มลอยมุมล่างขวา ไม่ใช่แท็บบนอีกแล้ว
   const [missionStats, setMissionStats] = useState(null); // { buyCount, sellCount, depositCount } — ใช้เช็คภารกิจมือใหม่
+  const [totalDeposited, setTotalDeposited] = useState(0); // ยอดฝากรวมทุกครั้ง — ใช้คำนวณ % กำไรที่แท้จริงตั้งแต่เริ่มเล่น
+  const [setBenchmarkPct, setSetBenchmarkPct] = useState(null); // % เปลี่ยนแปลงของ SET Index ในช่วงเวลาเดียวกับที่เริ่มเล่น (เทียบผลงาน)
   useEffect(() => { if (portfolioOpen && userId) loadPortfolio(); }, [portfolioOpen]);
 
   const loadPortfolio = async () => {
@@ -11559,6 +11562,27 @@ function TradePage({ t, lang, userId }) {
       const r = await fetch("/api/content?type=stocks&view=currency", { cache: "no-store" });
       const data = await r.json();
       setUsdThb((data.items || []).find((c) => c.symbol === "USD")?.price || null);
+    } catch (e) {}
+    // 📊 เทียบผลงานกับ SET Index ตั้งแต่วันที่ฝากเงินครั้งแรก — ต้องรู้ยอดฝากรวม (สำหรับ % return ที่แท้จริง) และวันที่เริ่มเล่น
+    try {
+      const [{ data: depRows }, { data: firstDep }] = await Promise.all([
+        supabase.from("paper_transactions").select("amount_thb").eq("user_id", userId).eq("type", "deposit"),
+        supabase.from("paper_transactions").select("created_at").eq("user_id", userId).eq("type", "deposit").order("created_at", { ascending: true }).limit(1).maybeSingle(),
+      ]);
+      const totalDeposited = (depRows || []).reduce((s, d) => s + Number(d.amount_thb), 0);
+      setTotalDeposited(totalDeposited);
+      if (firstDep) {
+        const rh = await fetch(`/api/content?type=stocks&view=history&symbol=${encodeURIComponent("^SET.BK")}&range=max`, { cache: "no-store" });
+        const hdata = await rh.json();
+        const points = hdata.points || [];
+        if (points.length > 1) {
+          const startTime = new Date(firstDep.created_at).getTime();
+          let closest = points[0];
+          for (const p of points) { if (Math.abs(p.t - startTime) < Math.abs(closest.t - startTime)) closest = p; }
+          const latest = points[points.length - 1];
+          setSetBenchmarkPct(((latest.p - closest.p) / closest.p) * 100);
+        }
+      }
     } catch (e) {}
     setPortfolioLoading(false);
   };
@@ -11754,9 +11778,10 @@ function TradePage({ t, lang, userId }) {
     )}
     {depositOpen && <PaperDepositModal t={t} onConfirm={doDeposit} close={() => setDepositOpen(false)} />}
     {historyOpen && <PaperHistoryModal t={t} userId={userId} close={() => setHistoryOpen(false)} />}
+    {leaderboardOpen && <PaperLeaderboardModal t={t} userId={userId} close={() => setLeaderboardOpen(false)} />}
     {portfolioOpen && (
-      <PaperPortfolioModal t={t} loading={portfolioLoading} portfolio={portfolio} holdings={holdings} liveByKey={liveByKey} usdThb={usdThb} missionStats={missionStats}
-        close={() => setPortfolioOpen(false)} onDeposit={() => setDepositOpen(true)} onHistory={() => setHistoryOpen(true)}
+      <PaperPortfolioModal t={t} loading={portfolioLoading} portfolio={portfolio} holdings={holdings} liveByKey={liveByKey} usdThb={usdThb} missionStats={missionStats} totalDeposited={totalDeposited} setBenchmarkPct={setBenchmarkPct}
+        close={() => setPortfolioOpen(false)} onDeposit={() => setDepositOpen(true)} onHistory={() => setHistoryOpen(true)} onLeaderboard={() => setLeaderboardOpen(true)}
         onOpenHolding={(h) => { setPortfolioOpen(false); setDetailItem({ item: { key: h.symbol, symbol: h.symbol.replace(".BK", ""), name: h.name, price: h.livePriceThb != null ? (h.market === "world" ? h.livePriceThb / (usdThb || 1) : h.livePriceThb) : Number(h.avg_cost_thb), change: null }, tabCtx: h.market }); }} />
     )}
   </>);
@@ -11780,7 +11805,7 @@ function PaperPortfolioModal({ t, close, ...viewProps }) {
   );
 }
 
-function PaperPortfolioView({ t, portfolio, holdings, liveByKey, usdThb, loading, missionStats, onDeposit, onHistory, onOpenHolding }) {
+function PaperPortfolioView({ t, portfolio, holdings, liveByKey, usdThb, loading, missionStats, totalDeposited, setBenchmarkPct, onDeposit, onHistory, onLeaderboard, onOpenHolding }) {
   const cash = portfolio?.cash_balance || 0;
   const holdingsWithValue = holdings.map((h) => {
     const live = liveByKey[`${h.market}:${h.symbol}`];
@@ -11798,6 +11823,8 @@ function PaperPortfolioView({ t, portfolio, holdings, liveByKey, usdThb, loading
   const totalPnlPct = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
   const isUp = totalPnl >= 0;
   const monoFont = { fontFamily: "'IBM Plex Mono',monospace", fontVariantNumeric: "tabular-nums" };
+  // 📊 ผลตอบแทนรวมตั้งแต่เริ่มเล่นจริง (นับรวมเงินสดที่ยังไม่ได้ลงทุนด้วย) ต่างจาก totalPnlPct ด้านบนที่นับแค่ของที่ถืออยู่ตอนนี้ — ใช้ตัวนี้เทียบกับดัชนีตลาดถึงจะแฟร์
+  const overallReturnPct = totalDeposited > 0 ? ((totalValue - totalDeposited) / totalDeposited) * 100 : null;
 
   // 🏅 ภารกิจมือใหม่ — เช็คจากประวัติจริง (missionStats) ไม่ใช่แค่สถานะปัจจุบัน กันกรณีขายหมดแล้วภารกิจหายไป
   const oldestHoldingDays = holdings.length > 0 ? Math.max(...holdings.map((h) => (Date.now() - new Date(h.created_at).getTime()) / 86400000)) : 0;
@@ -11829,10 +11856,29 @@ function PaperPortfolioView({ t, portfolio, holdings, liveByKey, usdThb, loading
           <div style={{ fontSize: 11, color: t.faint, position: "relative", marginTop: 4 }}>ยังไม่มีเงินในพอร์ต ฝากเงินจำลองเพื่อเริ่มเล่น</div>
         )}
       </div>
-      <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+
+      {overallReturnPct != null && setBenchmarkPct != null && (
+        <div style={{ ...card(t), padding: 12, marginBottom: 18 }}>
+          <div style={{ fontSize: 10, color: t.faint, marginBottom: 8, textAlign: "center" }}>เทียบผลงานตั้งแต่วันที่ฝากเงินครั้งแรก</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ flex: 1, textAlign: "center" }}>
+              <div style={{ fontSize: 10, color: t.faint, marginBottom: 2 }}>พอร์ตคุณ</div>
+              <div style={{ ...monoFont, fontSize: 15, fontWeight: 700, color: overallReturnPct >= 0 ? "#2E9E6B" : "#D9534F" }}>{overallReturnPct >= 0 ? "+" : ""}{overallReturnPct.toFixed(2)}%</div>
+            </div>
+            <div style={{ width: 1, background: t.border }} />
+            <div style={{ flex: 1, textAlign: "center" }}>
+              <div style={{ fontSize: 10, color: t.faint, marginBottom: 2 }}>SET Index</div>
+              <div style={{ ...monoFont, fontSize: 15, fontWeight: 700, color: setBenchmarkPct >= 0 ? "#2E9E6B" : "#D9534F" }}>{setBenchmarkPct >= 0 ? "+" : ""}{setBenchmarkPct.toFixed(2)}%</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
         <button onClick={onDeposit} style={{ flex: 1, padding: "9px 0", borderRadius: 11, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 12, color: "#141414", background: "linear-gradient(160deg,#F5A050,#E27418)", boxShadow: "0 4px 12px -4px rgba(242,135,46,.5), inset 0 1px 0 rgba(255,255,255,.3)" }}>+ ฝากเพิ่ม</button>
         <button onClick={onHistory} style={{ flex: 1, padding: "9px 0", borderRadius: 11, cursor: "pointer", fontWeight: 700, fontSize: 12, color: t.sub, background: t.inputBg, border: `1px solid ${t.border}` }}>ประวัติ</button>
       </div>
+      <button onClick={onLeaderboard} style={{ width: "100%", padding: "9px 0", borderRadius: 11, cursor: "pointer", fontWeight: 700, fontSize: 12, color: t.sub, background: t.inputBg, border: `1px solid ${t.border}`, marginBottom: 18 }}>🏆 กระดานผู้นำในครอบครัว</button>
 
       {missions.length > 0 && (
         <div style={{ marginBottom: 18 }}>
@@ -11956,6 +12002,105 @@ function PaperHistoryModal({ t, userId, close }) {
                 <div style={{ fontSize: 10.5, color: t.faint }}>{r.quantity ? `${Number(r.quantity).toLocaleString()} หน่วย · ` : ""}{new Date(r.created_at).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}</div>
               </div>
               <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 13, fontWeight: 700, color: typeColor[r.type], flexShrink: 0 }}>{r.type === "buy" ? "-" : "+"}฿{Number(r.amount_thb).toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </ModalPortal>
+  );
+}
+
+// 🏆 กระดานผู้นำพอร์ตจำลองในครอบครัว — เทียบ % กำไร/ขาดทุนรวม (ตั้งแต่เริ่มเล่น) ไม่โชว์ยอดเงินที่แท้จริงของแต่ละคน เพื่อความเป็นส่วนตัว
+function PaperLeaderboardModal({ t, userId, close }) {
+  const [rows, setRows] = useState(null);
+  const [noFamily, setNoFamily] = useState(false);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data: me } = await supabase.from("profiles").select("family_id").eq("id", userId).single();
+        if (!me?.family_id) { setNoFamily(true); return; }
+        const { data: members } = await supabase.from("profiles").select("id, name, avatar_url").eq("family_id", me.family_id);
+        const memberIds = (members || []).map((m) => m.id);
+        const [{ data: portfolios }, { data: holdings }, { data: deposits }] = await Promise.all([
+          supabase.from("paper_portfolio").select("*").in("user_id", memberIds),
+          supabase.from("paper_holdings").select("*").in("user_id", memberIds),
+          supabase.from("paper_transactions").select("user_id, amount_thb").in("user_id", memberIds).eq("type", "deposit"),
+        ]);
+        // รวม symbol ทั้งหมดที่มีใครถืออยู่บ้าง แยกตามตลาด ดึงราคาสดทีเดียวจบ ไม่ยิงซ้ำต่อคน
+        const byMarket = {};
+        (holdings || []).forEach((h) => { (byMarket[h.market] = byMarket[h.market] || new Set()).add(h.symbol); });
+        const liveByKey = {};
+        await Promise.all(Object.entries(byMarket).map(async ([market, syms]) => {
+          try {
+            const r = await fetch(`/api/content?type=stocks&view=quotes&market=${market}&symbols=${[...syms].join(",")}`, { cache: "no-store" });
+            const data = await r.json();
+            (data.items || []).forEach((it) => { liveByKey[`${market}:${it.key}`] = it; });
+          } catch (e) {}
+        }));
+        let usdThb = null;
+        try {
+          const r = await fetch("/api/content?type=stocks&view=currency", { cache: "no-store" });
+          const data = await r.json();
+          usdThb = (data.items || []).find((c) => c.symbol === "USD")?.price || null;
+        } catch (e) {}
+
+        const result = (members || []).map((m) => {
+          const port = (portfolios || []).find((p) => p.user_id === m.id);
+          const cash = port?.cash_balance || 0;
+          const myHoldings = (holdings || []).filter((h) => h.user_id === m.id);
+          let holdingsValue = 0;
+          myHoldings.forEach((h) => {
+            const live = liveByKey[`${h.market}:${h.symbol}`];
+            const priceThb = live?.price != null ? (h.market === "world" ? live.price * (usdThb || 0) : live.price) : Number(h.avg_cost_thb);
+            holdingsValue += priceThb * Number(h.quantity);
+          });
+          const totalValue = cash + holdingsValue;
+          const totalDeposited = (deposits || []).filter((d) => d.user_id === m.id).reduce((s, d) => s + Number(d.amount_thb), 0);
+          const returnPct = totalDeposited > 0 ? ((totalValue - totalDeposited) / totalDeposited) * 100 : null;
+          return { ...m, totalValue, totalDeposited, returnPct, isMe: m.id === userId };
+        }).filter((r) => r.totalDeposited > 0); // เอาเฉพาะคนที่เริ่มเล่นแล้วจริงๆ ไม่งั้นกระดานจะเต็มไปด้วยคนที่ยังไม่ได้ฝากเงินเลย
+
+        result.sort((a, b) => (b.returnPct ?? -999) - (a.returnPct ?? -999));
+        setRows(result);
+      } catch (e) { setErr(e.message); }
+    })();
+  }, []);
+
+  const medal = ["🥇", "🥈", "🥉"];
+  const monoFont = { fontFamily: "'IBM Plex Mono',monospace", fontVariantNumeric: "tabular-nums" };
+
+  return (
+    <ModalPortal>
+      <div style={overlayHi} onClick={close}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "80vh", overflowY: "auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>🏆 กระดานผู้นำในครอบครัว</div>
+            <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+          </div>
+          <div style={{ fontSize: 11, color: t.faint, marginBottom: 16, lineHeight: 1.5 }}>เทียบ % กำไร/ขาดทุนของพอร์ตจำลอง (ไม่โชว์จำนวนเงินจริงของแต่ละคน)</div>
+
+          {noFamily && <Empty t={t} text="ยังไม่ได้อยู่ในครอบครัวไหน ไม่มีใครให้เทียบด้วย" />}
+          {err && <div style={{ fontSize: 12, color: "#D9534F" }}>{err}</div>}
+          {!noFamily && !err && rows === null && <Empty t={t} text="กำลังคำนวณอันดับ..." />}
+          {rows && rows.length === 0 && <Empty t={t} text="ยังไม่มีใครในครอบครัวเริ่มเล่นพอร์ตจำลองเลย" />}
+          {rows && rows.map((r, i) => (
+            <div key={r.id} style={{ ...card(t), padding: 12, display: "flex", alignItems: "center", gap: 10, marginBottom: 8, border: r.isMe ? `1.5px solid ${t.accent}` : `1px solid ${t.border}` }}>
+              <div style={{ fontSize: 16, width: 26, textAlign: "center", flexShrink: 0 }}>{medal[i] || `#${i + 1}`}</div>
+              {r.avatar_url ? (
+                <img src={r.avatar_url} alt="" style={{ width: 32, height: 32, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} />
+              ) : (
+                <div style={{ width: 32, height: 32, borderRadius: 10, background: colorFor(r.name || "?"), color: "#fff", display: "grid", placeItems: "center", fontSize: 13, fontWeight: 700, flexShrink: 0 }}>{(r.name || "?")[0]}</div>
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: t.text }}>{r.name || "ผู้ใช้"}{r.isMe && <span style={{ color: t.accent }}> (คุณ)</span>}</div>
+              </div>
+              {r.returnPct != null && (
+                <div style={{ ...monoFont, fontSize: 13.5, fontWeight: 700, color: r.returnPct >= 0 ? "#2E9E6B" : "#D9534F", flexShrink: 0 }}>
+                  {r.returnPct >= 0 ? "▲ +" : "▼ "}{r.returnPct.toFixed(2)}%
+                </div>
+              )}
             </div>
           ))}
         </div>
