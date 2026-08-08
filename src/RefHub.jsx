@@ -2305,7 +2305,7 @@ export default function RefHub() {
         )}
 
         {mentorPick && <MentorPicker t={t} mentor={mentor} setMentor={setMentor} authProfile={authProfile} setAuthProfile={setAuthProfile} userId={userId} customMentors={customMentors} setCustomMentors={setCustomMentors} close={() => setMentorPick(false)} />}
-        {themePick && <ThemePicker t={t} theme={theme} setTheme={setTheme} mode={mode} customAccent={customAccent} setCustomAccent={setCustomAccent} heroTheme={heroTheme} setHeroTheme={setHeroTheme} heroCustomUrl={heroCustomUrl} setHeroCustomUrl={setHeroCustomUrl} heroCustomType={heroCustomType} setHeroCustomType={setHeroCustomType} userId={userId} close={() => setThemePick(false)} />}
+        {themePick && <ThemePicker t={t} theme={theme} setTheme={setTheme} mode={mode} customAccent={customAccent} setCustomAccent={setCustomAccent} close={() => setThemePick(false)} />}
         {homeLayoutPick && <HomeLayoutPicker t={t} shp={shp} homeLayout={homeLayout} setHomeLayout={setHomeLayout} close={() => setHomeLayoutPick(false)} />}
         {cardShapePick && <CardShapePicker t={t} cardShape={cardShape} setCardShape={setCardShape} close={() => setCardShapePick(false)} />}
         {moreMenuOpen && (
@@ -5136,16 +5136,39 @@ const HERO_SHORTCUTS_META = [
   { id: "chat", label: "แชท", icon: MessageCircle },
   { id: "community", label: "คอมมู", icon: Users },
 ];
-function WidgetOrderModal({ t, title, hint, selected, setSelected, close, catColors, setCatColors, heroShortcuts, setHeroShortcuts }) {
+function WidgetOrderModal({ t, title, hint, selected, setSelected, close, catColors, setCatColors, heroShortcuts, setHeroShortcuts, heroTheme, setHeroTheme, heroCustomUrl, setHeroCustomUrl, heroCustomType, setHeroCustomType, userId }) {
   const chosen = selected.map((id) => AVAILABLE_WIDGETS.find((w) => w.id === id)).filter(Boolean);
   const available = AVAILABLE_WIDGETS.filter((w) => !selected.includes(w.id));
   const hs = heroShortcuts || [];
   const chosenShortcuts = hs.map((id) => HERO_SHORTCUTS_META.find((s) => s.id === id)).filter(Boolean);
   const availableShortcuts = HERO_SHORTCUTS_META.filter((s) => !hs.includes(s.id));
   const [colorEditKey, setColorEditKey] = useState(null); // 🎨 cat key ที่กำลังเปิด ColorPickerModal อยู่ (null = ไม่ได้เปิด)
+  const [heroUploadOpen, setHeroUploadOpen] = useState(false);
   return (<ModalPortal><div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
     <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 4 }}>{title}</div>
     <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>{hint}</div>
+
+    {/* 🌊 พื้นหลังเคลื่อนไหว/รูปการ์ดใหญ่ — ย้ายมาไว้ตรงนี้แทนหน้าธีมสีแอป เพราะเป็นการปรับ "การ์ดนี้" โดยเฉพาะ ควรอยู่ที่ปุ่มดินสอของการ์ดนี้เลย ไม่ใช่ไปปนกับธีมสีทั้งแอป */}
+    {setHeroTheme && (
+      <>
+        <div style={{ fontSize: 11, fontWeight: 800, color: t.sub, marginBottom: 8 }}>พื้นหลังการ์ดใหญ่</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 6 }}>
+          {HERO_THEMES.map((h) => (
+            <button key={h.id} onClick={() => { if (h.id === "custom") setHeroUploadOpen(true); else setHeroTheme(h.id); }} style={{ display: "flex", alignItems: "center", gap: 8, padding: 11, borderRadius: 13, cursor: "pointer", textAlign: "left", background: t.surface, border: `2px solid ${heroTheme === h.id ? t.accent : t.border}` }}>
+              <span style={{ fontSize: 16 }}>{h.emoji}</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: t.text, flex: 1 }}>{h.label}</span>
+              {heroTheme === h.id && <Check size={15} color={t.accent} />}
+            </button>
+          ))}
+        </div>
+        {heroTheme === "custom" && heroCustomUrl && (
+          <div style={{ fontSize: 10.5, color: t.faint, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+            <CheckCircle2 size={12} color="#2E9E6B" /> ใช้ไฟล์ที่อัปโหลดไว้อยู่ — กด "อัปโหลดของตัวเอง" อีกครั้งเพื่อเปลี่ยน
+          </div>
+        )}
+        <div style={{ height: 1, background: t.border, margin: "6px 0 14px" }} />
+      </>
+    )}
 
     {/* 🔗 ทางลัดเสริม — มีแค่ที่การ์ดใหญ่เท่านั้น (ปุ่มเดียวจากการ์ดใหญ่เรียก editor นี้ขึ้นมาแก้ได้ทุกอย่างในที่เดียว) ลากสลับตำแหน่งได้ + ไอคอนโยกเยก (wiggle) บอกว่ากำลังอยู่ในโหมดแก้ไข เหมือนรายการวิดเจ็ตหลักด้านล่าง */}
     {setHeroShortcuts && (
@@ -5230,6 +5253,7 @@ function WidgetOrderModal({ t, title, hint, selected, setSelected, close, catCol
       </div>
     </>)}
     {colorEditKey && <ColorPickerModal t={t} value={catColors[colorEditKey] || "#888888"} onChange={(hex) => setCatColors((cc) => ({ ...cc, [colorEditKey]: hex }))} close={() => setColorEditKey(null)} />}
+    {heroUploadOpen && <HeroBgUploadModal t={t} userId={userId} close={() => setHeroUploadOpen(false)} onDone={(url, type) => { setHeroCustomUrl(url); setHeroCustomType(type); setHeroTheme("custom"); }} />}
   </div></div></ModalPortal>);
 }
 
@@ -5493,13 +5517,13 @@ function HomePage({ t, lang, M, quote, isNight, setMentorPick, balance, tx, goal
       </div>
       {shareGoalOpen && <ShareGoalModal t={t} userId={userId} authProfile={authProfile} weekPoints={weekPoints} bestStreak={bestStreak} badge={badge} close={() => setShareGoalOpen(false)} />}
       {editWidgetsOpen && homeLayout === "wallet" && (
-        <WidgetOrderModal t={t} title="ปรับการ์ดใหญ่" hint="ทางลัดเสริม+วิดเจ็ตทั้งหมด ปรับได้ในที่เดียว การ์ดแม่ (การเงิน/เป้าหมาย) ลบไม่ได้เพราะไม่มีทางเข้าอื่น" selected={walletWidgets} setSelected={setWalletWidgets} close={() => setEditWidgetsOpen(false)} catColors={catColors} setCatColors={setCatColors} heroShortcuts={heroShortcuts} setHeroShortcuts={setHeroShortcuts} />
+        <WidgetOrderModal t={t} title="ปรับการ์ดใหญ่" hint="ทางลัดเสริม+วิดเจ็ตทั้งหมด ปรับได้ในที่เดียว การ์ดแม่ (การเงิน/เป้าหมาย) ลบไม่ได้เพราะไม่มีทางเข้าอื่น" selected={walletWidgets} setSelected={setWalletWidgets} close={() => setEditWidgetsOpen(false)} catColors={catColors} setCatColors={setCatColors} heroShortcuts={heroShortcuts} setHeroShortcuts={setHeroShortcuts} heroTheme={heroTheme} setHeroTheme={setHeroTheme} heroCustomUrl={heroCustomUrl} setHeroCustomUrl={setHeroCustomUrl} heroCustomType={heroCustomType} setHeroCustomType={setHeroCustomType} userId={userId} />
       )}
       {editWidgetsOpen && homeLayout === "bento" && (
-        <WidgetOrderModal t={t} title="ปรับการ์ดใหญ่" hint="ทางลัดเสริม+วิดเจ็ตทั้งหมด ปรับได้ในที่เดียว (2 อันแรกเป็นบล็อกข้างเล็ก ที่เหลือเป็นบล็อกเต็มแถวด้านล่าง) การ์ดแม่ (การเงิน/เป้าหมาย) ลบไม่ได้เพราะไม่มีทางเข้าอื่น" selected={bentoWidgets} setSelected={setBentoWidgets} close={() => setEditWidgetsOpen(false)} catColors={catColors} setCatColors={setCatColors} heroShortcuts={heroShortcuts} setHeroShortcuts={setHeroShortcuts} />
+        <WidgetOrderModal t={t} title="ปรับการ์ดใหญ่" hint="ทางลัดเสริม+วิดเจ็ตทั้งหมด ปรับได้ในที่เดียว (2 อันแรกเป็นบล็อกข้างเล็ก ที่เหลือเป็นบล็อกเต็มแถวด้านล่าง) การ์ดแม่ (การเงิน/เป้าหมาย) ลบไม่ได้เพราะไม่มีทางเข้าอื่น" selected={bentoWidgets} setSelected={setBentoWidgets} close={() => setEditWidgetsOpen(false)} catColors={catColors} setCatColors={setCatColors} heroShortcuts={heroShortcuts} setHeroShortcuts={setHeroShortcuts} heroTheme={heroTheme} setHeroTheme={setHeroTheme} heroCustomUrl={heroCustomUrl} setHeroCustomUrl={setHeroCustomUrl} heroCustomType={heroCustomType} setHeroCustomType={setHeroCustomType} userId={userId} />
       )}
       {editWidgetsOpen && homeLayout === "original" && (
-        <WidgetOrderModal t={t} title="ปรับการ์ดใหญ่" hint="ทางลัดเสริม+วิดเจ็ตทั้งหมด ปรับได้ในที่เดียว การ์ดแม่ (การเงิน/เป้าหมาย) ลบไม่ได้เพราะไม่มีทางเข้าอื่น" selected={classicWidgets} setSelected={setClassicWidgets} close={() => setEditWidgetsOpen(false)} catColors={catColors} setCatColors={setCatColors} heroShortcuts={heroShortcuts} setHeroShortcuts={setHeroShortcuts} />
+        <WidgetOrderModal t={t} title="ปรับการ์ดใหญ่" hint="ทางลัดเสริม+วิดเจ็ตทั้งหมด ปรับได้ในที่เดียว การ์ดแม่ (การเงิน/เป้าหมาย) ลบไม่ได้เพราะไม่มีทางเข้าอื่น" selected={classicWidgets} setSelected={setClassicWidgets} close={() => setEditWidgetsOpen(false)} catColors={catColors} setCatColors={setCatColors} heroShortcuts={heroShortcuts} setHeroShortcuts={setHeroShortcuts} heroTheme={heroTheme} setHeroTheme={setHeroTheme} heroCustomUrl={heroCustomUrl} setHeroCustomUrl={setHeroCustomUrl} heroCustomType={heroCustomType} setHeroCustomType={setHeroCustomType} userId={userId} />
       )}
 
 
@@ -15352,10 +15376,9 @@ function ColorPickerModal({ t, value, onChange, close }) {
   </div></div></ModalPortal>);
 }
 
-function ThemePicker({ t, theme, setTheme, mode, customAccent, setCustomAccent, heroTheme, setHeroTheme, heroCustomUrl, setHeroCustomUrl, heroCustomType, setHeroCustomType, userId, close }) {
+function ThemePicker({ t, theme, setTheme, mode, customAccent, setCustomAccent, close }) {
   const [pendingColor, setPendingColor] = useState(customAccent);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [heroUploadOpen, setHeroUploadOpen] = useState(false);
   return (<ModalPortal><div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
     <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 4 }}>เลือกธีมสีแอป</div>
     <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>แต่ละธีมมีเวอร์ชันกลางวัน/กลางคืนของตัวเอง สลับได้อิสระจากโค้ช</div>
@@ -15385,26 +15408,7 @@ function ThemePicker({ t, theme, setTheme, mode, customAccent, setCustomAccent, 
       </div>
     </div>
 
-    {/* 🌊 พื้นหลังเคลื่อนไหวการ์ดฮีโร่ — เฉพาะการ์ดใหญ่สุดหน้าแรกเท่านั้น (ตามที่เลือกไว้) การ์ดอื่นยังเป็นสีพื้นปกติ */}
-    <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text, margin: "22px 0 4px" }}>พื้นหลังการ์ดฮีโร่</div>
-    <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 12 }}>ใส่ลูกเล่นเคลื่อนไหวเบาๆ ให้การ์ดใหญ่สุดหน้าแรกเท่านั้น</div>
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-      {HERO_THEMES.map((h) => (
-        <button key={h.id} onClick={() => { if (h.id === "custom") setHeroUploadOpen(true); else setHeroTheme(h.id); }} style={{ display: "flex", alignItems: "center", gap: 8, padding: 12, borderRadius: 14, cursor: "pointer", textAlign: "left", background: t.surface, border: `2px solid ${heroTheme === h.id ? t.accent : t.border}` }}>
-          <span style={{ fontSize: 18 }}>{h.emoji}</span>
-          <span style={{ fontSize: 11.5, fontWeight: 700, color: t.text, flex: 1 }}>{h.label}</span>
-          {heroTheme === h.id && <Check size={16} color={t.accent} />}
-        </button>
-      ))}
-    </div>
-    {heroTheme === "custom" && heroCustomUrl && (
-      <div style={{ fontSize: 11, color: t.faint, marginTop: 8, display: "flex", alignItems: "center", gap: 6 }}>
-        <CheckCircle2 size={13} color="#2E9E6B" /> ใช้ไฟล์ที่อัปโหลดไว้อยู่ — กด "อัปโหลดของตัวเอง" อีกครั้งเพื่อเปลี่ยน
-      </div>
-    )}
-
     {pickerOpen && <ColorPickerModal t={t} value={pendingColor} onChange={setPendingColor} close={() => setPickerOpen(false)} />}
-    {heroUploadOpen && <HeroBgUploadModal t={t} userId={userId} close={() => setHeroUploadOpen(false)} onDone={(url, type) => { setHeroCustomUrl(url); setHeroCustomType(type); setHeroTheme("custom"); }} />}
   </div></div></ModalPortal>);
 }
 
