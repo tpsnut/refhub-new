@@ -2091,7 +2091,7 @@ export default function RefHub() {
 
   return (
     <div style={{ minHeight: vvh ? `${vvh}px` : "100dvh", background: t.page, display: "flex", justifyContent: "center", fontFamily: "'IBM Plex Sans Thai','Segoe UI','Helvetica Neue',system-ui,sans-serif" }}>
-      <div style={{ width: "100%", maxWidth: 440, position: "relative", background: t.bg, minHeight: vvh ? `${vvh}px` : "100dvh", overflow: "hidden", transition: "background .5s", ...(appBgUrl ? { backgroundImage: `linear-gradient(rgba(${isNight ? "0,0,0" : "255,255,255"},${appBgOverlay / 100}), rgba(${isNight ? "0,0,0" : "255,255,255"},${appBgOverlay / 100})), url(${appBgUrl})`, backgroundSize: "cover", backgroundPosition: "center" } : {}) }}>
+      <div style={{ width: "100%", maxWidth: 440, position: "relative", background: t.bg, minHeight: vvh ? `${vvh}px` : "100dvh", overflow: "hidden", transition: "background-color .5s", ...(appBgUrl ? { backgroundImage: `linear-gradient(rgba(${isNight ? "0,0,0" : "255,255,255"},${appBgOverlay / 100}), rgba(${isNight ? "0,0,0" : "255,255,255"},${appBgOverlay / 100})), url(${appBgUrl})`, backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat" } : {}) }}>
         {t.star && <Stars />}
         {/* 📏 ขยายเฉพาะส่วนหัว+เนื้อหา ไม่รวมแถบเมนูด้านล่าง กันเมนูหาย/เพี้ยน — ใช้ transform:scale แทน zoom เพราะ zoom ใช้งานไม่ได้เลยบน iOS Safari (zoom ไม่รองรับ ทำให้ก่อนหน้านี้ iPhone ไม่ขยายเลย)
         พื้นหลังภาพนิ่งทั้งแอป (appBgUrl) ตั้งใจใส่ไว้ที่กรอบนี้ ซึ่งอยู่นอก scale wrapper ข้างล่าง — ใส่ในนี้ไม่ได้เพราะเจอบั๊ก transform:scale ซ้ำแบบเดียวกับ modal ที่เคยเจอมาก่อน (ดูคอมเมนต์ leaderboardOpen ด้านบน) */}
