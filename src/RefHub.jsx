@@ -4845,73 +4845,16 @@ function widgetBentoData(id, t, { balance, todayNet, goalDone, goals, todayArtic
 // 🌊 พื้นหลังเคลื่อนไหวการ์ดฮีโร่ — CSS/SVG ล้วนๆ ไม่มีไฟล์วิดีโอ/gif ภายนอกเลย (โหลดเร็ว ไม่กินพื้นที่เก็บข้อมูล ไม่มีปัญหาลิขสิทธิ์)
 // ตั้งใจให้ "นิ่งเนิบ ไม่วูบวาบ" ใช้แค่ transform/opacity (เบาเครื่อง ไม่ทำให้ตัวหนังสือบนการ์ดอ่านยาก)
 function HeroAnimatedBg({ theme, customUrl, customType }) {
-  if (!theme || theme === "none") return null;
+  if (!theme || theme === "none" || !customUrl) return null;
   const wrap = { position: "absolute", inset: 0, overflow: "hidden", borderRadius: "inherit", pointerEvents: "none", zIndex: -1 };
-
-  if (theme === "custom" && customUrl) {
-    return (
-      <div style={wrap}>
-        {customType === "video" ? <HeroCustomVideo url={customUrl} /> : <img src={customUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
-        {/* เกรเดียนต์มืดคลุมเบาๆ กันตัวหนังสือบนการ์ดอ่านไม่ออก — ไฟล์ที่อัปโหลดเองคุมสี/ความสว่างไม่ได้เหมือนธีมสำเร็จรูป */}
-        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,.2), rgba(0,0,0,.42))" }} />
-      </div>
-    );
-  }
-
-  if (theme === "ocean") {
-    return (
-      <div style={wrap}>
-        <style>{`
-          @keyframes rh-hero-wave1 { 0% { transform: translateX(0) translateY(0); } 50% { transform: translateX(-6%) translateY(-3%); } 100% { transform: translateX(0) translateY(0); } }
-          @keyframes rh-hero-wave2 { 0% { transform: translateX(0) translateY(0); } 50% { transform: translateX(5%) translateY(2%); } 100% { transform: translateX(0) translateY(0); } }
-        `}</style>
-        <div style={{ position: "absolute", left: "-10%", bottom: "-30%", width: "120%", height: "80%", borderRadius: "45%", background: "radial-gradient(ellipse at center, rgba(255,255,255,.32), transparent 70%)", animation: "rh-hero-wave1 9s ease-in-out infinite" }} />
-        <div style={{ position: "absolute", left: "-15%", bottom: "-45%", width: "130%", height: "80%", borderRadius: "40%", background: "radial-gradient(ellipse at center, rgba(255,255,255,.22), transparent 70%)", animation: "rh-hero-wave2 12s ease-in-out infinite" }} />
-      </div>
-    );
-  }
-  if (theme === "stars") {
-    const stars = Array.from({ length: 22 }, (_, i) => ({ top: (i * 37) % 100, left: (i * 53) % 100, size: 3 + (i % 3) * 1.5, delay: (i % 7) * 0.5 }));
-    return (
-      <div style={wrap}>
-        <style>{`@keyframes rh-hero-twinkle { 0%,100% { opacity: .25; } 50% { opacity: 1; } }`}</style>
-        {stars.map((s, i) => (
-          <div key={i} style={{ position: "absolute", top: `${s.top}%`, left: `${s.left}%`, width: s.size, height: s.size, borderRadius: "50%", background: "#fff", boxShadow: "0 0 6px 1px rgba(255,255,255,.6)", animation: `rh-hero-twinkle ${2.5 + (i % 4)}s ease-in-out infinite`, animationDelay: `${s.delay}s` }} />
-        ))}
-      </div>
-    );
-  }
-  if (theme === "aurora") {
-    return (
-      <div style={wrap}>
-        <style>{`
-          @keyframes rh-hero-aurora1 { 0%,100% { transform: translate(-10%,-10%) scale(1); } 50% { transform: translate(10%,5%) scale(1.15); } }
-          @keyframes rh-hero-aurora2 { 0%,100% { transform: translate(10%,10%) scale(1); } 50% { transform: translate(-8%,-8%) scale(1.1); } }
-        `}</style>
-        <div style={{ position: "absolute", top: "-20%", left: "-10%", width: "70%", height: "70%", borderRadius: "50%", background: "radial-gradient(circle, rgba(255,255,255,.4), transparent 65%)", filter: "blur(6px)", animation: "rh-hero-aurora1 10s ease-in-out infinite" }} />
-        <div style={{ position: "absolute", bottom: "-25%", right: "-10%", width: "75%", height: "75%", borderRadius: "50%", background: "radial-gradient(circle, rgba(255,255,255,.28), transparent 65%)", filter: "blur(6px)", animation: "rh-hero-aurora2 13s ease-in-out infinite" }} />
-      </div>
-    );
-  }
-  if (theme === "candle") {
-    return (
-      <div style={wrap}>
-        <style>{`@keyframes rh-hero-flicker { 0%,100% { opacity: .6; transform: scale(1); } 25% { opacity: .85; transform: scale(1.03); } 50% { opacity: .55; transform: scale(0.98); } 75% { opacity: .8; transform: scale(1.02); } }`}</style>
-        <div style={{ position: "absolute", top: "20%", left: "60%", width: "70%", height: "70%", borderRadius: "50%", background: "radial-gradient(circle, rgba(255,220,150,.5), transparent 70%)", animation: "rh-hero-flicker 4s ease-in-out infinite" }} />
-        <div style={{ position: "absolute", bottom: "10%", left: "10%", width: "55%", height: "55%", borderRadius: "50%", background: "radial-gradient(circle, rgba(255,190,110,.4), transparent 70%)", animation: "rh-hero-flicker 5s ease-in-out infinite", animationDelay: "1.2s" }} />
-      </div>
-    );
-  }
-  return null;
+  return (
+    <div style={wrap}>
+      {customType === "video" ? <HeroCustomVideo url={customUrl} /> : <img src={customUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+      {/* เกรเดียนต์มืดคลุมเบาๆ กันตัวหนังสือบนการ์ดอ่านไม่ออก — ไฟล์ที่อัปโหลดเองคุมสี/ความสว่างไม่ได้ */}
+      <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,.2), rgba(0,0,0,.42))" }} />
+    </div>
+  );
 }
-const HERO_THEMES = [
-  { id: "none", label: "ไม่มี (ค่าเริ่มต้น)", emoji: "◻️" },
-  { id: "ocean", label: "คลื่นทะเลเบาๆ", emoji: "🌊" },
-  { id: "stars", label: "ดาวลอยเบาๆ", emoji: "✨" },
-  { id: "aurora", label: "ออโรร่าไล่สี", emoji: "🌅" },
-  { id: "candle", label: "แสงเทียนอุ่นๆ", emoji: "🕯️" },
-  { id: "custom", label: "อัปโหลดของตัวเอง", emoji: "📤" },
-];
 const HERO_UPLOAD_MAX_MB = 15;
 const HERO_VIDEO_LOOP_SECONDS = 8; // ไม่ได้ตัดไฟล์จริง แค่คุมให้เล่นวนเฉพาะช่วงต้นของวิดีโอ กันไฟล์ยาวเกินจนดูแปลก/หนักเครื่อง
 
@@ -4941,8 +4884,8 @@ function HeroBgUploadModal({ t, userId, onDone, close }) {
     if (!f) return;
     setErr("");
     const isVideo = f.type === "video/mp4";
-    const isGif = f.type === "image/gif";
-    if (!isVideo && !isGif) { setErr("รองรับแค่ไฟล์ .mp4 หรือ .gif เท่านั้น"); return; }
+    const isStaticImage = ["image/jpeg", "image/png", "image/webp", "image/gif"].includes(f.type);
+    if (!isVideo && !isStaticImage) { setErr("รองรับไฟล์ .mp4, .jpg, .png, .webp หรือ .gif เท่านั้น"); return; }
     if (f.size > HERO_UPLOAD_MAX_MB * 1024 * 1024) { setErr(`ไฟล์ใหญ่เกิน ${HERO_UPLOAD_MAX_MB}MB ลองไฟล์เล็กกว่านี้`); return; }
     setFile(f);
     setPreview(URL.createObjectURL(f));
@@ -4953,12 +4896,12 @@ function HeroBgUploadModal({ t, userId, onDone, close }) {
     setBusy(true); setErr("");
     try {
       const isVideo = file.type === "video/mp4";
-      const ext = isVideo ? "mp4" : "gif";
-      const path = `hero-bg/${userId}-${crypto.randomUUID()}.${ext}`;
+      const extMap = { "video/mp4": "mp4", "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" };
+      const path = `hero-bg/${userId}-${crypto.randomUUID()}.${extMap[file.type] || "bin"}`;
       const { error } = await supabase.storage.from("attachments").upload(path, file, { contentType: file.type });
       if (error) throw new Error(error.message);
       const { data } = supabase.storage.from("attachments").getPublicUrl(path);
-      onDone(data.publicUrl, isVideo ? "video" : "gif");
+      onDone(data.publicUrl, isVideo ? "video" : "image");
       close();
     } catch (e) { setErr(e.message); }
     setBusy(false);
@@ -4973,7 +4916,7 @@ function HeroBgUploadModal({ t, userId, onDone, close }) {
             <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
           </div>
           <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 14, lineHeight: 1.6 }}>
-            รองรับไฟล์ .mp4 หรือ .gif ขนาดไม่เกิน {HERO_UPLOAD_MAX_MB}MB<br />
+            รองรับรูปภาพ (.jpg .png .webp .gif) หรือวิดีโอ (.mp4) ขนาดไม่เกิน {HERO_UPLOAD_MAX_MB}MB<br />
             ระบบครอปให้เต็มการ์ดอัตโนมัติ ถ้าเป็นวิดีโอจะเล่นวนแค่ {HERO_VIDEO_LOOP_SECONDS} วินาทีแรก (ไม่ตัดไฟล์จริง แค่เล่นวนแค่ช่วงนั้น)
           </div>
           {!preview ? (
@@ -4990,7 +4933,7 @@ function HeroBgUploadModal({ t, userId, onDone, close }) {
               )}
             </div>
           )}
-          <input ref={fileRef} type="file" accept="video/mp4,image/gif" onChange={onPick} style={{ display: "none" }} />
+          <input ref={fileRef} type="file" accept="video/mp4,image/jpeg,image/png,image/webp,image/gif" onChange={onPick} style={{ display: "none" }} />
           {err && <div style={{ fontSize: 11.5, color: "#D9534F", marginBottom: 10 }}>{err}</div>}
           {preview && (
             <div style={{ display: "flex", gap: 8 }}>
@@ -5148,25 +5091,26 @@ function WidgetOrderModal({ t, title, hint, selected, setSelected, close, catCol
     <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 4 }}>{title}</div>
     <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>{hint}</div>
 
-    {/* 🌊 พื้นหลังเคลื่อนไหว/รูปการ์ดใหญ่ — ย้ายมาไว้ตรงนี้แทนหน้าธีมสีแอป เพราะเป็นการปรับ "การ์ดนี้" โดยเฉพาะ ควรอยู่ที่ปุ่มดินสอของการ์ดนี้เลย ไม่ใช่ไปปนกับธีมสีทั้งแอป */}
+    {/* 🖼️ พื้นหลังการ์ดใหญ่ (รูป/วิดีโอที่อัปโหลดเอง) — ย้ายมาไว้ตรงนี้แทนหน้าธีมสีแอป เพราะเป็นการปรับ "การ์ดนี้" โดยเฉพาะ ควรอยู่ที่ปุ่มดินสอของการ์ดนี้เลย */}
     {setHeroTheme && (
       <>
         <div style={{ fontSize: 11, fontWeight: 800, color: t.sub, marginBottom: 8 }}>พื้นหลังการ์ดใหญ่</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 6 }}>
-          {HERO_THEMES.map((h) => (
-            <button key={h.id} onClick={() => { if (h.id === "custom") setHeroUploadOpen(true); else setHeroTheme(h.id); }} style={{ display: "flex", alignItems: "center", gap: 8, padding: 11, borderRadius: 13, cursor: "pointer", textAlign: "left", background: t.surface, border: `2px solid ${heroTheme === h.id ? t.accent : t.border}` }}>
-              <span style={{ fontSize: 16 }}>{h.emoji}</span>
-              <span style={{ fontSize: 11, fontWeight: 700, color: t.text, flex: 1 }}>{h.label}</span>
-              {heroTheme === h.id && <Check size={15} color={t.accent} />}
-            </button>
-          ))}
-        </div>
-        {heroTheme === "custom" && heroCustomUrl && (
-          <div style={{ fontSize: 10.5, color: t.faint, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
-            <CheckCircle2 size={12} color="#2E9E6B" /> ใช้ไฟล์ที่อัปโหลดไว้อยู่ — กด "อัปโหลดของตัวเอง" อีกครั้งเพื่อเปลี่ยน
+        {heroTheme === "custom" && heroCustomUrl ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+            <div style={{ width: 54, height: 54, borderRadius: 12, overflow: "hidden", background: "#000", flexShrink: 0 }}>
+              {heroCustomType === "video" ? <video src={heroCustomUrl} muted style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <img src={heroCustomUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+            </div>
+            <div style={{ flex: 1, display: "flex", gap: 6 }}>
+              <button onClick={() => setHeroUploadOpen(true)} style={{ flex: 1, padding: "8px 0", borderRadius: 10, border: `1px solid ${t.border}`, background: t.surface, color: t.text, fontWeight: 700, fontSize: 11.5, cursor: "pointer" }}>เปลี่ยน</button>
+              <button onClick={() => setHeroTheme("none")} style={{ flex: 1, padding: "8px 0", borderRadius: 10, border: `1px solid ${t.border}`, background: t.surface, color: "#D9534F", fontWeight: 700, fontSize: 11.5, cursor: "pointer" }}>ลบออก</button>
+            </div>
           </div>
+        ) : (
+          <button onClick={() => setHeroUploadOpen(true)} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px 0", borderRadius: 13, border: `2px dashed ${t.border}`, background: t.inputBg, color: t.sub, fontWeight: 700, fontSize: 12.5, cursor: "pointer", marginBottom: 14 }}>
+            <Upload size={16} /> อัปโหลดพื้นหลังการ์ดนี้ (รูป/วิดีโอ)
+          </button>
         )}
-        <div style={{ height: 1, background: t.border, margin: "6px 0 14px" }} />
+        <div style={{ height: 1, background: t.border, margin: "0 0 14px" }} />
       </>
     )}
 
