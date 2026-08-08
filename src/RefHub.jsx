@@ -3423,6 +3423,29 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
   const [pendingYt, setPendingYt] = useState(null); // { id, url, name, platform } รอยืนยัน/แก้ชื่อก่อนบันทึกจริง
   const [ytLoading, setYtLoading] = useState(false);
   const [viewingMedia, setViewingMedia] = useState(null); // สื่อโซเชียล (ไม่ใช่เสียง) ที่กำลังเปิดดูอยู่
+  // 📁 ส่งไฟล์เพลง/เสียงเข้า Personal Drive — ตามแพทเทิร์นเดียวกับที่ Notes/Articles/News ใช้ (mode:"quick", source_type ผูกไว้กันส่งซ้ำ)
+  const [vaultedTrackIds, setVaultedTrackIds] = useState(new Set());
+  const [vaultSendingId, setVaultSendingId] = useState(null);
+  useEffect(() => {
+    if (!userId) return;
+    supabase.from("vault_items").select("source_id").eq("user_id", userId).eq("source_type", "media").then(({ data }) => setVaultedTrackIds(new Set((data || []).map((r) => r.source_id))));
+  }, [userId]);
+  const sendTrackToVault = async (tr) => {
+    if (!userId || tr.kind !== "file" || vaultedTrackIds.has(tr.id) || vaultSendingId) return;
+    setVaultSendingId(tr.id);
+    try {
+      const blob = await (await fetch(tr.src)).blob();
+      const ext = (tr.name.split(".").pop() || "mp3").toLowerCase();
+      const path = `${userId}/${crypto.randomUUID()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from("vault").upload(path, blob, { contentType: blob.type || "audio/mpeg" });
+      if (upErr) throw upErr;
+      const { error } = await supabase.from("vault_items").insert({ user_id: userId, type: "audio", title: tr.name, mode: "quick", storage_path: path, file_mime: blob.type || "audio/mpeg", file_size: blob.size, source_type: "media", source_id: tr.id });
+      if (error) throw error;
+      logAudit(userId, "vault", "add", `เพิ่มรายการใน Drive: ${tr.name}`);
+      setVaultedTrackIds((s) => new Set([...s, tr.id]));
+    } catch (e) { alert("ส่งเข้า Drive ไม่สำเร็จ: " + e.message); }
+    setVaultSendingId(null);
+  };
   const togglePinHome = (id) => {
     const target = playlist.find((p) => p.id === id);
     if (!target) return;
@@ -3678,7 +3701,8 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
                   }}
                   onFav={() => toggleFavorite(tr.id)}
                   onFolder={(fid) => setTrackFolder(tr.id, fid)} onRename={(name) => renameTrack(tr.id, name)}
-                  onPinHome={() => togglePinHome(tr.id)} />
+                  onPinHome={() => togglePinHome(tr.id)}
+                  onSendVault={userId ? () => sendTrackToVault(tr) : null} vaulted={vaultedTrackIds.has(tr.id)} vaultSending={vaultSendingId === tr.id} />
               </div>
             )}
           />
@@ -3793,7 +3817,7 @@ function SocialEmbedModal({ t, item, close }) {
   );
 }
 
-function TrackRow({ t, M, track, active, playing, folders, dragHandleProps, dragPriming, onPlay, onToggle, onDel, onFav, onFolder, onRename, onPinHome }) {
+function TrackRow({ t, M, track, active, playing, folders, dragHandleProps, dragPriming, onPlay, onToggle, onDel, onFav, onFolder, onRename, onPinHome, onSendVault, vaulted, vaultSending }) {
   const isLink = track.kind === "link";
   const platMeta = PLATFORM_META[track.platform] || PLATFORM_META.other;
   const icon = isLink ? <Link2 size={16} color={platMeta.color} /> : track.kind === "yt" ? <Music size={16} color="#E0507B" /> : track.kind === "file" ? <Music size={16} color="#3DA5D9" /> : <Sparkles size={16} color={t.accent} />;
@@ -3819,6 +3843,13 @@ function TrackRow({ t, M, track, active, playing, folders, dragHandleProps, drag
         <button onClick={onFav} style={ghost} title="โปรด"><Heart size={15} color={track.favorite ? "#E0245E" : t.faint} fill={track.favorite ? "#E0245E" : "none"} /></button>
         {track.kind === "file" && (
           <a href={track.src} download={track.name} style={{ ...ghost, display: "grid", placeItems: "center" }} title="ดาวน์โหลด"><Download size={15} color={t.faint} /></a>
+        )}
+        {track.kind === "file" && onSendVault && (
+          vaulted ? (
+            <span style={ghost} title="ส่งเข้า Drive แล้ว"><CheckCircle2 size={15} color="#2E9E6B" /></span>
+          ) : (
+            <button onClick={onSendVault} disabled={vaultSending} style={{ ...ghost, opacity: vaultSending ? 0.5 : 1 }} title="ส่งเข้า Drive ส่วนตัว"><Upload size={15} color={t.faint} /></button>
+          )
         )}
         {onDel && <button onClick={onDel} style={ghost}><Trash2 size={15} color={t.faint} /></button>}
       </div>
@@ -9603,7 +9634,7 @@ function VaultPage({ t, lang, userId, onBack }) {
     closeView();
   };
 
-  const typeIcon = { text: FileText, image: ImageIcon, file: Paperclip, video: Video };
+  const typeIcon = { text: FileText, image: ImageIcon, file: Paperclip, video: Video, audio: Music };
   const itemsPagination = usePagination(items, 15);
 
   // ---------- หน้าจอ PIN (ตั้งใหม่/ปลดล็อก) ----------
