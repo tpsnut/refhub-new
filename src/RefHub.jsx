@@ -2227,6 +2227,7 @@ export default function RefHub() {
           {page === "admin" && <AdminPage t={t} lang={lang} session={session} userId={userId} adminAlerts={adminAlerts} setAdminAlerts={setAdminAlerts} authProfile={authProfile} setAuthProfile={setAuthProfile} onBack={() => setPage("home")} />}
           {page === "locations" && <LocationsPage t={t} lang={lang} userId={userId} onBack={() => setPage("home")} />}
           {page === "vault" && <VaultPage t={t} lang={lang} userId={userId} onBack={() => setPage("home")} />}
+          {page === "notifications" && <NotificationCenterPage t={t} lang={lang} userId={userId} reminders={reminders} setPage={setPage} setCommunityOpen={setCommunityOpen} onBack={() => setPage("home")} />}
           {page === "chat" && <ChatEntryPage t={t} lang={lang} M={M} userId={userId} authProfile={authProfile} session={session} onBack={() => setPage("home")} openThread={(id, name, isGroup, avatarUrl, createdBy) => { setActiveThread({ id, name, isGroup: !!isGroup, avatarUrl: avatarUrl || null, createdBy: createdBy || null }); setPage("chatRoom"); }} />}
           {page === "chatRoom" && activeThread && (
             <ModalPortal>
@@ -2371,8 +2372,11 @@ export default function RefHub() {
                 <button onClick={() => { setPage("vault"); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "13px 14px", background: "none", border: "none", borderBottom: `1px solid ${t.border}`, cursor: "pointer", textAlign: "left" }}>
                   <Lock size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "menu_vault")}</span>
                 </button>
-                <button onClick={() => { setMyActivityOpen(true); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "13px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
+                <button onClick={() => { setMyActivityOpen(true); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "13px 14px", background: "none", border: "none", borderBottom: `1px solid ${t.border}`, cursor: "pointer", textAlign: "left" }}>
                   <Clock size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "menu_activity")}</span>
+                </button>
+                <button onClick={() => { setPage("notifications"); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "13px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
+                  <Bell size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>ศูนย์การแจ้งเตือน</span>
                 </button>
               </div>
 
@@ -9592,6 +9596,123 @@ function LocationsPage({ t, lang, userId, onBack }) {
 // สถาปัตยกรรม 2 ชั้น: (1) PIN "ประตูหน้า" กันคนหยิบมือถือดูเร็วๆ (สะดวก ไม่ใช่ความปลอดภัยจริง)
 // (2) ต่อรายการเลือกได้ว่าจะเป็น "ล็อกหน้าจอ" (quick) หรือ "เข้ารหัสจริง" (encrypted, AES-GCM มาตรฐาน
 // ถอดรหัสในเครื่องเท่านั้น ไม่ส่งรหัสผ่านขึ้นเซิร์ฟเวอร์ ลืมรหัส = กู้คืนไม่ได้จริงๆ)
+// 🔔 ศูนย์การแจ้งเตือน — รวมประกาศแอดมิน + กิจกรรมชุมชน + การเตือนที่ตั้งไว้ ไว้ที่เดียว แตะแล้วพาไปหน้าที่เกี่ยวข้องได้เลย
+function NotificationCenterPage({ t, lang, userId, reminders, setPage, setCommunityOpen, onBack }) {
+  const [filter, setFilter] = useState("all"); // all | community | announce | remind
+  const [announcements, setAnnouncements] = useState([]);
+  const [activity, setActivity] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      const [{ data: ann }, { data: act }] = await Promise.all([
+        supabase.from("announcements").select("*").eq("active", true).order("created_at", { ascending: false }).limit(20),
+        supabase.from("community_activity").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(30),
+      ]);
+      const actorIds = [...new Set((act || []).map((r) => r.actor_id))];
+      let amap = {};
+      if (actorIds.length > 0) {
+        const { data: profs } = await supabase.from("profiles").select("id, name, avatar_url, community_name, community_avatar, community_use_main").in("id", actorIds);
+        (profs || []).forEach((p) => { amap[p.id] = p; });
+      }
+      setAnnouncements(ann || []);
+      setActivity((act || []).map((r) => ({ ...r, actor: amap[r.actor_id] })));
+      setLoading(false);
+      // เปิดหน้านี้แล้วถือว่าอ่านกิจกรรมชุมชนหมดแล้ว (เงียบๆ เหมือนแท็บกิจกรรมเดิม)
+      const unreadIds = (act || []).filter((r) => !r.read).map((r) => r.id);
+      if (unreadIds.length > 0) supabase.from("community_activity").update({ read: true }).in("id", unreadIds).then(() => {}, () => {});
+    })();
+  }, [userId]);
+
+  const activeReminders = [...reminders].filter((r) => r.active).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+  const dowLabel = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัส", "ศุกร์", "เสาร์"];
+  const recurLabel = (r) => {
+    if (r.recurrence === "once") return `${dateLabel(r.specificDate)} · ${r.time}`;
+    if (r.recurrence === "daily") return `ทุกวัน · ${r.time}`;
+    if (r.recurrence === "weekly") return `ทุกวัน${dowLabel[r.dayOfWeek] || ""} · ${r.time}`;
+    if (r.recurrence === "monthly") return `ทุกวันที่ ${r.dayOfMonth} · ${r.time}`;
+    return r.time || "";
+  };
+  const targetIcon = { note: StickyNote, goal: Target, goal_summary: Target };
+  const goToReminder = (r) => { setPage(r.targetType === "note" ? "note" : "home"); };
+
+  const nameOf = (p) => p ? ((p.community_use_main === false && p.community_name ? p.community_name : p.name) || "ผู้ใช้") : "ผู้ใช้";
+  const avaOf = (p) => p ? (p.community_use_main === false && p.community_avatar ? p.community_avatar : p.avatar_url) : "";
+  const verb = { like: "ถูกใจโพสต์ของคุณ", comment: "แสดงความเห็นในโพสต์ของคุณ", follow: "เริ่มติดตามคุณ", repost: "รีโพสต์โพสต์ของคุณ", follow_request: "ขอติดตามคุณ", mention: "แท็กคุณในโพสต์/คอมเมนต์" };
+  const emo = { like: "❤️", comment: "💬", follow: "👥", repost: "🔁", follow_request: "🔔", mention: "📣" };
+
+  const showCommunity = filter === "all" || filter === "community";
+  const showAnnounce = filter === "all" || filter === "announce";
+  const showRemind = filter === "all" || filter === "remind";
+  const sectionTitle = { fontSize: 11, fontWeight: 800, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, margin: "18px 0 8px" };
+  const totalShown = (showAnnounce ? announcements.length : 0) + (showCommunity ? activity.length : 0) + (showRemind ? activeReminders.length : 0);
+
+  return (<>
+    <PageHead t={t} title="ศูนย์การแจ้งเตือน" sub="รวมทุกอย่างที่ต้องรู้ไว้ที่เดียว" icon={<Bell size={20} color={t.accent} />} onBack={onBack} />
+    <div style={{ display: "flex", gap: 6, marginTop: 4, marginBottom: 4, overflowX: "auto" }}>
+      {[["all", "ทั้งหมด"], ["community", "ชุมชน"], ["announce", "ประกาศ"], ["remind", "การเตือน"]].map(([v, lb]) => (
+        <button key={v} onClick={() => setFilter(v)} style={{ flexShrink: 0, padding: "7px 14px", borderRadius: 10, cursor: "pointer", border: `1.5px solid ${filter === v ? t.accent : t.border}`, fontWeight: 700, fontSize: 11.5, background: filter === v ? t.accent : "transparent", color: filter === v ? t.onAccent : t.sub }}>{lb}</button>
+      ))}
+    </div>
+
+    {loading && <Empty t={t} text="กำลังโหลด..." />}
+    {!loading && totalShown === 0 && <Empty t={t} text="ยังไม่มีการแจ้งเตือนในหมวดนี้" />}
+
+    {!loading && showAnnounce && announcements.length > 0 && (<>
+      <div style={sectionTitle}>📣 ประกาศจากแอดมิน</div>
+      {announcements.map((a) => (
+        <div key={a.id} style={{ ...card(t), padding: 12, display: "flex", gap: 10, alignItems: "center", marginBottom: 8 }}>
+          <div style={{ width: 34, height: 34, borderRadius: 12, background: `${t.accent}22`, display: "grid", placeItems: "center", flexShrink: 0 }}><Bell size={15} color={t.accent} /></div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: t.text }}>{a.message}</div>
+            <div style={{ fontSize: 10.5, color: t.faint }}>{timeAgo(a.created_at)}</div>
+          </div>
+        </div>
+      ))}
+    </>)}
+
+    {!loading && showCommunity && activity.length > 0 && (<>
+      <div style={sectionTitle}>❤️ กิจกรรมในชุมชน</div>
+      {activity.map((r) => (
+        <button key={r.id} onClick={() => setCommunityOpen(true)} style={{ ...card(t), width: "100%", textAlign: "left", padding: 12, display: "flex", gap: 10, alignItems: "center", marginBottom: 8, cursor: "pointer" }}>
+          {avaOf(r.actor) ? (
+            <img src={avaOf(r.actor)} alt="" style={{ width: 34, height: 34, borderRadius: 12, objectFit: "cover", flexShrink: 0 }} />
+          ) : (
+            <div style={{ width: 34, height: 34, borderRadius: 12, background: colorFor(nameOf(r.actor)), color: "#fff", display: "grid", placeItems: "center", fontSize: 14, flexShrink: 0 }}>{emo[r.type] || "🔔"}</div>
+          )}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12.5, color: t.text }}><b>{nameOf(r.actor)}</b> {verb[r.type] || r.type}</div>
+            {r.preview && <div style={{ fontSize: 10.5, color: t.sub, marginTop: 1 }}>{r.preview}</div>}
+            <div style={{ fontSize: 10.5, color: t.faint, marginTop: 1 }}>{timeAgo(r.created_at)}</div>
+          </div>
+        </button>
+      ))}
+    </>)}
+
+    {showRemind && activeReminders.length > 0 && (<>
+      <div style={sectionTitle}>⏰ การเตือนที่ตั้งไว้</div>
+      {activeReminders.map((r) => {
+        const Ic = targetIcon[r.targetType] || Bell;
+        return (
+          <button key={r.id} onClick={() => goToReminder(r)} style={{ ...card(t), width: "100%", textAlign: "left", padding: 12, display: "flex", gap: 10, alignItems: "center", marginBottom: 8, cursor: "pointer" }}>
+            <div style={{ width: 34, height: 34, borderRadius: 12, background: `${t.accent}22`, display: "grid", placeItems: "center", flexShrink: 0 }}><Ic size={15} color={t.accent} /></div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: t.text }}>{r.label}</div>
+              <div style={{ fontSize: 10.5, color: t.faint }}>{recurLabel(r)}</div>
+            </div>
+            <ChevronRight size={15} color={t.faint} style={{ flexShrink: 0 }} />
+          </button>
+        );
+      })}
+    </>)}
+
+    <div style={{ fontSize: 9.5, color: t.faint, textAlign: "center", marginTop: 16, lineHeight: 1.6, padding: "0 10px" }}>
+      โชว์เฉพาะการเตือนที่ยังไม่ถึงเวลา (ยังไม่รองรับประวัติย้อนหลังของการเตือนที่เคยดังไปแล้ว)
+    </div>
+  </>);
+}
+
 function VaultPage({ t, lang, userId, onBack }) {
   const [askConfirm, ConfirmUI] = useConfirm(t);
   const [settings, setSettings] = useState(undefined); // undefined=ยังไม่โหลด, null=ยังไม่เคยตั้ง PIN
