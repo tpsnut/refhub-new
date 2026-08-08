@@ -1298,8 +1298,9 @@ export default function RefHub() {
 
   // 🔙 ปุ่มกลับของมือถือ (Android back gesture/ปุ่ม) — ให้ถอยกลับในแอปก่อน ไม่ใช่ปิดแอปทันที
   // กลไก: ดัน history entry กันไว้ 1 ชั้นเสมอ ("guard") กดกลับ = เบราว์เซอร์ยิง popstate มา
-  // ถ้าตอนนั้น page ไม่ใช่ "home" -> พากลับไป home ในแอป (ไม่ปิดแอป) แล้วดัน guard คืนเข้าไปใหม่
-  // ถ้า page เป็น "home" อยู่แล้ว (ไม่มีที่ให้ถอยต่อในแอป) -> ถามยืนยันว่าจะออกจากแอปไหม
+  // ลำดับการถอย: 1) ถ้ามี modal/popup เปิดอยู่ ปิดตัวบนสุดก่อน (เจาะจากพื้น DOM ตอนนั้นจริงๆ ไม่ต้องรู้ล่วงหน้าว่าเป็น modal ไหน)
+  //              2) ถ้าไม่มี modal เปิดแล้ว และ page ไม่ใช่ "home" -> พากลับไป home ในแอป
+  //              3) ถ้าอยู่ home แล้วไม่มีอะไรให้ถอยอีก -> ถามยืนยันว่าจะออกจากแอปไหม
   // ⚠️ ข้อจำกัดจริงของเว็บ/PWA: โค้ดสั่งปิดแอปเองไม่ได้เด็ดขาด (เบราว์เซอร์กันไว้ด้วยเหตุผลความปลอดภัย)
   // ตอนกดยืนยัน "ออกจากแอป" ทำได้แค่เอา guard ที่กันไว้ออก ให้ปุ่มกลับครั้งถัดไปหลุดออกจากแอปได้ตามธรรมชาติจริงๆ
   const [askConfirm, ConfirmUI] = useConfirm(t);
@@ -1308,6 +1309,18 @@ export default function RefHub() {
   useEffect(() => {
     const onPopState = () => {
       if (allowExitRef.current) return; // ยืนยันออกไปแล้วรอบก่อน ปล่อยผ่านให้หลุดออกจากแอปจริง
+      // 🔎 modal ทุกตัวถูก portal ไปเป็นลูกตรงของ <body> เสมอ (ดู ModalPortal) — เช็คตรงนี้ครอบคลุมทั้งแอปโดยไม่ต้องแก้ทีละจุด
+      // ส่วนใหญ่ใช้ลาย "คลิกฉากหลังเพื่อปิด" (มี onClick อยู่ที่ตัว element เองแล้ว) กด .click() ตรงๆได้เลย
+      // ตัวที่เป็นเต็มจอไม่มีฉากหลัง (เช่น หน้าพอร์ตจำลอง/แชท) ทำเครื่องหมาย data-rh-close ไว้ที่ปุ่มปิดแทน ให้หาเจอแล้วกดแทน
+      const fixedNodes = Array.from(document.body.children).filter((el) => el instanceof HTMLElement && window.getComputedStyle(el).position === "fixed");
+      if (fixedNodes.length > 0) {
+        fixedNodes.sort((a, b) => (parseInt(window.getComputedStyle(b).zIndex) || 0) - (parseInt(window.getComputedStyle(a).zIndex) || 0));
+        const top = fixedNodes[0];
+        const trigger = top.querySelector("[data-rh-close]");
+        (trigger || top).click();
+        window.history.pushState({ rhGuard: true }, "", "");
+        return;
+      }
       if (page !== "home") {
         setPage("home");
       } else {
@@ -7865,7 +7878,7 @@ function CommunityOverlay({ t, cardShape, userId, authProfile, session, openThre
       <div style={{ position: "fixed", inset: 0, background: t.page, zIndex: 100, display: "flex", flexDirection: "column" }}>
         {/* หัวแถบ */}
         <div style={{ display: "flex", alignItems: "center", gap: 12, padding: `16px ${cardShape === "sharp" ? 0 : 10}px 12px`, borderBottom: `1px solid ${t.border}`, flexShrink: 0 }}>
-          <button onClick={close} style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 18, width: 36, height: 36, cursor: "pointer", display: "grid", placeItems: "center" }}><ArrowLeft size={18} color={t.text} /></button>
+          <button data-rh-close="true" onClick={close} style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 18, width: 36, height: 36, cursor: "pointer", display: "grid", placeItems: "center" }}><ArrowLeft size={18} color={t.text} /></button>
           <div style={{ display: "flex", alignItems: "center", gap: 9, flex: 1 }}>
             <GlobeIcon size={30} accent={t.accent} />
             <div style={{ fontSize: 17, fontWeight: 800, color: t.text }}>ชุมชน</div>
@@ -8770,7 +8783,7 @@ function CommunityProfile({ t, cardShape, userId, profileId, session, onOpenProf
         <ModalPortal>
           <div style={{ position: "fixed", inset: 0, background: t.page, zIndex: 110, display: "flex", flexDirection: "column" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, padding: `16px ${cardShape === "sharp" ? 0 : 10}px 12px`, borderBottom: `1px solid ${t.border}`, flexShrink: 0 }}>
-              <button onClick={() => setShowBookmarks(false)} style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 18, width: 36, height: 36, cursor: "pointer", display: "grid", placeItems: "center" }}><ArrowLeft size={18} color={t.text} /></button>
+              <button data-rh-close="true" onClick={() => setShowBookmarks(false)} style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 18, width: 36, height: 36, cursor: "pointer", display: "grid", placeItems: "center" }}><ArrowLeft size={18} color={t.text} /></button>
               <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>🔖 โพสต์ที่บันทึกไว้</div>
             </div>
             <div style={{ flex: 1, overflowY: "auto", padding: `16px ${cardShape === "sharp" ? 0 : 10}px 40px` }}>
@@ -12048,7 +12061,7 @@ function PaperPortfolioModal({ t, close, ...viewProps }) {
       <div style={{ position: "fixed", inset: 0, zIndex: 100, background: t.page, overflowY: "auto" }}>
         <div style={{ padding: "16px 16px 40px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-            <button onClick={close} style={{ width: 34, height: 34, borderRadius: 17, background: t.surface, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}><ArrowLeft size={18} color={t.text} /></button>
+            <button data-rh-close="true" onClick={close} style={{ width: 34, height: 34, borderRadius: 17, background: t.surface, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}><ArrowLeft size={18} color={t.text} /></button>
             <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>พอร์ตจำลอง</div>
           </div>
           <PaperPortfolioView t={t} {...viewProps} />
@@ -12453,7 +12466,7 @@ function PaperFuturesModal({ t, userId, portfolio, onCashChange, close }) {
       <div style={{ position: "fixed", inset: 0, zIndex: 100, background: t.page, overflowY: "auto" }}>
         <div style={{ padding: "16px 16px 40px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-            <button onClick={close} style={{ width: 34, height: 34, borderRadius: 17, background: t.surface, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}><ArrowLeft size={18} color={t.text} /></button>
+            <button data-rh-close="true" onClick={close} style={{ width: 34, height: 34, borderRadius: 17, background: t.surface, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}><ArrowLeft size={18} color={t.text} /></button>
             <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>⚡ ฟิวเจอร์ส (เลเวอเรจ)</div>
           </div>
 
@@ -15127,7 +15140,7 @@ function ChatModal({ t, M, mentor, setMentor, authProfile, setAuthProfile, custo
           <button onClick={newChat} style={{ background: `${t.onAccent}26`, border: "none", borderRadius: 12, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }} title="เริ่มแชทใหม่ (ของเก่ายังเก็บไว้ ดูย้อนหลังได้)">
             <Plus size={13} color={t.onAccent} /><span style={{ fontSize: 10.5, color: t.onAccent, fontWeight: 700 }}>ใหม่</span>
           </button>
-          <button onClick={close} style={{ background: `${t.onAccent}26`, border: "none", borderRadius: 16, width: 32, height: 32, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}><X size={18} color={t.onAccent} /></button>
+          <button data-rh-close="true" onClick={close} style={{ background: `${t.onAccent}26`, border: "none", borderRadius: 16, width: 32, height: 32, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}><X size={18} color={t.onAccent} /></button>
         </div>
         {switchPick && <MentorPicker t={t} mentor={mentor} setMentor={setMentor} authProfile={authProfile} setAuthProfile={setAuthProfile} userId={userId} customMentors={customMentors} setCustomMentors={setCustomMentors} close={() => setSwitchPick(false)} />}
         {showHistList && <ChatHistoryListModal t={t} userId={userId} mentor={mentor} currentSessionId={currentSessionId} onSelect={viewSession} close={() => setShowHistList(false)} />}
