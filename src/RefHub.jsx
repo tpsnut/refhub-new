@@ -11523,6 +11523,7 @@ function TradePage({ t, lang, userId }) {
   const [depositOpen, setDepositOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [portfolioOpen, setPortfolioOpen] = useState(false); // 🎮 เปิดจากปุ่มลอยมุมล่างขวา ไม่ใช่แท็บบนอีกแล้ว
+  const [missionStats, setMissionStats] = useState(null); // { buyCount, sellCount, depositCount } — ใช้เช็คภารกิจมือใหม่
   useEffect(() => { if (portfolioOpen && userId) loadPortfolio(); }, [portfolioOpen]);
 
   const loadPortfolio = async () => {
@@ -11534,6 +11535,13 @@ function TradePage({ t, lang, userId }) {
     ]);
     setPortfolio(p || { cash_balance: 0 });
     setHoldings(h || []);
+    // 🏅 นับจำนวนรายการแต่ละประเภท ไว้เช็คว่าภารกิจไหนสำเร็จแล้วบ้าง (เช็คจากประวัติจริง ไม่ใช่แค่สถานะปัจจุบัน กันกรณีขายหมดแล้วภารกิจหายไป)
+    const [{ count: buyCount }, { count: sellCount }, { count: depositCount }] = await Promise.all([
+      supabase.from("paper_transactions").select("*", { count: "exact", head: true }).eq("user_id", userId).eq("type", "buy"),
+      supabase.from("paper_transactions").select("*", { count: "exact", head: true }).eq("user_id", userId).eq("type", "sell"),
+      supabase.from("paper_transactions").select("*", { count: "exact", head: true }).eq("user_id", userId).eq("type", "deposit"),
+    ]);
+    setMissionStats({ buyCount: buyCount || 0, sellCount: sellCount || 0, depositCount: depositCount || 0 });
     if (h && h.length > 0) {
       const byMarket = {};
       h.forEach((row) => { (byMarket[row.market] = byMarket[row.market] || []).push(row.symbol); });
@@ -11568,13 +11576,18 @@ function TradePage({ t, lang, userId }) {
   // item: { key, symbol, name, price, currency } (จาก list/detail), market: 'th'|'world'|'crypto', qty: จำนวนหน่วยที่ซื้อ/ขาย
   const priceToThb = (item, market) => (market === "world" ? item.price * (usdThb || 0) : item.price);
 
+  const TRADE_FEE_RATE = 0.0015; // ค่าธรรมเนียมจำลอง 0.15% ต่อรายการ (ทั้งซื้อและขาย) — ให้ความรู้สึกใกล้เคียงค่าคอมมิชชั่นจริง กันรู้สึกว่าเทรดถี่ๆแล้วไม่มีต้นทุนอะไรเลย
+
   const doBuy = async (item, market, qty) => {
     if (!(qty > 0)) throw new Error("จำนวนต้องมากกว่า 0");
     if (market === "world" && !usdThb) throw new Error("ยังไม่มีอัตราแลกเปลี่ยน ลองรีเฟรชแล้วลองใหม่");
     const priceThb = priceToThb(item, market);
-    const amountThb = priceThb * qty;
+    const grossThb = priceThb * qty;
+    const feeThb = grossThb * TRADE_FEE_RATE;
+    const amountThb = grossThb + feeThb; // จ่ายจริง = ค่าหุ้น + ค่าธรรมเนียม
+    const costPerUnit = amountThb / qty; // ต้นทุนเฉลี่ยต่อหน่วยรวมค่าธรรมเนียมไปด้วยเลย ให้กำไร/ขาดทุนคำนวณแม่นตรงกับที่จ่ายจริง
     const cash = portfolio?.cash_balance || 0;
-    if (amountThb > cash) throw new Error(`เงินสดไม่พอ (มี ฿${cash.toLocaleString(undefined, { maximumFractionDigits: 0 })} ต้องใช้ ฿${amountThb.toLocaleString(undefined, { maximumFractionDigits: 0 })})`);
+    if (amountThb > cash) throw new Error(`เงินสดไม่พอ (มี ฿${cash.toLocaleString(undefined, { maximumFractionDigits: 0 })} ต้องใช้ ฿${amountThb.toLocaleString(undefined, { maximumFractionDigits: 0 })} รวมค่าธรรมเนียม ${(TRADE_FEE_RATE * 100).toFixed(2)}%)`);
     const existing = holdings.find((hh) => hh.symbol === item.key && hh.market === market);
     if (existing) {
       const newQty = Number(existing.quantity) + qty;
@@ -11582,7 +11595,7 @@ function TradePage({ t, lang, userId }) {
       const { error } = await supabase.from("paper_holdings").update({ quantity: newQty, avg_cost_thb: newAvgCost, updated_at: new Date().toISOString() }).eq("id", existing.id);
       if (error) throw new Error(error.message);
     } else {
-      const { error } = await supabase.from("paper_holdings").insert({ user_id: userId, symbol: item.key, market, name: item.name, quantity: qty, avg_cost_thb: priceThb });
+      const { error } = await supabase.from("paper_holdings").insert({ user_id: userId, symbol: item.key, market, name: item.name, quantity: qty, avg_cost_thb: costPerUnit });
       if (error) throw new Error(error.message);
     }
     const { error: cashErr } = await supabase.from("paper_portfolio").upsert({ user_id: userId, cash_balance: cash - amountThb, updated_at: new Date().toISOString() });
@@ -11596,7 +11609,9 @@ function TradePage({ t, lang, userId }) {
     if (!existing || qty > Number(existing.quantity)) throw new Error("จำนวนที่ขายมากกว่าที่ถืออยู่");
     if (market === "world" && !usdThb) throw new Error("ยังไม่มีอัตราแลกเปลี่ยน ลองรีเฟรชแล้วลองใหม่");
     const priceThb = priceToThb(item, market);
-    const proceedsThb = priceThb * qty;
+    const grossThb = priceThb * qty;
+    const feeThb = grossThb * TRADE_FEE_RATE;
+    const proceedsThb = grossThb - feeThb; // ได้รับจริง = ค่าหุ้น - ค่าธรรมเนียม
     const remainingQty = Number(existing.quantity) - qty;
     if (remainingQty <= 0) {
       const { error } = await supabase.from("paper_holdings").delete().eq("id", existing.id);
@@ -11740,7 +11755,7 @@ function TradePage({ t, lang, userId }) {
     {depositOpen && <PaperDepositModal t={t} onConfirm={doDeposit} close={() => setDepositOpen(false)} />}
     {historyOpen && <PaperHistoryModal t={t} userId={userId} close={() => setHistoryOpen(false)} />}
     {portfolioOpen && (
-      <PaperPortfolioModal t={t} loading={portfolioLoading} portfolio={portfolio} holdings={holdings} liveByKey={liveByKey} usdThb={usdThb}
+      <PaperPortfolioModal t={t} loading={portfolioLoading} portfolio={portfolio} holdings={holdings} liveByKey={liveByKey} usdThb={usdThb} missionStats={missionStats}
         close={() => setPortfolioOpen(false)} onDeposit={() => setDepositOpen(true)} onHistory={() => setHistoryOpen(true)}
         onOpenHolding={(h) => { setPortfolioOpen(false); setDetailItem({ item: { key: h.symbol, symbol: h.symbol.replace(".BK", ""), name: h.name, price: h.livePriceThb != null ? (h.market === "world" ? h.livePriceThb / (usdThb || 1) : h.livePriceThb) : Number(h.avg_cost_thb), change: null }, tabCtx: h.market }); }} />
     )}
@@ -11765,7 +11780,7 @@ function PaperPortfolioModal({ t, close, ...viewProps }) {
   );
 }
 
-function PaperPortfolioView({ t, portfolio, holdings, liveByKey, usdThb, loading, onDeposit, onHistory, onOpenHolding }) {
+function PaperPortfolioView({ t, portfolio, holdings, liveByKey, usdThb, loading, missionStats, onDeposit, onHistory, onOpenHolding }) {
   const cash = portfolio?.cash_balance || 0;
   const holdingsWithValue = holdings.map((h) => {
     const live = liveByKey[`${h.market}:${h.symbol}`];
@@ -11783,6 +11798,17 @@ function PaperPortfolioView({ t, portfolio, holdings, liveByKey, usdThb, loading
   const totalPnlPct = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
   const isUp = totalPnl >= 0;
   const monoFont = { fontFamily: "'IBM Plex Mono',monospace", fontVariantNumeric: "tabular-nums" };
+
+  // 🏅 ภารกิจมือใหม่ — เช็คจากประวัติจริง (missionStats) ไม่ใช่แค่สถานะปัจจุบัน กันกรณีขายหมดแล้วภารกิจหายไป
+  const oldestHoldingDays = holdings.length > 0 ? Math.max(...holdings.map((h) => (Date.now() - new Date(h.created_at).getTime()) / 86400000)) : 0;
+  const missions = missionStats ? [
+    { icon: "💰", title: "ฝากเงินครั้งแรก", done: missionStats.depositCount >= 1 },
+    { icon: "🛒", title: "ซื้อครั้งแรก", done: missionStats.buyCount >= 1 },
+    { icon: "🧩", title: "กระจายเงินลงทุน 3 ตัวขึ้นไป", done: holdings.length >= 3 },
+    { icon: "📅", title: "ถือครองครบ 7 วัน", done: oldestHoldingDays >= 7 },
+    { icon: "💸", title: "ขายครั้งแรก", done: missionStats.sellCount >= 1 },
+  ] : [];
+  const doneCount = missions.filter((m) => m.done).length;
 
   return (
     <div>
@@ -11807,6 +11833,23 @@ function PaperPortfolioView({ t, portfolio, holdings, liveByKey, usdThb, loading
         <button onClick={onDeposit} style={{ flex: 1, padding: "9px 0", borderRadius: 11, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 12, color: "#141414", background: "linear-gradient(160deg,#F5A050,#E27418)", boxShadow: "0 4px 12px -4px rgba(242,135,46,.5), inset 0 1px 0 rgba(255,255,255,.3)" }}>+ ฝากเพิ่ม</button>
         <button onClick={onHistory} style={{ flex: 1, padding: "9px 0", borderRadius: 11, cursor: "pointer", fontWeight: 700, fontSize: 12, color: t.sub, background: t.inputBg, border: `1px solid ${t.border}` }}>ประวัติ</button>
       </div>
+
+      {missions.length > 0 && (
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: 10.5, fontWeight: 700, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, display: "flex", justifyContent: "space-between" }}>
+            <span>🏅 ภารกิจมือใหม่</span><span style={{ color: t.sub }}>{doneCount}/{missions.length}</span>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {missions.map((m) => (
+              <div key={m.title} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 11, background: m.done ? `${t.accent}12` : t.inputBg, border: `1px solid ${m.done ? t.accent + "40" : t.border}` }}>
+                <span style={{ fontSize: 16, opacity: m.done ? 1 : 0.4 }}>{m.icon}</span>
+                <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: m.done ? t.text : t.faint, textDecoration: m.done ? "line-through" : "none" }}>{m.title}</span>
+                {m.done && <CheckCircle2 size={16} color="#2E9E6B" />}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {loading && <Empty t={t} text="กำลังโหลดพอร์ต..." />}
       {!loading && (
@@ -12180,7 +12223,9 @@ function TradeBuySellPanel({ t, item, market, usdThb, cash, heldQty, onBuy, onSe
   const monoFont = { fontFamily: "'IBM Plex Mono',monospace", fontVariantNumeric: "tabular-nums" };
   const priceThb = market === "world" ? item.price * (usdThb || 0) : item.price;
   const n = Number(qty) || 0;
-  const totalThb = priceThb * n;
+  const grossThb = priceThb * n;
+  const feeThb = grossThb * 0.0015;
+  const totalThb = side === "buy" ? grossThb + feeThb : grossThb - feeThb;
 
   const submit = async () => {
     setErr(""); setMsg("");
@@ -12207,7 +12252,8 @@ function TradeBuySellPanel({ t, item, market, usdThb, cash, heldQty, onBuy, onSe
       {side === "sell" && <div style={{ fontSize: 11, color: t.sub, marginBottom: 8 }}>ถืออยู่ <span style={monoFont}>{heldQty.toLocaleString()}</span> หน่วย</div>}
       <input value={qty} onChange={(e) => setQty(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0" style={{ ...input(t), ...monoFont, fontSize: 18, fontWeight: 700, textAlign: "center", marginBottom: 10 }} />
       <div style={{ fontSize: 11.5, color: t.sub, display: "flex", justifyContent: "space-between", padding: "4px 0" }}><span>ราคา/หน่วย</span><span style={{ ...monoFont, color: t.text, fontWeight: 700 }}>฿{priceThb.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></div>
-      <div style={{ fontSize: 11.5, color: t.sub, display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: `1px solid ${t.border}`, marginBottom: 12 }}><span>รวมทั้งหมด</span><span style={{ ...monoFont, color: t.text, fontWeight: 700 }}>฿{totalThb.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></div>
+      <div style={{ fontSize: 11.5, color: t.sub, display: "flex", justifyContent: "space-between", padding: "4px 0" }}><span>ค่าธรรมเนียมจำลอง (0.15%)</span><span style={{ ...monoFont, color: t.faint, fontWeight: 700 }}>{side === "buy" ? "+" : "-"}฿{feeThb.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></div>
+      <div style={{ fontSize: 11.5, color: t.sub, display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: `1px solid ${t.border}`, marginBottom: 12 }}><span>{side === "buy" ? "รวมจ่ายทั้งหมด" : "รับสุทธิ"}</span><span style={{ ...monoFont, color: t.text, fontWeight: 700 }}>฿{totalThb.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></div>
       {err && <div style={{ fontSize: 11.5, color: "#D9534F", marginBottom: 8 }}>{err}</div>}
       {msg && <div style={{ fontSize: 11.5, color: "#2E9E6B", marginBottom: 8 }}>{msg}</div>}
       <div style={{ textAlign: "center" }}>
