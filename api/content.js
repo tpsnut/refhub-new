@@ -215,7 +215,9 @@ function googleNewsSourceFromQuery(q) {
 
 // 💰 TradePage — ราคาจริงจากแหล่งฟรี (ไม่ใช้ key) รวมกัน ถ้าแหล่งไหนล่มข้ามไปเงียบๆ เหมือนระบบข่าว ตราบใดที่เหลืออย่างน้อย 1 แหล่ง
 const numFromComma = (s) => parseFloat(String(s ?? "").replace(/,/g, ""));
-const YAHOO_HEADERS = { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" };
+// เบราว์เซอร์ปลอมให้ทุก fetch เส้นนี้ — บาง API/CDN (โดยเฉพาะที่อยู่หลัง Cloudflare) บล็อกหรือส่งหน้า challenge กลับมาแทน
+// ถ้า request ไม่มี User-Agent เหมือนเบราว์เซอร์จริง เจอปัญหานี้มาแล้วตอน request จากเซิร์ฟเวอร์ Vercel โดยตรง (ไม่มีปัญหาตอน fetch จากเบราว์เซอร์ปกติ)
+const BROWSER_HEADERS = { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36", "Accept": "application/json,text/plain,*/*" };
 
 async function withCache(key, fetcher, force) {
   const cached = cache[key];
@@ -228,36 +230,42 @@ async function withCache(key, fetcher, force) {
 
 async function fetchGoldPrice() {
   // สมาคมค้าทองคำ (goldtraders.or.th) ผ่าน API ชุมชนที่ยัง maintain อยู่ — ทองคำแท่ง 96.5% ราคาขายออก
-  const r = await fetch("https://api.chnwt.dev/thai-gold-api/latest");
-  if (!r.ok) throw new Error("ดึงราคาทองไม่สำเร็จ");
-  const data = await r.json();
-  if (data.status !== "success") throw new Error("ราคาทองไม่พร้อมใช้งาน");
-  const price = numFromComma(data.response.price?.gold_bar?.sell);
-  if (!isFinite(price)) throw new Error("อ่านราคาทองไม่ได้");
+  const r = await fetch("https://api.chnwt.dev/thai-gold-api/latest", { headers: BROWSER_HEADERS });
+  const raw = await r.text();
+  if (!r.ok) throw new Error(`ดึงราคาทองไม่สำเร็จ (HTTP ${r.status})`);
+  let data;
+  try { data = JSON.parse(raw); } catch { throw new Error(`ราคาทอง: อ่านผลลัพธ์ไม่ใช่ JSON (${raw.slice(0, 80)})`); }
+  if (data.status !== "success") throw new Error(`ราคาทองไม่พร้อมใช้งาน (status: ${data.status})`);
+  const price = numFromComma(data.response?.price?.gold_bar?.sell);
+  if (!isFinite(price)) throw new Error(`อ่านราคาทองไม่ได้ (โครงสร้างข้อมูลอาจเปลี่ยน: ${JSON.stringify(data.response?.price || {}).slice(0, 100)})`);
   return { key: "gold", name: "ทองคำแท่ง 96.5% (ขายออก)", price, unit: "บาท/บาททองคำ", change: null, updatedText: `${data.response.update_date} ${data.response.update_time}` };
 }
 
 async function fetchSetIndex() {
   // ดัชนี SET สด — API ชุมชน (ไม่ใช่ SET อย่างเป็นทางการ ของจริงคิดค่าบริการหลักหมื่น/เดือน) เผื่อวันไหนพังไม่มีการรับประกัน uptime
-  const r = await fetch("https://api.thaistock2d.com/live");
-  if (!r.ok) throw new Error("ดึง SET Index ไม่สำเร็จ");
-  const data = await r.json();
+  const r = await fetch("https://api.thaistock2d.com/live", { headers: BROWSER_HEADERS });
+  const raw = await r.text();
+  if (!r.ok) throw new Error(`ดึง SET Index ไม่สำเร็จ (HTTP ${r.status})`);
+  let data;
+  try { data = JSON.parse(raw); } catch { throw new Error(`SET Index: อ่านผลลัพธ์ไม่ใช่ JSON (${raw.slice(0, 80)})`); }
   const price = numFromComma(data.live?.set);
-  if (!isFinite(price)) throw new Error("อ่านค่า SET Index ไม่ได้");
+  if (!isFinite(price)) throw new Error(`อ่านค่า SET Index ไม่ได้ (${JSON.stringify(data).slice(0, 100)})`);
   return { key: "set", name: "SET Index", price, unit: "จุด", change: null, updatedText: data.live?.time || "" };
 }
 
 async function fetchSP500Index() {
-  const r = await fetch("https://query1.finance.yahoo.com/v7/finance/quote?symbols=%5EGSPC", { headers: YAHOO_HEADERS });
-  if (!r.ok) throw new Error("ดึง S&P 500 ไม่สำเร็จ");
-  const data = await r.json();
+  const r = await fetch("https://query1.finance.yahoo.com/v7/finance/quote?symbols=%5EGSPC", { headers: BROWSER_HEADERS });
+  const raw = await r.text();
+  if (!r.ok) throw new Error(`ดึง S&P 500 ไม่สำเร็จ (HTTP ${r.status})`);
+  let data;
+  try { data = JSON.parse(raw); } catch { throw new Error(`S&P 500: อ่านผลลัพธ์ไม่ใช่ JSON (${raw.slice(0, 80)})`); }
   const q = data?.quoteResponse?.result?.[0];
   if (!q?.regularMarketPrice) throw new Error("ไม่พบข้อมูล S&P 500");
   return { key: "sp500", name: "S&P 500 Index", price: q.regularMarketPrice, unit: "จุด", change: q.regularMarketChangePercent ?? null, updatedText: "" };
 }
 
 async function fetchTopCrypto() {
-  const r = await fetch("https://api.coingecko.com/api/v3/coins/markets?vs_currency=thb&order=market_cap_desc&per_page=10&page=1&sparkline=false&price_change_percentage=24h");
+  const r = await fetch("https://api.coingecko.com/api/v3/coins/markets?vs_currency=thb&order=market_cap_desc&per_page=10&page=1&sparkline=false&price_change_percentage=24h", { headers: BROWSER_HEADERS });
   if (!r.ok) throw new Error("ดึงราคาคริปโตไม่สำเร็จ");
   const data = await r.json();
   if (!Array.isArray(data) || data.length === 0) throw new Error("ไม่พบข้อมูลคริปโต");
@@ -269,8 +277,8 @@ const TOP_CURRENCIES = ["USD", "EUR", "JPY", "GBP", "CNY", "SGD", "AUD", "HKD", 
 const CURRENCY_NAMES = { USD: "ดอลลาร์สหรัฐ", EUR: "ยูโร", JPY: "เยนญี่ปุ่น", GBP: "ปอนด์สเตอร์ลิง", CNY: "หยวนจีน", SGD: "ดอลลาร์สิงคโปร์", AUD: "ดอลลาร์ออสเตรเลีย", HKD: "ดอลลาร์ฮ่องกง", KRW: "วอนเกาหลีใต้", TWD: "ดอลลาร์ไต้หวัน" };
 
 async function fetchTopCurrencies() {
-  const r = await fetch("https://open.er-api.com/v6/latest/USD");
-  if (!r.ok) throw new Error("ดึงอัตราแลกเปลี่ยนไม่สำเร็จ");
+  const r = await fetch("https://open.er-api.com/v6/latest/USD", { headers: BROWSER_HEADERS });
+  if (!r.ok) throw new Error(`ดึงอัตราแลกเปลี่ยนไม่สำเร็จ (HTTP ${r.status})`);
   const data = await r.json();
   const rates = data?.rates;
   if (!rates?.THB) throw new Error("ไม่พบอัตราแลกเปลี่ยน");
@@ -308,8 +316,8 @@ const WORLD_STOCKS = [
 ];
 
 async function fetchYahooQuotes(symbols) {
-  const r = await fetch(`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbols.join(",")}`, { headers: YAHOO_HEADERS });
-  if (!r.ok) throw new Error("ดึงข้อมูลหุ้นไม่สำเร็จ (Yahoo อาจบล็อกการเข้าถึงชั่วคราว)");
+  const r = await fetch(`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbols.join(",")}`, { headers: BROWSER_HEADERS });
+  if (!r.ok) throw new Error(`ดึงข้อมูลหุ้นไม่สำเร็จ (HTTP ${r.status} — Yahoo อาจบล็อกการเข้าถึงชั่วคราว)`);
   const data = await r.json();
   const results = data?.quoteResponse?.result || [];
   if (results.length === 0) throw new Error("ไม่พบข้อมูลหุ้น");
