@@ -1182,11 +1182,13 @@ export default function RefHub() {
   const [customMentors, setCustomMentors] = useState([]); // โค้ชที่ user สร้างเอง (ไม่ใช่แอดมิน) [{id, name, description, avatarUrl}]
   const [theme, setTheme] = useState("default"); // 🎨 ธีมสีแอป: gray | default | red | navy | twilight | custom — แยกอิสระจาก mentor
   const [customAccent, setCustomAccent] = useState("#F2872E"); // 🎨 สีที่ user กำหนดเอง ใช้เมื่อ theme === "custom" (accent2/onAccent คำนวณอัตโนมัติจากสีนี้)
-  const [heroTheme, setHeroTheme] = useState(() => { try { return localStorage.getItem("refhub:heroTheme") || "none"; } catch (e) { return "none"; } }); // 🌊 พื้นหลังเคลื่อนไหวของการ์ดฮีโร่หน้าแรก (none/ocean/stars/aurora/candle/custom) — เก็บ local อย่างเดียวพอ ไม่ต้อง sync ข้ามอุปกรณ์
+  const [heroTheme, setHeroTheme] = useState(() => { try { return localStorage.getItem("refhub:heroTheme") || "none"; } catch (e) { return "none"; } }); // 🌊 พื้นหลังของการ์ดฮีโร่หน้าแรก (none/custom) — เก็บ local อย่างเดียวพอ ไม่ต้อง sync ข้ามอุปกรณ์
   const [heroCustomUrl, setHeroCustomUrl] = useState(() => { try { return localStorage.getItem("refhub:heroCustomUrl") || ""; } catch (e) { return ""; } });
-  const [heroCustomType, setHeroCustomType] = useState(() => { try { return localStorage.getItem("refhub:heroCustomType") || ""; } catch (e) { return ""; } }); // "video" | "gif"
+  const [heroCustomType, setHeroCustomType] = useState(() => { try { return localStorage.getItem("refhub:heroCustomType") || ""; } catch (e) { return ""; } }); // "video" | "image"
   useEffect(() => { try { localStorage.setItem("refhub:heroCustomUrl", heroCustomUrl); localStorage.setItem("refhub:heroCustomType", heroCustomType); } catch (e) {} }, [heroCustomUrl, heroCustomType]);
   useEffect(() => { try { localStorage.setItem("refhub:heroTheme", heroTheme); } catch (e) {} }, [heroTheme]);
+  const [appBgUrl, setAppBgUrl] = useState(() => { try { return localStorage.getItem("refhub:appBgUrl") || ""; } catch (e) { return ""; } }); // 🖼️ พื้นหลังภาพนิ่งทั้งแอป (ไม่รองรับวิดีโอ/gif — ตั้งใจให้เป็นแค่ภาพนิ่งเท่านั้นตามที่ตกลงกัน) โชว์ผ่านช่องว่างระหว่างการ์ด เพราะการ์ด/พื้นผิวต่างๆยังทึบแสงเหมือนเดิม
+  useEffect(() => { try { localStorage.setItem("refhub:appBgUrl", appBgUrl); } catch (e) {} }, [appBgUrl]);
   const [catColors, setCatColors] = useState(DEFAULT_CAT_COLORS); // 🎨 สีหมวดหมู่ (การเงิน/ความรู้/เป้าหมาย/โน้ต) ที่ user ปรับเองได้ทีละสี
   const [cardShape, setCardShape] = useState("soft"); // 🔲 ทรงกรอบการ์ด: sharp (เหลี่ยมคมแบบ SCB ไม่มีเงา) | soft (มนเบาๆ ใกล้ตัวอักษร) — default soft ตามที่ตกลง
   const [homeLayout, setHomeLayout] = useState("original"); // 🏠 โครงหน้า Home: original (ของเดิม) | wallet (แนววอลเล็ต) | bento (บล็อกผสม) — default original ตามที่ตกลง
@@ -2087,9 +2089,10 @@ export default function RefHub() {
 
   return (
     <div style={{ minHeight: vvh ? `${vvh}px` : "100dvh", background: t.page, display: "flex", justifyContent: "center", fontFamily: "'IBM Plex Sans Thai','Segoe UI','Helvetica Neue',system-ui,sans-serif" }}>
-      <div style={{ width: "100%", maxWidth: 440, position: "relative", background: t.bg, minHeight: vvh ? `${vvh}px` : "100dvh", overflow: "hidden", transition: "background .5s" }}>
+      <div style={{ width: "100%", maxWidth: 440, position: "relative", background: t.bg, minHeight: vvh ? `${vvh}px` : "100dvh", overflow: "hidden", transition: "background .5s", ...(appBgUrl ? { backgroundImage: `url(${appBgUrl})`, backgroundSize: "cover", backgroundPosition: "center" } : {}) }}>
         {t.star && <Stars />}
-        {/* 📏 ขยายเฉพาะส่วนหัว+เนื้อหา ไม่รวมแถบเมนูด้านล่าง กันเมนูหาย/เพี้ยน — ใช้ transform:scale แทน zoom เพราะ zoom ใช้งานไม่ได้เลยบน iOS Safari (zoom ไม่รองรับ ทำให้ก่อนหน้านี้ iPhone ไม่ขยายเลย) */}
+        {/* 📏 ขยายเฉพาะส่วนหัว+เนื้อหา ไม่รวมแถบเมนูด้านล่าง กันเมนูหาย/เพี้ยน — ใช้ transform:scale แทน zoom เพราะ zoom ใช้งานไม่ได้เลยบน iOS Safari (zoom ไม่รองรับ ทำให้ก่อนหน้านี้ iPhone ไม่ขยายเลย)
+        พื้นหลังภาพนิ่งทั้งแอป (appBgUrl) ตั้งใจใส่ไว้ที่กรอบนี้ ซึ่งอยู่นอก scale wrapper ข้างล่าง — ใส่ในนี้ไม่ได้เพราะเจอบั๊ก transform:scale ซ้ำแบบเดียวกับ modal ที่เคยเจอมาก่อน (ดูคอมเมนต์ leaderboardOpen ด้านบน) */}
         <div style={{ transform: `scale(${fontScale / 100})`, transformOrigin: "top left", width: `${10000 / fontScale}%` }}>
 
         {/* HEADER */}
@@ -2305,7 +2308,7 @@ export default function RefHub() {
         )}
 
         {mentorPick && <MentorPicker t={t} mentor={mentor} setMentor={setMentor} authProfile={authProfile} setAuthProfile={setAuthProfile} userId={userId} customMentors={customMentors} setCustomMentors={setCustomMentors} close={() => setMentorPick(false)} />}
-        {themePick && <ThemePicker t={t} theme={theme} setTheme={setTheme} mode={mode} customAccent={customAccent} setCustomAccent={setCustomAccent} close={() => setThemePick(false)} />}
+        {themePick && <ThemePicker t={t} theme={theme} setTheme={setTheme} mode={mode} customAccent={customAccent} setCustomAccent={setCustomAccent} appBgUrl={appBgUrl} setAppBgUrl={setAppBgUrl} userId={userId} close={() => setThemePick(false)} />}
         {homeLayoutPick && <HomeLayoutPicker t={t} shp={shp} homeLayout={homeLayout} setHomeLayout={setHomeLayout} close={() => setHomeLayoutPick(false)} />}
         {cardShapePick && <CardShapePicker t={t} cardShape={cardShape} setCardShape={setCardShape} close={() => setCardShapePick(false)} />}
         {moreMenuOpen && (
@@ -4872,7 +4875,7 @@ function HeroCustomVideo({ url }) {
 
 // 📤 อัปโหลดพื้นหลังของตัวเอง — ครอปให้เต็มการ์ดอัตโนมัติด้วย object-fit:cover (ไม่แก้ไฟล์จริง แค่ครอปตอนแสดงผล)
 // วิดีโอ: เล่นวนแค่ 8 วิแรก (ดูคอมเมนต์ HeroCustomVideo) — ไม่ได้ตัด/re-encode ไฟล์จริง เพื่อไม่ต้องพึ่งไลบรารีตัดต่อวิดีโอฝั่ง client ที่หนักมาก (เช่น ffmpeg.wasm ~25MB)
-function HeroBgUploadModal({ t, userId, onDone, close }) {
+function HeroBgUploadModal({ t, userId, onDone, close, imageOnly, pathPrefix, title }) {
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -4885,7 +4888,8 @@ function HeroBgUploadModal({ t, userId, onDone, close }) {
     setErr("");
     const isVideo = f.type === "video/mp4";
     const isStaticImage = ["image/jpeg", "image/png", "image/webp", "image/gif"].includes(f.type);
-    if (!isVideo && !isStaticImage) { setErr("รองรับไฟล์ .mp4, .jpg, .png, .webp หรือ .gif เท่านั้น"); return; }
+    if (imageOnly && isVideo) { setErr("ส่วนนี้รองรับแค่ภาพนิ่งเท่านั้น (.jpg .png .webp .gif) ไม่รองรับวิดีโอ"); return; }
+    if (!isVideo && !isStaticImage) { setErr(imageOnly ? "รองรับไฟล์ .jpg, .png, .webp หรือ .gif เท่านั้น" : "รองรับไฟล์ .mp4, .jpg, .png, .webp หรือ .gif เท่านั้น"); return; }
     if (f.size > HERO_UPLOAD_MAX_MB * 1024 * 1024) { setErr(`ไฟล์ใหญ่เกิน ${HERO_UPLOAD_MAX_MB}MB ลองไฟล์เล็กกว่านี้`); return; }
     setFile(f);
     setPreview(URL.createObjectURL(f));
@@ -4897,7 +4901,7 @@ function HeroBgUploadModal({ t, userId, onDone, close }) {
     try {
       const isVideo = file.type === "video/mp4";
       const extMap = { "video/mp4": "mp4", "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" };
-      const path = `hero-bg/${userId}-${crypto.randomUUID()}.${extMap[file.type] || "bin"}`;
+      const path = `${pathPrefix || "hero-bg"}/${userId}-${crypto.randomUUID()}.${extMap[file.type] || "bin"}`;
       const { error } = await supabase.storage.from("attachments").upload(path, file, { contentType: file.type });
       if (error) throw new Error(error.message);
       const { data } = supabase.storage.from("attachments").getPublicUrl(path);
@@ -4912,12 +4916,15 @@ function HeroBgUploadModal({ t, userId, onDone, close }) {
       <div style={overlayHi} onClick={close}>
         <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 22, paddingBottom: 30 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-            <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>อัปโหลดพื้นหลังของตัวเอง</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>{title || "อัปโหลดพื้นหลังของตัวเอง"}</div>
             <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
           </div>
           <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 14, lineHeight: 1.6 }}>
-            รองรับรูปภาพ (.jpg .png .webp .gif) หรือวิดีโอ (.mp4) ขนาดไม่เกิน {HERO_UPLOAD_MAX_MB}MB<br />
-            ระบบครอปให้เต็มการ์ดอัตโนมัติ ถ้าเป็นวิดีโอจะเล่นวนแค่ {HERO_VIDEO_LOOP_SECONDS} วินาทีแรก (ไม่ตัดไฟล์จริง แค่เล่นวนแค่ช่วงนั้น)
+            {imageOnly ? (
+              <>รองรับรูปภาพนิ่ง (.jpg .png .webp .gif) ขนาดไม่เกิน {HERO_UPLOAD_MAX_MB}MB<br />ระบบครอปให้เต็มพอดีอัตโนมัติ</>
+            ) : (
+              <>รองรับรูปภาพ (.jpg .png .webp .gif) หรือวิดีโอ (.mp4) ขนาดไม่เกิน {HERO_UPLOAD_MAX_MB}MB<br />ระบบครอปให้เต็มการ์ดอัตโนมัติ ถ้าเป็นวิดีโอจะเล่นวนแค่ {HERO_VIDEO_LOOP_SECONDS} วินาทีแรก (ไม่ตัดไฟล์จริง แค่เล่นวนแค่ช่วงนั้น)</>
+            )}
           </div>
           {!preview ? (
             <button onClick={() => fileRef.current?.click()} style={{ width: "100%", padding: "34px 0", borderRadius: 16, border: `2px dashed ${t.border}`, background: t.inputBg, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
@@ -4933,7 +4940,7 @@ function HeroBgUploadModal({ t, userId, onDone, close }) {
               )}
             </div>
           )}
-          <input ref={fileRef} type="file" accept="video/mp4,image/jpeg,image/png,image/webp,image/gif" onChange={onPick} style={{ display: "none" }} />
+          <input ref={fileRef} type="file" accept={imageOnly ? "image/jpeg,image/png,image/webp,image/gif" : "video/mp4,image/jpeg,image/png,image/webp,image/gif"} onChange={onPick} style={{ display: "none" }} />
           {err && <div style={{ fontSize: 11.5, color: "#D9534F", marginBottom: 10 }}>{err}</div>}
           {preview && (
             <div style={{ display: "flex", gap: 8 }}>
@@ -15320,9 +15327,10 @@ function ColorPickerModal({ t, value, onChange, close }) {
   </div></div></ModalPortal>);
 }
 
-function ThemePicker({ t, theme, setTheme, mode, customAccent, setCustomAccent, close }) {
+function ThemePicker({ t, theme, setTheme, mode, customAccent, setCustomAccent, appBgUrl, setAppBgUrl, userId, close }) {
   const [pendingColor, setPendingColor] = useState(customAccent);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [appBgUploadOpen, setAppBgUploadOpen] = useState(false);
   return (<ModalPortal><div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
     <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 4 }}>เลือกธีมสีแอป</div>
     <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>แต่ละธีมมีเวอร์ชันกลางวัน/กลางคืนของตัวเอง สลับได้อิสระจากโค้ช</div>
@@ -15352,7 +15360,25 @@ function ThemePicker({ t, theme, setTheme, mode, customAccent, setCustomAccent, 
       </div>
     </div>
 
+    {/* 🖼️ พื้นหลังภาพนิ่งทั้งแอป — ภาพนิ่งเท่านั้น (ไม่รองรับวิดีโอ/gif ตามที่ตกลงกัน) โชว์ผ่านช่องว่างรอบๆการ์ด เพราะการ์ด/พื้นผิวต่างๆยังทึบแสงเหมือนเดิม ไม่บังตัวหนังสือ */}
+    <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text, margin: "22px 0 4px" }}>พื้นหลังภาพนิ่งทั้งแอป</div>
+    <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 12 }}>ใส่รูปพื้นหลังให้ทั้งแอป โชว์ผ่านช่องว่างรอบการ์ดต่างๆ (การ์ดยังทึบแสงเหมือนเดิม อ่านง่าย)</div>
+    {appBgUrl ? (
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <img src={appBgUrl} alt="" style={{ width: 54, height: 54, borderRadius: 12, objectFit: "cover", flexShrink: 0 }} />
+        <div style={{ flex: 1, display: "flex", gap: 6 }}>
+          <button onClick={() => setAppBgUploadOpen(true)} style={{ flex: 1, padding: "8px 0", borderRadius: 10, border: `1px solid ${t.border}`, background: t.surface, color: t.text, fontWeight: 700, fontSize: 11.5, cursor: "pointer" }}>เปลี่ยน</button>
+          <button onClick={() => setAppBgUrl("")} style={{ flex: 1, padding: "8px 0", borderRadius: 10, border: `1px solid ${t.border}`, background: t.surface, color: "#D9534F", fontWeight: 700, fontSize: 11.5, cursor: "pointer" }}>ลบออก</button>
+        </div>
+      </div>
+    ) : (
+      <button onClick={() => setAppBgUploadOpen(true)} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px 0", borderRadius: 13, border: `2px dashed ${t.border}`, background: t.inputBg, color: t.sub, fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}>
+        <Upload size={16} /> อัปโหลดพื้นหลังภาพนิ่ง
+      </button>
+    )}
+
     {pickerOpen && <ColorPickerModal t={t} value={pendingColor} onChange={setPendingColor} close={() => setPickerOpen(false)} />}
+    {appBgUploadOpen && <HeroBgUploadModal t={t} userId={userId} imageOnly pathPrefix="app-bg" title="อัปโหลดพื้นหลังทั้งแอป" close={() => setAppBgUploadOpen(false)} onDone={(url) => setAppBgUrl(url)} />}
   </div></div></ModalPortal>);
 }
 
