@@ -4876,11 +4876,17 @@ function HeroCustomVideo({ url }) {
 // 📤 อัปโหลดพื้นหลังของตัวเอง — ครอปให้เต็มการ์ดอัตโนมัติด้วย object-fit:cover (ไม่แก้ไฟล์จริง แค่ครอปตอนแสดงผล)
 // วิดีโอ: เล่นวนแค่ 8 วิแรก (ดูคอมเมนต์ HeroCustomVideo) — ไม่ได้ตัด/re-encode ไฟล์จริง เพื่อไม่ต้องพึ่งไลบรารีตัดต่อวิดีโอฝั่ง client ที่หนักมาก (เช่น ffmpeg.wasm ~25MB)
 function HeroBgUploadModal({ t, userId, onDone, close, imageOnly, pathPrefix, title }) {
+  const [mode, setMode] = useState("file"); // "file" | "link"
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const fileRef = useRef(null);
+
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linkType, setLinkType] = useState("image"); // เดาจากนามสกุลไฟล์ในลิงก์ — ปรับเองได้ถ้าเดาผิด (บางลิงก์ไม่มีนามสกุลให้เดา)
+  const [linkErr, setLinkErr] = useState("");
+  const [linkLoadFailed, setLinkLoadFailed] = useState(false);
 
   const onPick = (e) => {
     const f = e.target.files?.[0];
@@ -4911,43 +4917,108 @@ function HeroBgUploadModal({ t, userId, onDone, close, imageOnly, pathPrefix, ti
     setBusy(false);
   };
 
+  const onLinkChange = (v) => {
+    setLinkUrl(v); setLinkErr(""); setLinkLoadFailed(false);
+    const clean = v.trim().split("?")[0].toLowerCase();
+    if (clean.endsWith(".mp4")) setLinkType("video");
+    else if (/\.(jpg|jpeg|png|webp|gif)$/.test(clean)) setLinkType("image");
+    // ไม่มีนามสกุลชัดเจน (บางลิงก์ CDN เป็นแบบนี้) — คงค่าที่เลือกไว้เดิม ให้ผู้ใช้กดปรับเองด้านล่างได้
+  };
+  const submitLink = () => {
+    const url = linkUrl.trim();
+    if (!url) { setLinkErr("ใส่ลิงก์ก่อน"); return; }
+    if (imageOnly && linkType === "video") { setLinkErr("ส่วนนี้รองรับแค่ภาพนิ่งเท่านั้น ไม่รองรับวิดีโอ"); return; }
+    try { new URL(url); } catch { setLinkErr("ลิงก์ไม่ถูกต้อง ต้องขึ้นต้นด้วย https://"); return; }
+    if (linkLoadFailed) { setLinkErr("โหลดลิงก์นี้ไม่ขึ้น ต้องเป็นลิงก์ไฟล์ตรง ไม่ใช่ลิงก์หน้าเว็บ (ดูตัวอย่างด้านล่าง)"); return; }
+    onDone(url, linkType);
+    close();
+  };
+
   return (
     <ModalPortal>
       <div style={overlayHi} onClick={close}>
-        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 22, paddingBottom: 30 }}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 22, paddingBottom: 30, maxHeight: "88vh", overflowY: "auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>{title || "อัปโหลดพื้นหลังของตัวเอง"}</div>
             <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
           </div>
-          <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 14, lineHeight: 1.6 }}>
-            {imageOnly ? (
-              <>รองรับรูปภาพนิ่ง (.jpg .png .webp .gif) ขนาดไม่เกิน {HERO_UPLOAD_MAX_MB}MB<br />ระบบครอปให้เต็มพอดีอัตโนมัติ</>
-            ) : (
-              <>รองรับรูปภาพ (.jpg .png .webp .gif) หรือวิดีโอ (.mp4) ขนาดไม่เกิน {HERO_UPLOAD_MAX_MB}MB<br />ระบบครอปให้เต็มการ์ดอัตโนมัติ ถ้าเป็นวิดีโอจะเล่นวนแค่ {HERO_VIDEO_LOOP_SECONDS} วินาทีแรก (ไม่ตัดไฟล์จริง แค่เล่นวนแค่ช่วงนั้น)</>
-            )}
+
+          <div style={{ display: "flex", background: t.inputBg, borderRadius: 11, padding: 3, marginBottom: 14, border: `1px solid ${t.border}` }}>
+            <button onClick={() => setMode("file")} style={{ flex: 1, padding: "8px 0", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 700, background: mode === "file" ? t.accent : "transparent", color: mode === "file" ? t.onAccent : t.sub }}>อัปโหลดไฟล์</button>
+            <button onClick={() => setMode("link")} style={{ flex: 1, padding: "8px 0", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 700, background: mode === "link" ? t.accent : "transparent", color: mode === "link" ? t.onAccent : t.sub }}>วางลิงก์</button>
           </div>
-          {!preview ? (
-            <button onClick={() => fileRef.current?.click()} style={{ width: "100%", padding: "34px 0", borderRadius: 16, border: `2px dashed ${t.border}`, background: t.inputBg, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-              <Upload size={24} color={t.sub} />
-              <span style={{ fontSize: 12.5, color: t.sub, fontWeight: 700 }}>แตะเพื่อเลือกไฟล์</span>
-            </button>
-          ) : (
-            <div style={{ borderRadius: 16, overflow: "hidden", marginBottom: 14, aspectRatio: "16/7", background: "#000" }}>
-              {file.type === "video/mp4" ? (
-                <video src={preview} autoPlay muted loop playsInline style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+
+          {mode === "file" && (<>
+            <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 14, lineHeight: 1.6 }}>
+              {imageOnly ? (
+                <>รองรับรูปภาพนิ่ง (.jpg .png .webp .gif) ขนาดไม่เกิน {HERO_UPLOAD_MAX_MB}MB<br />ระบบครอปให้เต็มพอดีอัตโนมัติ</>
               ) : (
-                <img src={preview} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                <>รองรับรูปภาพ (.jpg .png .webp .gif) หรือวิดีโอ (.mp4) ขนาดไม่เกิน {HERO_UPLOAD_MAX_MB}MB<br />ระบบครอปให้เต็มการ์ดอัตโนมัติ ถ้าเป็นวิดีโอจะเล่นวนแค่ {HERO_VIDEO_LOOP_SECONDS} วินาทีแรก (ไม่ตัดไฟล์จริง แค่เล่นวนแค่ช่วงนั้น)</>
               )}
             </div>
-          )}
-          <input ref={fileRef} type="file" accept={imageOnly ? "image/jpeg,image/png,image/webp,image/gif" : "video/mp4,image/jpeg,image/png,image/webp,image/gif"} onChange={onPick} style={{ display: "none" }} />
-          {err && <div style={{ fontSize: 11.5, color: "#D9534F", marginBottom: 10 }}>{err}</div>}
-          {preview && (
-            <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => { setFile(null); setPreview(null); }} style={{ flex: 1, padding: "10px 0", borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, color: t.sub, fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}>เลือกใหม่</button>
-              <button onClick={submit} disabled={busy} style={{ flex: 1, padding: "10px 0", borderRadius: 12, border: "none", background: t.accent, color: t.onAccent, fontWeight: 700, fontSize: 12.5, cursor: busy ? "default" : "pointer" }}>{busy ? "กำลังอัปโหลด..." : "ใช้พื้นหลังนี้"}</button>
+            {!preview ? (
+              <button onClick={() => fileRef.current?.click()} style={{ width: "100%", padding: "34px 0", borderRadius: 16, border: `2px dashed ${t.border}`, background: t.inputBg, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+                <Upload size={24} color={t.sub} />
+                <span style={{ fontSize: 12.5, color: t.sub, fontWeight: 700 }}>แตะเพื่อเลือกไฟล์</span>
+              </button>
+            ) : (
+              <div style={{ borderRadius: 16, overflow: "hidden", marginBottom: 14, aspectRatio: "16/7", background: "#000" }}>
+                {file.type === "video/mp4" ? (
+                  <video src={preview} autoPlay muted loop playsInline style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                ) : (
+                  <img src={preview} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                )}
+              </div>
+            )}
+            <input ref={fileRef} type="file" accept={imageOnly ? "image/jpeg,image/png,image/webp,image/gif" : "video/mp4,image/jpeg,image/png,image/webp,image/gif"} onChange={onPick} style={{ display: "none" }} />
+            {err && <div style={{ fontSize: 11.5, color: "#D9534F", marginBottom: 10 }}>{err}</div>}
+            {preview && (
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => { setFile(null); setPreview(null); }} style={{ flex: 1, padding: "10px 0", borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, color: t.sub, fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}>เลือกใหม่</button>
+                <button onClick={submit} disabled={busy} style={{ flex: 1, padding: "10px 0", borderRadius: 12, border: "none", background: t.accent, color: t.onAccent, fontWeight: 700, fontSize: 12.5, cursor: busy ? "default" : "pointer" }}>{busy ? "กำลังอัปโหลด..." : "ใช้พื้นหลังนี้"}</button>
+              </div>
+            )}
+          </>)}
+
+          {mode === "link" && (<>
+            <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 10, lineHeight: 1.6 }}>
+              วางลิงก์ไฟล์ตรงๆ (ลิงก์ที่ชี้ไปที่ไฟล์รูป/วิดีโอจริง ไม่ใช่ลิงก์หน้าเว็บ) — ไม่ต้องอัปโหลดไฟล์เอง
             </div>
-          )}
+            <input value={linkUrl} onChange={(e) => onLinkChange(e.target.value)} placeholder="https://..." style={{ ...input(t), marginBottom: 10 }} />
+            {linkUrl.trim() && (
+              <>
+                <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+                  <button onClick={() => setLinkType("image")} style={{ flex: 1, padding: "6px 0", borderRadius: 9, border: `1.5px solid ${linkType === "image" ? t.accent : t.border}`, background: linkType === "image" ? t.accent : "transparent", color: linkType === "image" ? t.onAccent : t.sub, fontWeight: 700, fontSize: 11, cursor: "pointer" }}>เป็นรูปภาพ</button>
+                  {!imageOnly && <button onClick={() => setLinkType("video")} style={{ flex: 1, padding: "6px 0", borderRadius: 9, border: `1.5px solid ${linkType === "video" ? t.accent : t.border}`, background: linkType === "video" ? t.accent : "transparent", color: linkType === "video" ? t.onAccent : t.sub, fontWeight: 700, fontSize: 11, cursor: "pointer" }}>เป็นวิดีโอ</button>}
+                </div>
+                <div style={{ borderRadius: 16, overflow: "hidden", marginBottom: 10, aspectRatio: "16/7", background: "#000", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {linkLoadFailed ? (
+                    <span style={{ fontSize: 11, color: "#D9534F", padding: "0 16px", textAlign: "center" }}>โหลดตัวอย่างไม่ขึ้น ลิงก์นี้อาจไม่ใช่ไฟล์ตรง</span>
+                  ) : linkType === "video" ? (
+                    <video key={linkUrl} src={linkUrl} autoPlay muted loop playsInline onError={() => setLinkLoadFailed(true)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  ) : (
+                    <img key={linkUrl} src={linkUrl} alt="" onError={() => setLinkLoadFailed(true)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  )}
+                </div>
+              </>
+            )}
+            {linkErr && <div style={{ fontSize: 11.5, color: "#D9534F", marginBottom: 10 }}>{linkErr}</div>}
+            <button onClick={submitLink} disabled={!linkUrl.trim()} style={{ width: "100%", padding: "10px 0", borderRadius: 12, border: "none", background: t.accent, color: t.onAccent, fontWeight: 700, fontSize: 12.5, cursor: "pointer", marginBottom: 16, opacity: linkUrl.trim() ? 1 : 0.5 }}>ใช้พื้นหลังนี้</button>
+
+            {/* 📌 ตัวอย่างแหล่งลิงก์ — กันคนงงว่าลิงก์แบบไหนใช้ได้/ไม่ได้ */}
+            <div style={{ ...card(t), padding: 12 }}>
+              <div style={{ fontSize: 11.5, fontWeight: 800, color: t.text, marginBottom: 8 }}>ลิงก์แบบไหนใช้ได้บ้าง</div>
+              <div style={{ fontSize: 10.5, color: "#2E9E6B", fontWeight: 700, marginBottom: 3 }}>✅ วางแล้วใช้ได้เลย</div>
+              <div style={{ fontSize: 10.5, color: t.sub, marginBottom: 8, lineHeight: 1.6 }}>
+                <b>Giphy</b> — เปิดรูปที่ต้องการ กด "Copy Link" แล้วเลือก "GIF Link" (ไม่ใช่ลิงก์หน้าเว็บ)<br />
+                <b>Imgur</b> — อัปโหลดรูปขึ้น imgur.com แล้วกดคัดลอกลิงก์ตรง (ขึ้นต้นด้วย i.imgur.com)
+              </div>
+              <div style={{ fontSize: 10.5, color: "#D9534F", fontWeight: 700, marginBottom: 3 }}>❌ วางแล้วใช้ไม่ได้</div>
+              <div style={{ fontSize: 10.5, color: t.sub, lineHeight: 1.6 }}>
+                <b>Pinterest, Instagram, TikTok</b> — ลิงก์ที่ก็อปมาเป็นลิงก์หน้าเว็บ ไม่ใช่ไฟล์ตรง ต้อง**เซฟรูป/วิดีโอลงเครื่องก่อน** แล้วสลับมาโหมด "อัปโหลดไฟล์" แทน
+              </div>
+            </div>
+          </>)}
         </div>
       </div>
     </ModalPortal>
