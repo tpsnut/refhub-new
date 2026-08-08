@@ -213,8 +213,18 @@ function googleNewsSourceFromQuery(q) {
   return { url: `https://news.google.com/rss/search?q=${encodeURIComponent(q)}+when:2d&hl=th&gl=TH&ceid=TH:th`, label: "Google News", isGoogleNews: true };
 }
 
-// 💰 TradePage — ราคาจริงจาก 4 แหล่งฟรี (ไม่ใช้ key) รวมกัน ถ้าแหล่งไหนล่มข้ามไปเงียบๆ เหมือนระบบข่าว ตราบใดที่เหลืออย่างน้อย 1 แหล่ง
+// 💰 TradePage — ราคาจริงจากแหล่งฟรี (ไม่ใช้ key) รวมกัน ถ้าแหล่งไหนล่มข้ามไปเงียบๆ เหมือนระบบข่าว ตราบใดที่เหลืออย่างน้อย 1 แหล่ง
 const numFromComma = (s) => parseFloat(String(s ?? "").replace(/,/g, ""));
+const YAHOO_HEADERS = { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" };
+
+async function withCache(key, fetcher, force) {
+  const cached = cache[key];
+  if (!force && cached && Date.now() - cached.ts < CACHE_TTL_MS) return { data: cached.data, fetchedAt: cached.ts, fromCache: true };
+  const data = await fetcher();
+  const ts = Date.now();
+  cache[key] = { data, ts };
+  return { data, fetchedAt: ts, fromCache: false };
+}
 
 async function fetchGoldPrice() {
   // สมาคมค้าทองคำ (goldtraders.or.th) ผ่าน API ชุมชนที่ยัง maintain อยู่ — ทองคำแท่ง 96.5% ราคาขายออก
@@ -237,37 +247,89 @@ async function fetchSetIndex() {
   return { key: "set", name: "SET Index", price, unit: "จุด", change: null, updatedText: data.live?.time || "" };
 }
 
-async function fetchBitcoin() {
-  const r = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=thb&include_24hr_change=true");
-  if (!r.ok) throw new Error("ดึงราคา Bitcoin ไม่สำเร็จ");
+async function fetchSP500Index() {
+  const r = await fetch("https://query1.finance.yahoo.com/v7/finance/quote?symbols=%5EGSPC", { headers: YAHOO_HEADERS });
+  if (!r.ok) throw new Error("ดึง S&P 500 ไม่สำเร็จ");
   const data = await r.json();
-  if (!data.bitcoin) throw new Error("ไม่พบข้อมูล Bitcoin");
-  return { key: "btc", name: "Bitcoin (BTC)", price: data.bitcoin.thb, unit: "บาท", change: data.bitcoin.thb_24h_change ?? null, updatedText: "" };
+  const q = data?.quoteResponse?.result?.[0];
+  if (!q?.regularMarketPrice) throw new Error("ไม่พบข้อมูล S&P 500");
+  return { key: "sp500", name: "S&P 500 Index", price: q.regularMarketPrice, unit: "จุด", change: q.regularMarketChangePercent ?? null, updatedText: "" };
 }
 
-async function fetchUsdThb() {
+async function fetchTopCrypto() {
+  const r = await fetch("https://api.coingecko.com/api/v3/coins/markets?vs_currency=thb&order=market_cap_desc&per_page=10&page=1&sparkline=false&price_change_percentage=24h");
+  if (!r.ok) throw new Error("ดึงราคาคริปโตไม่สำเร็จ");
+  const data = await r.json();
+  if (!Array.isArray(data) || data.length === 0) throw new Error("ไม่พบข้อมูลคริปโต");
+  return data.map((c) => ({ key: c.id, symbol: (c.symbol || "").toUpperCase(), name: c.name, price: c.current_price, change: c.price_change_percentage_24h ?? null, image: c.image }));
+}
+
+// 10 สกุลเงินที่คนไทยสนใจสุด (คู่ค้า/สายท่องเที่ยวหลัก) — ปรับลิสต์ได้ตามต้องการ
+const TOP_CURRENCIES = ["USD", "EUR", "JPY", "GBP", "CNY", "SGD", "AUD", "HKD", "KRW", "TWD"];
+const CURRENCY_NAMES = { USD: "ดอลลาร์สหรัฐ", EUR: "ยูโร", JPY: "เยนญี่ปุ่น", GBP: "ปอนด์สเตอร์ลิง", CNY: "หยวนจีน", SGD: "ดอลลาร์สิงคโปร์", AUD: "ดอลลาร์ออสเตรเลีย", HKD: "ดอลลาร์ฮ่องกง", KRW: "วอนเกาหลีใต้", TWD: "ดอลลาร์ไต้หวัน" };
+
+async function fetchTopCurrencies() {
   const r = await fetch("https://open.er-api.com/v6/latest/USD");
   if (!r.ok) throw new Error("ดึงอัตราแลกเปลี่ยนไม่สำเร็จ");
   const data = await r.json();
-  const price = data?.rates?.THB;
-  if (!price) throw new Error("ไม่พบอัตรา USD/THB");
-  return { key: "usdthb", name: "USD/THB", price, unit: "บาท/ดอลลาร์", change: null, updatedText: data.time_last_update_utc || "" };
+  const rates = data?.rates;
+  if (!rates?.THB) throw new Error("ไม่พบอัตราแลกเปลี่ยน");
+  const thbPerUsd = rates.THB;
+  return TOP_CURRENCIES.map((code) => {
+    const perUsd = rates[code];
+    if (!perUsd) return null;
+    return { key: code.toLowerCase(), symbol: code, name: CURRENCY_NAMES[code] || code, price: thbPerUsd / perUsd, change: null };
+  }).filter(Boolean);
 }
 
-async function fetchStocksData(force) {
-  const cacheKey = "trade_stocks";
-  const cached = cache[cacheKey];
-  if (!force && cached && Date.now() - cached.ts < CACHE_TTL_MS) return { items: cached.data, fetchedAt: cached.ts, fromCache: true, failures: [] };
+// หุ้นไทย 50 ตัว (SET) กระจายหลายกลุ่มอุตสาหกรรม — ticker ต่อท้าย .BK ตามมาตรฐาน Yahoo Finance
+const THAI_STOCKS = [
+  "KBANK.BK","SCB.BK","BBL.BK","KTB.BK","TTB.BK","TISCO.BK",
+  "PTT.BK","PTTEP.BK","GULF.BK","BGRIM.BK","EGCO.BK","RATCH.BK","GPSC.BK",
+  "ADVANC.BK","TRUE.BK","INTUCH.BK",
+  "CPALL.BK","HMPRO.BK","CRC.BK","COM7.BK","MAKRO.BK","GLOBAL.BK",
+  "LH.BK","AP.BK","SPALI.BK","SIRI.BK","ORIGIN.BK",
+  "AOT.BK","MINT.BK","ERW.BK","BEM.BK","BTS.BK",
+  "CPF.BK","TU.BK","OSP.BK","TFG.BK",
+  "SCC.BK","SCGP.BK","IVL.BK","IRPC.BK","TOP.BK",
+  "BDMS.BK","BH.BK","BCH.BK",
+  "DELTA.BK","KCE.BK","HANA.BK",
+  "KTC.BK","MTC.BK","SAWAD.BK",
+];
+// หุ้นโลก 50 ตัว (ส่วนใหญ่จดทะเบียนในสหรัฐฯ) บริษัทที่คนรู้จักกว้างที่สุดในแต่ละกลุ่ม
+const WORLD_STOCKS = [
+  "AAPL","MSFT","GOOGL","AMZN","META","NVDA","TSLA","AVGO","ORCL","ADBE",
+  "CRM","AMD","INTC","CSCO","QCOM","IBM","NFLX","PYPL","UBER","NOW",
+  "JPM","V","MA","BAC","WFC","GS","MS","AXP",
+  "WMT","PG","KO","PEP","COST","MCD","NKE","HD","SBUX","DIS",
+  "JNJ","UNH","PFE","LLY","ABBV","MRK",
+  "XOM","CVX","BA","CAT","GE",
+  "BRK-B",
+];
 
-  const results = await Promise.allSettled([fetchGoldPrice(), fetchSetIndex(), fetchBitcoin(), fetchUsdThb()]);
-  const items = [];
-  const failures = [];
-  results.forEach((r) => { if (r.status === "fulfilled") items.push(r.value); else failures.push(r.reason.message); });
-  if (items.length === 0) throw new Error(failures.join(" | "));
-  const ts = Date.now();
-  cache[cacheKey] = { data: items, ts };
-  return { items, fetchedAt: ts, fromCache: false, failures };
+async function fetchYahooQuotes(symbols) {
+  const r = await fetch(`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbols.join(",")}`, { headers: YAHOO_HEADERS });
+  if (!r.ok) throw new Error("ดึงข้อมูลหุ้นไม่สำเร็จ (Yahoo อาจบล็อกการเข้าถึงชั่วคราว)");
+  const data = await r.json();
+  const results = data?.quoteResponse?.result || [];
+  if (results.length === 0) throw new Error("ไม่พบข้อมูลหุ้น");
+  return results.map((q) => ({
+    key: q.symbol, symbol: (q.symbol || "").replace(".BK", ""), name: q.shortName || q.longName || q.symbol,
+    price: q.regularMarketPrice, change: q.regularMarketChangePercent ?? null, currency: q.currency,
+  }));
 }
+
+async function fetchStockList(market) {
+  const symbols = market === "th" ? THAI_STOCKS : WORLD_STOCKS;
+  const indexFetcher = market === "th" ? fetchSetIndex : fetchSP500Index;
+  const [stocksR, indexR] = await Promise.allSettled([fetchYahooQuotes(symbols), indexFetcher()]);
+  const items = stocksR.status === "fulfilled" ? stocksR.value : [];
+  const index = indexR.status === "fulfilled" ? indexR.value : null;
+  if (items.length === 0 && !index) throw new Error([stocksR.reason?.message, indexR.reason?.message].filter(Boolean).join(" | "));
+  return { index, items };
+}
+
+
 
 export default async function handler(req, res) {
   const { type, category, force, q, limit } = req.query || {};
@@ -297,8 +359,30 @@ export default async function handler(req, res) {
 
     // เผื่อไว้สำหรับอนาคต — TradePage / LangPage จะมาเพิ่ม branch ตรงนี้
     if (type === "stocks") {
-      const { items, fetchedAt, fromCache, failures } = await fetchStocksData(force === "1" || force === "true");
-      return res.status(200).json({ items, fetchedAt, fromCache, failures });
+      const view = req.query.view || "overview";
+      const doForce = force === "1" || force === "true";
+      if (view === "overview") {
+        const { data, fetchedAt, fromCache } = await withCache("trade_overview", async () => {
+          const results = await Promise.allSettled([fetchGoldPrice(), fetchSetIndex(), fetchSP500Index()]);
+          const items = results.filter((r) => r.status === "fulfilled").map((r) => r.value);
+          if (items.length === 0) throw new Error(results.map((r) => r.reason?.message).filter(Boolean).join(" | "));
+          return items;
+        }, doForce);
+        return res.status(200).json({ items: data, fetchedAt, fromCache });
+      }
+      if (view === "crypto") {
+        const { data, fetchedAt, fromCache } = await withCache("trade_crypto", fetchTopCrypto, doForce);
+        return res.status(200).json({ items: data, fetchedAt, fromCache });
+      }
+      if (view === "currency") {
+        const { data, fetchedAt, fromCache } = await withCache("trade_currency", fetchTopCurrencies, doForce);
+        return res.status(200).json({ items: data, fetchedAt, fromCache });
+      }
+      if (view === "th" || view === "world") {
+        const { data, fetchedAt, fromCache } = await withCache(`trade_${view}`, () => fetchStockList(view), doForce);
+        return res.status(200).json({ index: data.index, items: data.items, fetchedAt, fromCache });
+      }
+      return res.status(400).json({ error: "view ไม่ถูกต้อง (overview/crypto/currency/th/world)" });
     }
     if (type === "vocab") {
       return res.status(501).json({ error: "ยังไม่ได้ทำส่วนคำศัพท์" });
