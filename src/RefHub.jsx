@@ -1182,6 +1182,8 @@ export default function RefHub() {
   const [customMentors, setCustomMentors] = useState([]); // โค้ชที่ user สร้างเอง (ไม่ใช่แอดมิน) [{id, name, description, avatarUrl}]
   const [theme, setTheme] = useState("default"); // 🎨 ธีมสีแอป: gray | default | red | navy | twilight | custom — แยกอิสระจาก mentor
   const [customAccent, setCustomAccent] = useState("#F2872E"); // 🎨 สีที่ user กำหนดเอง ใช้เมื่อ theme === "custom" (accent2/onAccent คำนวณอัตโนมัติจากสีนี้)
+  const [heroTheme, setHeroTheme] = useState(() => { try { return localStorage.getItem("refhub:heroTheme") || "none"; } catch (e) { return "none"; } }); // 🌊 พื้นหลังเคลื่อนไหวของการ์ดฮีโร่หน้าแรก (none/ocean/stars/aurora/candle) — เก็บ local อย่างเดียวพอ ไม่ต้อง sync ข้ามอุปกรณ์
+  useEffect(() => { try { localStorage.setItem("refhub:heroTheme", heroTheme); } catch (e) {} }, [heroTheme]);
   const [catColors, setCatColors] = useState(DEFAULT_CAT_COLORS); // 🎨 สีหมวดหมู่ (การเงิน/ความรู้/เป้าหมาย/โน้ต) ที่ user ปรับเองได้ทีละสี
   const [cardShape, setCardShape] = useState("soft"); // 🔲 ทรงกรอบการ์ด: sharp (เหลี่ยมคมแบบ SCB ไม่มีเงา) | soft (มนเบาๆ ใกล้ตัวอักษร) — default soft ตามที่ตกลง
   const [homeLayout, setHomeLayout] = useState("original"); // 🏠 โครงหน้า Home: original (ของเดิม) | wallet (แนววอลเล็ต) | bento (บล็อกผสม) — default original ตามที่ตกลง
@@ -2216,7 +2218,7 @@ export default function RefHub() {
 
         {/* CONTENT — ความสูงหารด้วยสเกลชดเชย transform:scale ข้างบน กันตอนขยายฟอนต์แล้วท้ายเนื้อหาจมใต้ Dock */}
         <div ref={contentScrollRef} onScroll={(e) => setAtTop(e.currentTarget.scrollTop < 80)} style={{ position: "relative", zIndex: 2, padding: `8px 10px ${page === "chat" || page === "chatRoom" ? 16 : 120}px`, height: vvh ? `${(vvh * 100 / fontScale - 76).toFixed(2)}px` : `calc(${(10000 / fontScale).toFixed(2)}dvh - 76px)`, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
-          {page === "home" && <ErrorCatcher t={t}><HomePage {...{ t, lang, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, allGoals: goals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, setMusicOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget, setWorkoutTimerTarget, setAddGoalOpen, setScoreRulesOpen, cardShape, homeLayout, walletWidgets, setWalletWidgets, bentoWidgets, setBentoWidgets, classicWidgets, setClassicWidgets, catColors, setCatColors, heroShortcuts, setHeroShortcuts }} /></ErrorCatcher>}
+          {page === "home" && <ErrorCatcher t={t}><HomePage {...{ t, lang, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, allGoals: goals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, setMusicOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget, setWorkoutTimerTarget, setAddGoalOpen, setScoreRulesOpen, cardShape, homeLayout, walletWidgets, setWalletWidgets, bentoWidgets, setBentoWidgets, classicWidgets, setClassicWidgets, catColors, setCatColors, heroShortcuts, setHeroShortcuts, heroTheme }} /></ErrorCatcher>}
           {page === "ledger" && <FinancePage {...{ t, lang, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt), userId, billReminders, billPayments, markBillPaid, setBillManagerOpen }} />}
           {page === "note" && <NotePage {...{ t, lang, notes, setNotes, isNight, userId, session, authProfile, reminders, openReminder }} />}
           {page === "ideas" && <IdeasPage t={t} lang={lang} M={M} userId={userId} session={session} authProfile={authProfile} setAuthProfile={setAuthProfile} setNotes={setNotes} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} />}
@@ -2300,7 +2302,7 @@ export default function RefHub() {
         )}
 
         {mentorPick && <MentorPicker t={t} mentor={mentor} setMentor={setMentor} authProfile={authProfile} setAuthProfile={setAuthProfile} userId={userId} customMentors={customMentors} setCustomMentors={setCustomMentors} close={() => setMentorPick(false)} />}
-        {themePick && <ThemePicker t={t} theme={theme} setTheme={setTheme} mode={mode} customAccent={customAccent} setCustomAccent={setCustomAccent} close={() => setThemePick(false)} />}
+        {themePick && <ThemePicker t={t} theme={theme} setTheme={setTheme} mode={mode} customAccent={customAccent} setCustomAccent={setCustomAccent} heroTheme={heroTheme} setHeroTheme={setHeroTheme} close={() => setThemePick(false)} />}
         {homeLayoutPick && <HomeLayoutPicker t={t} shp={shp} homeLayout={homeLayout} setHomeLayout={setHomeLayout} close={() => setHomeLayoutPick(false)} />}
         {cardShapePick && <CardShapePicker t={t} cardShape={cardShape} setCardShape={setCardShape} close={() => setCardShapePick(false)} />}
         {moreMenuOpen && (
@@ -4837,11 +4839,72 @@ function widgetBentoData(id, t, { balance, todayNet, goalDone, goals, todayArtic
 }
 
 // 🏠 โครง Home แบบ "โฟกัส" — ยอดเงินตัวใหญ่บนสุด + แถวไอคอนฟังก์ชันลัด (ปรับ/ลบ/เพิ่ม/ลากสลับลำดับเองได้) + list เรียบ
-function HomeWidgetsWallet({ t, lang, shp, M, isNight, setMentorPick, setChatOpen, setMusicOpen, balance, todayNet, goalDone, goals, todayArticles, latestNote, setPage, setCommunityOpen, commPreview, walletWidgets, onEditWidgets, heroShortcuts }) {
+// 🌊 พื้นหลังเคลื่อนไหวการ์ดฮีโร่ — CSS/SVG ล้วนๆ ไม่มีไฟล์วิดีโอ/gif ภายนอกเลย (โหลดเร็ว ไม่กินพื้นที่เก็บข้อมูล ไม่มีปัญหาลิขสิทธิ์)
+// ตั้งใจให้ "นิ่งเนิบ ไม่วูบวาบ" ใช้แค่ transform/opacity (เบาเครื่อง ไม่ทำให้ตัวหนังสือบนการ์ดอ่านยาก)
+function HeroAnimatedBg({ theme }) {
+  if (!theme || theme === "none") return null;
+  const wrap = { position: "absolute", inset: 0, overflow: "hidden", borderRadius: "inherit", pointerEvents: "none", zIndex: -1 };
+
+  if (theme === "ocean") {
+    return (
+      <div style={wrap}>
+        <style>{`
+          @keyframes rh-hero-wave1 { 0% { transform: translateX(0) translateY(0); } 50% { transform: translateX(-6%) translateY(-3%); } 100% { transform: translateX(0) translateY(0); } }
+          @keyframes rh-hero-wave2 { 0% { transform: translateX(0) translateY(0); } 50% { transform: translateX(5%) translateY(2%); } 100% { transform: translateX(0) translateY(0); } }
+        `}</style>
+        <div style={{ position: "absolute", left: "-10%", bottom: "-30%", width: "120%", height: "80%", borderRadius: "45%", background: "radial-gradient(ellipse at center, rgba(255,255,255,.16), transparent 70%)", animation: "rh-hero-wave1 9s ease-in-out infinite" }} />
+        <div style={{ position: "absolute", left: "-15%", bottom: "-45%", width: "130%", height: "80%", borderRadius: "40%", background: "radial-gradient(ellipse at center, rgba(255,255,255,.10), transparent 70%)", animation: "rh-hero-wave2 12s ease-in-out infinite" }} />
+      </div>
+    );
+  }
+  if (theme === "stars") {
+    const stars = Array.from({ length: 22 }, (_, i) => ({ top: (i * 37) % 100, left: (i * 53) % 100, size: 1.5 + (i % 3), delay: (i % 7) * 0.5 }));
+    return (
+      <div style={wrap}>
+        <style>{`@keyframes rh-hero-twinkle { 0%,100% { opacity: .15; } 50% { opacity: .9; } }`}</style>
+        {stars.map((s, i) => (
+          <div key={i} style={{ position: "absolute", top: `${s.top}%`, left: `${s.left}%`, width: s.size, height: s.size, borderRadius: "50%", background: "#fff", animation: `rh-hero-twinkle ${2.5 + (i % 4)}s ease-in-out infinite`, animationDelay: `${s.delay}s` }} />
+        ))}
+      </div>
+    );
+  }
+  if (theme === "aurora") {
+    return (
+      <div style={wrap}>
+        <style>{`
+          @keyframes rh-hero-aurora1 { 0%,100% { transform: translate(-10%,-10%) scale(1); } 50% { transform: translate(10%,5%) scale(1.15); } }
+          @keyframes rh-hero-aurora2 { 0%,100% { transform: translate(10%,10%) scale(1); } 50% { transform: translate(-8%,-8%) scale(1.1); } }
+        `}</style>
+        <div style={{ position: "absolute", top: "-20%", left: "-10%", width: "70%", height: "70%", borderRadius: "50%", background: "radial-gradient(circle, rgba(255,255,255,.22), transparent 65%)", filter: "blur(6px)", animation: "rh-hero-aurora1 10s ease-in-out infinite" }} />
+        <div style={{ position: "absolute", bottom: "-25%", right: "-10%", width: "75%", height: "75%", borderRadius: "50%", background: "radial-gradient(circle, rgba(255,255,255,.14), transparent 65%)", filter: "blur(6px)", animation: "rh-hero-aurora2 13s ease-in-out infinite" }} />
+      </div>
+    );
+  }
+  if (theme === "candle") {
+    return (
+      <div style={wrap}>
+        <style>{`@keyframes rh-hero-flicker { 0%,100% { opacity: .5; transform: scale(1); } 25% { opacity: .7; transform: scale(1.03); } 50% { opacity: .45; transform: scale(0.98); } 75% { opacity: .65; transform: scale(1.02); } }`}</style>
+        <div style={{ position: "absolute", top: "20%", left: "60%", width: "70%", height: "70%", borderRadius: "50%", background: "radial-gradient(circle, rgba(255,200,120,.35), transparent 70%)", animation: "rh-hero-flicker 4s ease-in-out infinite" }} />
+        <div style={{ position: "absolute", bottom: "10%", left: "10%", width: "55%", height: "55%", borderRadius: "50%", background: "radial-gradient(circle, rgba(255,180,90,.25), transparent 70%)", animation: "rh-hero-flicker 5s ease-in-out infinite", animationDelay: "1.2s" }} />
+      </div>
+    );
+  }
+  return null;
+}
+const HERO_THEMES = [
+  { id: "none", label: "ไม่มี (ค่าเริ่มต้น)", emoji: "◻️" },
+  { id: "ocean", label: "คลื่นทะเลเบาๆ", emoji: "🌊" },
+  { id: "stars", label: "ดาวลอยเบาๆ", emoji: "✨" },
+  { id: "aurora", label: "ออโรร่าไล่สี", emoji: "🌅" },
+  { id: "candle", label: "แสงเทียนอุ่นๆ", emoji: "🕯️" },
+];
+
+function HomeWidgetsWallet({ t, lang, shp, M, isNight, setMentorPick, setChatOpen, setMusicOpen, balance, todayNet, goalDone, goals, todayArticles, latestNote, setPage, setCommunityOpen, commPreview, walletWidgets, onEditWidgets, heroShortcuts, heroTheme }) {
   const sharp = shp.radius === 0;
   return (
     <>
       <div style={{ marginTop: 8, background: t.hero, borderRadius: shp.radius, padding: sharp ? "18px 26px" : "18px 16px", position: "relative", overflow: "hidden" }}>
+        <HeroAnimatedBg theme={heroTheme} />
         <button onClick={onEditWidgets} style={{ position: "absolute", top: 14, right: sharp ? 26 : 16, background: `${t.onAccent}26`, border: "none", borderRadius: shp.radius === 0 ? 0 : 10, width: 28, height: 28, display: "grid", placeItems: "center", cursor: "pointer" }} title="ปรับการ์ดใหญ่"><Pencil size={14} color={t.onAccent} /></button>
         <button onClick={() => setMentorPick(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: `${t.onAccent}CC` }}>{isNight ? "โค้ชคืนนี้" : "โค้ชวันนี้"} · {M.name.toUpperCase()} ▾</span>
@@ -4902,7 +4965,7 @@ function WalletRow({ t, shp, icon, title, sub, onClick }) {
 }
 
 // 🧱 โครง Home แบบ "โมเสก" — บล็อกยอดเงินใหญ่เด่น + บล็อกเล็กล้อมรอบ (ปรับ/ลบ/เพิ่ม/ลากสลับลำดับเองได้ ใช้สี solid ไม่จางแล้ว)
-function HomeWidgetsBento({ t, lang, shp, M, isNight, setMentorPick, setChatOpen, setMusicOpen, balance, todayNet, goalDone, goals, todayArticles, latestNote, setPage, setCommunityOpen, commPreview, bentoWidgets, onEditWidgets, heroShortcuts }) {
+function HomeWidgetsBento({ t, lang, shp, M, isNight, setMentorPick, setChatOpen, setMusicOpen, balance, todayNet, goalDone, goals, todayArticles, latestNote, setPage, setCommunityOpen, commPreview, bentoWidgets, onEditWidgets, heroShortcuts, heroTheme }) {
   const sharp = shp.radius === 0;
   const data = { balance, todayNet, goalDone, goals, todayArticles, latestNote, commPreview };
   const resolve = (id) => {
@@ -4919,6 +4982,7 @@ function HomeWidgetsBento({ t, lang, shp, M, isNight, setMentorPick, setChatOpen
     <>
       <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 10, marginTop: 8 }}>
         <div style={{ background: t.hero, borderRadius: shp.radius, padding: sharp ? "16px 16px 16px 26px" : 16, position: "relative", overflow: "hidden" }}>
+          <HeroAnimatedBg theme={heroTheme} />
           <button onClick={onEditWidgets} style={{ position: "absolute", top: 10, right: 10, background: `${t.onAccent}26`, border: "none", borderRadius: shp.radius === 0 ? 0 : 10, width: 26, height: 26, display: "grid", placeItems: "center", cursor: "pointer" }} title="ปรับการ์ดใหญ่"><Pencil size={13} color={t.onAccent} /></button>
           <button onClick={() => setMentorPick(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
             <span style={{ fontSize: 10.5, fontWeight: 700, color: `${t.onAccent}CC` }}>{isNight ? "โค้ชคืนนี้" : "โค้ชวันนี้"}</span>
@@ -5064,7 +5128,7 @@ function WidgetOrderModal({ t, title, hint, selected, setSelected, close, catCol
   </div></div></ModalPortal>);
 }
 
-function HomePage({ t, lang, M, quote, isNight, setMentorPick, balance, tx, goals, allGoals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, setMusicOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget, setWorkoutTimerTarget, setAddGoalOpen, setScoreRulesOpen, cardShape, homeLayout, walletWidgets, setWalletWidgets, bentoWidgets, setBentoWidgets, classicWidgets, setClassicWidgets, catColors, setCatColors, heroShortcuts, setHeroShortcuts }) {
+function HomePage({ t, lang, M, quote, isNight, setMentorPick, balance, tx, goals, allGoals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, setMusicOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget, setWorkoutTimerTarget, setAddGoalOpen, setScoreRulesOpen, cardShape, homeLayout, walletWidgets, setWalletWidgets, bentoWidgets, setBentoWidgets, classicWidgets, setClassicWidgets, catColors, setCatColors, heroShortcuts, setHeroShortcuts, heroTheme }) {
   const [askConfirm, ConfirmUI] = useConfirm(t);
   const [viewingPinned, setViewingPinned] = useState(null);
   const [commentingId, setCommentingId] = useState(null);
@@ -5156,12 +5220,13 @@ function HomePage({ t, lang, M, quote, isNight, setMentorPick, balance, tx, goal
       ))}
       <div style={{ margin: cardShape === "sharp" ? "0 -10px" : 0 }}>
       {homeLayout === "wallet" ? (
-        <HomeWidgetsWallet t={t} lang={lang} shp={shp} M={M} isNight={isNight} setMentorPick={setMentorPick} setChatOpen={setChatOpen} setMusicOpen={setMusicOpen} balance={balance} todayNet={todayNet} goalDone={goalDone} goals={goals} todayArticles={todayArticles} latestNote={latestNote} setPage={setPage} setCommunityOpen={setCommunityOpen} commPreview={commPreview} walletWidgets={walletWidgets} onEditWidgets={() => setEditWidgetsOpen(true)} heroShortcuts={heroShortcuts} />
+        <HomeWidgetsWallet t={t} lang={lang} shp={shp} M={M} isNight={isNight} setMentorPick={setMentorPick} setChatOpen={setChatOpen} setMusicOpen={setMusicOpen} balance={balance} todayNet={todayNet} goalDone={goalDone} goals={goals} todayArticles={todayArticles} latestNote={latestNote} setPage={setPage} setCommunityOpen={setCommunityOpen} commPreview={commPreview} walletWidgets={walletWidgets} onEditWidgets={() => setEditWidgetsOpen(true)} heroShortcuts={heroShortcuts} heroTheme={heroTheme} />
       ) : homeLayout === "bento" ? (
-        <HomeWidgetsBento t={t} lang={lang} shp={shp} M={M} isNight={isNight} setMentorPick={setMentorPick} setChatOpen={setChatOpen} setMusicOpen={setMusicOpen} balance={balance} todayNet={todayNet} goalDone={goalDone} goals={goals} todayArticles={todayArticles} latestNote={latestNote} setPage={setPage} setCommunityOpen={setCommunityOpen} commPreview={commPreview} bentoWidgets={bentoWidgets} onEditWidgets={() => setEditWidgetsOpen(true)} heroShortcuts={heroShortcuts} />
+        <HomeWidgetsBento t={t} lang={lang} shp={shp} M={M} isNight={isNight} setMentorPick={setMentorPick} setChatOpen={setChatOpen} setMusicOpen={setMusicOpen} balance={balance} todayNet={todayNet} goalDone={goalDone} goals={goals} todayArticles={todayArticles} latestNote={latestNote} setPage={setPage} setCommunityOpen={setCommunityOpen} commPreview={commPreview} bentoWidgets={bentoWidgets} onEditWidgets={() => setEditWidgetsOpen(true)} heroShortcuts={heroShortcuts} heroTheme={heroTheme} />
       ) : (
         <>
       <div style={{ marginTop: 8, background: t.hero, border: `1px solid ${t.heroBorder}`, borderRadius: shp.radius, padding: shp.radius === 0 ? 30 : 20, position: "relative", overflow: "hidden", boxShadow: isNight ? "none" : "0 10px 24px rgba(30,40,70,.18)" }}>
+        <HeroAnimatedBg theme={heroTheme} />
         <div style={{ position: "absolute", top: -34, right: -34, width: 130, height: 130, borderRadius: "50%", background: "rgba(255,255,255,.10)", pointerEvents: "none" }} />
         <div style={{ position: "absolute", bottom: -44, left: -24, width: 105, height: 105, borderRadius: "50%", background: "rgba(255,255,255,.06)", pointerEvents: "none" }} />
         <button onClick={() => setEditWidgetsOpen(true)} style={{ position: "absolute", top: 14, right: 14, background: `${t.onAccent}26`, border: "none", borderRadius: shp.radius === 0 ? 0 : 10, width: 28, height: 28, display: "grid", placeItems: "center", cursor: "pointer", zIndex: 1 }} title="ปรับการ์ดใหญ่"><Pencil size={14} color={t.onAccent} /></button>
@@ -15182,7 +15247,7 @@ function ColorPickerModal({ t, value, onChange, close }) {
   </div></div></ModalPortal>);
 }
 
-function ThemePicker({ t, theme, setTheme, mode, customAccent, setCustomAccent, close }) {
+function ThemePicker({ t, theme, setTheme, mode, customAccent, setCustomAccent, heroTheme, setHeroTheme, close }) {
   const [pendingColor, setPendingColor] = useState(customAccent);
   const [pickerOpen, setPickerOpen] = useState(false);
   return (<ModalPortal><div style={overlay} onClick={close}><div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
@@ -15213,6 +15278,20 @@ function ThemePicker({ t, theme, setTheme, mode, customAccent, setCustomAccent, 
         <button onClick={() => { setCustomAccent(pendingColor); setTheme("custom"); close(); }} style={{ ...primaryBtn({ accent: pendingColor, accent2: lightenHex(pendingColor, 0.2), onAccent: relativeLuminance(pendingColor) > 0.5 ? "#141414" : "#FFFFFF" }), width: "100%", padding: "10px 0", marginTop: 12, fontSize: 13 }}>ใช้สีนี้</button>
       </div>
     </div>
+
+    {/* 🌊 พื้นหลังเคลื่อนไหวการ์ดฮีโร่ — เฉพาะการ์ดใหญ่สุดหน้าแรกเท่านั้น (ตามที่เลือกไว้) การ์ดอื่นยังเป็นสีพื้นปกติ */}
+    <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text, margin: "22px 0 4px" }}>พื้นหลังการ์ดฮีโร่</div>
+    <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 12 }}>ใส่ลูกเล่นเคลื่อนไหวเบาๆ ให้การ์ดใหญ่สุดหน้าแรกเท่านั้น</div>
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+      {HERO_THEMES.map((h) => (
+        <button key={h.id} onClick={() => setHeroTheme(h.id)} style={{ display: "flex", alignItems: "center", gap: 8, padding: 12, borderRadius: 14, cursor: "pointer", textAlign: "left", background: t.surface, border: `2px solid ${heroTheme === h.id ? t.accent : t.border}` }}>
+          <span style={{ fontSize: 18 }}>{h.emoji}</span>
+          <span style={{ fontSize: 11.5, fontWeight: 700, color: t.text, flex: 1 }}>{h.label}</span>
+          {heroTheme === h.id && <Check size={16} color={t.accent} />}
+        </button>
+      ))}
+    </div>
+
     {pickerOpen && <ColorPickerModal t={t} value={pendingColor} onChange={setPendingColor} close={() => setPickerOpen(false)} />}
   </div></div></ModalPortal>);
 }
