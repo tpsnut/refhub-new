@@ -13605,26 +13605,33 @@ function VocabBatchGenModal({ t, table = "vocab_words", mode = "word", topics = 
 }
 
 // 🧪 แบบทดสอบให้คะแนน — เลือกความหมายที่ถูกต้อง 4 ตัวเลือก จบแล้วเก็บผลลง vocab_quiz_history
-function VocabQuizModal({ t, mode, category, level, pool, allItems, userId, close, onFinished }) {
+function VocabQuizModal({ t, mode, category, level, pool, allItems, userId, close, onFinished, retryPoolIds }) {
   const isWord = mode === "word";
   const shuffle = (arr) => { const a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
-  const [questions] = useState(() => pickFreshItems(`refhub:vocabFresh:quiz:${mode}:${category}:${level}`, pool, Math.min(10, pool.length)).map((item) => {
-    const wrongPool = allItems.filter((x) => x.id !== item.id && x.meaning && x.meaning !== item.meaning);
-    const wrongs = shuffle(wrongPool).slice(0, 3).map((x) => x.meaning);
-    const choices = shuffle([item.meaning, ...wrongs].filter(Boolean));
-    return { item, choices };
-  }));
+  const [questions] = useState(() => {
+    // 🔁 ถ้ามาจากปุ่ม "สอบชุดเดิมอีกครั้ง" ใช้ชุดคำเดิมเป๊ะๆ (retryPoolIds) ไม่งั้นสุ่มใหม่ตามปกติ
+    const base = retryPoolIds?.length ? retryPoolIds.map((id) => pool.find((x) => x.id === id)).filter(Boolean) : pickFreshItems(`refhub:vocabFresh:quiz:${mode}:${category}:${level}`, pool, Math.min(10, pool.length));
+    return base.map((item) => {
+      const wrongPool = allItems.filter((x) => x.id !== item.id && x.meaning && x.meaning !== item.meaning);
+      const wrongs = shuffle(wrongPool).slice(0, 3).map((x) => x.meaning);
+      const choices = shuffle([item.meaning, ...wrongs].filter(Boolean));
+      return { item, choices };
+    });
+  });
   const [idx, setIdx] = useState(0);
   const [picked, setPicked] = useState(null);
   const [score, setScore] = useState(0);
   const [done, setDone] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [details, setDetails] = useState([]); // [{ question, correct, given, isCorrect }]
   const q = questions[idx];
 
   const pick = (choice) => {
     if (picked) return;
     setPicked(choice);
-    if (choice === q.item.meaning) setScore((s) => s + 1);
+    const isCorrect = choice === q.item.meaning;
+    if (isCorrect) setScore((s) => s + 1);
+    setDetails((d) => [...d, { question: q.item.word, correct: q.item.meaning, given: choice, isCorrect }]);
   };
   const next = async () => {
     if (idx + 1 < questions.length) { setIdx((i) => i + 1); setPicked(null); }
@@ -13632,7 +13639,7 @@ function VocabQuizModal({ t, mode, category, level, pool, allItems, userId, clos
       setDone(true);
       if (userId) {
         setSaving(true);
-        await supabase.from("vocab_quiz_history").insert({ id: crypto.randomUUID(), user_id: userId, mode, category, level, score, total: questions.length, created_at: new Date().toISOString() }).then(() => {}, () => {});
+        await supabase.from("vocab_quiz_history").insert({ id: crypto.randomUUID(), user_id: userId, mode, category, level, score, total: questions.length, details, pool_ids: questions.map((qq) => qq.item.id), created_at: new Date().toISOString() }).then(() => {}, () => {});
         setSaving(false);
       }
       onFinished?.();
@@ -13696,18 +13703,30 @@ function VocabQuizModal({ t, mode, category, level, pool, allItems, userId, clos
   );
 }
 
-// 🎧 ฟัง แล้วพิมพ์สิ่งที่ได้ยิน — ใช้ Azure Neural TTS ตัวเดียวกับหน้าความรู้ (fallback เสียงเครื่องอัตโนมัติถ้าใช้ไม่ได้)
-function VocabListeningModal({ t, mode, category, level, pool, userId, session, close, onFinished }) {
+// 🎧 ฟัง แล้วตอบว่าได้ยินอะไร — 2 โหมด: พิมพ์ตาม (type) หรือเลือกคำตอบ (choice) ใช้ Azure Neural TTS ตัวเดียวกับหน้าความรู้ (fallback เสียงเครื่องอัตโนมัติถ้าใช้ไม่ได้)
+function VocabListeningModal({ t, mode, category, level, pool, userId, session, variant = "type", close, onFinished, retryPoolIds }) {
   const shuffle = (arr) => { const a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
-  const [questions] = useState(() => pickFreshItems(`refhub:vocabFresh:listening:${mode}:${category}:${level}`, pool, Math.min(8, pool.length)));
+  const [questions] = useState(() => {
+    const base = retryPoolIds?.length ? retryPoolIds.map((id) => pool.find((x) => x.id === id)).filter(Boolean) : pickFreshItems(`refhub:vocabFresh:listening:${mode}:${category}:${level}`, pool, Math.min(8, pool.length));
+    if (variant !== "choice") return base;
+    // 🎯 โหมดเลือกคำตอบ: เตรียมตัวเลือกผิด 3 ตัวจากคำอื่นในหมวดเดียวกัน (คำ/ประโยคที่หน้าตาไม่เหมือนกันเกินไป)
+    return base.map((item) => {
+      const wrongPool = pool.filter((x) => x.id !== item.id && x.word && x.word !== item.word);
+      const wrongs = shuffle(wrongPool).slice(0, 3).map((x) => x.word);
+      const choices = shuffle([item.word, ...wrongs].filter(Boolean));
+      return { ...item, choices };
+    });
+  });
   const [idx, setIdx] = useState(0);
   const [answer, setAnswer] = useState("");
+  const [pickedChoice, setPickedChoice] = useState(null); // ใช้เฉพาะโหมด choice
   const [checked, setChecked] = useState(false);
   const [correct, setCorrect] = useState(false);
   const [score, setScore] = useState(0);
   const [done, setDone] = useState(false);
   const [saving, setSaving] = useState(false);
   const [speaking, setSpeaking] = useState(false);
+  const [details, setDetails] = useState([]);
   const audioRef = useRef(null);
   const q = questions[idx];
 
@@ -13750,14 +13769,24 @@ function VocabListeningModal({ t, mode, category, level, pool, userId, session, 
     setCorrect(ok);
     setChecked(true);
     if (ok) setScore((s) => s + 1);
+    setDetails((d) => [...d, { question: "🎧 (เสียง)", correct: q.word, given: answer, isCorrect: ok }]);
+  };
+  const pickChoice = (choice) => {
+    if (pickedChoice) return;
+    setPickedChoice(choice);
+    const ok = choice === q.word;
+    setCorrect(ok);
+    setChecked(true);
+    if (ok) setScore((s) => s + 1);
+    setDetails((d) => [...d, { question: "🎧 (เสียง)", correct: q.word, given: choice, isCorrect: ok }]);
   };
   const next = async () => {
-    if (idx + 1 < questions.length) { setIdx((i) => i + 1); setAnswer(""); setChecked(false); }
+    if (idx + 1 < questions.length) { setIdx((i) => i + 1); setAnswer(""); setPickedChoice(null); setChecked(false); }
     else {
       setDone(true);
       if (userId) {
         setSaving(true);
-        await supabase.from("vocab_quiz_history").insert({ id: crypto.randomUUID(), user_id: userId, mode, category, level, skill: "listening", score, total: questions.length, created_at: new Date().toISOString() }).then(() => {}, () => {});
+        await supabase.from("vocab_quiz_history").insert({ id: crypto.randomUUID(), user_id: userId, mode, category, level, skill: variant === "choice" ? "listening_choice" : "listening", score, total: questions.length, details, pool_ids: questions.map((qq) => qq.id), created_at: new Date().toISOString() }).then(() => {}, () => {});
         setSaving(false);
       }
       onFinished?.();
@@ -13769,7 +13798,7 @@ function VocabListeningModal({ t, mode, category, level, pool, userId, session, 
       <ModalPortal>
         <div style={overlayHi} onClick={close}>
           <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
-            <div style={{ fontSize: 14, color: t.sub, textAlign: "center", marginBottom: 14 }}>หมวดนี้ยังไม่มีเนื้อหาให้ฝึกฟังเลย ลองให้ AI เจนให้ก่อนได้เลย</div>
+            <div style={{ fontSize: 14, color: t.sub, textAlign: "center", marginBottom: 14 }}>{variant === "choice" ? "หมวดนี้ต้องมีอย่างน้อย 4 คำ/ประโยคถึงจะทำโหมดเลือกคำตอบได้" : "หมวดนี้ยังไม่มีเนื้อหาให้ฝึกฟังเลย ลองให้ AI เจนให้ก่อนได้เลย"}</div>
             <button onClick={close} style={{ ...card(t), width: "100%", padding: "11px 0", border: `1px solid ${t.border}`, cursor: "pointer", color: t.text, fontWeight: 700 }}>ปิด</button>
           </div>
         </div>
@@ -13782,7 +13811,7 @@ function VocabListeningModal({ t, mode, category, level, pool, userId, session, 
       <div style={overlayHi} onClick={done ? close : undefined}>
         <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "88vh", overflowY: "auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-            <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>🎧 ฟังแล้วพิมพ์ตาม</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>🎧 {variant === "choice" ? "ฟังแล้วเลือก" : "ฟังแล้วพิมพ์ตาม"}</div>
             <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
           </div>
 
@@ -13794,15 +13823,38 @@ function VocabListeningModal({ t, mode, category, level, pool, userId, session, 
               </button>
               <div style={{ fontSize: 11, color: t.faint, marginTop: 10 }}>{speaking ? "กำลังเล่น..." : "แตะเพื่อฟังอีกครั้ง"}</div>
             </div>
-            <input value={answer} onChange={(e) => setAnswer(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") check(); }} disabled={checked} placeholder="พิมพ์สิ่งที่ได้ยิน..." style={{ ...input(t), marginBottom: 12, textAlign: "center", fontSize: 15 }} autoCapitalize="none" />
-            {checked && (
+
+            {variant === "choice" ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
+                {q.choices.map((c, i) => {
+                  const isCorrect = c === q.word;
+                  const isPicked = c === pickedChoice;
+                  let bg = t.surface, border = t.border, color = t.text;
+                  if (pickedChoice) {
+                    if (isCorrect) { bg = "#2E9E6B18"; border = "#2E9E6B"; color = "#2E9E6B"; }
+                    else if (isPicked) { bg = "#D9534F18"; border = "#D9534F"; color = "#D9534F"; }
+                  }
+                  return (
+                    <button key={i} onClick={() => pickChoice(c)} disabled={!!pickedChoice} style={{ padding: "13px 14px", borderRadius: 12, border: `1.5px solid ${border}`, background: bg, color, fontWeight: 700, fontSize: 14, textAlign: "left", cursor: pickedChoice ? "default" : "pointer" }}>{c}</button>
+                  );
+                })}
+              </div>
+            ) : (
+              <input value={answer} onChange={(e) => setAnswer(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") check(); }} disabled={checked} placeholder="พิมพ์สิ่งที่ได้ยิน..." style={{ ...input(t), marginBottom: 12, textAlign: "center", fontSize: 15 }} autoCapitalize="none" />
+            )}
+
+            {checked && variant !== "choice" && (
               <div style={{ ...card(t), padding: 12, marginBottom: 14, border: `1px solid ${correct ? "#2E9E6B" : "#D9534F"}`, textAlign: "center" }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: correct ? "#2E9E6B" : "#D9534F", marginBottom: 4 }}>{correct ? "✓ ถูกต้อง!" : "✗ ยังไม่ตรง"}</div>
                 <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>{q.word}</div>
                 {q.meaning && <div style={{ fontSize: 11.5, color: t.sub, marginTop: 2 }}>{q.meaning}</div>}
               </div>
             )}
-            <button onClick={checked ? next : check} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "12px 0" }}>{checked ? (idx + 1 < questions.length ? "ข้อต่อไป →" : "ดูผลคะแนน") : "เช็คคำตอบ"}</button>
+            {variant === "choice" ? (
+              pickedChoice && <button onClick={next} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "12px 0" }}>{idx + 1 < questions.length ? "ข้อต่อไป →" : "ดูผลคะแนน"}</button>
+            ) : (
+              <button onClick={checked ? next : check} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "12px 0" }}>{checked ? (idx + 1 < questions.length ? "ข้อต่อไป →" : "ดูผลคะแนน") : "เช็คคำตอบ"}</button>
+            )}
           </>) : (
             <div style={{ textAlign: "center", padding: "10px 0" }}>
               <div style={{ fontSize: 15, color: t.sub, marginBottom: 6 }}>คะแนนของคุณ</div>
@@ -13824,10 +13876,42 @@ function VocabWritingModal({ t, category, level, topics = VOCAB_TOPICS, userId, 
   const [prompt, setPrompt] = useState(null);
   const [loadingPrompt, setLoadingPrompt] = useState(true);
   const [answer, setAnswer] = useState("");
-  const [feedback, setFeedback] = useState(null); // {score, corrected, comment}
+  const [feedback, setFeedback] = useState(null); // {score, corrected, translation, comment}
   const [checking, setChecking] = useState(false);
   const [err, setErr] = useState("");
+  const [speaking, setSpeaking] = useState(false);
+  const audioRef = useRef(null);
   const seenPromptsRef = useRef([]); // 🚫 กันโจทย์ซ้ำ — รวมทั้งที่เจอในเซสชันนี้ + ประวัติเก่าจาก DB
+
+  // 🔊 อ่านออกเสียงเวอร์ชันที่แก้ไขให้แล้ว — ใช้ Azure TTS เดียวกับโหมดฟัง/ทบทวน (fallback เสียงเครื่องอัตโนมัติถ้าใช้ไม่ได้)
+  const playCorrected = async () => {
+    if (!feedback?.corrected) return;
+    setSpeaking(true);
+    window.speechSynthesis?.cancel();
+    audioRef.current?.pause();
+    try {
+      const r = await fetch("/api/knowledge-generate", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "tts", text: feedback.corrected, voice: "en-US-JennyNeural", callerToken: session?.access_token }),
+      });
+      if (!r.ok) throw new Error("azure_tts_failed");
+      const blob = await r.blob();
+      const audio = new Audio(URL.createObjectURL(blob));
+      audioRef.current = audio;
+      audio.onended = () => setSpeaking(false);
+      audio.onerror = () => fallbackSpeakCorrected();
+      await audio.play();
+    } catch (e) { fallbackSpeakCorrected(); }
+  };
+  const fallbackSpeakCorrected = () => {
+    if (!window.speechSynthesis || !feedback?.corrected) { setSpeaking(false); return; }
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(feedback.corrected);
+    u.lang = "en-US";
+    u.onend = () => setSpeaking(false);
+    u.onerror = () => setSpeaking(false);
+    window.speechSynthesis.speak(u);
+  };
 
   const getPrompt = async () => {
     setLoadingPrompt(true); setErr(""); setFeedback(null); setAnswer("");
@@ -13868,7 +13952,7 @@ function VocabWritingModal({ t, category, level, topics = VOCAB_TOPICS, userId, 
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mentor: "none", userId, callerToken: session?.access_token,
-          messages: [{ who: "u", text: `โจทย์เขียนคือ: "${prompt}"\nคำตอบของผู้เรียนคือ: "${answer.trim()}"\nช่วยตรวจให้หน่อย ตอบตามรูปแบบนี้เป๊ะๆ 3 บรรทัด ห้ามมีข้อความอื่น:\nคะแนน: (ตัวเลข 0-10)\nแก้ไข: (เวอร์ชันที่ถูกต้องขึ้น เป็นภาษาอังกฤษ)\nคอมเมนต์: (ติชมสั้นๆ เป็นภาษาไทย ให้กำลังใจด้วย)` }],
+          messages: [{ who: "u", text: `โจทย์เขียนคือ: "${prompt}"\nคำตอบของผู้เรียนคือ: "${answer.trim()}"\nช่วยตรวจให้หน่อย ตอบตามรูปแบบนี้เป๊ะๆ 4 บรรทัด ห้ามมีข้อความอื่น:\nคะแนน: (ตัวเลข 0-10)\nแก้ไข: (เวอร์ชันที่ถูกต้องขึ้น เป็นภาษาอังกฤษ)\nคำแปล: (คำแปลไทยของเวอร์ชันที่แก้ไขแล้วบรรทัดบน)\nคอมเมนต์: (ติชมสั้นๆ เป็นภาษาไทย ให้กำลังใจด้วย)` }],
         }),
       });
       const data = await r.json();
@@ -13876,8 +13960,9 @@ function VocabWritingModal({ t, category, level, topics = VOCAB_TOPICS, userId, 
       const text = data.text || "";
       const sc = /คะแนน[:：]\s*(\d+)/.exec(text);
       const co = /แก้ไข[:：]\s*(.+)/.exec(text);
+      const tr = /คำแปล[:：]\s*(.+)/.exec(text);
       const cm = /คอมเมนต์[:：]\s*(.+)/.exec(text);
-      const fb = { score: sc ? sc[1] : "-", corrected: co ? co[1].trim() : "", comment: cm ? cm[1].trim() : text.trim() };
+      const fb = { score: sc ? sc[1] : "-", corrected: co ? co[1].trim() : "", translation: tr ? tr[1].trim() : "", comment: cm ? cm[1].trim() : text.trim() };
       setFeedback(fb);
       if (userId) supabase.from("vocab_writing_history").insert({ id: crypto.randomUUID(), user_id: userId, category, level, prompt, answer: answer.trim(), score: fb.score, feedback: fb.comment, created_at: new Date().toISOString() }).then(() => {}, () => {});
     } catch (e) {
@@ -13906,7 +13991,16 @@ function VocabWritingModal({ t, category, level, topics = VOCAB_TOPICS, userId, 
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                   <div style={{ fontSize: 22, fontWeight: 800, color: t.accent }}>{feedback.score}/10</div>
                 </div>
-                {feedback.corrected && (<><div style={{ fontSize: 10.5, fontWeight: 700, color: t.faint, marginBottom: 2 }}>เวอร์ชันแก้ไข</div><div style={{ fontSize: 13, color: t.text, marginBottom: 8 }}>{feedback.corrected}</div></>)}
+                {feedback.corrected && (
+                  <>
+                    <div style={{ fontSize: 10.5, fontWeight: 700, color: t.faint, marginBottom: 2 }}>เวอร์ชันแก้ไข</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                      <div style={{ fontSize: 13, color: t.text, flex: 1 }}>{feedback.corrected}</div>
+                      <button onClick={playCorrected} disabled={speaking} style={{ width: 30, height: 30, borderRadius: 15, border: "none", background: t.accent, color: t.onAccent, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}><Volume2 size={15} /></button>
+                    </div>
+                    {feedback.translation && <div style={{ fontSize: 12, color: t.sub, marginBottom: 8, fontStyle: "italic" }}>{feedback.translation}</div>}
+                  </>
+                )}
                 <div style={{ fontSize: 12.5, color: t.sub, lineHeight: 1.6 }}>{feedback.comment}</div>
               </div>
             )}
@@ -13924,9 +14018,9 @@ function VocabWritingModal({ t, category, level, topics = VOCAB_TOPICS, userId, 
 }
 
 // 🎤 พูดตาม — ใช้ Web Speech API (ฟรี ในตัวเบราว์เซอร์) เครื่องฟังแล้วเทียบว่าตรงกับคำ/ประโยคเป้าหมายไหม ไม่รองรับทุกเบราว์เซอร์ (เช็คให้ก่อนใช้)
-function VocabSpeakingModal({ t, mode, category, level, pool, userId, close, onFinished }) {
+function VocabSpeakingModal({ t, mode, category, level, pool, userId, close, onFinished, retryPoolIds }) {
   const shuffle = (arr) => { const a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
-  const [questions] = useState(() => pickFreshItems(`refhub:vocabFresh:speaking:${mode}:${category}:${level}`, pool, Math.min(8, pool.length)));
+  const [questions] = useState(() => retryPoolIds?.length ? retryPoolIds.map((id) => pool.find((x) => x.id === id)).filter(Boolean) : pickFreshItems(`refhub:vocabFresh:speaking:${mode}:${category}:${level}`, pool, Math.min(8, pool.length)));
   const [idx, setIdx] = useState(0);
   const [listening, setListening] = useState(false);
   const [heard, setHeard] = useState(null);
@@ -13936,6 +14030,7 @@ function VocabSpeakingModal({ t, mode, category, level, pool, userId, close, onF
   const [done, setDone] = useState(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
+  const [details, setDetails] = useState([]);
   const recogRef = useRef(null);
   const q = questions[idx];
 
@@ -13955,6 +14050,7 @@ function VocabSpeakingModal({ t, mode, category, level, pool, userId, close, onF
       setCorrect(ok);
       setChecked(true);
       if (ok) setScore((s) => s + 1);
+      setDetails((d) => [...d, { question: q.word, correct: q.word, given: text, isCorrect: ok }]);
     };
     r.onerror = () => { setListening(false); setErr("ฟังไม่สำเร็จ ลองใหม่อีกครั้ง (เช็คว่าอนุญาตไมค์แล้ว)"); };
     r.onend = () => setListening(false);
@@ -13968,7 +14064,7 @@ function VocabSpeakingModal({ t, mode, category, level, pool, userId, close, onF
       setDone(true);
       if (userId) {
         setSaving(true);
-        await supabase.from("vocab_quiz_history").insert({ id: crypto.randomUUID(), user_id: userId, mode, category, level, skill: "speaking", score, total: questions.length, created_at: new Date().toISOString() }).then(() => {}, () => {});
+        await supabase.from("vocab_quiz_history").insert({ id: crypto.randomUUID(), user_id: userId, mode, category, level, skill: "speaking", score, total: questions.length, details, pool_ids: questions.map((qq) => qq.id), created_at: new Date().toISOString() }).then(() => {}, () => {});
         setSaving(false);
       }
       onFinished?.();
@@ -14030,13 +14126,14 @@ function VocabSpeakingModal({ t, mode, category, level, pool, userId, close, onF
 }
 
 // 🔁🎯 ทบทวนแบบ active recall — เลือกได้ว่าอยากฝึกแบบไหน: เห็นคำ→พิมพ์แปล, เห็นคำแปล→เขียนคำศัพท์, ออกเสียง+แปล, หรือสุ่ม
-function VocabRecallModal({ t, mode, category, level, pool, userId, session, close, onFinished }) {
+function VocabRecallModal({ t, mode, category, level, pool, userId, session, close, onFinished, retryPoolIds }) {
   const isWord = mode === "word";
   const [subMode, setSubMode] = useState(null); // null = หน้าเลือกโหมดก่อน
   const RECALL_TYPES = ["word2meaning", "meaning2word", "speak"];
-  const [questions] = useState(() => pickFreshItems(`refhub:vocabFresh:recall:${mode}:${category}:${level}`, pool, Math.min(10, pool.length)).map((item) => ({
-    item, type: subMode === "random" || !subMode ? null : subMode, // เดี๋ยวเซ็ตจริงตอนเลือก subMode
-  })));
+  const [questions] = useState(() => {
+    const base = retryPoolIds?.length ? retryPoolIds.map((id) => pool.find((x) => x.id === id)).filter(Boolean) : pickFreshItems(`refhub:vocabFresh:recall:${mode}:${category}:${level}`, pool, Math.min(10, pool.length));
+    return base.map((item) => ({ item, type: subMode === "random" || !subMode ? null : subMode }));
+  });
   const [idx, setIdx] = useState(0);
   const [answer, setAnswer] = useState("");
   const [answer2, setAnswer2] = useState(""); // ใช้กับโหมด speak (ช่องแปล คู่กับพูด)
@@ -14049,6 +14146,7 @@ function VocabRecallModal({ t, mode, category, level, pool, userId, session, clo
   const [done, setDone] = useState(false);
   const [saving, setSaving] = useState(false);
   const [speaking, setSpeaking] = useState(false);
+  const [details, setDetails] = useState([]);
   const audioRef = useRef(null);
   const [qTypes] = useState(() => questions.map(() => RECALL_TYPES[Math.floor(Math.random() * RECALL_TYPES.length)]));
   const q = questions[idx];
@@ -14099,13 +14197,14 @@ function VocabRecallModal({ t, mode, category, level, pool, userId, session, clo
 
   const check = () => {
     if (checked) return;
-    let ok;
-    if (qType === "word2meaning") ok = answer.trim().length > 0 && (normalize(answer).includes(normalize(q.item.meaning)) || normalize(q.item.meaning).includes(normalize(answer)));
-    else if (qType === "meaning2word") ok = normalize(answer) === normalize(q.item.word);
-    else ok = !!pronOk && answer2.trim().length > 0 && (normalize(answer2).includes(normalize(q.item.meaning)) || normalize(q.item.meaning).includes(normalize(answer2)));
+    let ok, question, given;
+    if (qType === "word2meaning") { ok = answer.trim().length > 0 && (normalize(answer).includes(normalize(q.item.meaning)) || normalize(q.item.meaning).includes(normalize(answer))); question = q.item.word; given = answer; }
+    else if (qType === "meaning2word") { ok = normalize(answer) === normalize(q.item.word); question = q.item.meaning; given = answer; }
+    else { ok = !!pronOk && answer2.trim().length > 0 && (normalize(answer2).includes(normalize(q.item.meaning)) || normalize(q.item.meaning).includes(normalize(answer2))); question = `🎤 ${q.item.word}`; given = `${heard || ""} / ${answer2}`; }
     setCorrect(ok);
     setChecked(true);
     if (ok) setScore((s) => s + 1);
+    setDetails((d) => [...d, { question, correct: qType === "meaning2word" ? q.item.word : q.item.meaning, given, isCorrect: ok }]);
   };
   const next = async () => {
     if (idx + 1 < questions.length) { setIdx((i) => i + 1); setAnswer(""); setAnswer2(""); setChecked(false); setHeard(null); setPronOk(null); }
@@ -14113,7 +14212,7 @@ function VocabRecallModal({ t, mode, category, level, pool, userId, session, clo
       setDone(true);
       if (userId) {
         setSaving(true);
-        await supabase.from("vocab_quiz_history").insert({ id: crypto.randomUUID(), user_id: userId, mode, category, level, skill: "recall", score, total: questions.length, created_at: new Date().toISOString() }).then(() => {}, () => {});
+        await supabase.from("vocab_quiz_history").insert({ id: crypto.randomUUID(), user_id: userId, mode, category, level, skill: "recall", score, total: questions.length, details, pool_ids: questions.map((qq) => qq.item.id), created_at: new Date().toISOString() }).then(() => {}, () => {});
         setSaving(false);
       }
       onFinished?.();
@@ -14344,7 +14443,22 @@ function LangPage({ t, lang, userId, session, authProfile, scrollToTop }) {
   const [addOpen, setAddOpen] = useState(false);
   const [genOpen, setGenOpen] = useState(false);
   const [quizOpen, setQuizOpen] = useState(false);
+  // 🔁 ดูรายละเอียดประวัติ + สอบซ้ำ — เก็บทั้งแถวประวัติที่กด และ payload สำหรับเปิดโหมดสอบซ้ำ (โหลดพูลสดใหม่เสมอ ไม่พึ่ง state ปัจจุบันของหน้า เพราะประวัติอาจเป็นคนละหมวด/คนละโหมดกับที่เลือกอยู่ตอนนี้)
+  const [historyDetail, setHistoryDetail] = useState(null); // แถวประวัติที่กำลังดูรายละเอียดอยู่
+  const [retryPayload, setRetryPayload] = useState(null); // { skill, mode, category, level, pool, allItems, poolIds } พร้อมเปิดโหมดสอบซ้ำ
+  const [retryLoading, setRetryLoading] = useState(false);
+  const startRetry = async (h) => {
+    setRetryLoading(true);
+    try {
+      const tbl = h.mode === "word" ? "vocab_words" : "vocab_sentences";
+      const { data } = await supabase.from(tbl).select("*").eq("user_id", userId).eq("category", h.category);
+      const allItems = data || [];
+      setHistoryDetail(null);
+      setRetryPayload({ skill: h.skill, mode: h.mode, category: h.category, level: h.level, pool: allItems, allItems, poolIds: h.pool_ids || [] });
+    } catch (e) {} finally { setRetryLoading(false); }
+  };
   const [listenOpen, setListenOpen] = useState(false);
+  const [listenVariant, setListenVariant] = useState("type"); // "type" | "choice"
   const [speakOpen, setSpeakOpen] = useState(false);
   const [recallOpen, setRecallOpen] = useState(false);
   const [writeOpen, setWriteOpen] = useState(false);
@@ -14723,8 +14837,11 @@ function LangPage({ t, lang, userId, session, authProfile, scrollToTop }) {
       <div style={{ ...card(t), padding: 28, textAlign: "center" }}>
         <div style={{ fontSize: 32, marginBottom: 10 }}>🎧</div>
         <div style={{ fontSize: 14.5, fontWeight: 800, color: t.text, marginBottom: 4 }}>ฝึกฟังหมวด {currentTopicMeta?.label}</div>
-        <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>ฟังเสียงแล้วพิมพ์ตามที่ได้ยิน เช็คคำตอบทันที เก็บคะแนนลงประวัติ</div>
-        <button onClick={() => setListenOpen(true)} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "13px 0", fontSize: 14 }}>เริ่มฝึกฟัง</button>
+        <div style={{ fontSize: 12.5, color: t.sub, marginBottom: 16 }}>ฟังเสียงแล้วตอบว่าได้ยินอะไร เช็คคำตอบทันที เก็บคะแนนลงประวัติ</div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => { setListenVariant("type"); setListenOpen(true); }} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), flex: 1, padding: "13px 0", fontSize: 13 }}>⌨️ พิมพ์ตาม</button>
+          <button onClick={() => { setListenVariant("choice"); setListenOpen(true); }} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), flex: 1, padding: "13px 0", fontSize: 13 }}>☑️ เลือกคำตอบ</button>
+        </div>
       </div>
     )}
 
@@ -14792,13 +14909,16 @@ function LangPage({ t, lang, userId, session, authProfile, scrollToTop }) {
       historyLoading ? <Empty t={t} text="กำลังโหลด..." /> : history.length === 0 ? <Empty t={t} text="ยังไม่เคยทำแบบทดสอบเลย ลองแท็บ 🧪 ทดสอบดูได้เลย" /> : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {history.map((h) => (
-            <div key={h.id} style={{ ...card(t), padding: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <button key={h.id} onClick={() => setHistoryDetail(h)} style={{ ...card(t), width: "100%", padding: 12, display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", textAlign: "left" }}>
               <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{h.skill === "listening" ? "🎧" : "🧪"} {allTopics.find((c) => c.id === h.category)?.label || h.category} <span style={{ fontSize: 10.5, color: t.faint }}>· {h.mode === "word" ? "คำศัพท์" : "ประโยค"} · {h.level}</span></div>
-                <div style={{ fontSize: 10.5, color: t.faint, marginTop: 2 }}>{new Date(h.created_at).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" })}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{h.skill === "listening" ? "🎧" : h.skill === "listening_choice" ? "☑️" : h.skill === "speaking" ? "🎤" : h.skill === "recall" ? "🔁" : "🧪"} {allTopics.find((c) => c.id === h.category)?.label || h.category} <span style={{ fontSize: 10.5, color: t.faint }}>· {h.mode === "word" ? "คำศัพท์" : "ประโยค"} · {h.level}</span></div>
+                <div style={{ fontSize: 10.5, color: t.faint, marginTop: 2 }}>{new Date(h.created_at).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" })}{h.details?.length ? " · แตะดูรายละเอียด" : ""}</div>
               </div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: h.score === h.total ? "#2E9E6B" : t.accent }}>{h.score}/{h.total}</div>
-            </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                <div style={{ fontSize: 16, fontWeight: 800, color: h.score === h.total ? "#2E9E6B" : t.accent }}>{h.score}/{h.total}</div>
+                {h.details?.length > 0 && <ChevronRight size={16} color={t.faint} />}
+              </div>
+            </button>
           ))}
         </div>
       )
@@ -14920,13 +15040,71 @@ function LangPage({ t, lang, userId, session, authProfile, scrollToTop }) {
       </div>
     </ModalPortal>
     {quizOpen && <VocabQuizModal t={t} mode={contentType} category={topic} level={level === "all" ? "mixed" : level} pool={topicWords} allItems={words} userId={userId} close={() => setQuizOpen(false)} onFinished={loadHistory} />}
-    {listenOpen && <VocabListeningModal t={t} mode={contentType} category={topic} level={level === "all" ? "mixed" : level} pool={topicWords} userId={userId} session={session} close={() => setListenOpen(false)} onFinished={loadHistory} />}
+    {listenOpen && <VocabListeningModal t={t} mode={contentType} category={topic} level={level === "all" ? "mixed" : level} pool={topicWords} userId={userId} session={session} variant={listenVariant} close={() => setListenOpen(false)} onFinished={loadHistory} />}
     {speakOpen && <VocabSpeakingModal t={t} mode={contentType} category={topic} level={level === "all" ? "mixed" : level} pool={topicWords} userId={userId} close={() => setSpeakOpen(false)} onFinished={loadHistory} />}
     {recallOpen && <VocabRecallModal t={t} mode={contentType} category={topic} level={level === "all" ? "mixed" : level} pool={reviewOnlyPool} userId={userId} session={session} close={() => setRecallOpen(false)} onFinished={loadHistory} />}
     {writeOpen && <VocabWritingModal t={t} category={topic} level={level === "all" ? "A1" : level} topics={allTopics} userId={userId} session={session} close={() => setWriteOpen(false)} />}
+
+    {/* 🔎 ดูรายละเอียดประวัติ + สอบซ้ำ */}
+    {historyDetail && <VocabHistoryDetailModal t={t} h={historyDetail} topics={allTopics} onRetry={() => startRetry(historyDetail)} retryLoading={retryLoading} close={() => setHistoryDetail(null)} />}
+    {retryPayload && retryPayload.skill !== "listening" && retryPayload.skill !== "listening_choice" && retryPayload.skill !== "speaking" && retryPayload.skill !== "recall" && (
+      <VocabQuizModal t={t} mode={retryPayload.mode} category={retryPayload.category} level={retryPayload.level} pool={retryPayload.pool} allItems={retryPayload.allItems} userId={userId} retryPoolIds={retryPayload.poolIds} close={() => setRetryPayload(null)} onFinished={loadHistory} />
+    )}
+    {retryPayload && (retryPayload.skill === "listening" || retryPayload.skill === "listening_choice") && (
+      <VocabListeningModal t={t} mode={retryPayload.mode} category={retryPayload.category} level={retryPayload.level} pool={retryPayload.pool} userId={userId} session={session} variant={retryPayload.skill === "listening_choice" ? "choice" : "type"} retryPoolIds={retryPayload.poolIds} close={() => setRetryPayload(null)} onFinished={loadHistory} />
+    )}
+    {retryPayload && retryPayload.skill === "speaking" && (
+      <VocabSpeakingModal t={t} mode={retryPayload.mode} category={retryPayload.category} level={retryPayload.level} pool={retryPayload.pool} userId={userId} retryPoolIds={retryPayload.poolIds} close={() => setRetryPayload(null)} onFinished={loadHistory} />
+    )}
+    {retryPayload && retryPayload.skill === "recall" && (
+      <VocabRecallModal t={t} mode={retryPayload.mode} category={retryPayload.category} level={retryPayload.level} pool={retryPayload.pool} userId={userId} session={session} retryPoolIds={retryPayload.poolIds} close={() => setRetryPayload(null)} onFinished={loadHistory} />
+    )}
+
     {ConfirmUI}
     <div style={{ height: 110 }} /> {/* กันเนื้อหาท้ายสุดโดนมินิด็อก/ปุ่ม AI ลอยบัง */}
   </>);
+}
+
+// 🔎 ดูรายละเอียดประวัติการสอบ — ข้อไหนถูก/ผิด + ปุ่มสอบชุดเดิมซ้ำ (ใช้ pool_ids ชุดเดิมเป๊ะๆ ไม่ใช่สุ่มใหม่)
+function VocabHistoryDetailModal({ t, h, topics, onRetry, retryLoading, close }) {
+  const categoryLabel = topics.find((c) => c.id === h.category)?.label || h.category;
+  const skillLabel = { listening: "🎧 ฟังแล้วพิมพ์ตาม", listening_choice: "☑️ ฟังแล้วเลือก", speaking: "🎤 พูดตาม", recall: "🔁 ทบทวน" }[h.skill] || "🧪 แบบทดสอบ";
+  return (
+    <ModalPortal>
+      <div style={overlayHi} onClick={close}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>{skillLabel}</div>
+            <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+          </div>
+          <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 14 }}>{categoryLabel} · {h.mode === "word" ? "คำศัพท์" : "ประโยค"} · {h.level} · {new Date(h.created_at).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" })}</div>
+
+          <div style={{ textAlign: "center", marginBottom: 16 }}>
+            <div style={{ fontSize: 32, fontWeight: 800, color: h.score === h.total ? "#2E9E6B" : t.accent }}>{h.score}/{h.total}</div>
+          </div>
+
+          {h.pool_ids?.length > 0 && (
+            <button onClick={onRetry} disabled={retryLoading} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "12px 0", marginBottom: 16 }}>{retryLoading ? "กำลังเตรียม..." : "🔁 สอบชุดเดิมอีกครั้ง"}</button>
+          )}
+
+          {h.details?.length > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5 }}>รายละเอียดแต่ละข้อ</div>
+              {h.details.map((d, i) => (
+                <div key={i} style={{ ...card(t), padding: 12, borderLeft: `3px solid ${d.isCorrect ? "#2E9E6B" : "#D9534F"}` }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: t.text, marginBottom: 4 }}>{i + 1}. {d.question}</div>
+                  <div style={{ fontSize: 11.5, color: d.isCorrect ? "#2E9E6B" : "#D9534F" }}>{d.isCorrect ? "✓" : "✗"} ตอบ: {d.given || "-"}</div>
+                  {!d.isCorrect && <div style={{ fontSize: 11.5, color: t.sub, marginTop: 2 }}>เฉลย: {d.correct}</div>}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ fontSize: 11.5, color: t.faint, textAlign: "center", padding: "10px 0" }}>รายการนี้ทำก่อนที่จะมีระบบเก็บรายละเอียดรายข้อ ดูได้แค่คะแนนรวม</div>
+          )}
+        </div>
+      </div>
+    </ModalPortal>
+  );
 }
 
 // ---------------- Modals ----------------
