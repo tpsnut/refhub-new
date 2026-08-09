@@ -8,7 +8,7 @@ import {
   Sparkles, Clock, Search, Volume2, VolumeX, Pencil, Download, ArrowLeft, Users, Camera, Phone, Mic, MicOff, PhoneOff, RefreshCw,
   Utensils, Car, ShoppingBag, Receipt, Gamepad2, HeartPulse, Briefcase, Gift, Coffee, Music,
   Play, Pause, Link2, Upload, SkipBack, SkipForward, Handshake, Coins, PiggyBank, FileSpreadsheet, FileText, Palette, ALargeSmall, ShieldCheck, Bell, UserCheck, UserX, Wifi, MessageCircle, MoreVertical, KeyRound, MapPin, Copy, LockKeyhole, LogOut, LayoutGrid, Maximize2, Volume1, Settings, Bookmark, Share2, Repeat2, Heart, User, Pin,
-  Heading1, Heading3, ListOrdered, ListTree, Quote, Code2, Minus, Table2, Video, Smile, RotateCcw, GripVertical, ChevronLeft, ChevronUp, ChevronDown, Repeat, Repeat1, Shuffle, Timer, Lock, HelpCircle, Info, CreditCard, Crown, Unlock, Activity, CheckCircle2, XCircle, ExternalLink
+  Heading1, Heading3, ListOrdered, ListTree, Quote, Code2, Minus, Table2, Video, Smile, RotateCcw, GripVertical, ChevronLeft, ChevronUp, ChevronDown, Repeat, Repeat1, Shuffle, Timer, Lock, HelpCircle, Info, CreditCard, Crown, Unlock, Activity, CheckCircle2, XCircle, ExternalLink, SlidersHorizontal
 } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
 // 🔀 dnd-kit — ใช้ทำ "ลากวางจัดเรียงจริง" (drag & drop) ทั่วแอป แทนปุ่มขึ้น/ลง — รองรับ touch บนมือถือมาให้เลย
@@ -14352,6 +14352,47 @@ function VocabRecallModal({ t, mode, category, level, pool, userId, session, clo
 }
 
 // 📖 ไกด์วิธีใช้งานหน้าฝึกภาษา — โผล่อัตโนมัติครั้งแรก + กดปุ่ม ❓ ดูซ้ำได้ทุกเมื่อ
+// 🔥 สรุปสถิติ (สตรีค/XP/badge) — เปิดจาก badge เล็กๆที่หัวหน้าฝึกภาษา แทนแถบยาวเดิมที่กินพื้นที่
+function VocabStatsModal({ t, streakDays, xp, badges, close }) {
+  return (
+    <ModalPortal>
+      <div style={overlayHi} onClick={close}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 22 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>สถิติของฉัน</div>
+            <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+          </div>
+          <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+            <div style={{ ...card(t), flex: 1, padding: 16, textAlign: "center" }}>
+              <div style={{ fontSize: 26 }}>🔥</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: t.text, marginTop: 2 }}>{streakDays}</div>
+              <div style={{ fontSize: 11, color: t.faint }}>วันติดต่อกัน</div>
+            </div>
+            <div style={{ ...card(t), flex: 1, padding: 16, textAlign: "center" }}>
+              <div style={{ fontSize: 26 }}>⭐</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: t.text, marginTop: 2 }}>{xp}</div>
+              <div style={{ fontSize: 11, color: t.faint }}>XP สะสม</div>
+            </div>
+          </div>
+          {badges.length > 0 && (
+            <>
+              <div style={{ fontSize: 11, fontWeight: 800, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>ความสำเร็จ</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {badges.map((b, i) => (
+                  <div key={i} style={{ ...card(t), padding: 11, display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontSize: 18 }}>{b.icon}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{b.label}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </ModalPortal>
+  );
+}
+
 function VocabGuideModal({ t, lang, close }) {
   const isEn = lang === "en";
   const steps = isEn ? [
@@ -14442,25 +14483,6 @@ function AddTopicModal({ t, userId, limit, currentCount, close, onAdded }) {
   );
 }
 
-// 🔍 แถบค้นหา+เรียง+กรองระดับ ใช้ร่วมกันทั้งหน้าจัดการและหน้าทบทวนของ LangPage
-function VocabSearchSortBar({ t, search, setSearch, sort, setSort, level, setLevel }) {
-  return (
-    <div style={{ marginBottom: 12 }}>
-      <div style={{ position: "relative", marginBottom: 8 }}>
-        <Search size={14} color={t.faint} style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)" }} />
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="ค้นหาคำ/ประโยค..." style={{ ...input(t), paddingLeft: 32, fontSize: 13 }} />
-      </div>
-      <div style={{ display: "flex", gap: 6, overflowX: "auto" }}>
-        <button onClick={() => setSort(sort === "az" ? "default" : "az")} style={{ flexShrink: 0, padding: "6px 12px", borderRadius: 9, cursor: "pointer", border: `1.5px solid ${sort === "az" ? t.accent : t.border}`, background: sort === "az" ? t.accent : "transparent", color: sort === "az" ? t.onAccent : t.sub, fontWeight: 700, fontSize: 11 }}>เรียง A-Z {sort === "az" ? "↓" : ""}</button>
-        <button onClick={() => setSort(sort === "za" ? "default" : "za")} style={{ flexShrink: 0, padding: "6px 12px", borderRadius: 9, cursor: "pointer", border: `1.5px solid ${sort === "za" ? t.accent : t.border}`, background: sort === "za" ? t.accent : "transparent", color: sort === "za" ? t.onAccent : t.sub, fontWeight: 700, fontSize: 11 }}>เรียง Z-A {sort === "za" ? "↓" : ""}</button>
-        <div style={{ width: 1, background: t.border, flexShrink: 0 }} />
-        {CEFR_LEVELS.map((lv) => (
-          <button key={lv} onClick={() => setLevel(level === lv ? "all" : lv)} style={{ flexShrink: 0, padding: "6px 12px", borderRadius: 9, cursor: "pointer", border: `1.5px solid ${level === lv ? t.accent : t.border}`, background: level === lv ? t.accent : "transparent", color: level === lv ? t.onAccent : t.sub, fontWeight: 700, fontSize: 11 }}>{lv}</button>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 function LangPage({ t, lang, userId, session, authProfile, scrollToTop }) {
   const [askConfirm, ConfirmUI] = useConfirm(t);
@@ -14737,44 +14759,68 @@ function LangPage({ t, lang, userId, session, authProfile, scrollToTop }) {
     else if (dx > 0 && idx > 0) setTopic(allTopics[idx - 1].id);
   };
 
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [searchExpanded, setSearchExpanded] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
   const currentTopicMeta = allTopics.find((c) => c.id === topic);
   const isWord = contentType === "word";
   const noun = isWord ? "คำศัพท์" : "ประโยค";
 
   return (<>
     <PageHead t={t} title={L(lang, "ph_lang_title")} sub={lang === "en" ? `My words ${words.length} · known ${knownCount}` : `${noun}ของฉัน ${words.length} · จำได้แล้ว ${knownCount}`} icon={<Languages size={20} color={t.accent} />} right={
-      <button onClick={() => setGuideOpen(true)} style={{ width: 34, height: 34, borderRadius: 17, border: `1px solid ${t.border}`, background: t.inputBg, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }} title="วิธีใช้งาน">
-        <HelpCircle size={16} color={t.sub} />
-      </button>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+        {streakDays >= 1 && (
+          <button onClick={() => setStatsOpen(true)} style={{ display: "flex", alignItems: "center", gap: 4, padding: "6px 10px", borderRadius: 14, border: `1px solid ${t.border}`, background: t.inputBg, cursor: "pointer" }}>
+            <span style={{ fontSize: 14, display: "inline-block", animation: "rh-fab-float 1.6s ease-in-out infinite" }}>🔥</span>
+            <span style={{ fontSize: 12, fontWeight: 800, color: t.text }}>{streakDays}</span>
+          </button>
+        )}
+        <button onClick={() => setGuideOpen(true)} style={{ width: 34, height: 34, borderRadius: 17, border: `1px solid ${t.border}`, background: t.inputBg, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }} title="วิธีใช้งาน">
+          <HelpCircle size={16} color={t.sub} />
+        </button>
+      </div>
     } />
 
-    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, overflowX: "auto" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}><span style={{ fontSize: 15 }}>🔥</span><span style={{ fontSize: 12.5, fontWeight: 700, color: t.text }}>{streakDays} วัน</span></div>
-      <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}><span style={{ fontSize: 15 }}>⭐</span><span style={{ fontSize: 12.5, fontWeight: 700, color: t.text }}>{xp} XP</span></div>
-      {badges.map((b, i) => (
-        <div key={i} style={{ display: "flex", alignItems: "center", gap: 3, flexShrink: 0, background: `${t.accent}15`, borderRadius: 10, padding: "3px 8px" }}>
-          <span style={{ fontSize: 12 }}>{b.icon}</span><span style={{ fontSize: 10.5, fontWeight: 700, color: t.accent }}>{b.label}</span>
-        </div>
-      ))}
-    </div>
-
-    {/* 📚 หัวข้อควบคุมแบบใหม่ — กะทัดรัดเหลือแถวเดียว: หมวด + ⚙️ตั้งค่า(ระดับ+ประเภทเนื้อหา) + 🗂/📃 มุมมอง (โหมด 8 อันย้ายไปมินิด็อกลอยด้านล่างแทนแล้ว) */}
+    {/* 📚 แถวควบคุมเดียวจบ: หมวด (เปิดลิ้นชักซ้าย) + ค้นหาในกรอบเดียวกัน (กดแว่นขยายขยายเป็นช่องพิมพ์) + สลับมุมมอง + ตั้งค่า */}
     <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-      <button onClick={() => setMenuOpen(true)} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 14px", borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, cursor: "pointer" }}>
-        <span style={{ fontSize: 13.5, fontWeight: 800, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{currentTopicMeta?.label} ({wordCountByTopic(topic)})</span>
-        <ChevronDown size={15} color={t.faint} style={{ flexShrink: 0 }} />
-      </button>
-      <button onClick={() => setSettingsOpen(true)} style={{ width: 42, height: 42, borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }} title="ตั้งค่า">
-        <Settings size={17} color={t.sub} />
-      </button>
-      <button onClick={() => setCardViewMode((m) => (m === "card" ? "list" : "card"))} style={{ width: 42, height: 42, borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }} title="สลับมุมมอง">
-        {cardViewMode === "card" ? <List size={17} color={t.sub} /> : <LayoutGrid size={17} color={t.sub} />}
-      </button>
+      {searchExpanded ? (
+        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, padding: "0 14px", borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, height: 42 }}>
+          <Search size={15} color={t.faint} style={{ flexShrink: 0 }} />
+          <input autoFocus value={manageSearch} onChange={(e) => setManageSearch(e.target.value)} placeholder="พิมพ์คำที่หา..." style={{ flex: 1, border: "none", background: "none", outline: "none", fontSize: 13.5, color: t.text }} />
+          <button onClick={() => { setSearchExpanded(false); setManageSearch(""); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "grid", placeItems: "center", flexShrink: 0 }}><X size={16} color={t.faint} /></button>
+        </div>
+      ) : (
+        <button onClick={() => setMenuOpen(true)} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 7, padding: "10px 14px", borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, cursor: "pointer" }}>
+          <Menu size={15} color={t.sub} style={{ flexShrink: 0 }} />
+          <span style={{ fontSize: 13.5, fontWeight: 800, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{currentTopicMeta?.label}</span>
+          <span style={{ fontSize: 11, color: t.faint, flexShrink: 0 }}>{wordCountByTopic(topic)} คำ</span>
+          <span style={{ flex: 1 }} />
+          <button onClick={(e) => { e.stopPropagation(); setSearchExpanded(true); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "grid", placeItems: "center", flexShrink: 0 }}>
+            <Search size={15} color={t.sub} />
+          </button>
+        </button>
+      )}
+      {!searchExpanded && (view === "manage" || view === "review") && (
+        <button onClick={() => setFilterOpen(true)} style={{ width: 42, height: 42, borderRadius: 12, border: `1px solid ${manageSort !== "default" || level !== "all" ? t.accent : t.border}`, background: t.inputBg, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }} title="เรียง/กรอง">
+          <SlidersHorizontal size={16} color={manageSort !== "default" || level !== "all" ? t.accent : t.sub} />
+        </button>
+      )}
+      {!searchExpanded && view === "manage" && (
+        <button onClick={() => { setEditing(null); setAddOpen(true); }} style={{ width: 42, height: 42, borderRadius: 12, border: "none", background: t.accent, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }} title={`เพิ่ม${noun}เอง`}>
+          <Plus size={18} color={t.onAccent} />
+        </button>
+      )}
+      {!searchExpanded && (view === "learn" || view === "review") && (
+        <button onClick={() => setCardViewMode((m) => (m === "card" ? "list" : "card"))} style={{ width: 42, height: 42, borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }} title="สลับมุมมอง">
+          {cardViewMode === "card" ? <List size={17} color={t.sub} /> : <LayoutGrid size={17} color={t.sub} />}
+        </button>
+      )}
+      {!searchExpanded && (
+        <button onClick={() => setSettingsOpen(true)} style={{ width: 42, height: 42, borderRadius: 12, border: `1px solid ${t.border}`, background: t.inputBg, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }} title="ตั้งค่า">
+          <Settings size={17} color={t.sub} />
+        </button>
+      )}
     </div>
-
-    {view === "review" && (
-      <VocabSearchSortBar t={t} search={manageSearch} setSearch={setManageSearch} sort={manageSort} setSort={setManageSort} level={level} setLevel={setLevel} />
-    )}
 
     {view === "review" && reviewOnlyPool.length > 0 && (
       <button onClick={() => setRecallOpen(true)} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "13px 0", marginBottom: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14 }}>
@@ -14909,8 +14955,6 @@ function LangPage({ t, lang, userId, session, authProfile, scrollToTop }) {
     )}
 
     {!loading && view === "manage" && (<>
-      <button onClick={() => { setEditing(null); setAddOpen(true); }} style={{ ...card(t), width: "100%", padding: "10px 0", marginBottom: 12, border: `1px solid ${t.border}`, color: t.sub, fontWeight: 700, fontSize: 12.5, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Plus size={14} /> เพิ่ม{noun}เองทีละอัน</button>
-      <VocabSearchSortBar t={t} search={manageSearch} setSearch={setManageSearch} sort={manageSort} setSort={setManageSort} level={level} setLevel={setLevel} />
       {topicWords.length === 0 && <Empty t={t} text={`หมวดนี้ยังไม่มี${noun} — ลองกด ✨ AI เจนให้ ด้านบนดูก่อนได้เลย`} />}
       {isWord && topicWords.some((w) => /[\u0E00-\u0E7F]/.test(w.word)) && (
         <button onClick={() => askConfirm(`ลบ${noun}ที่เพี้ยนทั้งหมดในหมวดนี้เลยไหม?`, async () => {
@@ -14974,8 +15018,9 @@ function LangPage({ t, lang, userId, session, authProfile, scrollToTop }) {
 
     {menuOpen && (
       <ModalPortal>
-        <div style={overlayHi} onClick={() => setMenuOpen(false)}>
-          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "75vh", overflowY: "auto" }}>
+        <style>{`@keyframes rh-drawer-in { from { transform: translateX(-100%); } to { transform: translateX(0); } }`}</style>
+        <div style={{ ...overlayHi, alignItems: "stretch", justifyContent: "flex-start" }} onClick={() => setMenuOpen(false)}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "80%", maxWidth: 300, height: "100%", background: t.page, padding: 20, overflowY: "auto", animation: "rh-drawer-in .25s ease-out" }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 2 }}>เลือกหมวด{noun}</div>
             <div style={{ fontSize: 11, color: t.sub, marginBottom: 14 }}>ยังไม่รู้จะเริ่มไหน? เริ่มที่ "ทั่วไป" ก่อนได้เลย เหมาะกับทุกคน</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -14996,6 +15041,33 @@ function LangPage({ t, lang, userId, session, authProfile, scrollToTop }) {
         </div>
       </ModalPortal>
     )}
+
+    {filterOpen && (
+      <ModalPortal>
+        <div style={overlayHi} onClick={() => setFilterOpen(false)}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>เรียง/กรอง</div>
+              <button onClick={() => setFilterOpen(false)} style={ghost}><X size={20} color={t.sub} /></button>
+            </div>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 8 }}>เรียงลำดับ</div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+              <button onClick={() => setManageSort(manageSort === "az" ? "default" : "az")} style={{ flex: 1, padding: "10px 0", borderRadius: 11, cursor: "pointer", fontWeight: 700, fontSize: 12.5, border: `1.5px solid ${manageSort === "az" ? t.accent : t.border}`, background: manageSort === "az" ? t.accent : "transparent", color: manageSort === "az" ? t.onAccent : t.sub }}>A → Z</button>
+              <button onClick={() => setManageSort(manageSort === "za" ? "default" : "za")} style={{ flex: 1, padding: "10px 0", borderRadius: 11, cursor: "pointer", fontWeight: 700, fontSize: 12.5, border: `1.5px solid ${manageSort === "za" ? t.accent : t.border}`, background: manageSort === "za" ? t.accent : "transparent", color: manageSort === "za" ? t.onAccent : t.sub }}>Z → A</button>
+            </div>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: t.sub, marginBottom: 8 }}>ระดับ (CEFR)</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+              <button onClick={() => setLevel("all")} style={{ padding: "8px 14px", borderRadius: 12, cursor: "pointer", fontSize: 12.5, fontWeight: 700, border: `1.5px solid ${level === "all" ? t.accent : t.border}`, background: level === "all" ? t.accent : "transparent", color: level === "all" ? t.onAccent : t.sub }}>ทุกระดับ</button>
+              {CEFR_LEVELS.map((lv) => (
+                <button key={lv} onClick={() => setLevel(lv)} style={{ padding: "8px 14px", borderRadius: 12, cursor: "pointer", fontSize: 12.5, fontWeight: 700, border: `1.5px solid ${level === lv ? t.accent : t.border}`, background: level === lv ? t.accent : "transparent", color: level === lv ? t.onAccent : t.sub }}>{lv}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </ModalPortal>
+    )}
+
+    {statsOpen && <VocabStatsModal t={t} streakDays={streakDays} xp={xp} badges={badges} close={() => setStatsOpen(false)} />}
 
     {addOpen && <VocabWordModal t={t} table={table} mode={contentType} topics={allTopics} initial={editing || { category: topic }} userId={userId} session={session} close={() => setAddOpen(false)} onSaved={onSaved} />}
     {genOpen && <VocabBatchGenModal t={t} table={table} mode={contentType} topics={allTopics} userId={userId} session={session} category={topic} level={level === "all" ? "mixed" : level} existingWords={topicWords.map((w) => w.word)} close={() => setGenOpen(false)} onSaved={onSavedBatch} />}
