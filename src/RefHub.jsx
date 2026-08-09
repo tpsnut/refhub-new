@@ -14442,6 +14442,26 @@ function AddTopicModal({ t, userId, limit, currentCount, close, onAdded }) {
   );
 }
 
+// 🔍 แถบค้นหา+เรียง+กรองระดับ ใช้ร่วมกันทั้งหน้าจัดการและหน้าทบทวนของ LangPage
+function VocabSearchSortBar({ t, search, setSearch, sort, setSort, level, setLevel }) {
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ position: "relative", marginBottom: 8 }}>
+        <Search size={14} color={t.faint} style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)" }} />
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="ค้นหาคำ/ประโยค..." style={{ ...input(t), paddingLeft: 32, fontSize: 13 }} />
+      </div>
+      <div style={{ display: "flex", gap: 6, overflowX: "auto" }}>
+        <button onClick={() => setSort(sort === "az" ? "default" : "az")} style={{ flexShrink: 0, padding: "6px 12px", borderRadius: 9, cursor: "pointer", border: `1.5px solid ${sort === "az" ? t.accent : t.border}`, background: sort === "az" ? t.accent : "transparent", color: sort === "az" ? t.onAccent : t.sub, fontWeight: 700, fontSize: 11 }}>เรียง A-Z {sort === "az" ? "↓" : ""}</button>
+        <button onClick={() => setSort(sort === "za" ? "default" : "za")} style={{ flexShrink: 0, padding: "6px 12px", borderRadius: 9, cursor: "pointer", border: `1.5px solid ${sort === "za" ? t.accent : t.border}`, background: sort === "za" ? t.accent : "transparent", color: sort === "za" ? t.onAccent : t.sub, fontWeight: 700, fontSize: 11 }}>เรียง Z-A {sort === "za" ? "↓" : ""}</button>
+        <div style={{ width: 1, background: t.border, flexShrink: 0 }} />
+        {CEFR_LEVELS.map((lv) => (
+          <button key={lv} onClick={() => setLevel(level === lv ? "all" : lv)} style={{ flexShrink: 0, padding: "6px 12px", borderRadius: 9, cursor: "pointer", border: `1.5px solid ${level === lv ? t.accent : t.border}`, background: level === lv ? t.accent : "transparent", color: level === lv ? t.onAccent : t.sub, fontWeight: 700, fontSize: 11 }}>{lv}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function LangPage({ t, lang, userId, session, authProfile, scrollToTop }) {
   const [askConfirm, ConfirmUI] = useConfirm(t);
   const [contentType, setContentType] = useState("word"); // "word" | "sentence" — สลับระหว่างคลังคำศัพท์กับคลังประโยค (คนละตารางกัน)
@@ -14682,12 +14702,24 @@ function LangPage({ t, lang, userId, session, authProfile, scrollToTop }) {
   const topicWords = words.filter((w) => (w.category || "general") === topic && (level === "all" || w.level === level));
   const wordCountByTopic = (id) => words.filter((w) => (w.category || "general") === id).length;
 
+  // 🔍 ค้นหา/เรียง — ใช้ร่วมกันทั้งหน้าจัดการและหน้าทบทวน
+  const [manageSearch, setManageSearch] = useState("");
+  const [manageSort, setManageSort] = useState("default"); // "default" | "az" | "za"
+  const applySearchSort = (list) => {
+    let out = list;
+    const q = manageSearch.trim().toLowerCase();
+    if (q) out = out.filter((w) => w.word?.toLowerCase().includes(q) || w.meaning?.toLowerCase().includes(q));
+    if (manageSort === "az") out = [...out].sort((a, b) => (a.word || "").localeCompare(b.word || ""));
+    else if (manageSort === "za") out = [...out].sort((a, b) => (b.word || "").localeCompare(a.word || ""));
+    return out;
+  };
+
   // 🎓🔁 แยกกองชัดเจน: "เรียนรู้" = คำที่ยังไม่จำ (สถานะ learning) ให้มาเรียนก่อน, "ทบทวน" = คำที่จำได้แล้ว (สถานะ known) เอาไว้ทบทวนซ้ำกันลืม
   const [reviewIdx, setReviewIdx] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const learnPool = topicWords.filter((w) => w.status !== "known");
   const reviewOnlyPool = topicWords.filter((w) => w.status === "known");
-  const activePool = view === "review" ? reviewOnlyPool : learnPool;
+  const activePool = view === "review" ? applySearchSort(reviewOnlyPool) : learnPool;
   const current = activePool.length ? activePool[reviewIdx % activePool.length] : null;
   const nextCard = () => { setReviewIdx((i) => i + 1); setFlipped(false); };
   useEffect(() => { setReviewIdx(0); setFlipped(false); scrollToTop?.(); }, [topic, level, contentType, view]);
@@ -14739,6 +14771,10 @@ function LangPage({ t, lang, userId, session, authProfile, scrollToTop }) {
         {cardViewMode === "card" ? <List size={17} color={t.sub} /> : <LayoutGrid size={17} color={t.sub} />}
       </button>
     </div>
+
+    {view === "review" && (
+      <VocabSearchSortBar t={t} search={manageSearch} setSearch={setManageSearch} sort={manageSort} setSort={setManageSort} level={level} setLevel={setLevel} />
+    )}
 
     {view === "review" && reviewOnlyPool.length > 0 && (
       <button onClick={() => setRecallOpen(true)} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "13px 0", marginBottom: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14 }}>
@@ -14874,6 +14910,7 @@ function LangPage({ t, lang, userId, session, authProfile, scrollToTop }) {
 
     {!loading && view === "manage" && (<>
       <button onClick={() => { setEditing(null); setAddOpen(true); }} style={{ ...card(t), width: "100%", padding: "10px 0", marginBottom: 12, border: `1px solid ${t.border}`, color: t.sub, fontWeight: 700, fontSize: 12.5, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Plus size={14} /> เพิ่ม{noun}เองทีละอัน</button>
+      <VocabSearchSortBar t={t} search={manageSearch} setSearch={setManageSearch} sort={manageSort} setSort={setManageSort} level={level} setLevel={setLevel} />
       {topicWords.length === 0 && <Empty t={t} text={`หมวดนี้ยังไม่มี${noun} — ลองกด ✨ AI เจนให้ ด้านบนดูก่อนได้เลย`} />}
       {isWord && topicWords.some((w) => /[\u0E00-\u0E7F]/.test(w.word)) && (
         <button onClick={() => askConfirm(`ลบ${noun}ที่เพี้ยนทั้งหมดในหมวดนี้เลยไหม?`, async () => {
@@ -14885,8 +14922,8 @@ function LangPage({ t, lang, userId, session, authProfile, scrollToTop }) {
         </button>
       )}
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {topicWords.map((w) => (
-          <div key={w.id} style={{ ...card(t), padding: 12 }}>
+        {applySearchSort(topicWords).map((w) => (
+          <button key={w.id} onClick={() => { setEditing(w); setAddOpen(true); }} style={{ ...card(t), width: "100%", padding: 12, cursor: "pointer", textAlign: "left" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 800, color: t.text, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
@@ -14904,13 +14941,14 @@ function LangPage({ t, lang, userId, session, authProfile, scrollToTop }) {
                 )}
               </div>
               <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
-                <button onClick={() => speak(w)} style={ghost}><Volume2 size={15} color={speakingId === w.id ? t.accent : t.faint} /></button>
-                <button onClick={() => { setEditing(w); setAddOpen(true); }} style={ghost}><Pencil size={15} color={t.faint} /></button>
-                <button onClick={() => askConfirm(`ลบ "${w.word}" เลยไหม?`, () => delWord(w))} style={ghost}><Trash2 size={15} color={t.faint} /></button>
+                <button onClick={(e) => { e.stopPropagation(); speak(w); }} style={ghost}><Volume2 size={15} color={speakingId === w.id ? t.accent : t.faint} /></button>
+                <button onClick={(e) => { e.stopPropagation(); setEditing(w); setAddOpen(true); }} style={ghost}><Pencil size={15} color={t.faint} /></button>
+                <button onClick={(e) => { e.stopPropagation(); askConfirm(`ลบ "${w.word}" เลยไหม?`, () => delWord(w)); }} style={ghost}><Trash2 size={15} color={t.faint} /></button>
               </div>
             </div>
-          </div>
+          </button>
         ))}
+        {applySearchSort(topicWords).length === 0 && topicWords.length > 0 && <Empty t={t} text="ไม่พบคำที่ค้นหา" />}
       </div>
     </>)}
 
@@ -15055,7 +15093,7 @@ function LangPage({ t, lang, userId, session, authProfile, scrollToTop }) {
     {writeOpen && <VocabWritingModal t={t} category={topic} level={level === "all" ? "A1" : level} topics={allTopics} userId={userId} session={session} close={() => setWriteOpen(false)} />}
 
     {/* 🔎 ดูรายละเอียดประวัติ + สอบซ้ำ */}
-    {historyDetail && <VocabHistoryDetailModal t={t} h={historyDetail} topics={allTopics} onRetry={() => startRetry(historyDetail)} retryLoading={retryLoading} close={() => setHistoryDetail(null)} />}
+    {historyDetail && <VocabHistoryDetailModal t={t} h={historyDetail} topics={allTopics} onRetry={() => startRetry(historyDetail)} retryLoading={retryLoading} onDelete={async (hh) => { await supabase.from("vocab_quiz_history").delete().eq("id", hh.id); setHistory((list) => list.filter((x) => x.id !== hh.id)); }} close={() => setHistoryDetail(null)} />}
     {retryPayload && retryPayload.skill !== "listening" && retryPayload.skill !== "listening_choice" && retryPayload.skill !== "speaking" && retryPayload.skill !== "recall" && (
       <VocabQuizModal t={t} mode={retryPayload.mode} category={retryPayload.category} level={retryPayload.level} pool={retryPayload.pool} allItems={retryPayload.allItems} userId={userId} retryPoolIds={retryPayload.poolIds} close={() => setRetryPayload(null)} onFinished={loadHistory} />
     )}
@@ -15075,7 +15113,8 @@ function LangPage({ t, lang, userId, session, authProfile, scrollToTop }) {
 }
 
 // 🔎 ดูรายละเอียดประวัติการสอบ — ข้อไหนถูก/ผิด + ปุ่มสอบชุดเดิมซ้ำ (ใช้ pool_ids ชุดเดิมเป๊ะๆ ไม่ใช่สุ่มใหม่)
-function VocabHistoryDetailModal({ t, h, topics, onRetry, retryLoading, close }) {
+function VocabHistoryDetailModal({ t, h, topics, onRetry, retryLoading, onDelete, close }) {
+  const [askConfirm, ConfirmUI] = useConfirm(t);
   const categoryLabel = topics.find((c) => c.id === h.category)?.label || h.category;
   const skillLabel = { listening: "🎧 ฟังแล้วพิมพ์ตาม", listening_choice: "☑️ ฟังแล้วเลือก", speaking: "🎤 พูดตาม", recall: "🔁 ทบทวน" }[h.skill] || "🧪 แบบทดสอบ";
   return (
@@ -15084,7 +15123,10 @@ function VocabHistoryDetailModal({ t, h, topics, onRetry, retryLoading, close })
         <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>{skillLabel}</div>
-            <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+            <div style={{ display: "flex", gap: 4 }}>
+              <button onClick={() => askConfirm("ลบประวัติรายการนี้เลยไหม?", () => { onDelete(h); close(); }, "ลบ")} style={ghost}><Trash2 size={18} color="#D9534F" /></button>
+              <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+            </div>
           </div>
           <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 14 }}>{categoryLabel} · {h.mode === "word" ? "คำศัพท์" : "ประโยค"} · {h.level} · {new Date(h.created_at).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" })}</div>
 
@@ -15112,6 +15154,7 @@ function VocabHistoryDetailModal({ t, h, topics, onRetry, retryLoading, close })
           )}
         </div>
       </div>
+      {ConfirmUI}
     </ModalPortal>
   );
 }
