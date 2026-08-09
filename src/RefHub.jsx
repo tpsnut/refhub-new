@@ -14109,6 +14109,7 @@ function VocabSpeakingModal({ t, mode, category, level, pool, userId, close, onF
               <div style={{ ...card(t), padding: 12, marginBottom: 14, border: `1px solid ${correct ? "#2E9E6B" : "#D9534F"}`, textAlign: "center" }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: correct ? "#2E9E6B" : "#D9534F", marginBottom: 4 }}>{correct ? "✓ ออกเสียงตรง!" : "✗ ยังไม่ตรงเป๊ะ"}</div>
                 <div style={{ fontSize: 11.5, color: t.faint }}>เครื่องได้ยิน: "{heard}"</div>
+                {!correct && <div style={{ fontSize: 11.5, color: t.text, fontWeight: 700, marginTop: 4 }}>ควรพูดว่า: "{q.word}"</div>}
               </div>
             )}
             {checked && <button onClick={next} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "12px 0" }}>{idx + 1 < questions.length ? "ข้อต่อไป →" : "ดูผลคะแนน"}</button>}
@@ -14292,7 +14293,8 @@ function VocabRecallModal({ t, mode, category, level, pool, userId, session, clo
               {checked && (
                 <div style={{ ...card(t), padding: 12, marginBottom: 14, border: `1px solid ${correct ? "#2E9E6B" : "#D9534F"}`, textAlign: "center" }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: correct ? "#2E9E6B" : "#D9534F" }}>{correct ? "✓ ถูกต้อง!" : "✗ ยังไม่ตรง"}</div>
-                  <div style={{ fontSize: 13, color: t.text, marginTop: 4 }}>{q.item.meaning}</div>
+                  {!correct && <div style={{ fontSize: 10.5, color: t.faint, marginTop: 6 }}>เฉลย</div>}
+                  <div style={{ fontSize: 13, color: t.text, marginTop: 2 }}>{q.item.meaning}</div>
                 </div>
               )}
             </>)}
@@ -14305,7 +14307,8 @@ function VocabRecallModal({ t, mode, category, level, pool, userId, session, clo
               {checked && (
                 <div style={{ ...card(t), padding: 12, marginBottom: 14, border: `1px solid ${correct ? "#2E9E6B" : "#D9534F"}`, textAlign: "center" }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: correct ? "#2E9E6B" : "#D9534F" }}>{correct ? "✓ ถูกต้อง!" : "✗ ยังไม่ตรง"}</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginTop: 4 }}>{q.item.word}</div>
+                  {!correct && <div style={{ fontSize: 10.5, color: t.faint, marginTop: 6 }}>เฉลย</div>}
+                  <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginTop: 2 }}>{q.item.word}</div>
                 </div>
               )}
             </>)}
@@ -14323,7 +14326,13 @@ function VocabRecallModal({ t, mode, category, level, pool, userId, session, clo
               {checked && (
                 <div style={{ ...card(t), padding: 12, marginBottom: 14, border: `1px solid ${correct ? "#2E9E6B" : "#D9534F"}`, textAlign: "center" }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: correct ? "#2E9E6B" : "#D9534F" }}>{correct ? "✓ ถูกต้อง!" : "✗ ยังไม่ตรง (ต้องออกเสียงตรง + แปลถูกด้วย)"}</div>
-                  <div style={{ fontSize: 13, color: t.text, marginTop: 4 }}>{q.item.meaning}</div>
+                  {!correct && (
+                    <div style={{ fontSize: 11, color: t.faint, marginTop: 8, textAlign: "left" }}>
+                      {!pronOk && <div>🎤 ควรออกเสียงว่า: <b style={{ color: t.text }}>{q.item.word}</b></div>}
+                      <div style={{ marginTop: pronOk ? 0 : 4 }}>🇹🇭 เฉลยคำแปล: <b style={{ color: t.text }}>{q.item.meaning}</b></div>
+                    </div>
+                  )}
+                  {correct && <div style={{ fontSize: 13, color: t.text, marginTop: 4 }}>{q.item.meaning}</div>}
                 </div>
               )}
             </>)}
