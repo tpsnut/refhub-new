@@ -22,12 +22,18 @@ if (/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream) {
   });
 }
 
-// 🐛 ตัวดักจับ error ชั่วคราว กันหน้าดำแบบเงียบๆ — เวลามี error ขึ้นจริงจะเด้ง alert โชว์ข้อความเลย ดีบักบนมือถือได้โดยไม่ต้องง้อ DevTools (เอาออกทีหลังเจอต้นตอครบแล้ว)
+// 🐛 ตัวดักจับ error ทั่วแอป — เปลี่ยนจาก alert() เป็น console.error แทน (alert เดิมเด้งใส่ผู้ใช้จริงทุกคนตอน error ใดๆก็ตามเกิดขึ้น
+// รวมถึง error ที่ไม่กระทบการทำงานจริง เช่นตอนวางสายเร็วระหว่างกำลังเปิดไมค์ ทำให้ดูเหมือนแอปพังทั้งที่ไม่ได้พัง)
+// เช็ค log ผ่าน remote debugging ได้ปกติ (chrome://inspect บน Android, Safari Web Inspector บน iOS) ไม่ต้องพึ่ง alert แล้ว
 window.addEventListener('error', (e) => {
-  alert('❌ JS Error:\n' + (e.error?.stack || e.message || String(e)));
+  console.error('JS Error:', e.error?.stack || e.message || String(e));
 });
 window.addEventListener('unhandledrejection', (e) => {
-  alert('❌ Unhandled Promise:\n' + (e.reason?.stack || e.reason?.message || String(e.reason)));
+  const msg = e.reason?.stack || e.reason?.message || String(e.reason);
+  // ข้าม error นี้ไปเงียบๆ — เป็นพฤติกรรมปกติภายในของ LiveKit ตอน publish ไมค์/กล้องค้างอยู่แล้วโดนยกเลิกกลางทาง
+  // (เช่นวางสายเร็วเกินไประหว่างกำลังขอสิทธิ์ไมค์) ไม่ใช่ error ที่กระทบการทำงานจริง
+  if (msg.includes('Cancelled publication by calling unpublish')) return;
+  console.error('Unhandled Promise:', msg);
 });
 
 createRoot(document.getElementById('root')).render(
