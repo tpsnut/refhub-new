@@ -2556,25 +2556,25 @@ function AuthLoadingScreen() {
   );
 }
 
-// ✨ โลโก้ Jomonbey — เปิดด้วย "JobMoney" ล็อกทีละตัว ค้างแว็ปเดียว แล้ว scramble เฉพาะช่วง "bMon" ให้กลายเป็น "monb" (จึงได้ "Jomonbey")
-// จากนั้น JMB สีทองเด้งขึ้นมาวูบวาบ ค้าง 3 วิ -> J/M/B บินไปหา J,m,b ทีละตัว กระทบแฟลชสว่างวาบแล้วฝังเป็นสีทอง จนกรอบ JMB ยุบหมด กดที่คำเพื่อเล่นซ้ำได้
-function JomonbeyMark({ width = 220, animated = false, showSub = true }) {
-  const INITIAL = "JobMoney"; // จุดตั้งต้นของชื่อ — J-o-b-Money
-  const FINAL = "Jomonbey"; // ต่างกันแค่ตำแหน่ง 2-5 (bMon -> monb) ตำแหน่งอื่นเหมือนเดิมทุกตัว
-  const FLY_MAP = [0, 2, 5]; // ตำแหน่งตัว J / m / b ใน "Jomonbey" ที่ J,M,B ด้านล่างจะบินไปหา
+// ✨ โลโก้ Jomonbey — ไอคอนแอป (ไม่มีเหรียญ) อยู่บนสุด, เส้นคั่นมีเหรียญเล็กวิ่งไป-กลับตลอดเวลา, คำว่า "Jomonbey" ตัวเล็กสีขาวนั่งอยู่บนเส้น
+// ✨ โลโก้ Jomonbey — เฟส 1: "Jomonbey" ตัวใหญ่กลางจอ (เปิดด้วย "JobMoney" ล็อกเร็วๆ ค้างแว็ปเดียว scramble "bMon"->"monb" แสงกวาด ทาทอง J,m,b)
+// เฟส 2: ตัวใหญ่หด+จางหายไป พร้อมไอคอนแอป(ไม่มีเหรียญ)โผล่ขึ้นมาแทนที่ด้านบน + คำเดิมย่อลงมานั่งบนเส้นคั่น
+// เฟส 3: เหรียญเล็กหล่นออกจากตัว M ไหลลื่นซ้าย->ขวาบนเส้น ตกขอบแล้วจางหาย วนตลอด จนสุดท้ายเหรียญใหญ่ตกจากบนฟ้าลงมาเติมเต็ม M บนไอคอน กดที่คำเพื่อเล่นซ้ำทั้งหมด
+function JomonbeyMark({ width = 220, animated = false }) {
+  const INITIAL = "JobMoney";
+  const FINAL = "Jomonbey";
   const GLYPHS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
   const [revealed, setRevealed] = useState(animated ? 0 : INITIAL.length);
   const [, setTick] = useState(0); // แค่บังคับ re-render ให้ตัวที่กำลังสุ่มเปลี่ยนตัวอักษรใหม่ทุกครั้ง ไม่ได้ใช้ค่าจริง
-  const [morphing, setMorphing] = useState(false); // ช่วง bMon กำลังสุ่มก่อนล็อกเป็น monb
-  const [morphed, setMorphed] = useState(!animated); // ล็อกเป็น monb แล้วหรือยัง
-  const [subVisible, setSubVisible] = useState(!animated);
-  const [flown, setFlown] = useState([false, false, false]);
-  const [goldIdx, setGoldIdx] = useState([]);
-  const [impactIdx, setImpactIdx] = useState(null);
-  const [subCollapsed, setSubCollapsed] = useState(false);
+  const [morphing, setMorphing] = useState(false);
+  const [morphed, setMorphed] = useState(!animated);
+  const [shineOn, setShineOn] = useState(false);
+  const [goldIdx, setGoldIdx] = useState(animated ? [] : [0, 2, 5]);
+  const [stage, setStage] = useState(animated ? "intro" : "main"); // intro (ตัวใหญ่กลางจอ) -> out (กำลังเปลี่ยนผ่าน) -> main (ไอคอน+เส้น)
+  const [coinPhase, setCoinPhase] = useState(animated ? "hidden" : "landed"); // hidden -> flying -> landed (เหรียญใหญ่ตอนจบ)
   const [playId, setPlayId] = useState(0);
-  const titleRefs = useRef([]);
-  const subRefs = useRef([]);
+
+  const iconSize = Math.round(width * 0.42);
 
   useEffect(() => {
     const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -2582,55 +2582,44 @@ function JomonbeyMark({ width = 220, animated = false, showSub = true }) {
     const T = (fn, ms) => { const id = setTimeout(fn, ms); timers.push(id); return id; };
 
     setRevealed(animated ? 0 : INITIAL.length);
-    setMorphing(false);
-    setMorphed(!animated);
-    setSubVisible(!animated);
-    setFlown([false, false, false]);
-    setGoldIdx([]);
-    setImpactIdx(null);
-    setSubCollapsed(false);
-    subRefs.current.forEach((el) => { if (el) { el.style.transition = "none"; el.style.transform = "none"; } });
+    setMorphing(false); setMorphed(!animated); setShineOn(false);
+    setGoldIdx(animated ? [] : [0, 2, 5]);
+    setStage(animated ? "intro" : "main");
+    setCoinPhase(animated ? "hidden" : "landed");
 
-    if (!animated || reducedMotion || !showSub) return () => timers.forEach(clearTimeout);
+    if (!animated || reducedMotion) return () => timers.forEach(clearTimeout);
 
     const scrambleTick = setInterval(() => setTick((t) => t + 1), 55);
     let i = 0;
     function revealNext() {
       i += 1; setRevealed(i);
       if (i < INITIAL.length) T(revealNext, 90);
-      else T(startMorph, 120); // โชว์ "JobMoney" แว็ปเดียวจริงๆก่อนเริ่มสลับ
+      else T(startMorph, 120); // ค้างโชว์ "JobMoney" แว็ปเดียวจริงๆ
     }
     function startMorph() { setMorphing(true); T(finishMorph, 260); }
     function finishMorph() {
       clearInterval(scrambleTick);
-      setMorphing(false);
-      setMorphed(true);
-      T(startSubtitle, 380);
+      setMorphing(false); setMorphed(true);
+      T(startShine, 220);
     }
-    function startSubtitle() { setSubVisible(true); T(startFlying, 3000); }
-    function flyLetter(k) {
-      const subEl = subRefs.current[k], targetEl = titleRefs.current[FLY_MAP[k]];
-      if (subEl && targetEl) {
-        const a = subEl.getBoundingClientRect(), b = targetEl.getBoundingClientRect();
-        const dx = (b.left + b.width / 2) - (a.left + a.width / 2);
-        const dy = (b.top + b.height / 2) - (a.top + a.height / 2);
-        subEl.style.transition = "transform .5s cubic-bezier(.3,.6,.25,1)";
-        subEl.style.transform = `translate(${dx}px, ${dy}px) scale(.6)`;
-      }
-      T(() => {
-        setFlown((f) => { const n = [...f]; n[k] = true; return n; });
-        setGoldIdx((g) => [...g, FLY_MAP[k]]);
-        setImpactIdx(FLY_MAP[k]); // 💥 แฟลชกระทบตอนตัวอักษรถึงเป้าหมายพอดี
-        T(() => setImpactIdx((cur) => (cur === FLY_MAP[k] ? null : cur)), 460);
-        if (k < 2) T(() => flyLetter(k + 1), 220);
-        else T(() => setSubCollapsed(true), 200);
-      }, 480);
+    function startShine() {
+      setShineOn(true);
+      T(() => setGoldIdx([0, 2, 5]), 500);
+      T(startTransition, 900); // ค้างให้เห็นสีทองตัวใหญ่แป๊บนึงก่อนหดเป็นไอคอน
     }
-    function startFlying() { flyLetter(0); }
+    function startTransition() {
+      setStage("out"); // ตัวใหญ่เริ่มหด+จาง พร้อมไอคอนเริ่มโผล่ (คุมจังหวะด้วย CSS transition)
+      T(() => setStage("main"), 520);
+      T(startCoin, 520 + 2400); // พอเข้าเฟส main แล้ว ค้างไว้ให้เห็นเหรียญไหลบนเส้นสักพักก่อนเหรียญใหญ่จะตก
+    }
+    function startCoin() {
+      setCoinPhase("flying");
+      T(() => setCoinPhase("landed"), 900);
+    }
 
     T(revealNext, 150);
     return () => { timers.forEach(clearTimeout); clearInterval(scrambleTick); };
-  }, [animated, showSub, playId]);
+  }, [animated, playId]);
 
   const randGlyph = () => GLYPHS[Math.floor(Math.random() * GLYPHS.length)];
   const letterAt = (idx) => {
@@ -2638,36 +2627,50 @@ function JomonbeyMark({ width = 220, animated = false, showSub = true }) {
     if (idx >= 2 && idx <= 5) { if (morphing) return randGlyph(); return morphed ? FINAL[idx] : INITIAL[idx]; }
     return INITIAL[idx];
   };
-  const subH = width * 0.075 * 1.7;
+  const renderLetters = () => INITIAL.split("").map((_, idx) => (
+    <span key={idx} style={{ color: goldIdx.includes(idx) ? "#C29E58" : "#fff", opacity: idx < revealed ? 1 : 0.5, transition: "opacity .12s, color .3s ease" }}>{letterAt(idx)}</span>
+  ));
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: Math.round(width * 0.05) }}>
+    <div onClick={() => animated && setPlayId((p) => p + 1)} style={{ display: "flex", flexDirection: "column", alignItems: "center", cursor: animated ? "pointer" : "default" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@700;800&display=swap');
-        @keyframes jmb-impact { 0% { text-shadow: 0 0 0 rgba(255,255,255,0); transform: scale(1); } 35% { text-shadow: 0 0 18px rgba(255,255,255,.95), 0 0 32px rgba(194,158,88,.85); transform: scale(1.32); } 100% { text-shadow: 0 0 0 rgba(255,255,255,0); transform: scale(1); } }
-        @keyframes jmb-flicker { 0%,100% { transform: translateY(0); opacity: 1; } 28% { transform: translateY(-8px); opacity: .82; } 52% { transform: translateY(2px); opacity: 1; } 74% { transform: translateY(-4px); opacity: .9; } }
+        @keyframes jmb-coin-roll { 0% { left: 34%; opacity: 0; transform: translateY(-50%) scale(.4) rotate(0deg); } 8% { opacity: 1; transform: translateY(-50%) scale(1) rotate(70deg); } 82% { left: 89%; opacity: 1; transform: translateY(-50%) scale(1) rotate(520deg); } 100% { left: 94%; opacity: 0; transform: translateY(-50%) scale(.6) rotate(580deg); } }
+        @keyframes jmb-coin-drop { 0% { transform: translate(-46px,-42px) rotate(0deg) scale(.65); opacity: 0; } 14% { opacity: 1; } 62% { transform: translate(6px,-9px) rotate(380deg) scale(1.08); } 100% { transform: translate(0,0) rotate(560deg) scale(1); } }
+        @keyframes jmb-impact { 0% { box-shadow: 0 0 0 rgba(255,255,255,0); } 35% { box-shadow: 0 0 20px 6px rgba(255,255,255,.85); } 100% { box-shadow: 0 0 0 rgba(255,255,255,0); } }
+        @keyframes jmb-shine { from { left: -60%; } to { left: 130%; } }
       `}</style>
-      <div
-        onClick={() => animated && setPlayId((p) => p + 1)}
-        style={{ fontFamily: "'Poppins','IBM Plex Sans Thai',sans-serif", fontWeight: 800, fontSize: width * 0.19, letterSpacing: -0.5, lineHeight: 1, whiteSpace: "nowrap", cursor: animated ? "pointer" : "default" }}
-      >
-        {INITIAL.split("").map((_, idx) => (
-          <span key={idx} ref={(el) => (titleRefs.current[idx] = el)} style={{
-            display: "inline-block", transformOrigin: "center", color: goldIdx.includes(idx) ? "#C29E58" : "#fff",
-            opacity: idx < revealed ? 1 : 0.5, transition: "opacity .12s, color .3s ease",
-            animation: idx === impactIdx ? "jmb-impact .46s ease" : "none",
-          }}>{letterAt(idx)}</span>
-        ))}
-      </div>
-      {showSub && (
-        <div style={{ display: "flex", gap: width * 0.02, height: subCollapsed ? 0 : subH, overflow: "hidden", opacity: subCollapsed ? 0 : (subVisible ? 1 : 0), transition: "opacity .4s ease, height .4s ease" }}>
-          {["J", "M", "B"].map((ch, k) => (
-            <span key={k} ref={(el) => (subRefs.current[k] = el)} style={{
-              fontFamily: "'Poppins','IBM Plex Sans Thai',sans-serif", fontWeight: 700, fontSize: width * 0.075, letterSpacing: 2, color: "#C29E58",
-              opacity: flown[k] ? 0 : 1, transition: "opacity .18s ease",
-              animation: subVisible && !flown[k] && !subCollapsed ? "jmb-flicker 1.1s ease-in-out infinite" : "none",
-            }}>{ch}</span>
-          ))}
+
+      {/* เฟส 1/2: ตัวใหญ่กลางจอ — โชว์เฉพาะตอน intro/out แล้วหด+จางหายตอนเข้า out */}
+      {stage !== "main" && (
+        <div style={{
+          fontFamily: "'Poppins','IBM Plex Sans Thai',sans-serif", fontWeight: 800, fontSize: width * 0.19, letterSpacing: -0.5, lineHeight: 1, whiteSpace: "nowrap",
+          transition: "opacity .5s ease, transform .5s cubic-bezier(.4,0,.2,1)",
+          opacity: stage === "out" ? 0 : 1, transform: stage === "out" ? `scale(${(width * 0.078) / (width * 0.19)}) translateY(${iconSize * 0.9}px)` : "scale(1) translateY(0)",
+        }}>{renderLetters()}</div>
+      )}
+
+      {/* เฟส 3: ไอคอน + เส้นคั่น + คำตัวเล็ก — โผล่ขึ้นมาตอน out/main */}
+      {stage !== "intro" && (
+        <div style={{ transition: "opacity .5s ease, transform .5s cubic-bezier(.4,0,.2,1)", opacity: stage === "out" ? 0 : 1, transform: stage === "out" ? "scale(.85)" : "scale(1)" }}>
+          <div style={{ position: "relative", width: iconSize, height: iconSize, margin: "0 auto" }}>
+            <img src={coinPhase === "landed" ? "/icons/icon-192.png" : "/icons/icon-nocoin-192.png"} width={iconSize} height={iconSize} style={{ display: "block", borderRadius: iconSize * 0.22 }} alt="Jomonbey" />
+            {coinPhase === "flying" && (
+              <div style={{ position: "absolute", left: "48.5%", top: "21%", width: iconSize * 0.13, height: iconSize * 0.13, marginLeft: -(iconSize * 0.065), marginTop: -(iconSize * 0.065), borderRadius: "50%", background: "radial-gradient(circle at 35% 30%, #F4DFA6, #C29E58 60%, #8a6b34)", animation: "jmb-coin-drop .9s cubic-bezier(.35,.05,.25,1) forwards" }} />
+            )}
+            {coinPhase === "landed" && (
+              <div key={playId} style={{ position: "absolute", left: "48.5%", top: "21%", width: iconSize * 0.16, height: iconSize * 0.16, marginLeft: -(iconSize * 0.08), marginTop: -(iconSize * 0.08), borderRadius: "50%", pointerEvents: "none", animation: animated ? "jmb-impact .5s ease" : "none" }} />
+            )}
+          </div>
+
+          <div style={{ position: "relative", width: "100%", maxWidth: width, display: "flex", justifyContent: "center", alignItems: "center", height: Math.max(18, width * 0.045), marginTop: Math.round(width * 0.045) }}>
+            <div style={{ position: "absolute", left: "10%", right: "10%", top: "50%", height: 1, background: "linear-gradient(90deg, transparent, rgba(194,158,88,.4), transparent)" }} />
+            {stage === "main" && <div style={{ position: "absolute", top: "50%", width: 7, height: 7, borderRadius: "50%", background: "#E4C583", boxShadow: "0 0 6px rgba(228,197,131,.8)", animation: "jmb-coin-roll 2.6s linear infinite" }} />}
+            <div style={{ position: "relative", background: "#0B0A08", padding: "0 9px", fontFamily: "'Poppins','IBM Plex Sans Thai',sans-serif", fontWeight: 700, fontSize: width * 0.078, letterSpacing: -.2, lineHeight: 1, whiteSpace: "nowrap", overflow: "hidden" }}>
+              {renderLetters()}
+              {shineOn && stage !== "main" && <div style={{ position: "absolute", top: 0, left: "-60%", width: "45%", height: "100%", background: "linear-gradient(100deg, transparent, rgba(255,255,255,.8), transparent)", mixBlendMode: "overlay", animation: "jmb-shine .9s ease forwards" }} />}
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -2834,31 +2837,31 @@ function AuthPage() {
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}><JomonbeyMark width={250} animated /></div>
         <div style={{ height: 1, background: "linear-gradient(90deg, transparent, rgba(194,158,88,.4), transparent)", marginBottom: 32 }} />
 
-        <div style={{ position: "relative", border: "1px solid rgba(194,158,88,.16)", borderRadius: 4, padding: "30px 26px 26px", background: "linear-gradient(180deg, rgba(194,158,88,.045), transparent 45%)" }}>
-          <div style={{ position: "absolute", top: -1, left: "14%", right: "14%", height: 2, background: "linear-gradient(90deg, transparent, #C29E58, transparent)" }} />
+        <div style={{ position: "relative", border: "1px solid rgba(194,158,88,.09)", borderRadius: 4, padding: "32px 26px 26px", background: "linear-gradient(180deg, rgba(194,158,88,.045), transparent 45%)" }}>
+          <div style={{ position: "absolute", top: -1, left: "14%", right: "14%", height: 1, background: "linear-gradient(90deg, transparent, #C29E58, transparent)" }} />
 
           <div style={{ display: "flex", gap: 26, marginBottom: 24, borderBottom: "1px solid rgba(255,255,255,.06)" }}>
-            <button onClick={() => setMode("login")} style={{ background: "none", border: "none", cursor: "pointer", padding: "0 0 12px", fontSize: 12, fontWeight: 700, letterSpacing: 1.4, textTransform: "uppercase", color: mode === "login" ? "#C29E58" : "#6B655F", borderBottom: mode === "login" ? "2px solid #C29E58" : "2px solid transparent", marginBottom: -1 }}>เข้าสู่ระบบ</button>
-            <button onClick={() => setMode("signup")} style={{ background: "none", border: "none", cursor: "pointer", padding: "0 0 12px", fontSize: 12, fontWeight: 700, letterSpacing: 1.4, textTransform: "uppercase", color: mode === "signup" ? "#C29E58" : "#6B655F", borderBottom: mode === "signup" ? "2px solid #C29E58" : "2px solid transparent", marginBottom: -1 }}>สมัครสมาชิก</button>
+            <button onClick={() => setMode("login")} style={{ background: "none", border: "none", cursor: "pointer", padding: "0 0 12px", fontSize: 13.5, fontWeight: 700, letterSpacing: 1.2, textTransform: "uppercase", color: mode === "login" ? "#C29E58" : "#6B655F", borderBottom: mode === "login" ? "2px solid #C29E58" : "2px solid transparent", marginBottom: -1 }}>เข้าสู่ระบบ</button>
+            <button onClick={() => setMode("signup")} style={{ background: "none", border: "none", cursor: "pointer", padding: "0 0 12px", fontSize: 13.5, fontWeight: 700, letterSpacing: 1.2, textTransform: "uppercase", color: mode === "signup" ? "#C29E58" : "#6B655F", borderBottom: mode === "signup" ? "2px solid #C29E58" : "2px solid transparent", marginBottom: -1 }}>สมัครสมาชิก</button>
           </div>
 
           {mode === "login" && (
             <div style={{ display: "flex", gap: 16, marginBottom: 20 }}>
-              <button onClick={() => setLoginWith("email")} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 600, letterSpacing: .3, color: loginWith === "email" ? "#E4C583" : "#6B655F" }}>ด้วยอีเมล</button>
+              <button onClick={() => setLoginWith("email")} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, letterSpacing: .2, color: loginWith === "email" ? "#E4C583" : "#6B655F" }}>ด้วยอีเมล</button>
               <span style={{ color: "#3A362F", fontSize: 11 }}>·</span>
-              <button onClick={() => setLoginWith("pin")} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 600, letterSpacing: .3, color: loginWith === "pin" ? "#E4C583" : "#6B655F" }}>ด้วยชื่อ + PIN</button>
+              <button onClick={() => setLoginWith("pin")} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, letterSpacing: .2, color: loginWith === "pin" ? "#E4C583" : "#6B655F" }}>ด้วยชื่อ + PIN</button>
             </div>
           )}
 
           {mode === "login" && loginWith === "pin" ? (
             <>
               <div style={{ marginBottom: 18 }}>
-                <label style={{ display: "block", fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "#8B8175", marginBottom: 7 }}>ชื่อผู้ใช้</label>
-                <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="ที่แอดมินตั้งให้ เช่น mom" className="jmb-field" style={{ width: "100%", background: "transparent", border: "none", borderBottom: "1px solid rgba(194,158,88,.25)", borderRadius: 0, padding: "6px 2px 9px", fontSize: 14, outline: "none", color: "#F3EDE1", boxSizing: "border-box" }} />
+                <label style={{ display: "block", fontSize: 11, fontWeight: 700, letterSpacing: 1.3, textTransform: "uppercase", color: "#9A9184", marginBottom: 7 }}>ชื่อผู้ใช้</label>
+                <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="ที่แอดมินตั้งให้ เช่น mom" className="jmb-field" style={{ width: "100%", background: "transparent", border: "none", borderBottom: "1px solid rgba(194,158,88,.25)", borderRadius: 0, padding: "7px 2px 10px", fontSize: 15.5, outline: "none", color: "#F3EDE1", boxSizing: "border-box" }} />
               </div>
               <div style={{ marginBottom: 8 }}>
-                <label style={{ display: "block", fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "#8B8175", marginBottom: 7 }}>PIN</label>
-                <input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} type="password" inputMode="numeric" placeholder="4-6 หลัก" className="jmb-field" style={{ width: "100%", background: "transparent", border: "none", borderBottom: "1px solid rgba(194,158,88,.25)", borderRadius: 0, padding: "6px 2px 9px", fontSize: 14, outline: "none", letterSpacing: 3, color: "#F3EDE1", boxSizing: "border-box" }} />
+                <label style={{ display: "block", fontSize: 11, fontWeight: 700, letterSpacing: 1.3, textTransform: "uppercase", color: "#9A9184", marginBottom: 7 }}>PIN</label>
+                <input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} type="password" inputMode="numeric" placeholder="4-6 หลัก" className="jmb-field" style={{ width: "100%", background: "transparent", border: "none", borderBottom: "1px solid rgba(194,158,88,.25)", borderRadius: 0, padding: "7px 2px 10px", fontSize: 15.5, outline: "none", letterSpacing: 3, color: "#F3EDE1", boxSizing: "border-box" }} />
               </div>
               <div style={{ fontSize: 11, color: "#6B655F", marginBottom: 20 }}>ลืม PIN? ให้แอดมินในบ้านช่วยรีเซ็ตให้จากหน้าตั้งค่าได้เลย</div>
             </>
@@ -2866,31 +2869,31 @@ function AuthPage() {
             <>
               {mode === "signup" && (
                 <div style={{ marginBottom: 18 }}>
-                  <label style={{ display: "block", fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "#8B8175", marginBottom: 7 }}>ชื่อของคุณ</label>
-                  <input value={name} onChange={(e) => setName(e.target.value)} placeholder="ชื่อที่คนในบ้านจะเห็น" className="jmb-field" style={{ width: "100%", background: "transparent", border: "none", borderBottom: "1px solid rgba(194,158,88,.25)", borderRadius: 0, padding: "6px 2px 9px", fontSize: 14, outline: "none", color: "#F3EDE1", boxSizing: "border-box" }} />
+                  <label style={{ display: "block", fontSize: 11, fontWeight: 700, letterSpacing: 1.3, textTransform: "uppercase", color: "#9A9184", marginBottom: 7 }}>ชื่อของคุณ</label>
+                  <input value={name} onChange={(e) => setName(e.target.value)} placeholder="ชื่อที่คนในบ้านจะเห็น" className="jmb-field" style={{ width: "100%", background: "transparent", border: "none", borderBottom: "1px solid rgba(194,158,88,.25)", borderRadius: 0, padding: "7px 2px 10px", fontSize: 15.5, outline: "none", color: "#F3EDE1", boxSizing: "border-box" }} />
                 </div>
               )}
 
               <div style={{ marginBottom: 18 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 7 }}>
-                  <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "#8B8175" }}>อีเมล</label>
-                  {email && <span style={{ fontSize: 10.5, color: emailOk ? "#4CBE8D" : "#E8685A" }}>{emailOk ? "✓ ถูกต้อง" : "รูปแบบผิด"}</span>}
+                  <label style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.3, textTransform: "uppercase", color: "#9A9184" }}>อีเมล</label>
+                  {email && <span style={{ fontSize: 11.5, color: emailOk ? "#4CBE8D" : "#E8685A" }}>{emailOk ? "✓ ถูกต้อง" : "รูปแบบผิด"}</span>}
                 </div>
-                <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@email.com" className="jmb-field" style={{ width: "100%", background: "transparent", border: "none", borderBottom: `1px solid ${email && !emailOk ? "#E8685A" : "rgba(194,158,88,.25)"}`, borderRadius: 0, padding: "6px 2px 9px", fontSize: 14, outline: "none", color: "#F3EDE1", boxSizing: "border-box" }} />
+                <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@email.com" className="jmb-field" style={{ width: "100%", background: "transparent", border: "none", borderBottom: `1px solid ${email && !emailOk ? "#E8685A" : "rgba(194,158,88,.25)"}`, borderRadius: 0, padding: "7px 2px 10px", fontSize: 15.5, outline: "none", color: "#F3EDE1", boxSizing: "border-box" }} />
               </div>
 
               <div style={{ marginBottom: 8 }}>
-                <label style={{ display: "block", fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "#8B8175", marginBottom: 7 }}>รหัสผ่าน</label>
-                <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="อย่างน้อย 6 ตัว" className="jmb-field" style={{ width: "100%", background: "transparent", border: "none", borderBottom: "1px solid rgba(194,158,88,.25)", borderRadius: 0, padding: "6px 2px 9px", fontSize: 14, outline: "none", color: "#F3EDE1", boxSizing: "border-box" }} />
+                <label style={{ display: "block", fontSize: 11, fontWeight: 700, letterSpacing: 1.3, textTransform: "uppercase", color: "#9A9184", marginBottom: 7 }}>รหัสผ่าน</label>
+                <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="อย่างน้อย 6 ตัว" className="jmb-field" style={{ width: "100%", background: "transparent", border: "none", borderBottom: "1px solid rgba(194,158,88,.25)", borderRadius: 0, padding: "7px 2px 10px", fontSize: 15.5, outline: "none", color: "#F3EDE1", boxSizing: "border-box" }} />
               </div>
 
               {mode === "login" && (
                 <div style={{ textAlign: "right", marginBottom: 12 }}>
-                  <button type="button" onClick={() => { setForgotOpen((v) => !v); setErr(""); setInfo(""); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: "#8C857C", fontWeight: 600, padding: 0 }}>ลืมรหัสผ่าน?</button>
+                  <button type="button" onClick={() => { setForgotOpen((v) => !v); setErr(""); setInfo(""); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12.5, color: "#9A9184", fontWeight: 600, padding: 0 }}>ลืมรหัสผ่าน?</button>
                 </div>
               )}
               {mode === "login" && forgotOpen && (
-                <div style={{ border: "1px solid rgba(194,158,88,.16)", borderRadius: 3, padding: 14, marginBottom: 16 }}>
+                <div style={{ border: "1px solid rgba(194,158,88,.10)", borderRadius: 3, padding: 14, marginBottom: 16 }}>
                   <div style={{ fontSize: 11.5, color: "#8C857C", marginBottom: 10, lineHeight: 1.5 }}>กรอกอีเมลด้านบนให้ถูกต้องก่อน แล้วกดปุ่มนี้ ระบบจะส่งลิงก์ตั้งรหัสผ่านใหม่ไปให้ทางอีเมล</div>
                   <button type="button" onClick={sendResetLink} disabled={forgotSending} style={{ width: "100%", padding: "9px 0", borderRadius: 3, border: "1px solid rgba(194,158,88,.4)", background: "none", color: "#E4C583", fontSize: 11.5, fontWeight: 700, letterSpacing: .8, cursor: forgotSending ? "default" : "pointer" }}>{forgotSending ? "กำลังส่ง..." : "ส่งลิงก์ตั้งรหัสผ่านใหม่"}</button>
                 </div>
@@ -2898,8 +2901,8 @@ function AuthPage() {
 
               {mode === "signup" && (
                 <div style={{ marginBottom: 22 }}>
-                  <label style={{ display: "block", fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "#8B8175", marginBottom: 7 }}>รหัสเชิญครอบครัว</label>
-                  <input value={familyCode} onChange={(e) => setFamilyCode(e.target.value)} placeholder="ถ้ามี" className="jmb-field" style={{ width: "100%", background: "transparent", border: "none", borderBottom: "1px solid rgba(194,158,88,.25)", borderRadius: 0, padding: "6px 2px 9px", fontSize: 14, outline: "none", color: "#F3EDE1", boxSizing: "border-box" }} />
+                  <label style={{ display: "block", fontSize: 11, fontWeight: 700, letterSpacing: 1.3, textTransform: "uppercase", color: "#9A9184", marginBottom: 7 }}>รหัสเชิญครอบครัว</label>
+                  <input value={familyCode} onChange={(e) => setFamilyCode(e.target.value)} placeholder="ถ้ามี" className="jmb-field" style={{ width: "100%", background: "transparent", border: "none", borderBottom: "1px solid rgba(194,158,88,.25)", borderRadius: 0, padding: "7px 2px 10px", fontSize: 15.5, outline: "none", color: "#F3EDE1", boxSizing: "border-box" }} />
                 </div>
               )}
             </>
@@ -2915,7 +2918,7 @@ function AuthPage() {
             </div>
           )}
 
-          <button onClick={submit} disabled={loading || (needsCaptcha && !captchaToken)} style={{ width: "100%", background: loading || (needsCaptcha && !captchaToken) ? "#3A2F22" : "linear-gradient(135deg, #E4C583, #B98B3E)", border: "none", borderRadius: 3, padding: "14px 0", fontSize: 12.5, fontWeight: 800, letterSpacing: 1.6, textTransform: "uppercase", color: "#141210", cursor: loading ? "default" : "pointer", marginTop: 8, boxShadow: loading || (needsCaptcha && !captchaToken) ? "none" : "0 4px 22px rgba(194,158,88,.22)" }}>
+          <button onClick={submit} disabled={loading || (needsCaptcha && !captchaToken)} style={{ width: "100%", background: loading || (needsCaptcha && !captchaToken) ? "#3A2F22" : "linear-gradient(135deg, #E4C583, #B98B3E)", border: "none", borderRadius: 3, padding: "14px 0", fontSize: 14, fontWeight: 800, letterSpacing: 1.4, textTransform: "uppercase", color: "#141210", cursor: loading ? "default" : "pointer", marginTop: 8, boxShadow: loading || (needsCaptcha && !captchaToken) ? "none" : "0 4px 22px rgba(194,158,88,.22)" }}>
             {loading ? "กำลังดำเนินการ..." : mode === "login" ? "เข้าสู่ระบบ" : "สมัครสมาชิก"}
           </button>
         </div>
