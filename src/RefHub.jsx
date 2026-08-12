@@ -2551,7 +2551,52 @@ function AuthLoadingScreen() {
   return (
     <div style={{ minHeight: "100dvh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#0D0C0B", gap: 22 }}>
       <style>{`@keyframes rh-pulse { 0%,100% { transform: scale(1); opacity:1; } 50% { transform: scale(1.05); opacity:.85; } }`}</style>
-      <div style={{ animation: "rh-pulse 1.6s ease-in-out infinite" }}><PKnowLockup width={180} gap={8} animated cycle /></div>
+      <div style={{ animation: "rh-pulse 1.6s ease-in-out infinite" }}><JomonbeyMark width={200} animated /></div>
+    </div>
+  );
+}
+
+// ✨ โลโก้ Jomonbey ใหม่ — ตัวอักษรค่อยๆ "ล็อก" เข้าที่ทีละตัวจากซ้ายไปขวา (ตัวที่ยังไม่ล็อกจะสุ่มเปลี่ยนตัวอักษรไปเรื่อยๆ ดูเหมือนกำลังถอดรหัส)
+// ผลคือ "Jo" นิ่งก่อน ตัวกลางยังดูสุ่มๆอยู่ระหว่างล็อกเป็น "mon" ตามด้วย "ey" แล้ว "b" (ตัวสุดท้าย) โผล่ปิดท้ายเป็น "Jomonbey" โดยธรรมชาติจากลำดับซ้าย->ขวา
+// ต่อด้วย "JMB" สีทองด้านล่าง ค่อยๆสว่างขึ้นมาพร้อมแสงเรือง (glow) หลังคำหลักล็อกครบ
+function JomonbeyMark({ width = 220, animated = false, showSub = true }) {
+  const WORD = "Jomonbey";
+  const GLYPHS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+  const [revealed, setRevealed] = useState(animated ? 0 : WORD.length);
+  const [, setTick] = useState(0); // แค่ใช้บังคับ re-render ให้ตัวที่ยังไม่ล็อกสุ่มตัวอักษรใหม่ทุกครั้ง ไม่ได้ใช้ค่าจริง
+  const [subVisible, setSubVisible] = useState(!animated);
+
+  useEffect(() => {
+    const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (!animated || reducedMotion) { setRevealed(WORD.length); setSubVisible(true); return; }
+    let revealTimer, subTimer;
+    let i = 0;
+    const scrambleTimer = setInterval(() => setTick((t) => t + 1), 45);
+    const revealNext = () => {
+      i += 1; setRevealed(i);
+      if (i < WORD.length) { revealTimer = setTimeout(revealNext, 130); }
+      else { clearInterval(scrambleTimer); subTimer = setTimeout(() => setSubVisible(true), 260); }
+    };
+    revealTimer = setTimeout(revealNext, 280);
+    return () => { clearTimeout(revealTimer); clearInterval(scrambleTimer); clearTimeout(subTimer); };
+  }, [animated]);
+
+  const randGlyph = () => GLYPHS[Math.floor(Math.random() * GLYPHS.length)];
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: Math.round(width * 0.05) }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@700;800&display=swap');`}</style>
+      <div style={{ fontFamily: "'Poppins','IBM Plex Sans Thai',sans-serif", fontWeight: 800, fontSize: width * 0.19, letterSpacing: -0.5, color: "#fff", lineHeight: 1, whiteSpace: "nowrap" }}>
+        {WORD.split("").map((ch, idx) => (
+          <span key={idx} style={{ opacity: idx < revealed ? 1 : 0.5, transition: "opacity .12s" }}>{idx < revealed ? ch : randGlyph()}</span>
+        ))}
+      </div>
+      {showSub && (
+        <div style={{
+          fontFamily: "'Poppins','IBM Plex Sans Thai',sans-serif", fontWeight: 700, fontSize: width * 0.075, letterSpacing: 4, color: "#C29E58",
+          opacity: subVisible ? 1 : 0, textShadow: subVisible ? "0 0 14px rgba(194,158,88,.55)" : "none", transition: "opacity .7s ease, text-shadow .7s ease",
+        }}>JMB</div>
+      )}
     </div>
   );
 }
@@ -2712,7 +2757,7 @@ function AuthPage() {
   return (
     <div style={{ minHeight: "100dvh", display: "flex", justifyContent: "center", background: "#0D0C0B", fontFamily: "'IBM Plex Sans Thai',sans-serif" }}>
       <div style={{ width: "100%", maxWidth: 440, padding: "64px 24px", display: "flex", flexDirection: "column" }}>
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: 40 }}><PKnowLockup width={230} cycle /></div>
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 40 }}><JomonbeyMark width={250} animated /></div>
 
         <div style={{ display: "flex", background: "#1C1A18", borderRadius: 14, padding: 4, marginBottom: 16, border: "1px solid rgba(255,255,255,0.07)" }}>
           <button onClick={() => setMode("login")} style={{ flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 11, border: "none", cursor: "pointer", background: mode === "login" ? "#F2872E" : "transparent", color: mode === "login" ? "#141414" : "#8C857C", fontWeight: 600, fontSize: 13.5 }}>เข้าสู่ระบบ</button>
@@ -2808,7 +2853,7 @@ function SetNewPasswordPage({ onDone }) {
   return (
     <div style={{ minHeight: "100dvh", display: "flex", justifyContent: "center", background: "#0D0C0B", fontFamily: "'IBM Plex Sans Thai',sans-serif" }}>
       <div style={{ width: "100%", maxWidth: 440, padding: "80px 24px", display: "flex", flexDirection: "column" }}>
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: 32 }}><PKnowLockup width={200} /></div>
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 32 }}><JomonbeyMark width={220} /></div>
         <div style={{ fontSize: 17, fontWeight: 800, color: "#F2EDE6", marginBottom: 6, textAlign: "center" }}>ตั้งรหัสผ่านใหม่</div>
         <div style={{ fontSize: 12.5, color: "#8C857C", marginBottom: 24, textAlign: "center", lineHeight: 1.6 }}>มาจากลิงก์ในอีเมล ตั้งรหัสผ่านใหม่ให้เรียบร้อยก่อนเข้าใช้งานต่อ</div>
         <input value={pw1} onChange={(e) => setPw1(e.target.value)} type="password" placeholder="รหัสผ่านใหม่ (อย่างน้อย 6 ตัว)" style={{ background: "#1C1A18", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, marginBottom: 10, outline: "none", color: "#F2EDE6" }} />
@@ -3514,7 +3559,7 @@ function PendingApprovalScreen({ profile, onLogout }) {
   return (
     <div style={{ minHeight: "100dvh", display: "flex", justifyContent: "center", background: "#0D0C0B", fontFamily: "'IBM Plex Sans Thai',sans-serif" }}>
       <div style={{ width: "100%", maxWidth: 440, padding: "80px 24px", textAlign: "center" }}>
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: 28 }}><PKnowLockup width={190} cycle /></div>
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 28 }}><JomonbeyMark width={210} animated /></div>
         <div style={{ fontSize: 16, fontWeight: 700, color: "#F2EDE6", marginBottom: 8 }}>รอแอดมินอนุมัติ</div>
         <div style={{ fontSize: 13, color: "#8C857C", lineHeight: 1.6, marginBottom: 4 }}>
           บัญชี {profile?.email ? <b style={{ color: "#C7C2BC" }}>{profile.email}</b> : "ของคุณ"} สมัครสำเร็จแล้ว<br />แต่ยังใช้งานแอปไม่ได้จนกว่าแอดมินจะกดอนุมัติ

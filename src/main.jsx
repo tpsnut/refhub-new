@@ -41,3 +41,12 @@ createRoot(document.getElementById('root')).render(
     <App />
   </StrictMode>,
 )
+
+// 📲 ลงทะเบียน Service Worker — จำเป็นสำหรับ 2 เรื่อง: (1) ให้ Chrome มองว่าเว็บนี้เป็น PWA ที่ "ติดตั้งแอปได้จริง"
+// (โชว์เมนู "ติดตั้งแอป" พร้อมไอคอนเต็มจาก manifest.json แทนที่จะเป็นแค่ favicon เล็กๆในกล่องขาว)
+// (2) รับ push notification ได้จริง (ไฟล์ sw.js มีโค้ดรับ push ไว้อยู่แล้ว แต่ไม่เคย register เลยตั้งแต่แรก)
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((e) => console.error('SW register failed:', e));
+  });
+}
