@@ -2556,46 +2556,96 @@ function AuthLoadingScreen() {
   );
 }
 
-// ✨ โลโก้ Jomonbey ใหม่ — ตัวอักษรค่อยๆ "ล็อก" เข้าที่ทีละตัวจากซ้ายไปขวา (ตัวที่ยังไม่ล็อกจะสุ่มเปลี่ยนตัวอักษรไปเรื่อยๆ ดูเหมือนกำลังถอดรหัส)
-// ผลคือ "Jo" นิ่งก่อน ตัวกลางยังดูสุ่มๆอยู่ระหว่างล็อกเป็น "mon" ตามด้วย "ey" แล้ว "b" (ตัวสุดท้าย) โผล่ปิดท้ายเป็น "Jomonbey" โดยธรรมชาติจากลำดับซ้าย->ขวา
-// ต่อด้วย "JMB" สีทองด้านล่าง ค่อยๆสว่างขึ้นมาพร้อมแสงเรือง (glow) หลังคำหลักล็อกครบ
+// ✨ โลโก้ Jomonbey — ล็อกตัวอักษรทีละตัว (ช้าๆอ่านออก) -> โชว์ JMB สีทองค้าง 3 วิ -> J/M/B บินขึ้นไปหาตัว J,m,b ในคำหลักทีละตัว
+// ทาสีทองให้ตัวหลักแล้วหายไป จนกรอบ JMB ด้านล่างยุบหมด กดที่คำว่า Jomonbey เพื่อเล่นซ้ำได้ตลอด
 function JomonbeyMark({ width = 220, animated = false, showSub = true }) {
   const WORD = "Jomonbey";
+  const FLY_MAP = [0, 2, 5]; // ตำแหน่งตัว J / m / b ใน "Jomonbey" ที่ J,M,B ด้านล่างจะบินไปหา
   const GLYPHS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
   const [revealed, setRevealed] = useState(animated ? 0 : WORD.length);
-  const [, setTick] = useState(0); // แค่ใช้บังคับ re-render ให้ตัวที่ยังไม่ล็อกสุ่มตัวอักษรใหม่ทุกครั้ง ไม่ได้ใช้ค่าจริง
+  const [, setTick] = useState(0); // แค่บังคับ re-render ให้ตัวที่ยังไม่ล็อกสุ่มตัวอักษรใหม่ทุกครั้ง ไม่ได้ใช้ค่าจริง
   const [subVisible, setSubVisible] = useState(!animated);
+  const [flown, setFlown] = useState([false, false, false]);
+  const [goldIdx, setGoldIdx] = useState([]);
+  const [subCollapsed, setSubCollapsed] = useState(false);
+  const [playId, setPlayId] = useState(0);
+  const titleRefs = useRef([]);
+  const subRefs = useRef([]);
 
   useEffect(() => {
     const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    if (!animated || reducedMotion) { setRevealed(WORD.length); setSubVisible(true); return; }
-    let revealTimer, subTimer;
+    const timers = [];
+    const T = (fn, ms) => { const id = setTimeout(fn, ms); timers.push(id); return id; };
+
+    // รีเซ็ตทุกอย่างก่อนเริ่มรอบใหม่ (ทั้งตอน mount ครั้งแรก และตอนกดเล่นซ้ำ)
+    setRevealed(animated ? 0 : WORD.length);
+    setSubVisible(!animated);
+    setFlown([false, false, false]);
+    setGoldIdx([]);
+    setSubCollapsed(false);
+    subRefs.current.forEach((el) => { if (el) { el.style.transition = "none"; el.style.transform = "none"; } });
+
+    if (!animated || reducedMotion || !showSub) return () => timers.forEach(clearTimeout);
+
+    const scrambleTick = setInterval(() => setTick((t) => t + 1), 70);
     let i = 0;
-    const scrambleTimer = setInterval(() => setTick((t) => t + 1), 45);
-    const revealNext = () => {
+    function revealNext() {
       i += 1; setRevealed(i);
-      if (i < WORD.length) { revealTimer = setTimeout(revealNext, 130); }
-      else { clearInterval(scrambleTimer); subTimer = setTimeout(() => setSubVisible(true), 260); }
-    };
-    revealTimer = setTimeout(revealNext, 280);
-    return () => { clearTimeout(revealTimer); clearInterval(scrambleTimer); clearTimeout(subTimer); };
-  }, [animated]);
+      if (i < WORD.length) T(revealNext, 260);
+      else T(startSubtitle, 450);
+    }
+    function startSubtitle() {
+      clearInterval(scrambleTick);
+      setSubVisible(true);
+      T(startFlying, 3000); // ค้างไว้ 3 วิ ตามที่ขอ
+    }
+    function flyLetter(k) {
+      const subEl = subRefs.current[k], targetEl = titleRefs.current[FLY_MAP[k]];
+      if (subEl && targetEl) {
+        const a = subEl.getBoundingClientRect(), b = targetEl.getBoundingClientRect();
+        const dx = (b.left + b.width / 2) - (a.left + a.width / 2);
+        const dy = (b.top + b.height / 2) - (a.top + a.height / 2);
+        subEl.style.transition = "transform .5s cubic-bezier(.3,.6,.25,1)";
+        subEl.style.transform = `translate(${dx}px, ${dy}px) scale(.6)`;
+      }
+      T(() => {
+        setFlown((f) => { const n = [...f]; n[k] = true; return n; });
+        setGoldIdx((g) => [...g, FLY_MAP[k]]);
+        if (k < 2) T(() => flyLetter(k + 1), 220);
+        else T(() => setSubCollapsed(true), 200);
+      }, 480);
+    }
+    function startFlying() { flyLetter(0); }
+
+    T(revealNext, 350);
+    return () => { timers.forEach(clearTimeout); clearInterval(scrambleTick); };
+  }, [animated, showSub, playId]);
 
   const randGlyph = () => GLYPHS[Math.floor(Math.random() * GLYPHS.length)];
+  const subH = width * 0.075 * 1.7;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: Math.round(width * 0.05) }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@700;800&display=swap');`}</style>
-      <div style={{ fontFamily: "'Poppins','IBM Plex Sans Thai',sans-serif", fontWeight: 800, fontSize: width * 0.19, letterSpacing: -0.5, color: "#fff", lineHeight: 1, whiteSpace: "nowrap" }}>
+      <div
+        onClick={() => animated && setPlayId((p) => p + 1)}
+        style={{ fontFamily: "'Poppins','IBM Plex Sans Thai',sans-serif", fontWeight: 800, fontSize: width * 0.19, letterSpacing: -0.5, lineHeight: 1, whiteSpace: "nowrap", cursor: animated ? "pointer" : "default" }}
+      >
         {WORD.split("").map((ch, idx) => (
-          <span key={idx} style={{ opacity: idx < revealed ? 1 : 0.5, transition: "opacity .12s" }}>{idx < revealed ? ch : randGlyph()}</span>
+          <span key={idx} ref={(el) => (titleRefs.current[idx] = el)} style={{ color: goldIdx.includes(idx) ? "#C29E58" : "#fff", opacity: idx < revealed ? 1 : 0.5, transition: "opacity .12s, color .3s ease" }}>
+            {idx < revealed ? ch : randGlyph()}
+          </span>
         ))}
       </div>
       {showSub && (
-        <div style={{
-          fontFamily: "'Poppins','IBM Plex Sans Thai',sans-serif", fontWeight: 700, fontSize: width * 0.075, letterSpacing: 4, color: "#C29E58",
-          opacity: subVisible ? 1 : 0, textShadow: subVisible ? "0 0 14px rgba(194,158,88,.55)" : "none", transition: "opacity .7s ease, text-shadow .7s ease",
-        }}>JMB</div>
+        <div style={{ display: "flex", gap: width * 0.02, height: subCollapsed ? 0 : subH, overflow: "hidden", opacity: subCollapsed ? 0 : (subVisible ? 1 : 0), transition: "opacity .4s ease, height .4s ease" }}>
+          {["J", "M", "B"].map((ch, k) => (
+            <span key={k} ref={(el) => (subRefs.current[k] = el)} style={{
+              fontFamily: "'Poppins','IBM Plex Sans Thai',sans-serif", fontWeight: 700, fontSize: width * 0.075, letterSpacing: 2, color: "#C29E58",
+              opacity: flown[k] ? 0 : 1, textShadow: subVisible ? "0 0 14px rgba(194,158,88,.55)" : "none", transition: "opacity .18s ease",
+            }}>{ch}</span>
+          ))}
+        </div>
       )}
     </div>
   );
