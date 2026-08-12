@@ -2593,19 +2593,19 @@ function JomonbeyMark({ width = 220, animated = false, showSub = true }) {
 
     if (!animated || reducedMotion || !showSub) return () => timers.forEach(clearTimeout);
 
-    const scrambleTick = setInterval(() => setTick((t) => t + 1), 70);
+    const scrambleTick = setInterval(() => setTick((t) => t + 1), 55);
     let i = 0;
     function revealNext() {
       i += 1; setRevealed(i);
-      if (i < INITIAL.length) T(revealNext, 260);
-      else T(startMorph, 480); // ค้างโชว์ "JobMoney" แว็ปเดียวก่อนเริ่มสลับ
+      if (i < INITIAL.length) T(revealNext, 90);
+      else T(startMorph, 120); // โชว์ "JobMoney" แว็ปเดียวจริงๆก่อนเริ่มสลับ
     }
-    function startMorph() { setMorphing(true); T(finishMorph, 480); }
+    function startMorph() { setMorphing(true); T(finishMorph, 260); }
     function finishMorph() {
       clearInterval(scrambleTick);
       setMorphing(false);
       setMorphed(true);
-      T(startSubtitle, 450);
+      T(startSubtitle, 380);
     }
     function startSubtitle() { setSubVisible(true); T(startFlying, 3000); }
     function flyLetter(k) {
@@ -2628,7 +2628,7 @@ function JomonbeyMark({ width = 220, animated = false, showSub = true }) {
     }
     function startFlying() { flyLetter(0); }
 
-    T(revealNext, 350);
+    T(revealNext, 150);
     return () => { timers.forEach(clearTimeout); clearInterval(scrambleTick); };
   }, [animated, showSub, playId]);
 
@@ -2645,7 +2645,7 @@ function JomonbeyMark({ width = 220, animated = false, showSub = true }) {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@700;800&display=swap');
         @keyframes jmb-impact { 0% { text-shadow: 0 0 0 rgba(255,255,255,0); transform: scale(1); } 35% { text-shadow: 0 0 18px rgba(255,255,255,.95), 0 0 32px rgba(194,158,88,.85); transform: scale(1.32); } 100% { text-shadow: 0 0 0 rgba(255,255,255,0); transform: scale(1); } }
-        @keyframes jmb-flicker { 0%,100% { opacity: 1; filter: brightness(1); } 45% { opacity: .72; filter: brightness(1.35); } 60% { opacity: .92; filter: brightness(.9); } }
+        @keyframes jmb-flicker { 0%,100% { transform: translateY(0); opacity: 1; } 28% { transform: translateY(-8px); opacity: .82; } 52% { transform: translateY(2px); opacity: 1; } 74% { transform: translateY(-4px); opacity: .9; } }
       `}</style>
       <div
         onClick={() => animated && setPlayId((p) => p + 1)}
@@ -2665,7 +2665,7 @@ function JomonbeyMark({ width = 220, animated = false, showSub = true }) {
             <span key={k} ref={(el) => (subRefs.current[k] = el)} style={{
               fontFamily: "'Poppins','IBM Plex Sans Thai',sans-serif", fontWeight: 700, fontSize: width * 0.075, letterSpacing: 2, color: "#C29E58",
               opacity: flown[k] ? 0 : 1, transition: "opacity .18s ease",
-              animation: subVisible && !flown[k] && !subCollapsed ? "jmb-flicker 1.8s ease-in-out infinite" : "none",
+              animation: subVisible && !flown[k] && !subCollapsed ? "jmb-flicker 1.1s ease-in-out infinite" : "none",
             }}>{ch}</span>
           ))}
         </div>
@@ -2828,75 +2828,97 @@ function AuthPage() {
   };
 
   return (
-    <div style={{ minHeight: "100dvh", display: "flex", justifyContent: "center", background: "#0D0C0B", fontFamily: "'IBM Plex Sans Thai',sans-serif" }}>
-      <div style={{ width: "100%", maxWidth: 440, padding: "64px 24px", display: "flex", flexDirection: "column" }}>
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: 40 }}><JomonbeyMark width={250} animated /></div>
+    <div style={{ minHeight: "100dvh", display: "flex", justifyContent: "center", background: "radial-gradient(ellipse 640px 460px at 50% -8%, rgba(194,158,88,.12), transparent 62%), #0B0A08", fontFamily: "'IBM Plex Sans Thai',sans-serif" }}>
+      <style>{`.jmb-field:focus { border-bottom-color: #C29E58 !important; } .jmb-field::placeholder { color: #57514A; }`}</style>
+      <div style={{ width: "100%", maxWidth: 420, padding: "56px 24px", display: "flex", flexDirection: "column" }}>
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}><JomonbeyMark width={250} animated /></div>
+        <div style={{ height: 1, background: "linear-gradient(90deg, transparent, rgba(194,158,88,.4), transparent)", marginBottom: 32 }} />
 
-        <div style={{ display: "flex", background: "#1C1A18", borderRadius: 14, padding: 4, marginBottom: 16, border: "1px solid rgba(255,255,255,0.07)" }}>
-          <button onClick={() => setMode("login")} style={{ flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 11, border: "none", cursor: "pointer", background: mode === "login" ? "#F2872E" : "transparent", color: mode === "login" ? "#141414" : "#8C857C", fontWeight: 600, fontSize: 13.5 }}>เข้าสู่ระบบ</button>
-          <button onClick={() => setMode("signup")} style={{ flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 11, border: "none", cursor: "pointer", background: mode === "signup" ? "#F2872E" : "transparent", color: mode === "signup" ? "#141414" : "#8C857C", fontWeight: 600, fontSize: 13.5 }}>สมัครสมาชิก</button>
+        <div style={{ position: "relative", border: "1px solid rgba(194,158,88,.16)", borderRadius: 4, padding: "30px 26px 26px", background: "linear-gradient(180deg, rgba(194,158,88,.045), transparent 45%)" }}>
+          <div style={{ position: "absolute", top: -1, left: "14%", right: "14%", height: 2, background: "linear-gradient(90deg, transparent, #C29E58, transparent)" }} />
+
+          <div style={{ display: "flex", gap: 26, marginBottom: 24, borderBottom: "1px solid rgba(255,255,255,.06)" }}>
+            <button onClick={() => setMode("login")} style={{ background: "none", border: "none", cursor: "pointer", padding: "0 0 12px", fontSize: 12, fontWeight: 700, letterSpacing: 1.4, textTransform: "uppercase", color: mode === "login" ? "#C29E58" : "#6B655F", borderBottom: mode === "login" ? "2px solid #C29E58" : "2px solid transparent", marginBottom: -1 }}>เข้าสู่ระบบ</button>
+            <button onClick={() => setMode("signup")} style={{ background: "none", border: "none", cursor: "pointer", padding: "0 0 12px", fontSize: 12, fontWeight: 700, letterSpacing: 1.4, textTransform: "uppercase", color: mode === "signup" ? "#C29E58" : "#6B655F", borderBottom: mode === "signup" ? "2px solid #C29E58" : "2px solid transparent", marginBottom: -1 }}>สมัครสมาชิก</button>
+          </div>
+
+          {mode === "login" && (
+            <div style={{ display: "flex", gap: 16, marginBottom: 20 }}>
+              <button onClick={() => setLoginWith("email")} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 600, letterSpacing: .3, color: loginWith === "email" ? "#E4C583" : "#6B655F" }}>ด้วยอีเมล</button>
+              <span style={{ color: "#3A362F", fontSize: 11 }}>·</span>
+              <button onClick={() => setLoginWith("pin")} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 600, letterSpacing: .3, color: loginWith === "pin" ? "#E4C583" : "#6B655F" }}>ด้วยชื่อ + PIN</button>
+            </div>
+          )}
+
+          {mode === "login" && loginWith === "pin" ? (
+            <>
+              <div style={{ marginBottom: 18 }}>
+                <label style={{ display: "block", fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "#8B8175", marginBottom: 7 }}>ชื่อผู้ใช้</label>
+                <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="ที่แอดมินตั้งให้ เช่น mom" className="jmb-field" style={{ width: "100%", background: "transparent", border: "none", borderBottom: "1px solid rgba(194,158,88,.25)", borderRadius: 0, padding: "6px 2px 9px", fontSize: 14, outline: "none", color: "#F3EDE1", boxSizing: "border-box" }} />
+              </div>
+              <div style={{ marginBottom: 8 }}>
+                <label style={{ display: "block", fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "#8B8175", marginBottom: 7 }}>PIN</label>
+                <input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} type="password" inputMode="numeric" placeholder="4-6 หลัก" className="jmb-field" style={{ width: "100%", background: "transparent", border: "none", borderBottom: "1px solid rgba(194,158,88,.25)", borderRadius: 0, padding: "6px 2px 9px", fontSize: 14, outline: "none", letterSpacing: 3, color: "#F3EDE1", boxSizing: "border-box" }} />
+              </div>
+              <div style={{ fontSize: 11, color: "#6B655F", marginBottom: 20 }}>ลืม PIN? ให้แอดมินในบ้านช่วยรีเซ็ตให้จากหน้าตั้งค่าได้เลย</div>
+            </>
+          ) : (
+            <>
+              {mode === "signup" && (
+                <div style={{ marginBottom: 18 }}>
+                  <label style={{ display: "block", fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "#8B8175", marginBottom: 7 }}>ชื่อของคุณ</label>
+                  <input value={name} onChange={(e) => setName(e.target.value)} placeholder="ชื่อที่คนในบ้านจะเห็น" className="jmb-field" style={{ width: "100%", background: "transparent", border: "none", borderBottom: "1px solid rgba(194,158,88,.25)", borderRadius: 0, padding: "6px 2px 9px", fontSize: 14, outline: "none", color: "#F3EDE1", boxSizing: "border-box" }} />
+                </div>
+              )}
+
+              <div style={{ marginBottom: 18 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 7 }}>
+                  <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "#8B8175" }}>อีเมล</label>
+                  {email && <span style={{ fontSize: 10.5, color: emailOk ? "#4CBE8D" : "#E8685A" }}>{emailOk ? "✓ ถูกต้อง" : "รูปแบบผิด"}</span>}
+                </div>
+                <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@email.com" className="jmb-field" style={{ width: "100%", background: "transparent", border: "none", borderBottom: `1px solid ${email && !emailOk ? "#E8685A" : "rgba(194,158,88,.25)"}`, borderRadius: 0, padding: "6px 2px 9px", fontSize: 14, outline: "none", color: "#F3EDE1", boxSizing: "border-box" }} />
+              </div>
+
+              <div style={{ marginBottom: 8 }}>
+                <label style={{ display: "block", fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "#8B8175", marginBottom: 7 }}>รหัสผ่าน</label>
+                <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="อย่างน้อย 6 ตัว" className="jmb-field" style={{ width: "100%", background: "transparent", border: "none", borderBottom: "1px solid rgba(194,158,88,.25)", borderRadius: 0, padding: "6px 2px 9px", fontSize: 14, outline: "none", color: "#F3EDE1", boxSizing: "border-box" }} />
+              </div>
+
+              {mode === "login" && (
+                <div style={{ textAlign: "right", marginBottom: 12 }}>
+                  <button type="button" onClick={() => { setForgotOpen((v) => !v); setErr(""); setInfo(""); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: "#8C857C", fontWeight: 600, padding: 0 }}>ลืมรหัสผ่าน?</button>
+                </div>
+              )}
+              {mode === "login" && forgotOpen && (
+                <div style={{ border: "1px solid rgba(194,158,88,.16)", borderRadius: 3, padding: 14, marginBottom: 16 }}>
+                  <div style={{ fontSize: 11.5, color: "#8C857C", marginBottom: 10, lineHeight: 1.5 }}>กรอกอีเมลด้านบนให้ถูกต้องก่อน แล้วกดปุ่มนี้ ระบบจะส่งลิงก์ตั้งรหัสผ่านใหม่ไปให้ทางอีเมล</div>
+                  <button type="button" onClick={sendResetLink} disabled={forgotSending} style={{ width: "100%", padding: "9px 0", borderRadius: 3, border: "1px solid rgba(194,158,88,.4)", background: "none", color: "#E4C583", fontSize: 11.5, fontWeight: 700, letterSpacing: .8, cursor: forgotSending ? "default" : "pointer" }}>{forgotSending ? "กำลังส่ง..." : "ส่งลิงก์ตั้งรหัสผ่านใหม่"}</button>
+                </div>
+              )}
+
+              {mode === "signup" && (
+                <div style={{ marginBottom: 22 }}>
+                  <label style={{ display: "block", fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "#8B8175", marginBottom: 7 }}>รหัสเชิญครอบครัว</label>
+                  <input value={familyCode} onChange={(e) => setFamilyCode(e.target.value)} placeholder="ถ้ามี" className="jmb-field" style={{ width: "100%", background: "transparent", border: "none", borderBottom: "1px solid rgba(194,158,88,.25)", borderRadius: 0, padding: "6px 2px 9px", fontSize: 14, outline: "none", color: "#F3EDE1", boxSizing: "border-box" }} />
+                </div>
+              )}
+            </>
+          )}
+
+          {err && <div style={{ fontSize: 12, color: "#E8685A", marginBottom: 10, textAlign: "center" }}>{err}</div>}
+          {info && <div style={{ fontSize: 12, color: "#4CBE8D", marginBottom: 10, textAlign: "center" }}>{info}</div>}
+
+          {needsCaptcha && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11.5, color: "#8C857C", marginBottom: 8, textAlign: "center" }}>พิมพ์รหัสผิดหลายครั้งเกินไป กรุณายืนยันตัวตนก่อน</div>
+              <div ref={captchaRef} style={{ display: "flex", justifyContent: "center" }} />
+            </div>
+          )}
+
+          <button onClick={submit} disabled={loading || (needsCaptcha && !captchaToken)} style={{ width: "100%", background: loading || (needsCaptcha && !captchaToken) ? "#3A2F22" : "linear-gradient(135deg, #E4C583, #B98B3E)", border: "none", borderRadius: 3, padding: "14px 0", fontSize: 12.5, fontWeight: 800, letterSpacing: 1.6, textTransform: "uppercase", color: "#141210", cursor: loading ? "default" : "pointer", marginTop: 8, boxShadow: loading || (needsCaptcha && !captchaToken) ? "none" : "0 4px 22px rgba(194,158,88,.22)" }}>
+            {loading ? "กำลังดำเนินการ..." : mode === "login" ? "เข้าสู่ระบบ" : "สมัครสมาชิก"}
+          </button>
         </div>
-
-        {mode === "login" && (
-          <div style={{ display: "flex", gap: 14, marginBottom: 16, justifyContent: "center" }}>
-            <button onClick={() => setLoginWith("email")} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, color: loginWith === "email" ? "#F2872E" : "#6B655F", borderBottom: loginWith === "email" ? "2px solid #F2872E" : "2px solid transparent", paddingBottom: 4 }}>ด้วยอีเมล</button>
-            <button onClick={() => setLoginWith("pin")} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, color: loginWith === "pin" ? "#F2872E" : "#6B655F", borderBottom: loginWith === "pin" ? "2px solid #F2872E" : "2px solid transparent", paddingBottom: 4 }}>ด้วยชื่อ + PIN</button>
-          </div>
-        )}
-
-        {mode === "login" && loginWith === "pin" ? (
-          <>
-            <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="ชื่อผู้ใช้ที่แอดมินตั้งให้ เช่น mom" style={{ background: "#1C1A18", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, marginBottom: 10, outline: "none", color: "#F2EDE6" }} />
-            <input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} type="password" inputMode="numeric" placeholder="PIN 4-6 หลัก" style={{ background: "#1C1A18", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, marginBottom: 6, outline: "none", letterSpacing: 3, color: "#F2EDE6" }} />
-            <div style={{ fontSize: 11, color: "#6B655F", marginBottom: 14 }}>ลืม PIN? ให้แอดมินในบ้านช่วยรีเซ็ตให้จากหน้าตั้งค่าได้เลย</div>
-          </>
-        ) : (
-          <>
-            {mode === "signup" && (
-              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="ชื่อของคุณ" style={{ background: "#1C1A18", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, marginBottom: 10, outline: "none", color: "#F2EDE6" }} />
-            )}
-
-            <div style={{ background: "#1C1A18", border: `1px solid ${email && !emailOk ? "#E8685A" : "rgba(255,255,255,0.07)"}`, borderRadius: 12, padding: "11px 14px", marginBottom: 4, display: "flex", alignItems: "center", gap: 8 }}>
-              <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@email.com" style={{ flex: 1, border: "none", outline: "none", fontSize: 13.5, background: "transparent", color: "#F2EDE6" }} />
-              {email && <span style={{ fontSize: 13, color: emailOk ? "#4CBE8D" : "#E8685A" }}>{emailOk ? "✓" : "!"}</span>}
-            </div>
-            <div style={{ fontSize: 11, color: email ? (emailOk ? "#4CBE8D" : "#E8685A") : "#6B655F", marginBottom: 10, paddingLeft: 2, minHeight: 14 }}>
-              {email ? (emailOk ? "รูปแบบอีเมลถูกต้อง" : "รูปแบบอีเมลยังไม่ถูกต้อง") : "พิมพ์อีเมลของคุณ"}
-            </div>
-
-            <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="รหัสผ่าน (อย่างน้อย 6 ตัว)" style={{ background: "#1C1A18", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, marginBottom: 10, outline: "none", color: "#F2EDE6" }} />
-
-            {mode === "login" && (
-              <div style={{ textAlign: "right", marginTop: -4, marginBottom: 10 }}>
-                <button type="button" onClick={() => { setForgotOpen((v) => !v); setErr(""); setInfo(""); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11.5, color: "#8C857C", fontWeight: 600, padding: 0 }}>ลืมรหัสผ่าน?</button>
-              </div>
-            )}
-            {mode === "login" && forgotOpen && (
-              <div style={{ background: "#1C1A18", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: 12, marginBottom: 10 }}>
-                <div style={{ fontSize: 11.5, color: "#8C857C", marginBottom: 8, lineHeight: 1.5 }}>กรอกอีเมลด้านบนให้ถูกต้องก่อน แล้วกดปุ่มนี้ ระบบจะส่งลิงก์ตั้งรหัสผ่านใหม่ไปให้ทางอีเมล</div>
-                <button type="button" onClick={sendResetLink} disabled={forgotSending} style={{ width: "100%", padding: "9px 0", borderRadius: 10, border: "none", background: "#F2872E", color: "#141414", fontSize: 12.5, fontWeight: 700, cursor: forgotSending ? "default" : "pointer" }}>{forgotSending ? "กำลังส่ง..." : "ส่งลิงก์ตั้งรหัสผ่านใหม่"}</button>
-              </div>
-            )}
-
-            {mode === "signup" && (
-              <input value={familyCode} onChange={(e) => setFamilyCode(e.target.value)} placeholder="รหัสเชิญครอบครัว (ถ้ามี)" style={{ background: "#1C1A18", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, marginBottom: 14, outline: "none", color: "#F2EDE6" }} />
-            )}
-          </>
-        )}
-
-        {err && <div style={{ fontSize: 12, color: "#E8685A", marginBottom: 10, textAlign: "center" }}>{err}</div>}
-        {info && <div style={{ fontSize: 12, color: "#4CBE8D", marginBottom: 10, textAlign: "center" }}>{info}</div>}
-
-        {needsCaptcha && (
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 11.5, color: "#8C857C", marginBottom: 8, textAlign: "center" }}>พิมพ์รหัสผิดหลายครั้งเกินไป กรุณายืนยันตัวตนก่อน</div>
-            <div ref={captchaRef} style={{ display: "flex", justifyContent: "center" }} />
-          </div>
-        )}
-
-        <button onClick={submit} disabled={loading || (needsCaptcha && !captchaToken)} style={{ background: loading || (needsCaptcha && !captchaToken) ? "#4A362A" : "#F2872E", border: "none", borderRadius: 14, padding: "13px 0", fontSize: 14, fontWeight: 700, color: "#141414", cursor: loading ? "default" : "pointer", marginTop: 6 }}>
-          {loading ? "กำลังดำเนินการ..." : mode === "login" ? "เข้าสู่ระบบ" : "สมัครสมาชิก"}
-        </button>
       </div>
     </div>
   );
@@ -2924,15 +2946,17 @@ function SetNewPasswordPage({ onDone }) {
   };
 
   return (
-    <div style={{ minHeight: "100dvh", display: "flex", justifyContent: "center", background: "#0D0C0B", fontFamily: "'IBM Plex Sans Thai',sans-serif" }}>
-      <div style={{ width: "100%", maxWidth: 440, padding: "80px 24px", display: "flex", flexDirection: "column" }}>
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: 32 }}><JomonbeyMark width={220} /></div>
-        <div style={{ fontSize: 17, fontWeight: 800, color: "#F2EDE6", marginBottom: 6, textAlign: "center" }}>ตั้งรหัสผ่านใหม่</div>
+    <div style={{ minHeight: "100dvh", display: "flex", justifyContent: "center", background: "radial-gradient(ellipse 640px 460px at 50% -8%, rgba(194,158,88,.12), transparent 62%), #0B0A08", fontFamily: "'IBM Plex Sans Thai',sans-serif" }}>
+      <div style={{ width: "100%", maxWidth: 420, padding: "72px 24px", display: "flex", flexDirection: "column" }}>
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 28 }}><JomonbeyMark width={220} /></div>
+        <div style={{ fontSize: 17, fontWeight: 800, color: "#F3EDE1", marginBottom: 6, textAlign: "center" }}>ตั้งรหัสผ่านใหม่</div>
         <div style={{ fontSize: 12.5, color: "#8C857C", marginBottom: 24, textAlign: "center", lineHeight: 1.6 }}>มาจากลิงก์ในอีเมล ตั้งรหัสผ่านใหม่ให้เรียบร้อยก่อนเข้าใช้งานต่อ</div>
-        <input value={pw1} onChange={(e) => setPw1(e.target.value)} type="password" placeholder="รหัสผ่านใหม่ (อย่างน้อย 6 ตัว)" style={{ background: "#1C1A18", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, marginBottom: 10, outline: "none", color: "#F2EDE6" }} />
-        <input value={pw2} onChange={(e) => setPw2(e.target.value)} type="password" placeholder="ยืนยันรหัสผ่านใหม่อีกครั้ง" onKeyDown={(e) => e.key === "Enter" && submit()} style={{ background: "#1C1A18", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "11px 14px", fontSize: 13.5, marginBottom: 14, outline: "none", color: "#F2EDE6" }} />
-        {err && <div style={{ fontSize: 12, color: "#E8685A", marginBottom: 10, textAlign: "center" }}>{err}</div>}
-        <button onClick={submit} disabled={busy} style={{ background: busy ? "#4A362A" : "#F2872E", border: "none", borderRadius: 14, padding: "13px 0", fontSize: 14, fontWeight: 700, color: "#141414", cursor: busy ? "default" : "pointer" }}>{busy ? "กำลังบันทึก..." : "บันทึกรหัสผ่านใหม่"}</button>
+        <div style={{ border: "1px solid rgba(194,158,88,.16)", borderRadius: 4, padding: "26px 24px" }}>
+          <input value={pw1} onChange={(e) => setPw1(e.target.value)} type="password" placeholder="รหัสผ่านใหม่ (อย่างน้อย 6 ตัว)" style={{ width: "100%", background: "transparent", border: "none", borderBottom: "1px solid rgba(194,158,88,.25)", borderRadius: 0, padding: "6px 2px 9px", fontSize: 14, marginBottom: 16, outline: "none", color: "#F3EDE1", boxSizing: "border-box" }} />
+          <input value={pw2} onChange={(e) => setPw2(e.target.value)} type="password" placeholder="ยืนยันรหัสผ่านใหม่อีกครั้ง" onKeyDown={(e) => e.key === "Enter" && submit()} style={{ width: "100%", background: "transparent", border: "none", borderBottom: "1px solid rgba(194,158,88,.25)", borderRadius: 0, padding: "6px 2px 9px", fontSize: 14, marginBottom: 18, outline: "none", color: "#F3EDE1", boxSizing: "border-box" }} />
+          {err && <div style={{ fontSize: 12, color: "#E8685A", marginBottom: 10, textAlign: "center" }}>{err}</div>}
+          <button onClick={submit} disabled={busy} style={{ width: "100%", background: busy ? "#3A2F22" : "linear-gradient(135deg, #E4C583, #B98B3E)", border: "none", borderRadius: 3, padding: "13px 0", fontSize: 12.5, fontWeight: 800, letterSpacing: 1.6, textTransform: "uppercase", color: "#141210", cursor: busy ? "default" : "pointer" }}>{busy ? "กำลังบันทึก..." : "บันทึกรหัสผ่านใหม่"}</button>
+        </div>
       </div>
     </div>
   );
