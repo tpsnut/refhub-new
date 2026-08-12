@@ -586,6 +586,7 @@ function CallModal({ t, threadId, userId, displayName, myAvatar, otherMemberIds,
   const [cameraOn, setCameraOn] = useState(false);
   const [connecting, setConnecting] = useState(true);
   const [err, setErr] = useState("");
+  const [callErr, setCallErr] = useState(""); // ข้อความ error สั้นๆตอนกดปุ่มไมค์/กล้องแล้วล้มเหลว (ต่างจาก err ด้านบนที่ทำให้เข้าห้องไม่ได้เลย — อันนี้แค่เตือนเฉยๆ ยังคุยต่อได้)
   const [speakerLoud, setSpeakerLoud] = useState(false); // false = เบา (แนบหู) / true = ดัง (เปิดลำโพง) — เริ่มที่เบาเหมือนโทรศัพท์
   const [speakerMuted, setSpeakerMuted] = useState(false); // ปิดเสียงลำโพง = ไม่ได้ยินเสียงคนอื่นเลย (ต่างจากปิดไมค์ที่เป็นเสียงเรา)
   const [layout, setLayout] = useState("grid"); // grid | speaker
@@ -718,11 +719,11 @@ function CallModal({ t, threadId, userId, displayName, myAvatar, otherMemberIds,
         setConnecting(false);
 
         const presenceChannel = supabase.channel(`call-${threadId}`);
-        presenceChannel.subscribe((status) => { if (status === "SUBSCRIBED") presenceChannel.track({ userId, name: displayName }); });
+        presenceChannel.subscribe((status) => { if (status === "SUBSCRIBED") presenceChannel.track({ userId, name: displayName, video: !!startWithCamera }); });
         presenceChannelRef.current = presenceChannel;
         // ช่องที่ 2 แยกหัวข้อ สำหรับ IncomingCallWatcher ระดับแอป (กันชนหัวข้อเดียวกับ ChatRoomPage ที่ทำให้ crash)
         const watchChannel = supabase.channel(`callwatch-${threadId}`);
-        watchChannel.subscribe((status) => { if (status === "SUBSCRIBED") watchChannel.track({ userId, name: displayName }); });
+        watchChannel.subscribe((status) => { if (status === "SUBSCRIBED") watchChannel.track({ userId, name: displayName, video: !!startWithCamera }); });
         watchChannelRef.current = watchChannel;
 
         notifyPush(otherMemberIds || [], `📞 ${displayName || "มีคน"}กำลังโทรเข้ามา`, `ในห้อง ${roomName || ""}`, session?.access_token);
@@ -745,16 +746,27 @@ function CallModal({ t, threadId, userId, displayName, myAvatar, otherMemberIds,
     };
   }, [threadId]);
 
+  const flashCallErr = (msg) => { setCallErr(msg); setTimeout(() => setCallErr((cur) => cur === msg ? "" : cur), 4000); };
+
   const toggleMute = async () => {
     const next = !muted;
-    await roomRef.current?.localParticipant.setMicrophoneEnabled(!next);
-    setMuted(next);
+    setMuted(next); // อัปเดต UI ก่อนเลย (รู้สึกไว) แล้วค่อยย้อนกลับถ้าจริงๆทำไม่สำเร็จ
+    try {
+      await roomRef.current?.localParticipant.setMicrophoneEnabled(!next);
+    } catch (e) {
+      setMuted(!next); // ทำไม่สำเร็จ -> ย้อนปุ่มกลับสถานะเดิม กันปุ่มค้างโชว์ผิดจากของจริง
+      flashCallErr("เปลี่ยนสถานะไมค์ไม่สำเร็จ ลองใหม่อีกครั้ง");
+    }
   };
 
   const toggleCamera = async () => {
     const next = !cameraOn;
-    await roomRef.current?.localParticipant.setCameraEnabled(next);
-    setCameraOn(next);
+    try {
+      await roomRef.current?.localParticipant.setCameraEnabled(next);
+      setCameraOn(next);
+    } catch (e) {
+      flashCallErr("เปลี่ยนสถานะกล้องไม่สำเร็จ (เช็คว่าอนุญาตสิทธิ์กล้องให้เว็บนี้หรือยัง)");
+    }
   };
 
   // ต่อวิดีโอตัวเองเข้ากับ element เมื่อเปิดกล้อง (callback ref ทำงานทุกครั้งที่ element mount ใหม่ กันจอดำ/ซ้อน)
@@ -822,6 +834,9 @@ function CallModal({ t, threadId, userId, displayName, myAvatar, otherMemberIds,
               )}
             </div>
 
+            {callErr && (
+              <div style={{ margin: "0 20px 10px", padding: "8px 12px", borderRadius: 10, background: "#D9534F22", border: "1px solid #D9534F55", color: "#F0A0A0", fontSize: 11.5, textAlign: "center" }}>{callErr}</div>
+            )}
             {/* ปุ่มควบคุม */}
             <div style={{ display: "flex", gap: 14, padding: "0 0 8px", flexWrap: "wrap", justifyContent: "center" }}>
               <button onClick={toggleMute} style={{ width: 54, height: 54, borderRadius: 27, background: muted ? "#D9534F" : "rgba(255,255,255,.15)", border: "none", cursor: "pointer", display: "grid", placeItems: "center" }} title={muted ? "เปิดไมค์" : "ปิดไมค์"}>
@@ -2469,7 +2484,7 @@ export default function RefHub() {
             <Phone size={15} color="#fff" /><span style={{ fontSize: 12, fontWeight: 700, color: "#fff" }}>กำลังคุยอยู่ · แตะเพื่อกลับ</span>
           </button>
         )}
-        {!activeCall && <IncomingCallWatcher t={t} userId={userId} onAccept={(threadId, roomName, otherIds) => { setActiveCall({ threadId, roomName, otherMemberIds: otherIds }); setCallMinimized(false); }} />}
+        {!activeCall && <IncomingCallWatcher t={t} userId={userId} onAccept={(threadId, roomName, otherIds, video) => { setActiveCall({ threadId, roomName, otherMemberIds: otherIds, video }); setCallMinimized(false); }} />}
         {msgToast && !(page === "chatRoom" && activeThread?.id === msgToast.threadId) && (
           <ModalPortal>
             <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 115, display: "flex", justifyContent: "center", padding: "12px 12px 0", pointerEvents: "none" }}>
@@ -9472,7 +9487,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
         <button onClick={() => setShowMembers(true)} style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 18, background: t.surface, border: `1px solid ${t.border}`, cursor: "pointer", display: "grid", placeItems: "center" }} title="ข้อมูลห้อง/สมาชิก"><Info size={16} color={t.sub} /></button>
       </div>
       {callParticipants.length > 0 && (
-        <button onClick={() => { setActiveCall({ threadId: thread.id, roomName: thread.name, otherMemberIds: otherMembers.map((m) => m.id) }); setCallMinimized(false); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: "#2E9E6B18", border: "1px solid #2E9E6B55", borderRadius: 14, padding: "10px 14px", marginBottom: 10, cursor: "pointer" }}>
+        <button onClick={() => { setActiveCall({ threadId: thread.id, roomName: thread.name, otherMemberIds: otherMembers.map((m) => m.id), video: callParticipants.some((p) => p.video) }); setCallMinimized(false); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: "#2E9E6B18", border: "1px solid #2E9E6B55", borderRadius: 14, padding: "10px 14px", marginBottom: 10, cursor: "pointer" }}>
           <Phone size={16} color="#2E9E6B" style={{ flexShrink: 0 }} />
           <div style={{ flex: 1, textAlign: "left", fontSize: 12, color: "#2E9E6B", fontWeight: 700 }}>📞 {callParticipants.map((p) => p.name).join(", ")} กำลังคุยด้วยเสียงอยู่</div>
           <span style={{ fontSize: 11, fontWeight: 800, color: "#fff", background: "#2E9E6B", padding: "5px 10px", borderRadius: 10 }}>เข้าร่วม</span>
@@ -16153,7 +16168,7 @@ function IncomingCallWatcher({ t, userId, onAccept }) {
             setIncoming((cur) => {
               if (cur) return cur; // มีสายค้างอยู่แล้ว ไม่ทับ
               if (isNewCall) playRing();
-              return { threadId, callerName: people[0]?.name || "มีคน", otherIds: people.map((p) => p.userId) };
+              return { threadId, callerName: people[0]?.name || "มีคน", otherIds: people.map((p) => p.userId), video: people.some((p) => p.video) };
             });
           } else if (people.length === 0) {
             dismissedRef.current[threadId] = false; // สายจบแล้ว รีเซ็ตให้เด้งได้อีกครั้งถ้ามีสายใหม่
@@ -16168,7 +16183,7 @@ function IncomingCallWatcher({ t, userId, onAccept }) {
   }, [userId]);
 
   if (!incoming) return null;
-  const accept = () => { stopRing(); const inc = incoming; setIncoming(null); onAccept(inc.threadId, inc.callerName, inc.otherIds); };
+  const accept = () => { stopRing(); const inc = incoming; setIncoming(null); onAccept(inc.threadId, inc.callerName, inc.otherIds, inc.video); };
   const decline = () => { stopRing(); dismissedRef.current[incoming.threadId] = true; setIncoming(null); };
 
   return (
