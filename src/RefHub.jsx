@@ -865,7 +865,34 @@ function CallModal({ t, threadId, userId, displayName, myAvatar, otherMemberIds,
   );
 }
 
-// 🖼️ ดูรูปเต็มจอ — รองรับทั้งรูปเดียว (ส่ง src) และหลายรูปในโพสต์เดียวกัน (ส่ง images+index ปัด/กดลูกศรเลื่อนไปรูปถัดไปได้)
+// 📞💫 ปุ่มลอยตอนย่อสายเก็บไว้ — วนแอนิเมชันดึงความสนใจ 3 จังหวะ: ไอคอนสั่น 1 ครั้ง -> จุดไข่ปลาค้าง 2-4วิ (สุ่ม) -> ข้อความ "แตะเพื่อกลับ" โผล่มาสั่น ค้าง 3-4วิ (สุ่ม) -> วนใหม่ตลอดเวลาที่ย่อสายไว้
+function MinimizedCallButton({ onClick }) {
+  const [phase, setPhase] = useState("icon"); // icon -> dots -> text -> (กลับไป icon วนลูป)
+  const [cycle, setCycle] = useState(0); // เปลี่ยนทุกรอบ ใช้เป็น key บังคับ replay แอนิเมชันใหม่ทุกครั้ง (React ไม่ replay keyframe ถ้า element เดิม)
+  useEffect(() => {
+    const rand = (min, max) => min + Math.random() * (max - min); // หน่วงไม่ตายตัวตามที่ขอ
+    let timer;
+    if (phase === "icon") timer = setTimeout(() => setPhase("dots"), 550);
+    else if (phase === "dots") timer = setTimeout(() => setPhase("text"), rand(2000, 4000));
+    else timer = setTimeout(() => { setPhase("icon"); setCycle((c) => c + 1); }, rand(3000, 4000));
+    return () => clearTimeout(timer);
+  }, [phase]);
+
+  return (
+    <button onClick={onClick} style={{ position: "fixed", bottom: 90, right: 16, zIndex: 90, background: "#2E9E6B", border: "none", borderRadius: 24, padding: "10px 16px", display: "flex", alignItems: "center", gap: 8, cursor: "pointer", boxShadow: "0 6px 18px rgba(0,0,0,.25)" }}>
+      <style>{`
+        @keyframes rh-mincall-shake { 0%,100% { transform: rotate(0); } 20% { transform: rotate(-18deg); } 40% { transform: rotate(16deg); } 60% { transform: rotate(-10deg); } 80% { transform: rotate(6deg); } }
+        @keyframes rh-mincall-pop { 0% { transform: scale(.7); opacity: 0; } 60% { transform: scale(1.08); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+        @keyframes rh-mincall-dots { 0%,100% { opacity: .35; } 50% { opacity: 1; } }
+      `}</style>
+      <Phone key={`mc-ph-${cycle}`} size={15} color="#fff" style={{ flexShrink: 0, animation: phase === "icon" ? "rh-mincall-shake .5s ease" : "none" }} />
+      {phase === "dots" && <span style={{ fontSize: 15, fontWeight: 800, color: "#fff", letterSpacing: 2, animation: "rh-mincall-dots 1s ease-in-out infinite" }}>···</span>}
+      {phase === "text" && <span key={`mc-tx-${cycle}`} style={{ fontSize: 12, fontWeight: 700, color: "#fff", whiteSpace: "nowrap", animation: "rh-mincall-pop .35s ease" }}>กำลังคุยอยู่ · แตะเพื่อกลับ</span>}
+    </button>
+  );
+}
+
+
 // เพิ่มปุ่มดาวน์โหลดรูปลงเครื่อง — ใช้วิธี fetch เป็น blob ก่อนสร้างลิงก์ดาวน์โหลด (เหมือน pattern doExportCsv/downloadText เดิม)
 // เพราะ URL ของ Supabase Storage เป็นคนละ origin การใส่ attribute download ตรงๆ บน <a> เฉยๆ เบราว์เซอร์จะไม่ยอมบังคับดาวน์โหลดให้ (แค่เปิดรูปแทน)
 function ImageLightbox({ src, images, index, onClose }) {
@@ -2480,9 +2507,7 @@ export default function RefHub() {
           <CallModal t={t} threadId={activeCall.threadId} userId={userId} displayName={profile?.name} myAvatar={profile?.avatar} otherMemberIds={activeCall.otherMemberIds} roomName={activeCall.roomName} session={session} minimized={callMinimized} startWithCamera={!!activeCall.video} onMinimize={() => setCallMinimized(true)} onClose={() => { setActiveCall(null); setCallMinimized(false); }} />
         )}
         {activeCall && callMinimized && (
-          <button onClick={() => setCallMinimized(false)} style={{ position: "fixed", bottom: 90, right: 16, zIndex: 90, background: "#2E9E6B", border: "none", borderRadius: 24, padding: "10px 16px", display: "flex", alignItems: "center", gap: 8, cursor: "pointer", boxShadow: "0 6px 18px rgba(0,0,0,.25)" }}>
-            <Phone size={15} color="#fff" /><span style={{ fontSize: 12, fontWeight: 700, color: "#fff" }}>กำลังคุยอยู่ · แตะเพื่อกลับ</span>
-          </button>
+          <MinimizedCallButton onClick={() => setCallMinimized(false)} />
         )}
         {!activeCall && <IncomingCallWatcher t={t} userId={userId} onAccept={(threadId, roomName, otherIds, video) => { setActiveCall({ threadId, roomName, otherMemberIds: otherIds, video }); setCallMinimized(false); }} />}
         {msgToast && !(page === "chatRoom" && activeThread?.id === msgToast.threadId) && (
