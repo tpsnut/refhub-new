@@ -2556,17 +2556,21 @@ function AuthLoadingScreen() {
   );
 }
 
-// ✨ โลโก้ Jomonbey — ล็อกตัวอักษรทีละตัว (ช้าๆอ่านออก) -> โชว์ JMB สีทองค้าง 3 วิ -> J/M/B บินขึ้นไปหาตัว J,m,b ในคำหลักทีละตัว
-// ทาสีทองให้ตัวหลักแล้วหายไป จนกรอบ JMB ด้านล่างยุบหมด กดที่คำว่า Jomonbey เพื่อเล่นซ้ำได้ตลอด
+// ✨ โลโก้ Jomonbey — เปิดด้วย "JobMoney" ล็อกทีละตัว ค้างแว็ปเดียว แล้ว scramble เฉพาะช่วง "bMon" ให้กลายเป็น "monb" (จึงได้ "Jomonbey")
+// จากนั้น JMB สีทองเด้งขึ้นมาวูบวาบ ค้าง 3 วิ -> J/M/B บินไปหา J,m,b ทีละตัว กระทบแฟลชสว่างวาบแล้วฝังเป็นสีทอง จนกรอบ JMB ยุบหมด กดที่คำเพื่อเล่นซ้ำได้
 function JomonbeyMark({ width = 220, animated = false, showSub = true }) {
-  const WORD = "Jomonbey";
+  const INITIAL = "JobMoney"; // จุดตั้งต้นของชื่อ — J-o-b-Money
+  const FINAL = "Jomonbey"; // ต่างกันแค่ตำแหน่ง 2-5 (bMon -> monb) ตำแหน่งอื่นเหมือนเดิมทุกตัว
   const FLY_MAP = [0, 2, 5]; // ตำแหน่งตัว J / m / b ใน "Jomonbey" ที่ J,M,B ด้านล่างจะบินไปหา
   const GLYPHS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-  const [revealed, setRevealed] = useState(animated ? 0 : WORD.length);
-  const [, setTick] = useState(0); // แค่บังคับ re-render ให้ตัวที่ยังไม่ล็อกสุ่มตัวอักษรใหม่ทุกครั้ง ไม่ได้ใช้ค่าจริง
+  const [revealed, setRevealed] = useState(animated ? 0 : INITIAL.length);
+  const [, setTick] = useState(0); // แค่บังคับ re-render ให้ตัวที่กำลังสุ่มเปลี่ยนตัวอักษรใหม่ทุกครั้ง ไม่ได้ใช้ค่าจริง
+  const [morphing, setMorphing] = useState(false); // ช่วง bMon กำลังสุ่มก่อนล็อกเป็น monb
+  const [morphed, setMorphed] = useState(!animated); // ล็อกเป็น monb แล้วหรือยัง
   const [subVisible, setSubVisible] = useState(!animated);
   const [flown, setFlown] = useState([false, false, false]);
   const [goldIdx, setGoldIdx] = useState([]);
+  const [impactIdx, setImpactIdx] = useState(null);
   const [subCollapsed, setSubCollapsed] = useState(false);
   const [playId, setPlayId] = useState(0);
   const titleRefs = useRef([]);
@@ -2577,11 +2581,13 @@ function JomonbeyMark({ width = 220, animated = false, showSub = true }) {
     const timers = [];
     const T = (fn, ms) => { const id = setTimeout(fn, ms); timers.push(id); return id; };
 
-    // รีเซ็ตทุกอย่างก่อนเริ่มรอบใหม่ (ทั้งตอน mount ครั้งแรก และตอนกดเล่นซ้ำ)
-    setRevealed(animated ? 0 : WORD.length);
+    setRevealed(animated ? 0 : INITIAL.length);
+    setMorphing(false);
+    setMorphed(!animated);
     setSubVisible(!animated);
     setFlown([false, false, false]);
     setGoldIdx([]);
+    setImpactIdx(null);
     setSubCollapsed(false);
     subRefs.current.forEach((el) => { if (el) { el.style.transition = "none"; el.style.transform = "none"; } });
 
@@ -2591,14 +2597,17 @@ function JomonbeyMark({ width = 220, animated = false, showSub = true }) {
     let i = 0;
     function revealNext() {
       i += 1; setRevealed(i);
-      if (i < WORD.length) T(revealNext, 260);
-      else T(startSubtitle, 450);
+      if (i < INITIAL.length) T(revealNext, 260);
+      else T(startMorph, 480); // ค้างโชว์ "JobMoney" แว็ปเดียวก่อนเริ่มสลับ
     }
-    function startSubtitle() {
+    function startMorph() { setMorphing(true); T(finishMorph, 480); }
+    function finishMorph() {
       clearInterval(scrambleTick);
-      setSubVisible(true);
-      T(startFlying, 3000); // ค้างไว้ 3 วิ ตามที่ขอ
+      setMorphing(false);
+      setMorphed(true);
+      T(startSubtitle, 450);
     }
+    function startSubtitle() { setSubVisible(true); T(startFlying, 3000); }
     function flyLetter(k) {
       const subEl = subRefs.current[k], targetEl = titleRefs.current[FLY_MAP[k]];
       if (subEl && targetEl) {
@@ -2611,6 +2620,8 @@ function JomonbeyMark({ width = 220, animated = false, showSub = true }) {
       T(() => {
         setFlown((f) => { const n = [...f]; n[k] = true; return n; });
         setGoldIdx((g) => [...g, FLY_MAP[k]]);
+        setImpactIdx(FLY_MAP[k]); // 💥 แฟลชกระทบตอนตัวอักษรถึงเป้าหมายพอดี
+        T(() => setImpactIdx((cur) => (cur === FLY_MAP[k] ? null : cur)), 460);
         if (k < 2) T(() => flyLetter(k + 1), 220);
         else T(() => setSubCollapsed(true), 200);
       }, 480);
@@ -2622,19 +2633,30 @@ function JomonbeyMark({ width = 220, animated = false, showSub = true }) {
   }, [animated, showSub, playId]);
 
   const randGlyph = () => GLYPHS[Math.floor(Math.random() * GLYPHS.length)];
+  const letterAt = (idx) => {
+    if (idx >= revealed) return randGlyph();
+    if (idx >= 2 && idx <= 5) { if (morphing) return randGlyph(); return morphed ? FINAL[idx] : INITIAL[idx]; }
+    return INITIAL[idx];
+  };
   const subH = width * 0.075 * 1.7;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: Math.round(width * 0.05) }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@700;800&display=swap');`}</style>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@700;800&display=swap');
+        @keyframes jmb-impact { 0% { text-shadow: 0 0 0 rgba(255,255,255,0); transform: scale(1); } 35% { text-shadow: 0 0 18px rgba(255,255,255,.95), 0 0 32px rgba(194,158,88,.85); transform: scale(1.32); } 100% { text-shadow: 0 0 0 rgba(255,255,255,0); transform: scale(1); } }
+        @keyframes jmb-flicker { 0%,100% { opacity: 1; filter: brightness(1); } 45% { opacity: .72; filter: brightness(1.35); } 60% { opacity: .92; filter: brightness(.9); } }
+      `}</style>
       <div
         onClick={() => animated && setPlayId((p) => p + 1)}
         style={{ fontFamily: "'Poppins','IBM Plex Sans Thai',sans-serif", fontWeight: 800, fontSize: width * 0.19, letterSpacing: -0.5, lineHeight: 1, whiteSpace: "nowrap", cursor: animated ? "pointer" : "default" }}
       >
-        {WORD.split("").map((ch, idx) => (
-          <span key={idx} ref={(el) => (titleRefs.current[idx] = el)} style={{ color: goldIdx.includes(idx) ? "#C29E58" : "#fff", opacity: idx < revealed ? 1 : 0.5, transition: "opacity .12s, color .3s ease" }}>
-            {idx < revealed ? ch : randGlyph()}
-          </span>
+        {INITIAL.split("").map((_, idx) => (
+          <span key={idx} ref={(el) => (titleRefs.current[idx] = el)} style={{
+            display: "inline-block", transformOrigin: "center", color: goldIdx.includes(idx) ? "#C29E58" : "#fff",
+            opacity: idx < revealed ? 1 : 0.5, transition: "opacity .12s, color .3s ease",
+            animation: idx === impactIdx ? "jmb-impact .46s ease" : "none",
+          }}>{letterAt(idx)}</span>
         ))}
       </div>
       {showSub && (
@@ -2642,7 +2664,8 @@ function JomonbeyMark({ width = 220, animated = false, showSub = true }) {
           {["J", "M", "B"].map((ch, k) => (
             <span key={k} ref={(el) => (subRefs.current[k] = el)} style={{
               fontFamily: "'Poppins','IBM Plex Sans Thai',sans-serif", fontWeight: 700, fontSize: width * 0.075, letterSpacing: 2, color: "#C29E58",
-              opacity: flown[k] ? 0 : 1, textShadow: subVisible ? "0 0 14px rgba(194,158,88,.55)" : "none", transition: "opacity .18s ease",
+              opacity: flown[k] ? 0 : 1, transition: "opacity .18s ease",
+              animation: subVisible && !flown[k] && !subCollapsed ? "jmb-flicker 1.8s ease-in-out infinite" : "none",
             }}>{ch}</span>
           ))}
         </div>
