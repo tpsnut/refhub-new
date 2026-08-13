@@ -2739,6 +2739,7 @@ function LoginDivider({ activeKey, iconRef, onCoinLanded }) {
   const [wordShown, setWordShown] = useState(false);
   const [lineShine, setLineShine] = useState(false);
   const [wordDissolve, setWordDissolve] = useState(false);
+  const [lineHealed, setLineHealed] = useState(false);
   const [coinFlying, setCoinFlying] = useState(false);
   const coinDotRef = useRef(null);
 
@@ -2747,7 +2748,7 @@ function LoginDivider({ activeKey, iconRef, onCoinLanded }) {
     const T = (fn, ms) => { const id = setTimeout(fn, ms); timers.push(id); return id; };
 
     // รีเซ็ตทุกอย่างก่อนเริ่มรอบใหม่เสมอ (ทั้ง mount ครั้งแรกและตอนกดเล่นซ้ำ)
-    setLinePhase("idle"); setWordShown(false); setLineShine(false); setWordDissolve(false); setCoinFlying(false);
+    setLinePhase("idle"); setWordShown(false); setLineShine(false); setWordDissolve(false); setLineHealed(false); setCoinFlying(false);
     if (coinDotRef.current) { coinDotRef.current.style.transition = "none"; coinDotRef.current.style.transform = "none"; }
 
     if (!activeKey) return () => timers.forEach(clearTimeout);
@@ -2760,6 +2761,8 @@ function LoginDivider({ activeKey, iconRef, onCoinLanded }) {
     function sendCoinToIcon() {
       setWordDissolve(true);
       setCoinFlying(true);
+      T(() => setLineHealed(true), 550); // รอตัวอักษรจางหายเกือบหมดก่อน ค่อยให้กล่องที่บังเส้นไว้หดแคบ+จางตาม เส้นจะได้ทะลุกลับมาเต็มเส้นเหมือนเดิม
+      T(() => setWordShown(false), 550 + 650);
     }
     return () => timers.forEach(clearTimeout);
   }, [activeKey]);
@@ -2799,7 +2802,7 @@ function LoginDivider({ activeKey, iconRef, onCoinLanded }) {
         <div ref={coinDotRef} style={{ position: "absolute", left: "50%", top: 0, width: 9, height: 9, marginLeft: -4.5, marginTop: -4.5, borderRadius: "50%", background: "radial-gradient(circle at 35% 30%, #F4DFA6, #C29E58 60%, #8a6b34)", zIndex: 3 }} />
       )}
       {wordShown && (
-        <div style={{ position: "absolute", left: "50%", top: 0, transform: "translate(-50%,-50%)", zIndex: 1, background: "#0B0A08", padding: "0 8px", fontFamily: "'Poppins','IBM Plex Sans Thai',sans-serif", fontWeight: 700, fontSize: 15, letterSpacing: -.1, lineHeight: 1, whiteSpace: "nowrap", overflow: "hidden", color: "#fff" }}>
+        <div style={{ position: "absolute", left: "50%", top: 0, transform: "translate(-50%,-50%)", zIndex: 1, background: lineHealed ? "rgba(11,10,8,0)" : "#0B0A08", padding: lineHealed ? "0 0px" : "0 8px", transition: "background-color .6s ease, padding .6s ease", fontFamily: "'Poppins','IBM Plex Sans Thai',sans-serif", fontWeight: 700, fontSize: 15, letterSpacing: -.1, lineHeight: 1, whiteSpace: "nowrap", overflow: "hidden", color: "#fff" }}>
           {"Jomonbey".split("").map((ch, idx) => (
             <span key={idx} style={{ display: "inline-block", animation: wordDissolve ? `jmb-dissolve .6s ease forwards ${idx * 45}ms` : "none" }}>{ch}</span>
           ))}
@@ -2917,7 +2920,7 @@ function AuthPage() {
   };
 
   return (
-    <div style={{ minHeight: "100dvh", display: "flex", justifyContent: "center", background: "radial-gradient(ellipse 640px 460px at 50% -8%, rgba(194,158,88,.12), transparent 62%), #0B0A08", fontFamily: "'IBM Plex Sans Thai',sans-serif" }}>
+    <div style={{ minHeight: "100dvh", overflowY: "auto", WebkitOverflowScrolling: "touch", display: "flex", justifyContent: "center", background: "radial-gradient(ellipse 640px 460px at 50% -8%, rgba(194,158,88,.12), transparent 62%), #0B0A08", fontFamily: "'IBM Plex Sans Thai',sans-serif" }}>
       <style>{`.jmb-field:focus { border-bottom-color: #C29E58 !important; } .jmb-field::placeholder { color: #57514A; }`}</style>
       <div style={{ width: "100%", maxWidth: 420, padding: "56px 24px", display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}><JomonbeyMark width={250} animated iconRef={authIconRef} coinOn={coinOn} onIconReady={() => { setCoinOn(false); setDivKey((k) => k + 1); }} /></div>
@@ -3035,7 +3038,7 @@ function SetNewPasswordPage({ onDone }) {
   };
 
   return (
-    <div style={{ minHeight: "100dvh", display: "flex", justifyContent: "center", background: "radial-gradient(ellipse 640px 460px at 50% -8%, rgba(194,158,88,.12), transparent 62%), #0B0A08", fontFamily: "'IBM Plex Sans Thai',sans-serif" }}>
+    <div style={{ minHeight: "100dvh", overflowY: "auto", WebkitOverflowScrolling: "touch", display: "flex", justifyContent: "center", background: "radial-gradient(ellipse 640px 460px at 50% -8%, rgba(194,158,88,.12), transparent 62%), #0B0A08", fontFamily: "'IBM Plex Sans Thai',sans-serif" }}>
       <div style={{ width: "100%", maxWidth: 420, padding: "72px 24px", display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 28 }}><JomonbeyMark width={220} /></div>
         <div style={{ fontSize: 17, fontWeight: 800, color: "#F3EDE1", marginBottom: 6, textAlign: "center" }}>ตั้งรหัสผ่านใหม่</div>
