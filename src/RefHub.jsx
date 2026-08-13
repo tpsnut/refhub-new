@@ -2620,8 +2620,11 @@ function JomonbeyMark({ width = 220, animated = false }) {
         const a = subEl.getBoundingClientRect(), b = targetEl.getBoundingClientRect();
         const dx = (b.left + b.width / 2) - (a.left + a.width / 2);
         const dy = (b.top + b.height / 2) - (a.top + a.height / 2);
+        subEl.style.transition = "none";
+        subEl.style.transform = "translate(0,0) scale(1)";
+        void subEl.offsetWidth; // บังคับ reflow ให้ browser จำ state เริ่มต้นก่อน ไม่งั้น transition จะกระโดดตรงไปเลยไม่เล่นแอนิเมชัน
         subEl.style.transition = "transform .5s cubic-bezier(.3,.6,.25,1)";
-        subEl.style.transform = `translate(${dx}px, ${dy}px) scale(.6)`;
+        requestAnimationFrame(() => { subEl.style.transform = `translate(${dx}px, ${dy}px) scale(.6)`; });
       }
       T(() => {
         setIntroFlown((f) => { const n = [...f]; n[k] = true; return n; });
@@ -2697,8 +2700,8 @@ function JomonbeyMark({ width = 220, animated = false }) {
 
           <div style={{ position: "relative", width: "100%", maxWidth: width, display: "flex", justifyContent: "center", alignItems: "center", height: Math.max(16, width * 0.04), marginTop: Math.round(width * 0.045) }}>
             <div style={{ position: "absolute", left: "10%", right: "10%", top: "50%", height: 1, background: "linear-gradient(90deg, transparent, rgba(194,158,88,.4), transparent)" }} />
-            {stage === "main" && <div style={{ position: "absolute", left: "34%", top: "50%", width: 7, height: 7, borderRadius: "50%", background: "#E4C583", boxShadow: "0 0 6px rgba(228,197,131,.8)", animation: "jmb-coin-roll 2.6s linear infinite" }} />}
-            <div style={{ position: "relative", background: "#0B0A08", padding: "0 8px", fontFamily: "'Poppins','IBM Plex Sans Thai',sans-serif", fontWeight: 700, fontSize: width * 0.06, letterSpacing: -.1, lineHeight: 1, whiteSpace: "nowrap", overflow: "hidden", color: "#fff", animation: stage === "main" ? "jmb-bob 2.4s ease-in-out infinite" : "none" }}>
+            {stage === "main" && <div style={{ position: "absolute", left: "34%", top: "50%", width: 9, height: 9, borderRadius: "50%", background: "#E4C583", boxShadow: "0 0 6px rgba(228,197,131,.8)", zIndex: 2, animation: "jmb-coin-roll 2.6s linear infinite" }} />}
+            <div style={{ position: "relative", zIndex: 1, background: "#0B0A08", padding: "0 8px", fontFamily: "'Poppins','IBM Plex Sans Thai',sans-serif", fontWeight: 700, fontSize: width * 0.06, letterSpacing: -.1, lineHeight: 1, whiteSpace: "nowrap", overflow: "hidden", color: "#fff" }}>
               {FINAL}
               {lineShine && <div style={{ position: "absolute", top: 0, left: "-60%", width: "45%", height: "100%", background: "linear-gradient(100deg, transparent, rgba(255,255,255,.85), transparent)", mixBlendMode: "overlay", animation: "jmb-line-shine .9s ease forwards" }} />}
             </div>
