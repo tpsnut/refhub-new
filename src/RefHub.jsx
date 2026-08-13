@@ -3568,6 +3568,8 @@ const PLAN_INFO = {
   duo: { label: "Duo", price: 349, seats: 2 },
   family_admin: { label: "Family Admin", price: 499, seats: 5 },
 };
+// 🎨 จำนวนธีมที่บันทึกไว้ใช้สลับได้ ตามแพ็กเกจที่ครอบครัวใช้อยู่ — ฟรี 1, Solo(199) 2, Duo(349) 3, Family Admin(499) 5
+const THEME_SLOT_LIMITS = { trial: 1, solo: 2, duo: 3, family_admin: 5 };
 
 // 💳 หน้าแพ็กเกจของฉัน — ดูสถานะ/mock checkout (โหมดทดสอบ ยังไม่ต่อเกตเวย์จ่ายเงินจริง Omise/2C2P)
 // + เข้าร่วมครอบครัวด้วยรหัสเชิญผ่านฟังก์ชัน join_family_by_code (SECURITY DEFINER เช็คโควตาที่นั่งให้)
@@ -16034,6 +16036,100 @@ function ColorPickerModal({ t, value, onChange, close }) {
   </div></div></ModalPortal>);
 }
 
+// 💾 แผงจัดการ "ธีมที่บันทึกไว้" — เก็บสแนปช็อตธีม(theme + customAccent)ไว้สลับกลับมาใช้ทีหลังได้
+// จำนวนที่เก็บได้ผูกกับแพ็กเกจของครอบครัว (THEME_SLOT_LIMITS) เช็ค limit ฝั่ง client ก่อน insert (RLS ฝั่ง DB กันแค่เรื่องเจ้าของแถวเท่านั้น ไม่ได้เช็ค limit ให้)
+function SavedThemesPanel({ t, theme, customAccent, setTheme, setCustomAccent, userId }) {
+  const [presets, setPresets] = useState(null); // null = กำลังโหลด
+  const [planTier, setPlanTier] = useState("trial");
+  const [saving, setSaving] = useState(false);
+  const [nameInput, setNameInput] = useState("");
+  const [showNameInput, setShowNameInput] = useState(false);
+  const [err, setErr] = useState("");
+
+  const limit = THEME_SLOT_LIMITS[planTier] || 1;
+
+  const load = async () => {
+    try {
+      const { data: prof } = await supabase.from("profiles").select("family_id").eq("id", userId).maybeSingle();
+      if (prof?.family_id) {
+        const { data: fam } = await supabase.from("families").select("plan").eq("id", prof.family_id).maybeSingle();
+        setPlanTier(fam?.plan || "trial");
+      }
+      const { data } = await supabase.from("theme_presets").select("*").eq("user_id", userId).order("created_at", { ascending: true });
+      setPresets(data || []);
+    } catch (e) { setPresets([]); }
+  };
+  useEffect(() => { if (userId) load(); }, [userId]);
+
+  const saveCurrent = async () => {
+    setErr("");
+    if (!nameInput.trim()) { setErr("ตั้งชื่อธีมก่อนนะ"); return; }
+    if ((presets?.length || 0) >= limit) { setErr(`แพ็กเกจตอนนี้บันทึกได้สูงสุด ${limit} ธีม ลบตัวเก่าออกก่อน หรืออัปเกรดแพ็กเกจเพื่อเก็บได้เพิ่ม`); return; }
+    setSaving(true);
+    const { error } = await supabase.from("theme_presets").insert({ user_id: userId, name: nameInput.trim(), theme, custom_accent: theme === "custom" ? customAccent : null });
+    setSaving(false);
+    if (error) { setErr("บันทึกไม่สำเร็จ ลองใหม่อีกครั้ง"); return; }
+    setNameInput(""); setShowNameInput(false);
+    load();
+  };
+
+  const applyPreset = (p) => {
+    if (p.custom_accent) setCustomAccent(p.custom_accent);
+    setTheme(p.theme);
+  };
+
+  const removePreset = async (id) => {
+    await supabase.from("theme_presets").delete().eq("id", id);
+    load();
+  };
+
+  const atLimit = presets !== null && presets.length >= limit;
+
+  return (
+    <div style={{ marginTop: 22 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text }}>ธีมที่บันทึกไว้</div>
+        <div style={{ fontSize: 11, color: t.sub }}>{presets ? presets.length : "…"}/{limit}</div>
+      </div>
+      <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 10 }}>เก็บธีมที่ถูกใจไว้ สลับกลับมาใช้ได้ทีหลัง — จำนวนที่เก็บได้ขึ้นกับแพ็กเกจ</div>
+
+      {presets === null ? (
+        <div style={{ fontSize: 12, color: t.faint }}>กำลังโหลด...</div>
+      ) : presets.length === 0 ? (
+        <div style={{ fontSize: 12, color: t.faint, marginBottom: 10 }}>ยังไม่มีธีมที่บันทึกไว้</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
+          {presets.map((p) => {
+            const th = THEMES[p.theme];
+            const swatchColor = p.theme === "custom" ? (p.custom_accent || t.accent) : (th?.day?.accent || t.accent);
+            return (
+              <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: 10, borderRadius: 14, background: t.surface, border: `1px solid ${t.border}` }}>
+                <span style={{ width: 30, height: 30, borderRadius: 15, background: swatchColor, flexShrink: 0, border: `1px solid ${t.border}` }} />
+                <div style={{ flex: 1, fontSize: 13, fontWeight: 700, color: t.text, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</div>
+                <button onClick={() => applyPreset(p)} style={{ padding: "6px 12px", borderRadius: 9, border: "none", background: t.accent, color: t.onAccent, fontSize: 11, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>ใช้</button>
+                <button onClick={() => removePreset(p.id)} style={{ padding: "6px 8px", borderRadius: 9, border: `1px solid ${t.border}`, background: "none", color: "#D9534F", cursor: "pointer", flexShrink: 0, display: "grid", placeItems: "center" }}><Trash2 size={13} /></button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {err && <div style={{ fontSize: 11.5, color: "#D9534F", marginBottom: 8 }}>{err}</div>}
+
+      {showNameInput ? (
+        <div style={{ display: "flex", gap: 6 }}>
+          <input value={nameInput} onChange={(e) => setNameInput(e.target.value)} placeholder="ตั้งชื่อธีม เช่น สไตล์ทำงาน" style={{ ...input(t), flex: 1 }} maxLength={30} />
+          <button onClick={saveCurrent} disabled={saving} style={{ padding: "0 16px", borderRadius: 10, border: "none", background: t.accent, color: t.onAccent, fontWeight: 700, fontSize: 12.5, cursor: saving ? "default" : "pointer", flexShrink: 0 }}>{saving ? "..." : "บันทึก"}</button>
+        </div>
+      ) : (
+        <button onClick={() => !atLimit && setShowNameInput(true)} disabled={atLimit} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "11px 0", borderRadius: 13, border: `2px dashed ${t.border}`, background: t.inputBg, color: atLimit ? t.faint : t.sub, fontWeight: 700, fontSize: 12.5, cursor: atLimit ? "default" : "pointer" }}>
+          <Plus size={16} /> {atLimit ? `เต็มโควตาแล้ว (${limit} ธีม) — อัปเกรดแพ็กเกจเพื่อเก็บเพิ่ม` : "บันทึกธีมปัจจุบันไว้"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function ThemePicker({ t, theme, setTheme, mode, customAccent, setCustomAccent, appBgUrl, setAppBgUrl, appBgOverlay, setAppBgOverlay, userId, close }) {
   const [pendingColor, setPendingColor] = useState(customAccent);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -16066,6 +16162,8 @@ function ThemePicker({ t, theme, setTheme, mode, customAccent, setCustomAccent, 
         <button onClick={() => { setCustomAccent(pendingColor); setTheme("custom"); close(); }} style={{ ...primaryBtn({ accent: pendingColor, accent2: lightenHex(pendingColor, 0.2), onAccent: relativeLuminance(pendingColor) > 0.5 ? "#141414" : "#FFFFFF" }), width: "100%", padding: "10px 0", marginTop: 12, fontSize: 13 }}>ใช้สีนี้</button>
       </div>
     </div>
+
+    <SavedThemesPanel t={t} theme={theme} customAccent={customAccent} setTheme={setTheme} setCustomAccent={setCustomAccent} userId={userId} />
 
     {/* 🖼️ พื้นหลังภาพนิ่งทั้งแอป — ภาพนิ่งเท่านั้น (ไม่รองรับวิดีโอ/gif ตามที่ตกลงกัน) โชว์ผ่านช่องว่างรอบๆการ์ด เพราะการ์ด/พื้นผิวต่างๆยังทึบแสงเหมือนเดิม ไม่บังตัวหนังสือ */}
     <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text, margin: "22px 0 4px" }}>พื้นหลังภาพนิ่งทั้งแอป</div>
