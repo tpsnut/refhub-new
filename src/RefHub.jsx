@@ -5509,6 +5509,86 @@ const HERO_SHORTCUTS_META = [
   { id: "chat", label: "แชท", icon: MessageCircle },
   { id: "community", label: "คอมมู", icon: Users },
 ];
+// 💾 แผงจัดการ "พื้นหลังการ์ดใหญ่ที่บันทึกไว้" — เก็บรูป/วิดีโอที่เคยอัปโหลด/ดึงลิงก์มาแล้วโอเคไว้สลับกลับมาใช้ทีหลังได้
+// จำนวนที่เก็บได้ผูกกับแพ็กเกจของครอบครัวเหมือนกับธีมสี (THEME_SLOT_LIMITS)
+// 💾 แผงจัดการ "พื้นหลังที่บันทึกไว้" — ใช้ร่วมกันได้ทั้งพื้นหลังการ์ดใหญ่ (target="hero", รูป/วิดีโอ) และพื้นหลังทั้งแอป (target="app", รูปนิ่งเท่านั้น + มีค่าความเข้ม overlay ด้วย)
+// จำนวนที่เก็บได้ผูกกับแพ็กเกจของครอบครัว (THEME_SLOT_LIMITS) — โควตานับรวมกันทั้ง 2 จุด เพราะเป็นตาราง bg_presets เดียวกัน กรองด้วย target
+function SavedBgPanel({ t, target, currentUrl, currentType = "image", currentOverlay, onApply, userId }) {
+  const [presets, setPresets] = useState(null);
+  const [planTier, setPlanTier] = useState("trial");
+  const [saving, setSaving] = useState(false);
+  const [nameInput, setNameInput] = useState("");
+  const [showNameInput, setShowNameInput] = useState(false);
+  const [err, setErr] = useState("");
+
+  const limit = THEME_SLOT_LIMITS[planTier] || 1;
+
+  const load = async () => {
+    try {
+      const { data: prof } = await supabase.from("profiles").select("family_id").eq("id", userId).maybeSingle();
+      if (prof?.family_id) {
+        const { data: fam } = await supabase.from("families").select("plan").eq("id", prof.family_id).maybeSingle();
+        setPlanTier(fam?.plan || "trial");
+      }
+      const { data } = await supabase.from("bg_presets").select("*").eq("user_id", userId).eq("target", target).order("created_at", { ascending: true });
+      setPresets(data || []);
+    } catch (e) { setPresets([]); }
+  };
+  useEffect(() => { if (userId) load(); }, [userId, target]);
+
+  const saveCurrent = async () => {
+    setErr("");
+    if (!currentUrl) { setErr("ยังไม่มีพื้นหลังที่ตั้งอยู่ตอนนี้ให้บันทึก"); return; }
+    if (!nameInput.trim()) { setErr("ตั้งชื่อพื้นหลังก่อนนะ"); return; }
+    if ((presets?.length || 0) >= limit) { setErr(`แพ็กเกจตอนนี้บันทึกได้สูงสุด ${limit} พื้นหลัง ลบตัวเก่าออกก่อน หรืออัปเกรดแพ็กเกจเพื่อเก็บได้เพิ่ม`); return; }
+    setSaving(true);
+    const { error } = await supabase.from("bg_presets").insert({ user_id: userId, target, name: nameInput.trim(), url: currentUrl, media_type: currentType || "image", overlay: currentOverlay ?? null });
+    setSaving(false);
+    if (error) { setErr("บันทึกไม่สำเร็จ ลองใหม่อีกครั้ง"); return; }
+    setNameInput(""); setShowNameInput(false);
+    load();
+  };
+
+  const removePreset = async (id) => { await supabase.from("bg_presets").delete().eq("id", id); load(); };
+  const atLimit = presets !== null && presets.length >= limit;
+
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+        <div style={{ fontSize: 11, fontWeight: 800, color: t.sub }}>พื้นหลังที่บันทึกไว้</div>
+        <div style={{ fontSize: 10.5, color: t.sub }}>{presets ? presets.length : "…"}/{limit}</div>
+      </div>
+
+      {presets && presets.length > 0 && (
+        <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, marginBottom: 8 }}>
+          {presets.map((p) => (
+            <div key={p.id} style={{ position: "relative", flexShrink: 0, width: 62 }}>
+              <button onClick={() => onApply(p)} style={{ width: 62, height: 62, borderRadius: 12, overflow: "hidden", background: "#000", border: `1px solid ${t.border}`, padding: 0, cursor: "pointer", display: "block" }}>
+                {p.media_type === "video" ? <video src={p.url} muted style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+              </button>
+              <button onClick={() => removePreset(p.id)} style={{ position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: 10, border: "none", background: "#D9534F", color: "#fff", cursor: "pointer", display: "grid", placeItems: "center" }}><X size={12} /></button>
+              <div style={{ fontSize: 9.5, color: t.sub, marginTop: 3, textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {err && <div style={{ fontSize: 11, color: "#D9534F", marginBottom: 6 }}>{err}</div>}
+
+      {showNameInput ? (
+        <div style={{ display: "flex", gap: 6 }}>
+          <input value={nameInput} onChange={(e) => setNameInput(e.target.value)} placeholder="ตั้งชื่อพื้นหลัง" style={{ ...input(t), flex: 1, fontSize: 12.5 }} maxLength={30} />
+          <button onClick={saveCurrent} disabled={saving} style={{ padding: "0 14px", borderRadius: 10, border: "none", background: t.accent, color: t.onAccent, fontWeight: 700, fontSize: 11.5, cursor: saving ? "default" : "pointer", flexShrink: 0 }}>{saving ? "..." : "บันทึก"}</button>
+        </div>
+      ) : (
+        <button onClick={() => !atLimit && currentUrl && setShowNameInput(true)} disabled={atLimit || !currentUrl} style={{ width: "100%", padding: "8px 0", borderRadius: 10, border: `1.5px dashed ${t.border}`, background: "none", color: atLimit || !currentUrl ? t.faint : t.sub, fontWeight: 700, fontSize: 11, cursor: atLimit || !currentUrl ? "default" : "pointer" }}>
+          {atLimit ? `เต็มโควตาแล้ว (${limit}) — อัปเกรดแพ็กเกจเพื่อเก็บเพิ่ม` : "＋ บันทึกพื้นหลังนี้ไว้"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function WidgetOrderModal({ t, title, hint, selected, setSelected, close, catColors, setCatColors, heroShortcuts, setHeroShortcuts, heroTheme, setHeroTheme, heroCustomUrl, setHeroCustomUrl, heroCustomType, setHeroCustomType, userId }) {
   const chosen = selected.map((id) => AVAILABLE_WIDGETS.find((w) => w.id === id)).filter(Boolean);
   const available = AVAILABLE_WIDGETS.filter((w) => !selected.includes(w.id));
@@ -5540,6 +5620,7 @@ function WidgetOrderModal({ t, title, hint, selected, setSelected, close, catCol
             <Upload size={16} /> อัปโหลดพื้นหลังการ์ดนี้ (รูป/วิดีโอ)
           </button>
         )}
+        <SavedBgPanel t={t} target="hero" currentUrl={heroCustomUrl} currentType={heroCustomType} onApply={(p) => { setHeroCustomUrl(p.url); setHeroCustomType(p.media_type); setHeroTheme("custom"); }} userId={userId} />
         <div style={{ height: 1, background: t.border, margin: "0 0 14px" }} />
       </>
     )}
@@ -16038,100 +16119,6 @@ function ColorPickerModal({ t, value, onChange, close }) {
   </div></div></ModalPortal>);
 }
 
-// 💾 แผงจัดการ "ธีมที่บันทึกไว้" — เก็บสแนปช็อตธีม(theme + customAccent)ไว้สลับกลับมาใช้ทีหลังได้
-// จำนวนที่เก็บได้ผูกกับแพ็กเกจของครอบครัว (THEME_SLOT_LIMITS) เช็ค limit ฝั่ง client ก่อน insert (RLS ฝั่ง DB กันแค่เรื่องเจ้าของแถวเท่านั้น ไม่ได้เช็ค limit ให้)
-function SavedThemesPanel({ t, theme, customAccent, setTheme, setCustomAccent, userId }) {
-  const [presets, setPresets] = useState(null); // null = กำลังโหลด
-  const [planTier, setPlanTier] = useState("trial");
-  const [saving, setSaving] = useState(false);
-  const [nameInput, setNameInput] = useState("");
-  const [showNameInput, setShowNameInput] = useState(false);
-  const [err, setErr] = useState("");
-
-  const limit = THEME_SLOT_LIMITS[planTier] || 1;
-
-  const load = async () => {
-    try {
-      const { data: prof } = await supabase.from("profiles").select("family_id").eq("id", userId).maybeSingle();
-      if (prof?.family_id) {
-        const { data: fam } = await supabase.from("families").select("plan").eq("id", prof.family_id).maybeSingle();
-        setPlanTier(fam?.plan || "trial");
-      }
-      const { data } = await supabase.from("theme_presets").select("*").eq("user_id", userId).order("created_at", { ascending: true });
-      setPresets(data || []);
-    } catch (e) { setPresets([]); }
-  };
-  useEffect(() => { if (userId) load(); }, [userId]);
-
-  const saveCurrent = async () => {
-    setErr("");
-    if (!nameInput.trim()) { setErr("ตั้งชื่อธีมก่อนนะ"); return; }
-    if ((presets?.length || 0) >= limit) { setErr(`แพ็กเกจตอนนี้บันทึกได้สูงสุด ${limit} ธีม ลบตัวเก่าออกก่อน หรืออัปเกรดแพ็กเกจเพื่อเก็บได้เพิ่ม`); return; }
-    setSaving(true);
-    const { error } = await supabase.from("theme_presets").insert({ user_id: userId, name: nameInput.trim(), theme, custom_accent: theme === "custom" ? customAccent : null });
-    setSaving(false);
-    if (error) { setErr("บันทึกไม่สำเร็จ ลองใหม่อีกครั้ง"); return; }
-    setNameInput(""); setShowNameInput(false);
-    load();
-  };
-
-  const applyPreset = (p) => {
-    if (p.custom_accent) setCustomAccent(p.custom_accent);
-    setTheme(p.theme);
-  };
-
-  const removePreset = async (id) => {
-    await supabase.from("theme_presets").delete().eq("id", id);
-    load();
-  };
-
-  const atLimit = presets !== null && presets.length >= limit;
-
-  return (
-    <div style={{ marginTop: 22 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-        <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text }}>ธีมที่บันทึกไว้</div>
-        <div style={{ fontSize: 11, color: t.sub }}>{presets ? presets.length : "…"}/{limit}</div>
-      </div>
-      <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 10 }}>เก็บธีมที่ถูกใจไว้ สลับกลับมาใช้ได้ทีหลัง — จำนวนที่เก็บได้ขึ้นกับแพ็กเกจ</div>
-
-      {presets === null ? (
-        <div style={{ fontSize: 12, color: t.faint }}>กำลังโหลด...</div>
-      ) : presets.length === 0 ? (
-        <div style={{ fontSize: 12, color: t.faint, marginBottom: 10 }}>ยังไม่มีธีมที่บันทึกไว้</div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
-          {presets.map((p) => {
-            const th = THEMES[p.theme];
-            const swatchColor = p.theme === "custom" ? (p.custom_accent || t.accent) : (th?.day?.accent || t.accent);
-            return (
-              <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: 10, borderRadius: 14, background: t.surface, border: `1px solid ${t.border}` }}>
-                <span style={{ width: 30, height: 30, borderRadius: 15, background: swatchColor, flexShrink: 0, border: `1px solid ${t.border}` }} />
-                <div style={{ flex: 1, fontSize: 13, fontWeight: 700, color: t.text, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</div>
-                <button onClick={() => applyPreset(p)} style={{ padding: "6px 12px", borderRadius: 9, border: "none", background: t.accent, color: t.onAccent, fontSize: 11, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>ใช้</button>
-                <button onClick={() => removePreset(p.id)} style={{ padding: "6px 8px", borderRadius: 9, border: `1px solid ${t.border}`, background: "none", color: "#D9534F", cursor: "pointer", flexShrink: 0, display: "grid", placeItems: "center" }}><Trash2 size={13} /></button>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {err && <div style={{ fontSize: 11.5, color: "#D9534F", marginBottom: 8 }}>{err}</div>}
-
-      {showNameInput ? (
-        <div style={{ display: "flex", gap: 6 }}>
-          <input value={nameInput} onChange={(e) => setNameInput(e.target.value)} placeholder="ตั้งชื่อธีม เช่น สไตล์ทำงาน" style={{ ...input(t), flex: 1 }} maxLength={30} />
-          <button onClick={saveCurrent} disabled={saving} style={{ padding: "0 16px", borderRadius: 10, border: "none", background: t.accent, color: t.onAccent, fontWeight: 700, fontSize: 12.5, cursor: saving ? "default" : "pointer", flexShrink: 0 }}>{saving ? "..." : "บันทึก"}</button>
-        </div>
-      ) : (
-        <button onClick={() => !atLimit && setShowNameInput(true)} disabled={atLimit} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "11px 0", borderRadius: 13, border: `2px dashed ${t.border}`, background: t.inputBg, color: atLimit ? t.faint : t.sub, fontWeight: 700, fontSize: 12.5, cursor: atLimit ? "default" : "pointer" }}>
-          <Plus size={16} /> {atLimit ? `เต็มโควตาแล้ว (${limit} ธีม) — อัปเกรดแพ็กเกจเพื่อเก็บเพิ่ม` : "บันทึกธีมปัจจุบันไว้"}
-        </button>
-      )}
-    </div>
-  );
-}
-
 function ThemePicker({ t, theme, setTheme, mode, customAccent, setCustomAccent, appBgUrl, setAppBgUrl, appBgOverlay, setAppBgOverlay, userId, close }) {
   const [pendingColor, setPendingColor] = useState(customAccent);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -16165,8 +16152,6 @@ function ThemePicker({ t, theme, setTheme, mode, customAccent, setCustomAccent, 
       </div>
     </div>
 
-    <SavedThemesPanel t={t} theme={theme} customAccent={customAccent} setTheme={setTheme} setCustomAccent={setCustomAccent} userId={userId} />
-
     {/* 🖼️ พื้นหลังภาพนิ่งทั้งแอป — ภาพนิ่งเท่านั้น (ไม่รองรับวิดีโอ/gif ตามที่ตกลงกัน) โชว์ผ่านช่องว่างรอบๆการ์ด เพราะการ์ด/พื้นผิวต่างๆยังทึบแสงเหมือนเดิม ไม่บังตัวหนังสือ */}
     <div style={{ fontSize: 13.5, fontWeight: 800, color: t.text, margin: "22px 0 4px" }}>พื้นหลังภาพนิ่งทั้งแอป</div>
     <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 12 }}>ใส่รูปพื้นหลังให้ทั้งแอป โชว์ผ่านช่องว่างรอบการ์ดต่างๆ (การ์ดยังทึบแสงเหมือนเดิม อ่านง่าย)</div>
@@ -16193,6 +16178,10 @@ function ThemePicker({ t, theme, setTheme, mode, customAccent, setCustomAccent, 
         <div style={{ fontSize: 10, color: t.faint, marginTop: 4, lineHeight: 1.5 }}>ลากไปทางซ้าย = เห็นภาพชัดขึ้น (ตัวหนังสืออาจอ่านยากขึ้น) · ลากไปทางขวา = ตัวหนังสือชัดขึ้น (เห็นภาพจางลง) — สีคลุมปรับอัตโนมัติตามโหมดกลางวัน/กลางคืนให้แล้ว</div>
       </div>
     )}
+
+    <div style={{ marginTop: 14 }}>
+      <SavedBgPanel t={t} target="app" currentUrl={appBgUrl} currentType="image" currentOverlay={appBgOverlay} onApply={(p) => { setAppBgUrl(p.url); if (p.overlay != null) setAppBgOverlay(p.overlay); }} userId={userId} />
+    </div>
 
     {pickerOpen && <ColorPickerModal t={t} value={pendingColor} onChange={setPendingColor} close={() => setPickerOpen(false)} />}
     {appBgUploadOpen && <HeroBgUploadModal t={t} userId={userId} imageOnly pathPrefix="app-bg" title="อัปโหลดพื้นหลังทั้งแอป" close={() => setAppBgUploadOpen(false)} onDone={(url) => setAppBgUrl(url)} />}
