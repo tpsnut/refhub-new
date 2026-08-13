@@ -442,7 +442,7 @@ const THEMES = {
     night: { accent: "#B5B5BA", accent2: "#D0D0D4", onAccent: "#141414" },
   },
   default:  {
-    label: "PKNOW (ส้ม)",
+    label: "Jomonbey (ทอง)",
     day:   { accent: "#F2872E", accent2: "#F5A050", onAccent: "#141414" },
     night: { accent: "#F2872E", accent2: "#F5A050", onAccent: "#141414" },
   },
@@ -2682,6 +2682,36 @@ function JomonbeyMark({ width = 220, animated = false, iconRef, coinOn = true, o
   );
 }
 
+// 🎯 โลโก้เล็ก "JMB" สำหรับพื้นที่แคบ (หัวฟีดชุมชน, About modal) — ไม่มีสคริปต์ยาวแบบหน้า login แค่ตัวหนังสือนิ่งๆ
+// บวกเนคไทรูดลงมาเข้าที่ + เหรียญเด้งขึ้นมาทีเดียวจบ (ใช้ไฟล์เหรียญ/เนคไททองจริงตัวเดียวกับไอคอนแอป ไม่ได้วาดขึ้นใหม่)
+function JmbMiniMark({ width = 90, animated = false, color = "#F2872E", cycle = false }) {
+  const [playId, setPlayId] = useState(0);
+  useEffect(() => {
+    if (!cycle) return;
+    const id = setInterval(() => setPlayId((p) => p + 1), 6000);
+    return () => clearInterval(id);
+  }, [cycle]);
+
+  const fontSize = width * 0.34;
+  const coinSize = fontSize * 0.34;
+  const tieW = fontSize * 0.15;
+  const tieH = fontSize * 0.36;
+
+  return (
+    <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "center" }}>
+      <style>{`
+        @keyframes jmb-mini-tie { 0% { transform: translateY(-16px); opacity: 0; } 65% { transform: translateY(2px); opacity: 1; } 100% { transform: translateY(0); opacity: 1; } }
+        @keyframes jmb-mini-coin { 0% { transform: scale(0); opacity: 0; } 55% { transform: scale(1.3); opacity: 1; } 78% { transform: scale(.88); } 100% { transform: scale(1); opacity: 1; } }
+      `}</style>
+      <div style={{ position: "relative", fontFamily: "'Poppins','IBM Plex Sans Thai',sans-serif", fontWeight: 800, fontSize, letterSpacing: -0.5, lineHeight: 1, color, whiteSpace: "nowrap" }}>
+        JMB
+        <img key={`coin-${playId}`} src="/icons/coin-mini.png" alt="" style={{ position: "absolute", left: "50%", top: -fontSize * 0.5, width: coinSize, marginLeft: -coinSize / 2, transformOrigin: "center", animation: animated ? "jmb-mini-coin .6s cubic-bezier(.34,1.56,.64,1) .38s both" : "none" }} />
+        <img key={`tie-${playId}`} src="/icons/tie-mini.png" alt="" style={{ position: "absolute", left: "50%", top: fontSize * 0.4, width: tieW, height: tieH, objectFit: "contain", marginLeft: -tieW / 2, animation: animated ? "jmb-mini-tie .5s ease .05s both" : "none" }} />
+      </div>
+    </div>
+  );
+}
+
 function PKnowMark({ width = 220, animated = false, color = "#F2872E", cycle = false }) {
   const h = width * 0.34;
   return (
@@ -3380,11 +3410,11 @@ function AboutAppModal({ t, lang, close }) {
             <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>{L(lang, "menu_about")}</div>
             <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
           </div>
-          <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}><PKnowMark width={140} color={t.accent} /></div>
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}><JmbMiniMark width={140} animated color={t.accent} /></div>
           <div style={{ fontSize: 12.5, color: t.sub, lineHeight: 1.8, background: t.inputBg, borderRadius: 12, padding: 14, marginBottom: 14 }}>
             {isEn
-              ? "P..KNOW is a family productivity & social app — goals, finance tracking, notes, a community feed, AI mentor chat, and more, all in one place."
-              : "P..KNOW คือแอปโปรดักทิวิตี้และโซเชียลสำหรับครอบครัว — เป้าหมาย การเงิน โน้ต ชุมชน แชทกับโค้ช AI และอีกมากมาย รวมไว้ในที่เดียว"}
+              ? "Jomonbey is a family productivity & finance app — goals, finance tracking, notes, a community feed, AI mentor chat, and more, all in one place."
+              : "Jomonbey คือแอปจัดการเงินและโปรดักทิวิตี้สำหรับครอบครัว — เป้าหมาย การเงิน โน้ต ชุมชน แชทกับโค้ช AI และอีกมากมาย รวมไว้ในที่เดียว"}
           </div>
           <div style={{ fontSize: 11, color: t.faint, lineHeight: 2 }}>
             <div>{isEn ? "Built with React + Vite" : "สร้างด้วย React + Vite"}</div>
@@ -5973,7 +6003,7 @@ function FinancePage({ t, lang, tx, setTx, categories, openAdd, openExport, user
   // เพราะใช้ font จริงของเครื่อง ไม่ใช่ font ฝังใน PDF แบบ library ทำ) ผู้ใช้กด "บันทึกเป็น PDF" ในหน้าต่าง print ได้เลย
   const doExportPdf = () => {
     const rows = periodTx.map((x) => `<tr><td>${x.date}</td><td>${x.type === "in" ? "รับเข้า" : "จ่ายออก"}</td><td>${findCat(categories, x.cat).label}</td><td style="text-align:right">${x.amount.toLocaleString()}</td><td>${(x.note || "").replace(/</g, "&lt;")}</td></tr>`).join("");
-    const html = `<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"><title>RefHub - รายงานการเงิน</title>
+    const html = `<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"><title>Jomonbey - รายงานการเงิน</title>
       <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap">
       <style>
         body{font-family:'IBM Plex Sans Thai','Sarabun','Segoe UI',sans-serif;padding:24px;color:#222}
@@ -5982,7 +6012,7 @@ function FinancePage({ t, lang, tx, setTx, categories, openAdd, openExport, user
         th{background:#f4f4f4} .summary{display:flex;gap:24px;margin-bottom:18px}
         .summary div{font-size:13px} .summary b{display:block;font-size:17px}
       </style></head><body>
-      <h1>รายงานการเงิน — RefHub</h1>
+      <h1>รายงานการเงิน — Jomonbey</h1>
       <div class="sub">ช่วงเวลา: ${periodLabel}</div>
       <div class="summary">
         <div>รายรับ<b style="color:#2E9E6B">${fmt(income)}</b></div>
@@ -8169,7 +8199,7 @@ function CommunityOverlay({ t, cardShape, userId, authProfile, session, openThre
                 <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center" }}><LockKeyhole size={34} color="#fff" /></div>
               </div>
               <div style={{ fontSize: 19, fontWeight: 800, color: t.text, marginBottom: 8 }}>โลกใบนี้ยังล็อกอยู่ 🔒</div>
-              <div style={{ fontSize: 13.5, color: t.sub, lineHeight: 1.7, maxWidth: 300, margin: "0 auto 24px" }}>ชุมชนคือพื้นที่โซเชียลลับของ PKNOW — โพสต์ แชร์ ติดตามกันได้เหมือนโซเชียลส่วนตัว ต้องปลดล็อกสิทธิ์ก่อนถึงจะเข้าได้</div>
+              <div style={{ fontSize: 13.5, color: t.sub, lineHeight: 1.7, maxWidth: 300, margin: "0 auto 24px" }}>ชุมชนคือพื้นที่โซเชียลลับของ Jomonbey — โพสต์ แชร์ ติดตามกันได้เหมือนโซเชียลส่วนตัว ต้องปลดล็อกสิทธิ์ก่อนถึงจะเข้าได้</div>
               <div style={{ ...card(t), padding: 16, maxWidth: 320, margin: "0 auto", textAlign: "left" }}>
                 <div style={{ fontSize: 12.5, fontWeight: 700, color: t.text, marginBottom: 10 }}>✨ ปลดล็อกแล้วได้อะไรบ้าง</div>
                 {["📝 โพสต์รูป + ข้อความ", "❤️ ไลก์ · 💬 คอมเมนต์ · 🔁 รีโพสต์", "👥 ติดตามคนอื่น มีฟีดส่วนตัว", "🔖 บันทึกโพสต์แยกหมวดหมู่"].map((x, i) => (
@@ -8368,7 +8398,7 @@ function PostCard({ t, post, userId, onOpenProfile, onChanged, onTag }) {
     else setShowBmMenu(true); // เปิดให้เลือกหมวดก่อนบันทึก
   };
   const share = async () => {
-    const text = (post.text || "") + "\n\n— แชร์จากชุมชน PKNOW";
+    const text = (post.text || "") + "\n\n— แชร์จากชุมชน Jomonbey";
     try {
       if (navigator.share) await navigator.share({ text });
       else { await navigator.clipboard.writeText(text); alert("คัดลอกข้อความโพสต์แล้ว"); }
@@ -16541,7 +16571,7 @@ function Empty({ t, text }) {
   if (isLoading) {
     return (
       <div style={{ textAlign: "center", padding: "26px 0" }}>
-        <div style={{ display: "flex", justifyContent: "center" }}><PKnowMark width={90} animated color={t.accent} /></div>
+        <div style={{ display: "flex", justifyContent: "center" }}><JmbMiniMark width={90} animated cycle color={t.accent} /></div>
         <div style={{ color: t.sub, fontSize: 12, marginTop: 2 }}>{text}</div>
       </div>
     );
