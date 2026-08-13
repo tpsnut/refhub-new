@@ -2734,7 +2734,7 @@ function PKnowLockup({ width = 220, gap = 10, animated = false, cycle = false })
 
 // 📏 เส้นคั่นจริงระหว่างโลโก้กับกรอบฟอร์ม — เล่นเอฟเฟค: เหรียญไหลจากซ้ายสุดไปขวาสุดของเส้นครั้งเดียว -> ตกขอบหาย -> "Jomonbey" ตัวเล็กสีขาวนิ่งโผล่มานั่งกึ่งกลางเส้น (แสงกวาดวนเฉพาะตอนคำยังอยู่ ขนาดเท่าตัวหนังสือเป๊ะ ไม่ล้นออกมา)
 // ค้างไว้ -> คำจางหายทีละตัว พร้อมเหรียญเดียวกันบินขึ้นไปหา iconRef (ตำแหน่งช่องว่างเหรียญบนไอคอนจริงที่ AuthPage เรนเดอร์อยู่) แล้วแจ้ง onCoinLanded ให้ AuthPage สลับไอคอนเป็นเวอร์ชันมีเหรียญ
-function LoginDivider({ active, iconRef, onCoinLanded }) {
+function LoginDivider({ activeKey, iconRef, onCoinLanded }) {
   const [linePhase, setLinePhase] = useState("idle"); // idle -> rolling -> done
   const [wordShown, setWordShown] = useState(false);
   const [lineShine, setLineShine] = useState(false);
@@ -2743,9 +2743,15 @@ function LoginDivider({ active, iconRef, onCoinLanded }) {
   const coinDotRef = useRef(null);
 
   useEffect(() => {
-    if (!active) return;
     const timers = [];
     const T = (fn, ms) => { const id = setTimeout(fn, ms); timers.push(id); return id; };
+
+    // รีเซ็ตทุกอย่างก่อนเริ่มรอบใหม่เสมอ (ทั้ง mount ครั้งแรกและตอนกดเล่นซ้ำ)
+    setLinePhase("idle"); setWordShown(false); setLineShine(false); setWordDissolve(false); setCoinFlying(false);
+    if (coinDotRef.current) { coinDotRef.current.style.transition = "none"; coinDotRef.current.style.transform = "none"; }
+
+    if (!activeKey) return () => timers.forEach(clearTimeout);
+
     T(() => setLinePhase("rolling"), 300);
     T(() => setLinePhase("done"), 300 + 1800);
     T(() => setWordShown(true), 300 + 1800 + 250);
@@ -2756,7 +2762,7 @@ function LoginDivider({ active, iconRef, onCoinLanded }) {
       setCoinFlying(true);
     }
     return () => timers.forEach(clearTimeout);
-  }, [active]);
+  }, [activeKey]);
 
   useEffect(() => {
     if (!coinFlying) return;
@@ -2771,7 +2777,10 @@ function LoginDivider({ active, iconRef, onCoinLanded }) {
       dot.style.transition = "transform .9s cubic-bezier(.35,.05,.25,1)";
       requestAnimationFrame(() => { dot.style.transform = `translate(${dx}px, ${dy}px) rotate(560deg) scale(1)`; });
     }
-    const t = setTimeout(() => onCoinLanded?.(), 900);
+    const t = setTimeout(() => {
+      onCoinLanded?.();
+      setCoinFlying(false); // ลบเหรียญที่บินทิ้ง กันซ้อนทับกับเหรียญจริงที่เพิ่งโผล่บนไอคอน
+    }, 900);
     return () => clearTimeout(t);
   }, [coinFlying]);
 
@@ -2814,7 +2823,7 @@ function AuthPage() {
   const [err, setErr] = useState("");
   const [info, setInfo] = useState("");
   const authIconRef = useRef(null);
-  const [divActive, setDivActive] = useState(false);
+  const [divKey, setDivKey] = useState(0);
   const [coinOn, setCoinOn] = useState(false);
   const [forgotOpen, setForgotOpen] = useState(false); // 🔑 เปิดฟอร์ม "ลืมรหัสผ่าน" (เฉพาะบัญชีอีเมล — บัญชี PIN ให้แอดมินรีเซ็ตให้แทน)
   const [forgotSending, setForgotSending] = useState(false);
@@ -2911,8 +2920,8 @@ function AuthPage() {
     <div style={{ minHeight: "100dvh", display: "flex", justifyContent: "center", background: "radial-gradient(ellipse 640px 460px at 50% -8%, rgba(194,158,88,.12), transparent 62%), #0B0A08", fontFamily: "'IBM Plex Sans Thai',sans-serif" }}>
       <style>{`.jmb-field:focus { border-bottom-color: #C29E58 !important; } .jmb-field::placeholder { color: #57514A; }`}</style>
       <div style={{ width: "100%", maxWidth: 420, padding: "56px 24px", display: "flex", flexDirection: "column" }}>
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}><JomonbeyMark width={250} animated iconRef={authIconRef} coinOn={coinOn} onIconReady={() => setDivActive(true)} /></div>
-        <LoginDivider active={divActive} iconRef={authIconRef} onCoinLanded={() => setCoinOn(true)} />
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}><JomonbeyMark width={250} animated iconRef={authIconRef} coinOn={coinOn} onIconReady={() => { setCoinOn(false); setDivKey((k) => k + 1); }} /></div>
+        <LoginDivider activeKey={divKey} iconRef={authIconRef} onCoinLanded={() => setCoinOn(true)} />
 
         <div style={{ position: "relative", border: "1px solid rgba(194,158,88,.09)", borderRadius: 4, padding: "32px 26px 26px", background: "linear-gradient(180deg, rgba(194,158,88,.045), transparent 45%)" }}>
           <div style={{ position: "absolute", top: -1, left: "14%", right: "14%", height: 1, background: "linear-gradient(90deg, transparent, #C29E58, transparent)" }} />
@@ -2934,11 +2943,11 @@ function AuthPage() {
             <>
               <div style={{ marginBottom: 18 }}>
                 <label style={{ display: "block", fontSize: 11, fontWeight: 700, letterSpacing: 1.3, textTransform: "uppercase", color: "#9A9184", marginBottom: 7 }}>ชื่อผู้ใช้</label>
-                <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="ที่แอดมินตั้งให้ เช่น mom" className="jmb-field" style={{ width: "100%", background: "transparent", border: "none", borderBottom: "1px solid rgba(194,158,88,.25)", borderRadius: 0, padding: "7px 2px 10px", fontSize: 15.5, outline: "none", color: "#F3EDE1", boxSizing: "border-box" }} />
+                <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="ที่แอดมินตั้งให้ เช่น mom" className="jmb-field" style={{ width: "100%", background: "transparent", border: "none", borderBottom: "1px solid rgba(194,158,88,.25)", borderRadius: 0, padding: "7px 2px 10px", fontSize: 16, outline: "none", color: "#F3EDE1", boxSizing: "border-box" }} />
               </div>
               <div style={{ marginBottom: 8 }}>
                 <label style={{ display: "block", fontSize: 11, fontWeight: 700, letterSpacing: 1.3, textTransform: "uppercase", color: "#9A9184", marginBottom: 7 }}>PIN</label>
-                <input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} type="password" inputMode="numeric" placeholder="4-6 หลัก" className="jmb-field" style={{ width: "100%", background: "transparent", border: "none", borderBottom: "1px solid rgba(194,158,88,.25)", borderRadius: 0, padding: "7px 2px 10px", fontSize: 15.5, outline: "none", letterSpacing: 3, color: "#F3EDE1", boxSizing: "border-box" }} />
+                <input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} type="password" inputMode="numeric" placeholder="4-6 หลัก" className="jmb-field" style={{ width: "100%", background: "transparent", border: "none", borderBottom: "1px solid rgba(194,158,88,.25)", borderRadius: 0, padding: "7px 2px 10px", fontSize: 16, outline: "none", letterSpacing: 3, color: "#F3EDE1", boxSizing: "border-box" }} />
               </div>
               <div style={{ fontSize: 11, color: "#6B655F", marginBottom: 20 }}>ลืม PIN? ให้แอดมินในบ้านช่วยรีเซ็ตให้จากหน้าตั้งค่าได้เลย</div>
             </>
@@ -2947,7 +2956,7 @@ function AuthPage() {
               {mode === "signup" && (
                 <div style={{ marginBottom: 18 }}>
                   <label style={{ display: "block", fontSize: 11, fontWeight: 700, letterSpacing: 1.3, textTransform: "uppercase", color: "#9A9184", marginBottom: 7 }}>ชื่อของคุณ</label>
-                  <input value={name} onChange={(e) => setName(e.target.value)} placeholder="ชื่อที่คนในบ้านจะเห็น" className="jmb-field" style={{ width: "100%", background: "transparent", border: "none", borderBottom: "1px solid rgba(194,158,88,.25)", borderRadius: 0, padding: "7px 2px 10px", fontSize: 15.5, outline: "none", color: "#F3EDE1", boxSizing: "border-box" }} />
+                  <input value={name} onChange={(e) => setName(e.target.value)} placeholder="ชื่อที่คนในบ้านจะเห็น" className="jmb-field" style={{ width: "100%", background: "transparent", border: "none", borderBottom: "1px solid rgba(194,158,88,.25)", borderRadius: 0, padding: "7px 2px 10px", fontSize: 16, outline: "none", color: "#F3EDE1", boxSizing: "border-box" }} />
                 </div>
               )}
 
@@ -2956,12 +2965,12 @@ function AuthPage() {
                   <label style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.3, textTransform: "uppercase", color: "#9A9184" }}>อีเมล</label>
                   {email && <span style={{ fontSize: 11.5, color: emailOk ? "#4CBE8D" : "#E8685A" }}>{emailOk ? "✓ ถูกต้อง" : "รูปแบบผิด"}</span>}
                 </div>
-                <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@email.com" className="jmb-field" style={{ width: "100%", background: "transparent", border: "none", borderBottom: `1px solid ${email && !emailOk ? "#E8685A" : "rgba(194,158,88,.25)"}`, borderRadius: 0, padding: "7px 2px 10px", fontSize: 15.5, outline: "none", color: "#F3EDE1", boxSizing: "border-box" }} />
+                <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@email.com" className="jmb-field" style={{ width: "100%", background: "transparent", border: "none", borderBottom: `1px solid ${email && !emailOk ? "#E8685A" : "rgba(194,158,88,.25)"}`, borderRadius: 0, padding: "7px 2px 10px", fontSize: 16, outline: "none", color: "#F3EDE1", boxSizing: "border-box" }} />
               </div>
 
               <div style={{ marginBottom: 8 }}>
                 <label style={{ display: "block", fontSize: 11, fontWeight: 700, letterSpacing: 1.3, textTransform: "uppercase", color: "#9A9184", marginBottom: 7 }}>รหัสผ่าน</label>
-                <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="อย่างน้อย 6 ตัว" className="jmb-field" style={{ width: "100%", background: "transparent", border: "none", borderBottom: "1px solid rgba(194,158,88,.25)", borderRadius: 0, padding: "7px 2px 10px", fontSize: 15.5, outline: "none", color: "#F3EDE1", boxSizing: "border-box" }} />
+                <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="อย่างน้อย 6 ตัว" className="jmb-field" style={{ width: "100%", background: "transparent", border: "none", borderBottom: "1px solid rgba(194,158,88,.25)", borderRadius: 0, padding: "7px 2px 10px", fontSize: 16, outline: "none", color: "#F3EDE1", boxSizing: "border-box" }} />
               </div>
 
               {mode === "login" && (
@@ -2979,7 +2988,7 @@ function AuthPage() {
               {mode === "signup" && (
                 <div style={{ marginBottom: 22 }}>
                   <label style={{ display: "block", fontSize: 11, fontWeight: 700, letterSpacing: 1.3, textTransform: "uppercase", color: "#9A9184", marginBottom: 7 }}>รหัสเชิญครอบครัว</label>
-                  <input value={familyCode} onChange={(e) => setFamilyCode(e.target.value)} placeholder="ถ้ามี" className="jmb-field" style={{ width: "100%", background: "transparent", border: "none", borderBottom: "1px solid rgba(194,158,88,.25)", borderRadius: 0, padding: "7px 2px 10px", fontSize: 15.5, outline: "none", color: "#F3EDE1", boxSizing: "border-box" }} />
+                  <input value={familyCode} onChange={(e) => setFamilyCode(e.target.value)} placeholder="ถ้ามี" className="jmb-field" style={{ width: "100%", background: "transparent", border: "none", borderBottom: "1px solid rgba(194,158,88,.25)", borderRadius: 0, padding: "7px 2px 10px", fontSize: 16, outline: "none", color: "#F3EDE1", boxSizing: "border-box" }} />
                 </div>
               )}
             </>
@@ -3032,8 +3041,8 @@ function SetNewPasswordPage({ onDone }) {
         <div style={{ fontSize: 17, fontWeight: 800, color: "#F3EDE1", marginBottom: 6, textAlign: "center" }}>ตั้งรหัสผ่านใหม่</div>
         <div style={{ fontSize: 12.5, color: "#8C857C", marginBottom: 24, textAlign: "center", lineHeight: 1.6 }}>มาจากลิงก์ในอีเมล ตั้งรหัสผ่านใหม่ให้เรียบร้อยก่อนเข้าใช้งานต่อ</div>
         <div style={{ border: "1px solid rgba(194,158,88,.16)", borderRadius: 4, padding: "26px 24px" }}>
-          <input value={pw1} onChange={(e) => setPw1(e.target.value)} type="password" placeholder="รหัสผ่านใหม่ (อย่างน้อย 6 ตัว)" style={{ width: "100%", background: "transparent", border: "none", borderBottom: "1px solid rgba(194,158,88,.25)", borderRadius: 0, padding: "6px 2px 9px", fontSize: 14, marginBottom: 16, outline: "none", color: "#F3EDE1", boxSizing: "border-box" }} />
-          <input value={pw2} onChange={(e) => setPw2(e.target.value)} type="password" placeholder="ยืนยันรหัสผ่านใหม่อีกครั้ง" onKeyDown={(e) => e.key === "Enter" && submit()} style={{ width: "100%", background: "transparent", border: "none", borderBottom: "1px solid rgba(194,158,88,.25)", borderRadius: 0, padding: "6px 2px 9px", fontSize: 14, marginBottom: 18, outline: "none", color: "#F3EDE1", boxSizing: "border-box" }} />
+          <input value={pw1} onChange={(e) => setPw1(e.target.value)} type="password" placeholder="รหัสผ่านใหม่ (อย่างน้อย 6 ตัว)" style={{ width: "100%", background: "transparent", border: "none", borderBottom: "1px solid rgba(194,158,88,.25)", borderRadius: 0, padding: "6px 2px 9px", fontSize: 16, marginBottom: 16, outline: "none", color: "#F3EDE1", boxSizing: "border-box" }} />
+          <input value={pw2} onChange={(e) => setPw2(e.target.value)} type="password" placeholder="ยืนยันรหัสผ่านใหม่อีกครั้ง" onKeyDown={(e) => e.key === "Enter" && submit()} style={{ width: "100%", background: "transparent", border: "none", borderBottom: "1px solid rgba(194,158,88,.25)", borderRadius: 0, padding: "6px 2px 9px", fontSize: 16, marginBottom: 18, outline: "none", color: "#F3EDE1", boxSizing: "border-box" }} />
           {err && <div style={{ fontSize: 12, color: "#E8685A", marginBottom: 10, textAlign: "center" }}>{err}</div>}
           <button onClick={submit} disabled={busy} style={{ width: "100%", background: busy ? "#3A2F22" : "linear-gradient(135deg, #E4C583, #B98B3E)", border: "none", borderRadius: 3, padding: "13px 0", fontSize: 12.5, fontWeight: 800, letterSpacing: 1.6, textTransform: "uppercase", color: "#141210", cursor: busy ? "default" : "pointer" }}>{busy ? "กำลังบันทึก..." : "บันทึกรหัสผ่านใหม่"}</button>
         </div>
