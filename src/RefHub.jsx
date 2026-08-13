@@ -11870,9 +11870,11 @@ function IdeasPage({ t, lang, M, userId, session, authProfile, setAuthProfile, s
   const generateToday = async () => {
     setGenMsg("กำลังสร้างบทความความรู้วันนี้ให้...");
     try {
+      // 📌 ดึงหัวข้อที่ "คนนี้" บันทึก(ดาว)ไว้แล้วมาก่อน กันสร้างซ้ำ — แยกต่อ user เพราะ query กรองด้วย user_id เสมอ
+      const { data: savedTitles } = await supabase.from("knowledge_articles").select("title").eq("user_id", userId).eq("starred", true);
       const r = await fetch("/api/knowledge-generate", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ interests: interests.map(topicLabel), count: dailyLimit, callerToken: session?.access_token }),
+        body: JSON.stringify({ interests: interests.map(topicLabel), count: dailyLimit, callerToken: session?.access_token, excludeTitles: (savedTitles || []).map((x) => x.title) }),
       });
       const data = await r.json();
       if (!r.ok) { setGenMsg("สร้างไม่สำเร็จ: " + data.error); return; }

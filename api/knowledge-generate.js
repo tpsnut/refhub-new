@@ -346,7 +346,7 @@ ${scoringRule}
   }
 
   // ---- โค้ดเดิม: สร้างบทความความรู้รายวันด้วย Gemini ----
-  const { interests, count, callerToken } = body;
+  const { interests, count, callerToken, excludeTitles } = body;
   if (!Array.isArray(interests) || interests.length === 0) return res.status(400).json({ error: "ยังไม่ได้เลือกความสนใจ" });
   if (!callerToken) return res.status(401).json({ error: "ไม่พบข้อมูลยืนยันตัวตน ลองล็อกอินใหม่" });
 
@@ -362,11 +362,16 @@ ${scoringRule}
     if (userErr || !userData?.user) return res.status(401).json({ error: "ยืนยันตัวตนไม่สำเร็จ ลองล็อกอินใหม่" });
 
     const n = Math.min(Math.max(parseInt(count) || 3, 1), 10);
+    // 🔁 กันซ้ำ — ห้ามสร้างหัวข้อที่ผู้ใช้คนนี้บันทึก(ดาว)ไว้แล้ว ต่อคนแยกกันเพราะ excludeTitles มาจากรายการที่ user_id นี้บันทึกไว้เท่านั้น
+    const excludeList = Array.isArray(excludeTitles) ? excludeTitles.filter(Boolean).slice(0, 200) : [];
+    const excludeBlock = excludeList.length
+      ? `\n\nห้ามสร้างบทความที่หัวข้อ("title")ซ้ำหรือใกล้เคียงกับรายการที่ผู้ใช้คนนี้บันทึกไว้แล้วต่อไปนี้เด็ดขาด ต้องเป็นหัวข้อใหม่ที่ไม่ซ้ำแนวเดิม:\n${excludeList.map((x) => `- ${x}`).join("\n")}`
+      : "";
     const prompt = `สร้างบทความความรู้สั้นๆ ภาษาไทยจำนวน ${n} บทความ โดยกระจายหัวข้อจากความสนใจต่อไปนี้: ${interests.join(", ")}
 แต่ละบทความต้องมี:
 - "topic": หมวดความสนใจที่ใช้ (ต้องเป็นหนึ่งในลิสต์ที่ให้มา)
 - "title": หัวข้อบทความ กระชับ น่าสนใจ ไม่เกิน 15 คำ
-- "bullets": array ของ string 4-6 ข้อ แต่ละข้อเป็นประเด็นสั้นๆ ที่ได้ความรู้จริง (ไม่ใช่พารากราฟยาว) ข้อละไม่เกิน 2 ประโยค
+- "bullets": array ของ string 4-6 ข้อ แต่ละข้อเป็นประเด็นสั้นๆ ที่ได้ความรู้จริง (ไม่ใช่พารากราฟยาว) ข้อละไม่เกิน 2 ประโยค${excludeBlock}
 
 ตอบกลับเป็น JSON ล้วนๆ เท่านั้น ไม่มีข้อความอื่นนำหน้า/ตามหลัง ไม่มี markdown code fence รูปแบบนี้เป๊ะ:
 {"articles":[{"topic":"...","title":"...","bullets":["...","..."]}]}`;
@@ -408,11 +413,15 @@ ${scoringRule}
       }
     }
 
-    const articles = (parsed.articles || []).slice(0, n).map((a) => ({
-      topic: a.topic || interests[0],
-      title: a.title || "บทความความรู้",
-      bullets: Array.isArray(a.bullets) ? a.bullets.slice(0, 8) : [],
-    }));
+    const excludeSet = new Set(excludeList.map((x) => String(x).trim().toLowerCase()));
+    const articles = (parsed.articles || [])
+      .filter((a) => !excludeSet.has(String(a.title || "").trim().toLowerCase())) // การ์ดกันชั้นที่ 2 เผื่อ AI ไม่ทำตามคำสั่งเป๊ะๆ
+      .slice(0, n)
+      .map((a) => ({
+        topic: a.topic || interests[0],
+        title: a.title || "บทความความรู้",
+        bullets: Array.isArray(a.bullets) ? a.bullets.slice(0, 8) : [],
+      }));
 
     return res.status(200).json({ articles });
   } catch (e) {
