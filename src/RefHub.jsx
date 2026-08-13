@@ -2551,7 +2551,7 @@ function AuthLoadingScreen() {
   return (
     <div style={{ minHeight: "100dvh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#0D0C0B", gap: 22 }}>
       <style>{`@keyframes rh-pulse { 0%,100% { transform: scale(1); opacity:1; } 50% { transform: scale(1.05); opacity:.85; } }`}</style>
-      <div style={{ animation: "rh-pulse 1.6s ease-in-out infinite" }}><JomonbeyMark width={200} animated /></div>
+      <div style={{ animation: "rh-pulse 1.6s ease-in-out infinite" }}><JmbMiniMark width={160} animated cycle color="#fff" /></div>
     </div>
   );
 }
@@ -8107,30 +8107,13 @@ function SpinningGlobe({ onClick, size = 38, accent }) {
 }
 
 // 🌐 หน้า Community เต็มจอ — ถ้าไม่มีสิทธิ์ใช้จะขึ้นชวนปลดล็อก (แบบ 2)
-// ✨ ตราสัญลักษณ์ P..KNOW บนหัวฟีด — รวม 3 เอฟเฟค: จุดกระพริบ + แสงกวาด + เรืองแสง
-function PKnowBanner({ accent = "#F2872E" }) {
+// ✨ แบนเนอร์หัวฟีดชุมชน — โลโก้ JMB เล็ก (เนคไทรูด+เหรียญเด้ง) พร้อมแสงนวลๆด้านหลัง + เส้นทองบางๆคั่นก่อนถึงแท็บสำรวจ/ติดตาม
+function CommunityBanner({ accent = "#F2872E" }) {
   return (
-    <div style={{ textAlign: "center", marginBottom: 12 }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');
-        @keyframes pkb-dot { 0%,100% { opacity:.5; transform: scale(.9) } 50% { opacity:1; transform: scale(1.15) } }
-        @keyframes pkb-sweep { 0% { background-position: 140% 0 } 100% { background-position: -140% 0 } }
-        @keyframes pkb-glow { 0%,100% { filter: drop-shadow(0 0 3px ${accent}55) } 50% { filter: drop-shadow(0 0 14px ${accent}) drop-shadow(0 0 26px ${accent}77) } }
-        .pkb-wrap { display:inline-block; animation: pkb-glow 2.6s ease-in-out infinite; }
-        .pkb-txt {
-          font-family: Anton, Impact, 'Arial Black', sans-serif;
-          font-size: 25px; letter-spacing: 1.5px; line-height: 1;
-          background: linear-gradient(90deg, ${accent} 0%, #FFE0BB 45%, ${accent} 90%);
-          background-size: 240% 100%;
-          -webkit-background-clip: text; background-clip: text; color: transparent;
-          animation: pkb-sweep 3s linear infinite;
-        }
-        .pkb-d { animation: pkb-dot 1.4s ease-in-out infinite; display:inline-block; color:${accent}; -webkit-text-fill-color:${accent}; }
-        .pkb-d2 { animation-delay:.2s } .pkb-d3 { animation-delay:.4s }
-      `}</style>
-      <div className="pkb-wrap">
-        <span className="pkb-txt">P<span className="pkb-d">.</span><span className="pkb-d pkb-d2">.</span><span className="pkb-d pkb-d3">.</span>KNOW</span>
-      </div>
+    <div style={{ position: "relative", textAlign: "center", marginBottom: 14, padding: "16px 0 12px" }}>
+      <div style={{ position: "absolute", left: "50%", top: "42%", transform: "translate(-50%,-50%)", width: 150, height: 150, borderRadius: "50%", background: `radial-gradient(circle, ${accent}22, transparent 70%)`, pointerEvents: "none" }} />
+      <div style={{ position: "relative" }}><JmbMiniMark width={68} animated cycle color={accent} /></div>
+      <div style={{ height: 1, background: `linear-gradient(90deg, transparent, ${accent}55, transparent)`, marginTop: 14 }} />
     </div>
   );
 }
@@ -8899,7 +8882,7 @@ function CommunityFeed({ t, userId, session, onOpenProfile }) {
 
   return (
     <div>
-      <PKnowBanner accent={t.accent} />
+      <CommunityBanner accent={t.accent} />
 
       {/* สลับมุมมองฟีด */}
       <div style={{ display: "flex", gap: 6, marginBottom: 10, background: t.surface, border: `1px solid ${t.border}`, borderRadius: 14, padding: 4 }}>
