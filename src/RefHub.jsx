@@ -2580,6 +2580,7 @@ function JomonbeyMark({ width = 220, animated = false }) {
   const [stage, setStage] = useState(animated ? "intro" : "main");
   const [linePhase, setLinePhase] = useState(animated ? "idle" : "done"); // idle -> rolling -> done
   const [wordShown, setWordShown] = useState(!animated);
+  const [wordDissolve, setWordDissolve] = useState(false);
   const [lineShine, setLineShine] = useState(false);
   const [coinPhase, setCoinPhase] = useState(animated ? "hidden" : "landed");
   const [playId, setPlayId] = useState(0);
@@ -2601,6 +2602,7 @@ function JomonbeyMark({ width = 220, animated = false }) {
     setStage(animated ? "intro" : "main");
     setLinePhase(animated ? "idle" : "done");
     setWordShown(!animated);
+    setWordDissolve(false);
     setLineShine(false);
     setCoinPhase(animated ? "hidden" : "landed");
     subRefs.current.forEach((el) => { if (el) { el.style.transition = "none"; el.style.transform = "none"; } });
@@ -2632,7 +2634,7 @@ function JomonbeyMark({ width = 220, animated = false }) {
         subEl.style.transform = "translate(0,0) scale(1)";
         void subEl.offsetWidth; // บังคับ reflow ให้ browser จำ state เริ่มต้นก่อน ไม่งั้น transition จะกระโดดตรงไปเลยไม่เล่นแอนิเมชัน
         subEl.style.transition = "transform .5s cubic-bezier(.3,.6,.25,1)";
-        requestAnimationFrame(() => { subEl.style.transform = `translate(${dx}px, ${dy}px) scale(.6)`; });
+        requestAnimationFrame(() => { subEl.style.transform = `translate(${dx}px, ${dy}px) scale(2.53)`; });
       }
       T(() => {
         setIntroFlown((f) => { const n = [...f]; n[k] = true; return n; });
@@ -2665,6 +2667,7 @@ function JomonbeyMark({ width = 220, animated = false }) {
     function startCoinDrop() {
       setCoinPhase("flying");
       T(() => setCoinPhase("landed"), 900);
+      T(() => setWordDissolve(true), 900 + 700); // ค้างให้เห็นไอคอนสมบูรณ์สักพัก แล้วค่อยให้คำจางหายทีละตัว
     }
 
     T(revealNext, 150);
@@ -2685,6 +2688,7 @@ function JomonbeyMark({ width = 220, animated = false }) {
         @keyframes jmb-float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
         @keyframes jmb-impact { 0% { text-shadow: 0 0 0 rgba(255,255,255,0); transform: scale(1); } 35% { text-shadow: 0 0 18px rgba(255,255,255,.95), 0 0 32px rgba(194,158,88,.85); transform: scale(1.32); } 100% { text-shadow: 0 0 0 rgba(255,255,255,0); transform: scale(1); } }
         @keyframes jmb-line-shine { from { left: -60%; } to { left: 130%; } }
+        @keyframes jmb-dissolve { 0% { opacity: 1; filter: blur(0px); transform: translateY(0); } 100% { opacity: 0; filter: blur(3px); transform: translateY(-7px); } }
         @keyframes jmb-coin-line-roll { 0% { left: 10%; opacity: 0; transform: translateY(-50%) scale(.5) rotate(0deg); } 10% { opacity: 1; transform: translateY(-50%) scale(1) rotate(90deg); } 85% { left: 90%; opacity: 1; transform: translateY(-50%) scale(1) rotate(640deg); } 100% { left: 92%; opacity: 0; transform: translateY(10%) scale(.6) rotate(700deg); } }
         @keyframes jmb-coin-drop { 0% { transform: translate(-46px,-42px) rotate(0deg) scale(.65); opacity: 0; } 14% { opacity: 1; } 62% { transform: translate(6px,-9px) rotate(380deg) scale(1.08); } 100% { transform: translate(0,0) rotate(560deg) scale(1); } }
         @keyframes jmb-coin-impact { 0% { box-shadow: 0 0 0 rgba(255,255,255,0); } 35% { box-shadow: 0 0 20px 6px rgba(255,255,255,.85); } 100% { box-shadow: 0 0 0 rgba(255,255,255,0); } }
@@ -2719,13 +2723,15 @@ function JomonbeyMark({ width = 220, animated = false }) {
             )}
           </div>
 
-          <div style={{ position: "relative", width: "100%", maxWidth: width, display: "flex", justifyContent: "center", alignItems: "center", height: Math.max(26, width * 0.095), marginTop: Math.round(width * 0.05) }}>
+          <div style={{ position: "relative", width: "100%", maxWidth: width, height: Math.max(26, width * 0.095), marginTop: Math.round(width * 0.05) }}>
             <div style={{ position: "absolute", left: "10%", right: "10%", top: "50%", height: 1, background: "linear-gradient(90deg, transparent, rgba(194,158,88,.4), transparent)" }} />
             {linePhase === "rolling" && <div style={{ position: "absolute", left: "10%", top: "50%", width: 9, height: 9, borderRadius: "50%", background: "#E4C583", boxShadow: "0 0 6px rgba(228,197,131,.8)", zIndex: 2, animation: "jmb-coin-line-roll 1.8s ease-in-out forwards" }} />}
             {wordShown && (
-              <div style={{ position: "relative", zIndex: 1, background: "#0B0A08", padding: "0 8px", fontFamily: "'Poppins','IBM Plex Sans Thai',sans-serif", fontWeight: 700, fontSize: width * 0.06, letterSpacing: -.1, lineHeight: 1, whiteSpace: "nowrap", overflow: "hidden", color: "#fff" }}>
-                {FINAL}
-                {lineShine && <div style={{ position: "absolute", top: 0, left: "-60%", width: "45%", height: "100%", background: "linear-gradient(100deg, transparent, rgba(255,255,255,.85), transparent)", mixBlendMode: "overlay", animation: "jmb-line-shine .9s ease forwards" }} />}
+              <div style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%,-50%)", zIndex: 1, background: "#0B0A08", padding: "0 8px", fontFamily: "'Poppins','IBM Plex Sans Thai',sans-serif", fontWeight: 700, fontSize: width * 0.06, letterSpacing: -.1, lineHeight: 1, whiteSpace: "nowrap", overflow: "visible", color: "#fff" }}>
+                {FINAL.split("").map((ch, idx) => (
+                  <span key={idx} style={{ display: "inline-block", animation: wordDissolve ? `jmb-dissolve .6s ease forwards ${idx * 45}ms` : "none" }}>{ch}</span>
+                ))}
+                {lineShine && <div style={{ position: "absolute", top: 0, left: "-60%", width: "45%", height: "100%", background: "linear-gradient(100deg, transparent, rgba(255,255,255,.85), transparent)", mixBlendMode: "overlay", animation: "jmb-line-shine 2.2s ease-in-out infinite" }} />}
               </div>
             )}
           </div>
