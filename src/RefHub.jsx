@@ -2551,7 +2551,7 @@ function AuthLoadingScreen() {
   return (
     <div style={{ minHeight: "100dvh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#0D0C0B", gap: 22 }}>
       <style>{`@keyframes rh-pulse { 0%,100% { transform: scale(1); opacity:1; } 50% { transform: scale(1.05); opacity:.85; } }`}</style>
-      <div style={{ animation: "rh-pulse 1.6s ease-in-out infinite" }}><JmbMiniMark width={160} animated cycle color="#fff" /></div>
+      <div style={{ animation: "rh-pulse 1.6s ease-in-out infinite" }}><JomonbeyMark width={200} animated /></div>
     </div>
   );
 }
