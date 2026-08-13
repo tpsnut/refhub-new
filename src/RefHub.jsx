@@ -2558,25 +2558,30 @@ function AuthLoadingScreen() {
 
 // ✨ โลโก้ Jomonbey — ไอคอนแอป (ไม่มีเหรียญ) อยู่บนสุด, เส้นคั่นมีเหรียญเล็กวิ่งไป-กลับตลอดเวลา, คำว่า "Jomonbey" ตัวเล็กสีขาวนั่งอยู่บนเส้น
 // ✨ โลโก้ Jomonbey — เฟส 1: "Jomonbey" ตัวใหญ่กลางจอ (JobMoney -> morph "bMon"->"monb" -> JMB สีทองโผล่ใต้คำ -> J,M,B บินเข้าไปทีละตัวใส่สีทองให้ J,m,b ในคำหลัก)
-// เฟส 2: ตัวใหญ่หด+จางหาย ไอคอนแอป(ไม่มีเหรียญ)โผล่แทนที่ด้านบน
-// เฟส 3: "Jomonbey" ตัวเล็กสีขาวล้วน (คนละ state สีกับเฟส 1 ไม่ปนกัน) นั่งบนเส้นคั่น มีแสงกวาด+วูบเบาๆตลอด + เหรียญเล็กหล่นจาก M ไหลลื่นไปทางขวาแล้วตกขอบจางหาย วนตลอด
-// จบด้วยเหรียญใหญ่ตกจากบนฟ้าลงมาเติมเต็ม M บนไอคอน กดที่โลโก้เพื่อเล่นซ้ำทั้งหมด
+// ✨ โลโก้ Jomonbey — เฟส 1: "Jomonbey" ตัวใหญ่กลางจอ (JobMoney -> morph -> JMB สีทองลอยตัวเบาๆใต้คำ -> บินเข้าไปทีละตัวใส่สีทองให้ J,m,b)
+// เฟส 2: ตัวใหญ่จาง+เบลอหด ไอคอนแอปพื้นหลังโปร่งใส(ไม่มีเหรียญ)ค่อยๆชัดขึ้นมาแทนที่
+// เฟส 3: เหรียญวิ่งจากซ้ายสุดไปขวาสุดของเส้นครั้งเดียว (แนบสนิทกับเส้นเป๊ะ) แล้วตกขอบหายไป
+// เฟส 4: "Jomonbey" ตัวเล็กสีขาวนิ่งสนิทโผล่มานั่งบนเส้น (แสงกวาดครั้งเดียว)
+// เฟส 5: เหรียญเดียวกันตกจากฟ้าลงมาเติมเต็ม M บนไอคอน จบ — กดที่โลโก้เพื่อเล่นซ้ำทั้งหมด
 function JomonbeyMark({ width = 220, animated = false }) {
   const INITIAL = "JobMoney";
   const FINAL = "Jomonbey";
-  const FLY_MAP = [0, 2, 5]; // ตำแหน่ง J / m / b ในคำหลักที่ J,M,B ใต้คำจะบินไปหา
+  const FLY_MAP = [0, 2, 5];
   const GLYPHS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
   const [revealed, setRevealed] = useState(animated ? 0 : INITIAL.length);
-  const [, setTick] = useState(0); // แค่บังคับ re-render ให้ตัวที่กำลังสุ่มเปลี่ยนตัวอักษรใหม่ทุกครั้ง ไม่ได้ใช้ค่าจริง
+  const [, setTick] = useState(0);
   const [morphing, setMorphing] = useState(false);
   const [morphed, setMorphed] = useState(!animated);
   const [introSubVisible, setIntroSubVisible] = useState(false);
+  const [introFlying, setIntroFlying] = useState([false, false, false]);
   const [introFlown, setIntroFlown] = useState([false, false, false]);
-  const [introGold, setIntroGold] = useState(animated ? [] : [0, 2, 5]); // สีทองของ "เฟส 1" เท่านั้น ไม่เกี่ยวกับคำเล็กบนเส้น
+  const [introGold, setIntroGold] = useState(animated ? [] : [0, 2, 5]);
   const [impactIdx, setImpactIdx] = useState(null);
-  const [stage, setStage] = useState(animated ? "intro" : "main"); // intro (ตัวใหญ่) -> out (transition) -> main (ไอคอน+เส้น)
+  const [stage, setStage] = useState(animated ? "intro" : "main");
+  const [linePhase, setLinePhase] = useState(animated ? "idle" : "done"); // idle -> rolling -> done
+  const [wordShown, setWordShown] = useState(!animated);
   const [lineShine, setLineShine] = useState(false);
-  const [coinPhase, setCoinPhase] = useState(animated ? "hidden" : "landed"); // เหรียญใหญ่ตอนจบ: hidden -> flying -> landed
+  const [coinPhase, setCoinPhase] = useState(animated ? "hidden" : "landed");
   const [playId, setPlayId] = useState(0);
   const titleRefs = useRef([]);
   const subRefs = useRef([]);
@@ -2590,10 +2595,12 @@ function JomonbeyMark({ width = 220, animated = false }) {
 
     setRevealed(animated ? 0 : INITIAL.length);
     setMorphing(false); setMorphed(!animated);
-    setIntroSubVisible(false); setIntroFlown([false, false, false]);
+    setIntroSubVisible(false); setIntroFlying([false, false, false]); setIntroFlown([false, false, false]);
     setIntroGold(animated ? [] : [0, 2, 5]);
     setImpactIdx(null);
     setStage(animated ? "intro" : "main");
+    setLinePhase(animated ? "idle" : "done");
+    setWordShown(!animated);
     setLineShine(false);
     setCoinPhase(animated ? "hidden" : "landed");
     subRefs.current.forEach((el) => { if (el) { el.style.transition = "none"; el.style.transform = "none"; } });
@@ -2605,7 +2612,7 @@ function JomonbeyMark({ width = 220, animated = false }) {
     function revealNext() {
       i += 1; setRevealed(i);
       if (i < INITIAL.length) T(revealNext, 90);
-      else T(startMorph, 120); // ค้างโชว์ "JobMoney" แว็ปเดียวจริงๆ
+      else T(startMorph, 120);
     }
     function startMorph() { setMorphing(true); T(finishMorph, 260); }
     function finishMorph() {
@@ -2615,6 +2622,7 @@ function JomonbeyMark({ width = 220, animated = false }) {
     }
     function startIntroSub() { setIntroSubVisible(true); T(startFlying, 1300); }
     function flyLetter(k) {
+      setIntroFlying((f) => { const n = [...f]; n[k] = true; return n; }); // ปิด float animation ของตัวนี้ก่อนเริ่มบิน กันชนกับ transform ที่ตั้งเอง
       const subEl = subRefs.current[k], targetEl = titleRefs.current[FLY_MAP[k]];
       if (subEl && targetEl) {
         const a = subEl.getBoundingClientRect(), b = targetEl.getBoundingClientRect();
@@ -2638,8 +2646,21 @@ function JomonbeyMark({ width = 220, animated = false }) {
     function startFlying() { flyLetter(0); }
     function startTransition() {
       setStage("out");
-      T(() => { setStage("main"); T(() => setLineShine(true), 60); }, 520);
-      T(startCoinDrop, 520 + 2200);
+      T(() => setStage("main"), 550);
+      T(startLineRoll, 550 + 350);
+    }
+    function startLineRoll() {
+      setLinePhase("rolling");
+      T(finishLineRoll, 1800);
+    }
+    function finishLineRoll() {
+      setLinePhase("done");
+      T(showWord, 250);
+    }
+    function showWord() {
+      setWordShown(true);
+      T(() => setLineShine(true), 60);
+      T(startCoinDrop, 1300);
     }
     function startCoinDrop() {
       setCoinPhase("flying");
@@ -2661,35 +2682,35 @@ function JomonbeyMark({ width = 220, animated = false }) {
     <div onClick={() => animated && setPlayId((p) => p + 1)} style={{ display: "flex", flexDirection: "column", alignItems: "center", cursor: animated ? "pointer" : "default" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@700;800&display=swap');
+        @keyframes jmb-float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
         @keyframes jmb-impact { 0% { text-shadow: 0 0 0 rgba(255,255,255,0); transform: scale(1); } 35% { text-shadow: 0 0 18px rgba(255,255,255,.95), 0 0 32px rgba(194,158,88,.85); transform: scale(1.32); } 100% { text-shadow: 0 0 0 rgba(255,255,255,0); transform: scale(1); } }
-        @keyframes jmb-bob { 0%,100% { transform: translateY(0); opacity: 1; } 28% { transform: translateY(-6px); opacity: .85; } 52% { transform: translateY(1px); opacity: 1; } 74% { transform: translateY(-3px); opacity: .92; } }
         @keyframes jmb-line-shine { from { left: -60%; } to { left: 130%; } }
-        @keyframes jmb-coin-roll { 0% { left: 34%; opacity: 0; transform: translateY(-50%) scale(.4) rotate(0deg); } 8% { opacity: 1; transform: translateY(-50%) scale(1) rotate(70deg); } 82% { left: 89%; opacity: 1; transform: translateY(-50%) scale(1) rotate(520deg); } 100% { left: 94%; opacity: 0; transform: translateY(-50%) scale(.6) rotate(580deg); } }
+        @keyframes jmb-coin-line-roll { 0% { left: 10%; opacity: 0; transform: translateY(-50%) scale(.5) rotate(0deg); } 10% { opacity: 1; transform: translateY(-50%) scale(1) rotate(90deg); } 85% { left: 90%; opacity: 1; transform: translateY(-50%) scale(1) rotate(640deg); } 100% { left: 92%; opacity: 0; transform: translateY(10%) scale(.6) rotate(700deg); } }
         @keyframes jmb-coin-drop { 0% { transform: translate(-46px,-42px) rotate(0deg) scale(.65); opacity: 0; } 14% { opacity: 1; } 62% { transform: translate(6px,-9px) rotate(380deg) scale(1.08); } 100% { transform: translate(0,0) rotate(560deg) scale(1); } }
         @keyframes jmb-coin-impact { 0% { box-shadow: 0 0 0 rgba(255,255,255,0); } 35% { box-shadow: 0 0 20px 6px rgba(255,255,255,.85); } 100% { box-shadow: 0 0 0 rgba(255,255,255,0); } }
       `}</style>
 
-      {/* เฟส 1/2: ตัวใหญ่กลางจอ + JMB สีทองบินเข้าไปทีละตัว */}
+      {/* เฟส 1/2: ตัวใหญ่กลางจอ + JMB สีทองลอยเบาๆแล้วบินเข้าไปทีละตัว */}
       {stage !== "main" && (
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: Math.round(width * 0.05), transition: "opacity .5s ease, transform .5s cubic-bezier(.4,0,.2,1)", opacity: stage === "out" ? 0 : 1, transform: stage === "out" ? `scale(${(width * 0.06) / (width * 0.19)}) translateY(${iconSize * 1.1}px)` : "scale(1) translateY(0)" }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: Math.round(width * 0.05), transition: "opacity .55s ease, transform .55s cubic-bezier(.4,0,.2,1), filter .55s ease", opacity: stage === "out" ? 0 : 1, filter: stage === "out" ? "blur(6px)" : "blur(0px)", transform: stage === "out" ? `scale(${(width * 0.06) / (width * 0.19)}) translateY(${iconSize * 1.1}px)` : "scale(1) translateY(0)" }}>
           <div style={{ fontFamily: "'Poppins','IBM Plex Sans Thai',sans-serif", fontWeight: 800, fontSize: width * 0.19, letterSpacing: -0.5, lineHeight: 1, whiteSpace: "nowrap" }}>
             {INITIAL.split("").map((_, idx) => (
               <span key={idx} ref={(el) => (titleRefs.current[idx] = el)} style={{ display: "inline-block", transformOrigin: "center", color: introGold.includes(idx) ? "#C29E58" : "#fff", opacity: idx < revealed ? 1 : 0.5, transition: "opacity .12s, color .3s ease", animation: idx === impactIdx ? "jmb-impact .46s ease" : "none" }}>{letterAt(idx)}</span>
             ))}
           </div>
-          <div style={{ display: "flex", gap: width * 0.02, height: introSubVisible ? width * 0.075 * 1.4 : 0, overflow: "hidden", opacity: introSubVisible ? 1 : 0, transition: "opacity .4s ease, height .4s ease" }}>
+          <div style={{ display: "flex", gap: width * 0.02, height: introSubVisible ? width * 0.075 * 1.6 : 0, overflow: "visible", opacity: introSubVisible ? 1 : 0, transition: "opacity .4s ease, height .4s ease" }}>
             {["J", "M", "B"].map((ch, k) => (
-              <span key={k} ref={(el) => (subRefs.current[k] = el)} style={{ fontFamily: "'Poppins','IBM Plex Sans Thai',sans-serif", fontWeight: 700, fontSize: width * 0.075, letterSpacing: 2, color: "#C29E58", opacity: introFlown[k] ? 0 : 1, transition: "opacity .18s ease" }}>{ch}</span>
+              <span key={k} ref={(el) => (subRefs.current[k] = el)} style={{ display: "inline-block", fontFamily: "'Poppins','IBM Plex Sans Thai',sans-serif", fontWeight: 700, fontSize: width * 0.075, letterSpacing: 2, color: "#C29E58", opacity: introFlown[k] ? 0 : 1, transition: "opacity .18s ease", animation: introSubVisible && !introFlying[k] && !introFlown[k] ? `jmb-float ${1.9 + k * 0.15}s ease-in-out infinite` : "none" }}>{ch}</span>
             ))}
           </div>
         </div>
       )}
 
-      {/* เฟส 3: ไอคอน + เส้นคั่น + "Jomonbey" ตัวเล็กสีขาวล้วน */}
+      {/* เฟส 3/4/5: ไอคอนโปร่งใส + เส้นคั่น + เหรียญวิ่งครั้งเดียว + คำเล็กสีขาวนิ่ง */}
       {stage !== "intro" && (
-        <div style={{ transition: "opacity .5s ease, transform .5s cubic-bezier(.4,0,.2,1)", opacity: stage === "out" ? 0 : 1, transform: stage === "out" ? "scale(.85)" : "scale(1)" }}>
+        <div style={{ transition: "opacity .55s ease, transform .55s cubic-bezier(.4,0,.2,1), filter .55s ease", opacity: stage === "out" ? 0 : 1, filter: stage === "out" ? "blur(0px)" : "blur(0px)", transform: stage === "out" ? "scale(.82)" : "scale(1)" }}>
           <div style={{ position: "relative", width: iconSize, height: iconSize, margin: "0 auto" }}>
-            <img src={coinPhase === "landed" ? "/icons/icon-192.png" : "/icons/icon-nocoin-192.png"} width={iconSize} height={iconSize} style={{ display: "block", borderRadius: iconSize * 0.22 }} alt="Jomonbey" />
+            <img src={coinPhase === "landed" ? "/icons/icon-192-t.png" : "/icons/icon-nocoin-192-t.png"} width={iconSize} height={iconSize} style={{ display: "block" }} alt="Jomonbey" />
             {coinPhase === "flying" && (
               <div style={{ position: "absolute", left: "48.5%", top: "21%", width: iconSize * 0.13, height: iconSize * 0.13, marginLeft: -(iconSize * 0.065), marginTop: -(iconSize * 0.065), borderRadius: "50%", background: "radial-gradient(circle at 35% 30%, #F4DFA6, #C29E58 60%, #8a6b34)", animation: "jmb-coin-drop .9s cubic-bezier(.35,.05,.25,1) forwards" }} />
             )}
@@ -2698,13 +2719,15 @@ function JomonbeyMark({ width = 220, animated = false }) {
             )}
           </div>
 
-          <div style={{ position: "relative", width: "100%", maxWidth: width, display: "flex", justifyContent: "center", alignItems: "center", height: Math.max(16, width * 0.04), marginTop: Math.round(width * 0.045) }}>
+          <div style={{ position: "relative", width: "100%", maxWidth: width, display: "flex", justifyContent: "center", alignItems: "center", height: Math.max(26, width * 0.095), marginTop: Math.round(width * 0.05) }}>
             <div style={{ position: "absolute", left: "10%", right: "10%", top: "50%", height: 1, background: "linear-gradient(90deg, transparent, rgba(194,158,88,.4), transparent)" }} />
-            {stage === "main" && <div style={{ position: "absolute", left: "34%", top: "50%", width: 9, height: 9, borderRadius: "50%", background: "#E4C583", boxShadow: "0 0 6px rgba(228,197,131,.8)", zIndex: 2, animation: "jmb-coin-roll 2.6s linear infinite" }} />}
-            <div style={{ position: "relative", zIndex: 1, background: "#0B0A08", padding: "0 8px", fontFamily: "'Poppins','IBM Plex Sans Thai',sans-serif", fontWeight: 700, fontSize: width * 0.06, letterSpacing: -.1, lineHeight: 1, whiteSpace: "nowrap", overflow: "hidden", color: "#fff" }}>
-              {FINAL}
-              {lineShine && <div style={{ position: "absolute", top: 0, left: "-60%", width: "45%", height: "100%", background: "linear-gradient(100deg, transparent, rgba(255,255,255,.85), transparent)", mixBlendMode: "overlay", animation: "jmb-line-shine .9s ease forwards" }} />}
-            </div>
+            {linePhase === "rolling" && <div style={{ position: "absolute", left: "10%", top: "50%", width: 9, height: 9, borderRadius: "50%", background: "#E4C583", boxShadow: "0 0 6px rgba(228,197,131,.8)", zIndex: 2, animation: "jmb-coin-line-roll 1.8s ease-in-out forwards" }} />}
+            {wordShown && (
+              <div style={{ position: "relative", zIndex: 1, background: "#0B0A08", padding: "0 8px", fontFamily: "'Poppins','IBM Plex Sans Thai',sans-serif", fontWeight: 700, fontSize: width * 0.06, letterSpacing: -.1, lineHeight: 1, whiteSpace: "nowrap", overflow: "hidden", color: "#fff" }}>
+                {FINAL}
+                {lineShine && <div style={{ position: "absolute", top: 0, left: "-60%", width: "45%", height: "100%", background: "linear-gradient(100deg, transparent, rgba(255,255,255,.85), transparent)", mixBlendMode: "overlay", animation: "jmb-line-shine .9s ease forwards" }} />}
+              </div>
+            )}
           </div>
         </div>
       )}
