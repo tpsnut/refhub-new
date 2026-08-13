@@ -2558,12 +2558,9 @@ function AuthLoadingScreen() {
 
 // ✨ โลโก้ Jomonbey — ไอคอนแอป (ไม่มีเหรียญ) อยู่บนสุด, เส้นคั่นมีเหรียญเล็กวิ่งไป-กลับตลอดเวลา, คำว่า "Jomonbey" ตัวเล็กสีขาวนั่งอยู่บนเส้น
 // ✨ โลโก้ Jomonbey — เฟส 1: "Jomonbey" ตัวใหญ่กลางจอ (JobMoney -> morph "bMon"->"monb" -> JMB สีทองโผล่ใต้คำ -> J,M,B บินเข้าไปทีละตัวใส่สีทองให้ J,m,b ในคำหลัก)
-// ✨ โลโก้ Jomonbey — เฟส 1: "Jomonbey" ตัวใหญ่กลางจอ (JobMoney -> morph -> JMB สีทองลอยตัวเบาๆใต้คำ -> บินเข้าไปทีละตัวใส่สีทองให้ J,m,b)
-// เฟส 2: ตัวใหญ่จาง+เบลอหด ไอคอนแอปพื้นหลังโปร่งใส(ไม่มีเหรียญ)ค่อยๆชัดขึ้นมาแทนที่
-// เฟส 3: เหรียญวิ่งจากซ้ายสุดไปขวาสุดของเส้นครั้งเดียว (แนบสนิทกับเส้นเป๊ะ) แล้วตกขอบหายไป
-// เฟส 4: "Jomonbey" ตัวเล็กสีขาวนิ่งสนิทโผล่มานั่งบนเส้น (แสงกวาดครั้งเดียว)
-// เฟส 5: เหรียญเดียวกันตกจากฟ้าลงมาเติมเต็ม M บนไอคอน จบ — กดที่โลโก้เพื่อเล่นซ้ำทั้งหมด
-function JomonbeyMark({ width = 220, animated = false }) {
+// ✨ โลโก้ Jomonbey — เฟส 1: "Jomonbey" ตัวใหญ่กลางจอ (JobMoney -> morph -> JMB สีทองลอยตัวเบาๆใต้คำ -> บินไปทับ+จางหายจนเกิดสีที่ตัวหลัก)
+// เฟส 2: ตัวใหญ่จาง+เบลอหด ไอคอนแอปพื้นหลังโปร่งใส(ไม่มีเหรียญตามค่า coinOn)ค่อยๆชัดขึ้นมาแทนที่ — จบแค่นี้ ส่วนเอฟเฟคบนเส้นคั่น/เหรียญตกใส่ไอคอน ควบคุมจาก "เส้น" จริงที่หน้า AuthPage แทน (ผ่าน iconRef/coinOn/onIconReady)
+function JomonbeyMark({ width = 220, animated = false, iconRef, coinOn = true, onIconReady }) {
   const INITIAL = "JobMoney";
   const FINAL = "Jomonbey";
   const FLY_MAP = [0, 2, 5];
@@ -2576,16 +2573,12 @@ function JomonbeyMark({ width = 220, animated = false }) {
   const [introFlying, setIntroFlying] = useState([false, false, false]);
   const [introFlown, setIntroFlown] = useState([false, false, false]);
   const [introGold, setIntroGold] = useState(animated ? [] : [0, 2, 5]);
-  const [impactIdx, setImpactIdx] = useState(null);
   const [stage, setStage] = useState(animated ? "intro" : "main");
-  const [linePhase, setLinePhase] = useState(animated ? "idle" : "done"); // idle -> rolling -> done
-  const [wordShown, setWordShown] = useState(!animated);
-  const [wordDissolve, setWordDissolve] = useState(false);
-  const [lineShine, setLineShine] = useState(false);
-  const [coinPhase, setCoinPhase] = useState(animated ? "hidden" : "landed");
   const [playId, setPlayId] = useState(0);
   const titleRefs = useRef([]);
   const subRefs = useRef([]);
+  const localIconRef = useRef(null);
+  const iconElRef = iconRef || localIconRef;
 
   const iconSize = Math.round(width * 0.42);
 
@@ -2598,16 +2591,10 @@ function JomonbeyMark({ width = 220, animated = false }) {
     setMorphing(false); setMorphed(!animated);
     setIntroSubVisible(false); setIntroFlying([false, false, false]); setIntroFlown([false, false, false]);
     setIntroGold(animated ? [] : [0, 2, 5]);
-    setImpactIdx(null);
     setStage(animated ? "intro" : "main");
-    setLinePhase(animated ? "idle" : "done");
-    setWordShown(!animated);
-    setWordDissolve(false);
-    setLineShine(false);
-    setCoinPhase(animated ? "hidden" : "landed");
-    subRefs.current.forEach((el) => { if (el) { el.style.transition = "none"; el.style.transform = "none"; } });
+    subRefs.current.forEach((el) => { if (el) { el.style.transition = "none"; el.style.transform = "none"; el.style.opacity = ""; } });
 
-    if (!animated || reducedMotion) return () => timers.forEach(clearTimeout);
+    if (!animated || reducedMotion) { onIconReady?.(); return () => timers.forEach(clearTimeout); }
 
     const scrambleTick = setInterval(() => setTick((t) => t + 1), 55);
     let i = 0;
@@ -2624,7 +2611,7 @@ function JomonbeyMark({ width = 220, animated = false }) {
     }
     function startIntroSub() { setIntroSubVisible(true); T(startFlying, 1300); }
     function flyLetter(k) {
-      setIntroFlying((f) => { const n = [...f]; n[k] = true; return n; }); // ปิด float animation ของตัวนี้ก่อนเริ่มบิน กันชนกับ transform ที่ตั้งเอง
+      setIntroFlying((f) => { const n = [...f]; n[k] = true; return n; });
       const subEl = subRefs.current[k], targetEl = titleRefs.current[FLY_MAP[k]];
       if (subEl && targetEl) {
         const a = subEl.getBoundingClientRect(), b = targetEl.getBoundingClientRect();
@@ -2632,42 +2619,25 @@ function JomonbeyMark({ width = 220, animated = false }) {
         const dy = (b.top + b.height / 2) - (a.top + a.height / 2);
         subEl.style.transition = "none";
         subEl.style.transform = "translate(0,0) scale(1)";
-        void subEl.offsetWidth; // บังคับ reflow ให้ browser จำ state เริ่มต้นก่อน ไม่งั้น transition จะกระโดดตรงไปเลยไม่เล่นแอนิเมชัน
-        subEl.style.transition = "transform .5s cubic-bezier(.3,.6,.25,1)";
-        requestAnimationFrame(() => { subEl.style.transform = `translate(${dx}px, ${dy}px) scale(2.53)`; });
+        subEl.style.opacity = "1";
+        void subEl.offsetWidth; // บังคับ reflow ก่อนตั้งค่าใหม่ ไม่งั้น transition จะกระโดดตรงไปเลย
+        subEl.style.transition = "transform .55s cubic-bezier(.25,.1,.25,1), opacity .55s ease .18s";
+        requestAnimationFrame(() => {
+          subEl.style.transform = `translate(${dx}px, ${dy}px) scale(.22)`; // บินไปทับแบบเล็กจนแทบมองไม่เห็น แทนการพยายามขยายให้เท่าตัวใหญ่ (แบบนั้นดูแข็งกระด้าง)
+          subEl.style.opacity = "0";
+        });
       }
       T(() => {
         setIntroFlown((f) => { const n = [...f]; n[k] = true; return n; });
         setIntroGold((g) => [...g, FLY_MAP[k]]);
-        setImpactIdx(FLY_MAP[k]);
-        T(() => setImpactIdx((cur) => (cur === FLY_MAP[k] ? null : cur)), 460);
         if (k < 2) T(() => flyLetter(k + 1), 220);
         else T(startTransition, 700);
-      }, 480);
+      }, 560);
     }
     function startFlying() { flyLetter(0); }
     function startTransition() {
       setStage("out");
-      T(() => setStage("main"), 550);
-      T(startLineRoll, 550 + 350);
-    }
-    function startLineRoll() {
-      setLinePhase("rolling");
-      T(finishLineRoll, 1800);
-    }
-    function finishLineRoll() {
-      setLinePhase("done");
-      T(showWord, 250);
-    }
-    function showWord() {
-      setWordShown(true);
-      T(() => setLineShine(true), 60);
-      T(startCoinDrop, 1300);
-    }
-    function startCoinDrop() {
-      setCoinPhase("flying");
-      T(() => setCoinPhase("landed"), 900);
-      T(() => setWordDissolve(true), 900 + 700); // ค้างให้เห็นไอคอนสมบูรณ์สักพัก แล้วค่อยให้คำจางหายทีละตัว
+      T(() => { setStage("main"); onIconReady?.(); }, 550);
     }
 
     T(revealNext, 150);
@@ -2686,55 +2656,26 @@ function JomonbeyMark({ width = 220, animated = false }) {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@700;800&display=swap');
         @keyframes jmb-float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
-        @keyframes jmb-impact { 0% { text-shadow: 0 0 0 rgba(255,255,255,0); transform: scale(1); } 35% { text-shadow: 0 0 18px rgba(255,255,255,.95), 0 0 32px rgba(194,158,88,.85); transform: scale(1.32); } 100% { text-shadow: 0 0 0 rgba(255,255,255,0); transform: scale(1); } }
-        @keyframes jmb-line-shine { from { left: -60%; } to { left: 130%; } }
-        @keyframes jmb-dissolve { 0% { opacity: 1; filter: blur(0px); transform: translateY(0); } 100% { opacity: 0; filter: blur(3px); transform: translateY(-7px); } }
-        @keyframes jmb-coin-line-roll { 0% { left: 10%; opacity: 0; transform: translateY(-50%) scale(.5) rotate(0deg); } 10% { opacity: 1; transform: translateY(-50%) scale(1) rotate(90deg); } 85% { left: 90%; opacity: 1; transform: translateY(-50%) scale(1) rotate(640deg); } 100% { left: 92%; opacity: 0; transform: translateY(10%) scale(.6) rotate(700deg); } }
-        @keyframes jmb-coin-drop { 0% { transform: translate(-46px,-42px) rotate(0deg) scale(.65); opacity: 0; } 14% { opacity: 1; } 62% { transform: translate(6px,-9px) rotate(380deg) scale(1.08); } 100% { transform: translate(0,0) rotate(560deg) scale(1); } }
-        @keyframes jmb-coin-impact { 0% { box-shadow: 0 0 0 rgba(255,255,255,0); } 35% { box-shadow: 0 0 20px 6px rgba(255,255,255,.85); } 100% { box-shadow: 0 0 0 rgba(255,255,255,0); } }
       `}</style>
 
-      {/* เฟส 1/2: ตัวใหญ่กลางจอ + JMB สีทองลอยเบาๆแล้วบินเข้าไปทีละตัว */}
       {stage !== "main" && (
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: Math.round(width * 0.05), transition: "opacity .55s ease, transform .55s cubic-bezier(.4,0,.2,1), filter .55s ease", opacity: stage === "out" ? 0 : 1, filter: stage === "out" ? "blur(6px)" : "blur(0px)", transform: stage === "out" ? `scale(${(width * 0.06) / (width * 0.19)}) translateY(${iconSize * 1.1}px)` : "scale(1) translateY(0)" }}>
           <div style={{ fontFamily: "'Poppins','IBM Plex Sans Thai',sans-serif", fontWeight: 800, fontSize: width * 0.19, letterSpacing: -0.5, lineHeight: 1, whiteSpace: "nowrap" }}>
             {INITIAL.split("").map((_, idx) => (
-              <span key={idx} ref={(el) => (titleRefs.current[idx] = el)} style={{ display: "inline-block", transformOrigin: "center", color: introGold.includes(idx) ? "#C29E58" : "#fff", opacity: idx < revealed ? 1 : 0.5, transition: "opacity .12s, color .3s ease", animation: idx === impactIdx ? "jmb-impact .46s ease" : "none" }}>{letterAt(idx)}</span>
+              <span key={idx} ref={(el) => (titleRefs.current[idx] = el)} style={{ display: "inline-block", transformOrigin: "center", color: introGold.includes(idx) ? "#C29E58" : "#fff", opacity: idx < revealed ? 1 : 0.5, transition: "opacity .12s, color .3s ease" }}>{letterAt(idx)}</span>
             ))}
           </div>
           <div style={{ display: "flex", gap: width * 0.02, height: introSubVisible ? width * 0.075 * 1.6 : 0, overflow: "visible", opacity: introSubVisible ? 1 : 0, transition: "opacity .4s ease, height .4s ease" }}>
             {["J", "M", "B"].map((ch, k) => (
-              <span key={k} ref={(el) => (subRefs.current[k] = el)} style={{ display: "inline-block", fontFamily: "'Poppins','IBM Plex Sans Thai',sans-serif", fontWeight: 700, fontSize: width * 0.075, letterSpacing: 2, color: "#C29E58", opacity: introFlown[k] ? 0 : 1, transition: "opacity .18s ease", animation: introSubVisible && !introFlying[k] && !introFlown[k] ? `jmb-float ${1.9 + k * 0.15}s ease-in-out infinite` : "none" }}>{ch}</span>
+              <span key={k} ref={(el) => (subRefs.current[k] = el)} style={{ display: "inline-block", fontFamily: "'Poppins','IBM Plex Sans Thai',sans-serif", fontWeight: 700, fontSize: width * 0.075, letterSpacing: 2, color: "#C29E58", opacity: introFlown[k] ? 0 : 1, animation: introSubVisible && !introFlying[k] && !introFlown[k] ? `jmb-float ${1.9 + k * 0.15}s ease-in-out infinite` : "none" }}>{ch}</span>
             ))}
           </div>
         </div>
       )}
 
-      {/* เฟส 3/4/5: ไอคอนโปร่งใส + เส้นคั่น + เหรียญวิ่งครั้งเดียว + คำเล็กสีขาวนิ่ง */}
       {stage !== "intro" && (
-        <div style={{ transition: "opacity .55s ease, transform .55s cubic-bezier(.4,0,.2,1), filter .55s ease", opacity: stage === "out" ? 0 : 1, filter: stage === "out" ? "blur(0px)" : "blur(0px)", transform: stage === "out" ? "scale(.82)" : "scale(1)" }}>
-          <div style={{ position: "relative", width: iconSize, height: iconSize, margin: "0 auto" }}>
-            <img src={coinPhase === "landed" ? "/icons/icon-192-t.png" : "/icons/icon-nocoin-192-t.png"} width={iconSize} height={iconSize} style={{ display: "block" }} alt="Jomonbey" />
-            {coinPhase === "flying" && (
-              <div style={{ position: "absolute", left: "48.5%", top: "21%", width: iconSize * 0.13, height: iconSize * 0.13, marginLeft: -(iconSize * 0.065), marginTop: -(iconSize * 0.065), borderRadius: "50%", background: "radial-gradient(circle at 35% 30%, #F4DFA6, #C29E58 60%, #8a6b34)", animation: "jmb-coin-drop .9s cubic-bezier(.35,.05,.25,1) forwards" }} />
-            )}
-            {coinPhase === "landed" && (
-              <div key={playId} style={{ position: "absolute", left: "48.5%", top: "21%", width: iconSize * 0.16, height: iconSize * 0.16, marginLeft: -(iconSize * 0.08), marginTop: -(iconSize * 0.08), borderRadius: "50%", pointerEvents: "none", animation: animated ? "jmb-coin-impact .5s ease" : "none" }} />
-            )}
-          </div>
-
-          <div style={{ position: "relative", width: "100%", maxWidth: width, height: Math.max(26, width * 0.095), marginTop: Math.round(width * 0.05) }}>
-            <div style={{ position: "absolute", left: "10%", right: "10%", top: "50%", height: 1, background: "linear-gradient(90deg, transparent, rgba(194,158,88,.4), transparent)" }} />
-            {linePhase === "rolling" && <div style={{ position: "absolute", left: "10%", top: "50%", width: 9, height: 9, borderRadius: "50%", background: "#E4C583", boxShadow: "0 0 6px rgba(228,197,131,.8)", zIndex: 2, animation: "jmb-coin-line-roll 1.8s ease-in-out forwards" }} />}
-            {wordShown && (
-              <div style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%,-50%)", zIndex: 1, background: "#0B0A08", padding: "0 8px", fontFamily: "'Poppins','IBM Plex Sans Thai',sans-serif", fontWeight: 700, fontSize: width * 0.06, letterSpacing: -.1, lineHeight: 1, whiteSpace: "nowrap", overflow: "visible", color: "#fff" }}>
-                {FINAL.split("").map((ch, idx) => (
-                  <span key={idx} style={{ display: "inline-block", animation: wordDissolve ? `jmb-dissolve .6s ease forwards ${idx * 45}ms` : "none" }}>{ch}</span>
-                ))}
-                {lineShine && <div style={{ position: "absolute", top: 0, left: "-60%", width: "45%", height: "100%", background: "linear-gradient(100deg, transparent, rgba(255,255,255,.85), transparent)", mixBlendMode: "overlay", animation: "jmb-line-shine 2.2s ease-in-out infinite" }} />}
-              </div>
-            )}
-          </div>
+        <div style={{ position: "relative", width: iconSize, height: iconSize, transition: "opacity .55s ease, transform .55s cubic-bezier(.4,0,.2,1)", opacity: stage === "out" ? 0 : 1, transform: stage === "out" ? "scale(.82)" : "scale(1)" }}>
+          <img ref={iconElRef} src={coinOn ? "/icons/icon-192-t.png" : "/icons/icon-nocoin-192-t.png"} width={iconSize} height={iconSize} style={{ display: "block" }} alt="Jomonbey" />
         </div>
       )}
     </div>
@@ -2791,6 +2732,75 @@ function PKnowLockup({ width = 220, gap = 10, animated = false, cycle = false })
   );
 }
 
+// 📏 เส้นคั่นจริงระหว่างโลโก้กับกรอบฟอร์ม — เล่นเอฟเฟค: เหรียญไหลจากซ้ายสุดไปขวาสุดของเส้นครั้งเดียว -> ตกขอบหาย -> "Jomonbey" ตัวเล็กสีขาวนิ่งโผล่มานั่งกึ่งกลางเส้น (แสงกวาดวนเฉพาะตอนคำยังอยู่ ขนาดเท่าตัวหนังสือเป๊ะ ไม่ล้นออกมา)
+// ค้างไว้ -> คำจางหายทีละตัว พร้อมเหรียญเดียวกันบินขึ้นไปหา iconRef (ตำแหน่งช่องว่างเหรียญบนไอคอนจริงที่ AuthPage เรนเดอร์อยู่) แล้วแจ้ง onCoinLanded ให้ AuthPage สลับไอคอนเป็นเวอร์ชันมีเหรียญ
+function LoginDivider({ active, iconRef, onCoinLanded }) {
+  const [linePhase, setLinePhase] = useState("idle"); // idle -> rolling -> done
+  const [wordShown, setWordShown] = useState(false);
+  const [lineShine, setLineShine] = useState(false);
+  const [wordDissolve, setWordDissolve] = useState(false);
+  const [coinFlying, setCoinFlying] = useState(false);
+  const coinDotRef = useRef(null);
+
+  useEffect(() => {
+    if (!active) return;
+    const timers = [];
+    const T = (fn, ms) => { const id = setTimeout(fn, ms); timers.push(id); return id; };
+    T(() => setLinePhase("rolling"), 300);
+    T(() => setLinePhase("done"), 300 + 1800);
+    T(() => setWordShown(true), 300 + 1800 + 250);
+    T(() => setLineShine(true), 300 + 1800 + 250 + 60);
+    T(sendCoinToIcon, 300 + 1800 + 250 + 60 + 1400);
+    function sendCoinToIcon() {
+      setWordDissolve(true);
+      setCoinFlying(true);
+    }
+    return () => timers.forEach(clearTimeout);
+  }, [active]);
+
+  useEffect(() => {
+    if (!coinFlying) return;
+    const dot = coinDotRef.current, icon = iconRef?.current;
+    if (dot && icon) {
+      const a = dot.getBoundingClientRect(), b = icon.getBoundingClientRect();
+      const dx = (b.left + b.width * 0.485) - (a.left + a.width / 2);
+      const dy = (b.top + b.height * 0.21) - (a.top + a.height / 2);
+      dot.style.transition = "none";
+      dot.style.transform = "translate(0,0) rotate(0deg) scale(.85)";
+      void dot.offsetWidth; // บังคับ reflow ก่อนตั้งค่าใหม่ ไม่งั้น transition จะกระโดดตรงไปเลย
+      dot.style.transition = "transform .9s cubic-bezier(.35,.05,.25,1)";
+      requestAnimationFrame(() => { dot.style.transform = `translate(${dx}px, ${dy}px) rotate(560deg) scale(1)`; });
+    }
+    const t = setTimeout(() => onCoinLanded?.(), 900);
+    return () => clearTimeout(t);
+  }, [coinFlying]);
+
+  return (
+    <div style={{ position: "relative", height: 1, marginBottom: 32 }}>
+      <style>{`
+        @keyframes jmb-coin-line-roll { 0% { left: 0%; opacity: 0; transform: translateY(-50%) scale(.5) rotate(0deg); } 10% { opacity: 1; transform: translateY(-50%) scale(1) rotate(90deg); } 85% { left: 96%; opacity: 1; transform: translateY(-50%) scale(1) rotate(640deg); } 100% { left: 99%; opacity: 0; transform: translateY(10%) scale(.6) rotate(700deg); } }
+        @keyframes jmb-line-shine { from { left: -60%; } to { left: 130%; } }
+        @keyframes jmb-dissolve { 0% { opacity: 1; filter: blur(0px); transform: translateY(0); } 100% { opacity: 0; filter: blur(3px); transform: translateY(-7px); } }
+      `}</style>
+      <div style={{ position: "absolute", left: 0, right: 0, top: 0, height: 1, background: "linear-gradient(90deg, transparent, rgba(194,158,88,.4), transparent)" }} />
+      {linePhase === "rolling" && (
+        <div style={{ position: "absolute", left: "0%", top: 0, width: 9, height: 9, borderRadius: "50%", background: "#E4C583", boxShadow: "0 0 6px rgba(228,197,131,.8)", zIndex: 2, animation: "jmb-coin-line-roll 1.8s ease-in-out forwards" }} />
+      )}
+      {coinFlying && (
+        <div ref={coinDotRef} style={{ position: "absolute", left: "50%", top: 0, width: 9, height: 9, marginLeft: -4.5, marginTop: -4.5, borderRadius: "50%", background: "radial-gradient(circle at 35% 30%, #F4DFA6, #C29E58 60%, #8a6b34)", zIndex: 3 }} />
+      )}
+      {wordShown && (
+        <div style={{ position: "absolute", left: "50%", top: 0, transform: "translate(-50%,-50%)", zIndex: 1, background: "#0B0A08", padding: "0 8px", fontFamily: "'Poppins','IBM Plex Sans Thai',sans-serif", fontWeight: 700, fontSize: 15, letterSpacing: -.1, lineHeight: 1, whiteSpace: "nowrap", overflow: "hidden", color: "#fff" }}>
+          {"Jomonbey".split("").map((ch, idx) => (
+            <span key={idx} style={{ display: "inline-block", animation: wordDissolve ? `jmb-dissolve .6s ease forwards ${idx * 45}ms` : "none" }}>{ch}</span>
+          ))}
+          {lineShine && !wordDissolve && <div style={{ position: "absolute", top: 0, left: "-60%", width: "45%", height: "100%", background: "linear-gradient(100deg, transparent, rgba(255,255,255,.85), transparent)", mixBlendMode: "overlay", animation: "jmb-line-shine 2.2s ease-in-out infinite" }} />}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AuthPage() {
   const [mode, setMode] = useState("login"); // login | signup
   const [loginWith, setLoginWith] = useState("email"); // email | pin (ใช้เฉพาะตอน mode==='login')
@@ -2803,6 +2813,9 @@ function AuthPage() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const [info, setInfo] = useState("");
+  const authIconRef = useRef(null);
+  const [divActive, setDivActive] = useState(false);
+  const [coinOn, setCoinOn] = useState(false);
   const [forgotOpen, setForgotOpen] = useState(false); // 🔑 เปิดฟอร์ม "ลืมรหัสผ่าน" (เฉพาะบัญชีอีเมล — บัญชี PIN ให้แอดมินรีเซ็ตให้แทน)
   const [forgotSending, setForgotSending] = useState(false);
 
@@ -2898,8 +2911,8 @@ function AuthPage() {
     <div style={{ minHeight: "100dvh", display: "flex", justifyContent: "center", background: "radial-gradient(ellipse 640px 460px at 50% -8%, rgba(194,158,88,.12), transparent 62%), #0B0A08", fontFamily: "'IBM Plex Sans Thai',sans-serif" }}>
       <style>{`.jmb-field:focus { border-bottom-color: #C29E58 !important; } .jmb-field::placeholder { color: #57514A; }`}</style>
       <div style={{ width: "100%", maxWidth: 420, padding: "56px 24px", display: "flex", flexDirection: "column" }}>
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}><JomonbeyMark width={250} animated /></div>
-        <div style={{ height: 1, background: "linear-gradient(90deg, transparent, rgba(194,158,88,.4), transparent)", marginBottom: 32 }} />
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}><JomonbeyMark width={250} animated iconRef={authIconRef} coinOn={coinOn} onIconReady={() => setDivActive(true)} /></div>
+        <LoginDivider active={divActive} iconRef={authIconRef} onCoinLanded={() => setCoinOn(true)} />
 
         <div style={{ position: "relative", border: "1px solid rgba(194,158,88,.09)", borderRadius: 4, padding: "32px 26px 26px", background: "linear-gradient(180deg, rgba(194,158,88,.045), transparent 45%)" }}>
           <div style={{ position: "absolute", top: -1, left: "14%", right: "14%", height: 1, background: "linear-gradient(90deg, transparent, #C29E58, transparent)" }} />
