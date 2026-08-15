@@ -6019,6 +6019,7 @@ function HomePage({ t, lang, M, quote, isNight, setMentorPick, balance, tx, goal
 function FinancePage({ t, lang, tx, setTx, categories, openAdd, openExport, userId, billReminders, billPayments, markBillPaid, setBillManagerOpen }) {
   const [askConfirm, ConfirmUI] = useConfirm(t);
   const [editingTx, setEditingTx] = useState(null);
+  const [viewingTx, setViewingTx] = useState(null); // ดูรายละเอียดเต็ม (อ่านอย่างเดียว) — แตะที่รายการเปิดตัวนี้
   const [viewReceipt, setViewReceipt] = useState(null); // signed url ของรูปสลิป/ใบเสร็จที่กำลังดู
   const openReceipt = async (path) => {
     const { data, error } = await supabase.storage.from("receipts").createSignedUrl(path, 120);
@@ -6222,12 +6223,12 @@ function FinancePage({ t, lang, tx, setTx, categories, openAdd, openExport, user
           <div style={{ fontSize: 11.5, fontWeight: 700, color: t.faint, marginBottom: 6 }}>{dateLabel(d)}</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {groups[d].map((x) => { const C = findCat(categories, x.cat); const Ic = ICONS[C.iconKey] || Wallet; return (
-              <div key={x.id} style={{ ...card(t), padding: "11px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div key={x.id} onClick={() => setViewingTx(x)} style={{ ...card(t), padding: "11px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0 }}>
                   <div style={{ width: 36, height: 36, borderRadius: 11, background: `${C.color}22`, display: "grid", placeItems: "center", flexShrink: 0 }}><Ic size={17} color={C.color} /></div>
                   <div style={{ minWidth: 0 }}><div style={{ fontSize: 13.5, fontWeight: 600, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.note}</div><div style={{ fontSize: 11, color: t.sub }}>{C.label}</div></div>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
                   <div style={{ fontSize: 14.5, fontWeight: 800, color: x.type === "in" ? "#2E9E6B" : t.text, whiteSpace: "nowrap", flexShrink: 0 }}>{x.type === "in" ? "+" : "−"}{x.amount.toLocaleString()}</div>
                   {x.receipt_path && <button onClick={() => openReceipt(x.receipt_path)} style={ghost} title="ดูรูปสลิป/ใบเสร็จ"><Receipt size={15} color={t.accent} /></button>}
                   <button onClick={() => setEditingTx(x)} style={ghost} title="แก้ไข"><Pencil size={15} color={t.faint} /></button>
@@ -6240,6 +6241,7 @@ function FinancePage({ t, lang, tx, setTx, categories, openAdd, openExport, user
       ))}
       <PaginationBar t={t} page={txPagination.page} setPage={txPagination.setPage} totalPages={txPagination.totalPages} />
       {editingTx && <EditTxModal t={t} x={editingTx} categories={categories} userId={userId} setTx={setTx} close={() => setEditingTx(null)} />}
+      {viewingTx && <TxDetailModal t={t} x={viewingTx} categories={categories} onEdit={() => { setEditingTx(viewingTx); setViewingTx(null); }} close={() => setViewingTx(null)} />}
       {viewReceipt && <ImageLightbox src={viewReceipt} onClose={() => setViewReceipt(null)} />}
       {ConfirmUI}
     </>
@@ -10841,6 +10843,74 @@ function GoalsReportPage({ t, lang, goals, setGoals, userId }) {
         </>
       )}
     </div>
+  );
+}
+
+// 🔍 ดูรายละเอียดธุรกรรมเต็ม (อ่านอย่างเดียว) — โชว์ข้อมูลที่ auto-import จากอีเมลธนาคารเก็บไว้ใน items (ถ้ามี) หรือรายการใบเสร็จที่สแกน
+function TxDetailModal({ t, x, categories, onEdit, close }) {
+  const C = findCat(categories, x.cat);
+  const Ic = ICONS[C.iconKey] || Wallet;
+  const meta = x.items && typeof x.items === "object" && !Array.isArray(x.items) ? x.items : null; // ธุรกรรม auto จากอีเมลธนาคาร
+  const receiptItems = Array.isArray(x.items) ? x.items : null; // รายการจากสแกนใบเสร็จ
+
+  return (
+    <ModalPortal>
+      <div style={overlayHi} onClick={close}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: "20px 20px 28px", maxHeight: "88vh", overflowY: "auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <div style={{ fontSize: 17, fontWeight: 800, color: t.text }}>รายละเอียดธุรกรรม</div>
+            <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "12px 0 20px" }}>
+            <div style={{ width: 52, height: 52, borderRadius: 16, background: `${C.color}22`, display: "grid", placeItems: "center" }}><Ic size={24} color={C.color} /></div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: x.type === "in" ? "#2E9E6B" : t.text }}>{x.type === "in" ? "+" : "−"}฿{x.amount.toLocaleString()}</div>
+            <div style={{ fontSize: 12.5, color: t.sub }}>{C.label} · {dateLabel(x.date)}</div>
+            {x.doc_type === "bank_email_auto" && (
+              <div style={{ fontSize: 11, fontWeight: 700, color: t.accent, background: `${t.accent}18`, padding: "3px 10px", borderRadius: 20, marginTop: 2 }}>
+                ตรวจจับอัตโนมัติจากอีเมลธนาคาร
+              </div>
+            )}
+          </div>
+
+          <div style={{ ...card(t), padding: 14, marginBottom: meta || receiptItems ? 12 : 0 }}>
+            <div style={{ fontSize: 11, color: t.faint, marginBottom: 4 }}>รายละเอียด</div>
+            <div style={{ fontSize: 14, color: t.text }}>{x.note}</div>
+          </div>
+
+          {meta && (
+            <div style={{ ...card(t), padding: 14, marginBottom: 12 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: t.faint, marginBottom: 8 }}>ข้อมูลจากอีเมลธนาคาร</div>
+              {[
+                ["ธนาคาร", meta.bank_label],
+                ["คู่ค้า/ผู้รับ", meta.counterparty_name],
+                ["เลขอ้างอิง", meta.reference_no],
+              ].filter(([, v]) => v).map(([label, v]) => (
+                <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "6px 0", borderBottom: `1px solid ${t.border}` }}>
+                  <div style={{ fontSize: 12.5, color: t.sub, flexShrink: 0 }}>{label}</div>
+                  <div style={{ fontSize: 12.5, color: t.text, fontWeight: 600, textAlign: "right" }}>{v}</div>
+                </div>
+              ))}
+              {meta.raw_subject && <div style={{ fontSize: 11, color: t.faint, marginTop: 8, fontStyle: "italic" }}>หัวข้ออีเมลต้นฉบับ: {meta.raw_subject}</div>}
+            </div>
+          )}
+
+          {receiptItems && receiptItems.length > 0 && (
+            <div style={{ ...card(t), padding: 14, marginBottom: 12 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: t.faint, marginBottom: 8 }}>รายการในใบเสร็จ</div>
+              {receiptItems.map((it, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}>
+                  <div style={{ fontSize: 13, color: t.text }}>{it.name}</div>
+                  <div style={{ fontSize: 13, color: t.sub }}>฿{Number(it.price || 0).toLocaleString()}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <button onClick={onEdit} style={{ ...primaryBtn({ accent: t.accent, accent2: t.accent2, onAccent: t.onAccent }), width: "100%", padding: "13px 0" }}>แก้ไขรายการนี้</button>
+        </div>
+      </div>
+    </ModalPortal>
   );
 }
 
