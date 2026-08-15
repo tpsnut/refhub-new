@@ -1781,6 +1781,11 @@ export default function RefHub() {
           const { data: withCode } = await supabase.from("profiles").update({ chat_code: code }).eq("id", userId).select().single();
           if (withCode) setAuthProfile(withCode);
         }
+        if (data && !data.email_alias) {
+          const alias = Math.random().toString(36).slice(2, 8).toLowerCase(); // ใช้ต่อท้าย inbox.jomonbey+alias@gmail.com แยกว่าอีเมลธนาคาร forward มาจาก user คนไหน
+          const { data: withAlias } = await supabase.from("profiles").update({ email_alias: alias }).eq("id", userId).select().single();
+          if (withAlias) setAuthProfile(withAlias);
+        }
       } catch (e) { console.error("โหลดโปรไฟล์ผิดพลาด:", e.message); setAuthProfile(null); }
       finally { setAuthProfileChecked(true); }
     })();
