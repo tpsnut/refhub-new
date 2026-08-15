@@ -6223,12 +6223,12 @@ function FinancePage({ t, lang, tx, setTx, categories, openAdd, openExport, user
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {groups[d].map((x) => { const C = findCat(categories, x.cat); const Ic = ICONS[C.iconKey] || Wallet; return (
               <div key={x.id} style={{ ...card(t), padding: "11px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <div style={{ width: 36, height: 36, borderRadius: 11, background: `${C.color}22`, display: "grid", placeItems: "center" }}><Ic size={17} color={C.color} /></div>
-                  <div><div style={{ fontSize: 13.5, fontWeight: 600, color: t.text }}>{x.note}</div><div style={{ fontSize: 11, color: t.sub }}>{C.label}</div></div>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 11, background: `${C.color}22`, display: "grid", placeItems: "center", flexShrink: 0 }}><Ic size={17} color={C.color} /></div>
+                  <div style={{ minWidth: 0 }}><div style={{ fontSize: 13.5, fontWeight: 600, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.note}</div><div style={{ fontSize: 11, color: t.sub }}>{C.label}</div></div>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <div style={{ fontSize: 14.5, fontWeight: 800, color: x.type === "in" ? "#2E9E6B" : t.text }}>{x.type === "in" ? "+" : "−"}{x.amount.toLocaleString()}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                  <div style={{ fontSize: 14.5, fontWeight: 800, color: x.type === "in" ? "#2E9E6B" : t.text, whiteSpace: "nowrap", flexShrink: 0 }}>{x.type === "in" ? "+" : "−"}{x.amount.toLocaleString()}</div>
                   {x.receipt_path && <button onClick={() => openReceipt(x.receipt_path)} style={ghost} title="ดูรูปสลิป/ใบเสร็จ"><Receipt size={15} color={t.accent} /></button>}
                   <button onClick={() => setEditingTx(x)} style={ghost} title="แก้ไข"><Pencil size={15} color={t.faint} /></button>
                   <button onClick={() => askConfirm(`ลบรายการ "${x.note || (x.type === "in" ? "รายรับ" : "รายจ่าย")}" ฿${x.amount.toLocaleString()} เลยไหม?`, () => { setTx((l) => l.filter((y) => y.id !== x.id)); if (userId) { supabase.from("transactions").delete().eq("id", x.id).then(() => {}, () => {}); logAudit(userId, "finance", "delete", "ลบรายการการเงิน"); } })} style={ghost}><Trash2 size={15} color={t.faint} /></button>
