@@ -1246,6 +1246,18 @@ export default function RefHub() {
   });
   const dbFontScaleHydratedRef = useRef(false); // 🔒 กันบั๊ก: ค่าจาก DB (font_scale) เคยไปทับค่าที่เพิ่งเลือกไว้ในเครื่องนี้ทุกครั้งที่ authProfile โหลดใหม่ — ให้ดึงจาก DB มาทับได้แค่ "ครั้งแรก" ตอน hydrate เท่านั้น และเฉพาะตอนที่เครื่องนี้ไม่มีค่าอยู่ในเครื่องอยู่แล้ว (เครื่องใหม่/ล้าง storage)
   const [page, setPage] = useState(() => { try { return sessionStorage.getItem("refhub:page") || "home"; } catch (e) { return "home"; } });
+  // 🔗 Deep link จาก LINE (แจ้งเตือนธุรกรรม auto-import) — อ่านตอนโหลดแอปครั้งแรกครั้งเดียว เช่น jomonbey.com/?tx=xxx&action=view
+  const [deepLinkTx, setDeepLinkTx] = useState(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const tx = params.get("tx");
+      const action = params.get("action");
+      return tx ? { id: tx, action: action === "edit" ? "edit" : "view" } : null;
+    } catch (e) { return null; }
+  });
+  useEffect(() => {
+    if (deepLinkTx) setPage("ledger"); // มี deep link ธุรกรรม -> พาไปหน้าการเงินทันที ไม่ว่าจะอยู่หน้าไหนอยู่ก่อน
+  }, [deepLinkTx]);
   const contentScrollRef = useRef(null); // 📜 container หลักที่ scroll ของทุกหน้า — ใช้เด้งกลับขึ้นบนตอนเปลี่ยนหน้า + ปุ่มเลื่อนขึ้น/ลง
   // 📱 ติดตามความสูง viewport จริงผ่าน VisualViewport API — บาง Android WebView/PWA ไม่อัปเดต CSS dvh ตอนคีย์บอร์ดเปิด
   // ทำให้เหลือพื้นที่ว่างด้านล่างค้างอยู่เท่าความสูงคีย์บอร์ด (container คิดว่ายังมีพื้นที่เท่าเดิมทั้งที่คีย์บอร์ดมาบังไปแล้ว)
@@ -2306,7 +2318,7 @@ export default function RefHub() {
         {/* CONTENT — ความสูงหารด้วยสเกลชดเชย transform:scale ข้างบน กันตอนขยายฟอนต์แล้วท้ายเนื้อหาจมใต้ Dock */}
         <div ref={contentScrollRef} onScroll={(e) => setAtTop(e.currentTarget.scrollTop < 80)} style={{ position: "relative", zIndex: 2, padding: `8px 10px ${page === "chat" || page === "chatRoom" ? 16 : 120}px`, height: vvh ? `${(vvh * 100 / fontScale - 76).toFixed(2)}px` : `calc(${(10000 / fontScale).toFixed(2)}dvh - 76px)`, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
           {page === "home" && <ErrorCatcher t={t}><HomePage {...{ t, lang, M, quote, isNight, setMentorPick, balance, tx, goals: todayGoals, allGoals: goals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, setMusicOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget, setWorkoutTimerTarget, setAddGoalOpen, setScoreRulesOpen, cardShape, homeLayout, walletWidgets, setWalletWidgets, bentoWidgets, setBentoWidgets, classicWidgets, setClassicWidgets, catColors, setCatColors, heroShortcuts, setHeroShortcuts, heroTheme, setHeroTheme, heroCustomUrl, setHeroCustomUrl, heroCustomType, setHeroCustomType }} /></ErrorCatcher>}
-          {page === "ledger" && <FinancePage {...{ t, lang, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt), userId, billReminders, billPayments, markBillPaid, setBillManagerOpen }} />}
+          {page === "ledger" && <FinancePage {...{ t, lang, tx, setTx, categories, openAdd: () => setAddOpen(true), openExport: (txt) => setExportText(txt), userId, billReminders, billPayments, markBillPaid, setBillManagerOpen, deepLinkTx, clearDeepLinkTx: () => setDeepLinkTx(null) }} />}
           {page === "note" && <NotePage {...{ t, lang, notes, setNotes, isNight, userId, session, authProfile, reminders, openReminder }} />}
           {page === "ideas" && <IdeasPage t={t} lang={lang} M={M} userId={userId} session={session} authProfile={authProfile} setAuthProfile={setAuthProfile} setNotes={setNotes} setChatOpen={setChatOpen} setAskAiTopic={setAskAiTopic} />}
           {page === "trade" && <TradePage t={t} lang={lang} userId={userId} scrollToTop={() => { if (contentScrollRef.current) contentScrollRef.current.scrollTop = 0; }} />}
@@ -6016,10 +6028,21 @@ function HomePage({ t, lang, M, quote, isNight, setMentorPick, balance, tx, goal
 }
 
 // ---------------- Finance (full) ----------------
-function FinancePage({ t, lang, tx, setTx, categories, openAdd, openExport, userId, billReminders, billPayments, markBillPaid, setBillManagerOpen }) {
+function FinancePage({ t, lang, tx, setTx, categories, openAdd, openExport, userId, billReminders, billPayments, markBillPaid, setBillManagerOpen, deepLinkTx, clearDeepLinkTx }) {
   const [askConfirm, ConfirmUI] = useConfirm(t);
   const [editingTx, setEditingTx] = useState(null);
   const [viewingTx, setViewingTx] = useState(null); // ดูรายละเอียดเต็ม (อ่านอย่างเดียว) — แตะที่รายการเปิดตัวนี้
+
+  // 🔗 มี deep link จาก LINE (?tx=xxx&action=view/edit) รอเปิดอยู่ไหม -> หาธุรกรรมตรง id แล้วเปิด modal ที่ถูกต้องอัตโนมัติ
+  useEffect(() => {
+    if (!deepLinkTx) return;
+    const found = tx.find((x) => x.id === deepLinkTx.id);
+    if (!found) return; // ยังโหลดข้อมูลไม่เสร็จ รอ effect นี้รันใหม่ตอน tx อัปเดต
+    if (deepLinkTx.action === "edit") setEditingTx(found);
+    else setViewingTx(found);
+    clearDeepLinkTx?.();
+    try { window.history.replaceState(null, "", window.location.pathname); } catch (e) {} // ล้าง ?tx=...&action=... ออกจาก URL กัน refresh แล้วเปิดซ้ำ
+  }, [deepLinkTx, tx]);
   const [viewReceipt, setViewReceipt] = useState(null); // signed url ของรูปสลิป/ใบเสร็จที่กำลังดู
   const openReceipt = async (path) => {
     const { data, error } = await supabase.storage.from("receipts").createSignedUrl(path, 120);
