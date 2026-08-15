@@ -10057,7 +10057,7 @@ function ChatRoomPage({ t, userId, thread, profile, session, onLeave, onBack, ac
       {lightbox && <ImageLightbox src={lightbox} onClose={() => setLightbox(null)} />}
       {callDetail && (
         <ModalPortal>
-        <div style={overlay} onClick={() => setCallDetail(null)}>
+        <div style={overlayHi} onClick={() => setCallDetail(null)}>
           <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 380, background: t.page, borderRadius: 20, padding: 24, textAlign: "center" }}>
             <div style={{ width: 56, height: 56, borderRadius: 28, background: "#2E9E6B", display: "grid", placeItems: "center", margin: "0 auto 14px" }}><Phone size={26} color="#fff" /></div>
             <div style={{ fontSize: 17, fontWeight: 800, color: t.text, marginBottom: 4 }}>ประวัติการโทร</div>
@@ -10122,7 +10122,7 @@ function RoomMembersModal({ t, threadId, session, isCreator, confirmLeave, setCo
 
   return (
     <ModalPortal>
-      <div style={overlay} onClick={close}>
+      <div style={overlayHi} onClick={close}>
         <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
           <div style={{ fontSize: 16, fontWeight: 800, color: t.text, marginBottom: 4 }}>ข้อมูลห้อง</div>
           <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 16 }}>{isCreator ? "เตะออก หรือปิดไม่ให้พิมพ์ (mute) ได้เฉพาะคนที่ไม่ใช่ตัวคุณเอง" : "สมาชิกทั้งหมดในห้องนี้"}</div>
