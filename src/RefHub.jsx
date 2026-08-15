@@ -9472,7 +9472,7 @@ function ChatEntryPage({ t, lang, M, userId, authProfile, session, openThread, o
   if (!authProfile?.can_chat && !hasFullAccess) {
     return (
       <>
-        <PageHead t={t} title={L(lang, "ph_chat_title")} sub={L(lang, "ph_chat_sub1")} icon={<MessageCircle size={20} color={t.accent} />} onBack={onBack} />
+        <PageHead t={t} title={L(lang, "ph_chat_title")} sub={L(lang, "ph_chat_sub1")} icon={<MessageCircle size={20} color={t.accent} />} />
         <Empty t={t} text="คุณยังไม่ได้รับสิทธิ์ใช้งานแชท — ให้แอดมินเปิดสิทธิ์ให้ที่หน้า Admin ก่อนนะ" />
       </>
     );
@@ -9480,7 +9480,7 @@ function ChatEntryPage({ t, lang, M, userId, authProfile, session, openThread, o
 
   return (
     <>
-      <PageHead t={t} title={L(lang, "ph_chat_title")} sub={L(lang, "ph_chat_sub2")} icon={<MessageCircle size={20} color={t.accent} />} onBack={onBack} />
+      <PageHead t={t} title={L(lang, "ph_chat_title")} sub={L(lang, "ph_chat_sub2")} icon={<MessageCircle size={20} color={t.accent} />} />
 
       <>
       {authProfile.chat_code && (
