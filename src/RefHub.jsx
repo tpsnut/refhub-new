@@ -3316,16 +3316,25 @@ function LanguageModal({ t, lang, setLang, close }) {
 }
 
 // 🏦 ตั้งค่าเชื่อมต่อธนาคาร — อีเมล forward สำหรับเงินออก (auto จากอีเมลธนาคาร) + เชื่อม LINE สำหรับเงินเข้า (ส่งรูปสลิปให้บอทอ่าน)
-const BANK_SETUP_STEPS = [
-  { id: "scb", name: "ธนาคารไทยพาณิชย์ (SCB Easy)", color: "#5B2D90", steps: ["เปิดแอป SCB Easy → เมนู \"อื่นๆ\" → \"การตั้งค่า\"", "เลือก \"การจัดการการแจ้งเตือน\"", "เปิด \"แจ้งเตือนทางอีเมล\" แล้วใส่ที่อยู่อีเมลด้านบน"] },
-  { id: "kbank", name: "ธนาคารกสิกรไทย (K PLUS)", color: "#0B8442", steps: ["เปิดแอป K PLUS → \"ตั้งค่า\" → \"การแจ้งเตือน\"", "เลือกช่องทาง \"อีเมล\"", "ใส่ที่อยู่อีเมลด้านบน แล้วกดยืนยัน"] },
-  { id: "bbl", name: "ธนาคารกรุงเทพ", color: "#1E4FA3", steps: ["เปิดแอป Bualuang mBanking → \"จัดการบัญชี\"", "เลือกบัญชี → \"SMS/Email Alert\"", "ใส่ที่อยู่อีเมลด้านบน"] },
-  { id: "ktb", name: "ธนาคารกรุงไทย (Krungthai NEXT)", color: "#00A9E0", steps: ["เปิดแอป Krungthai NEXT → \"ตั้งค่า\"", "เลือก \"การแจ้งเตือนทางอีเมล\"", "ใส่ที่อยู่อีเมลด้านบน"] },
+const EMAIL_FORWARD_STEPS = [
+  { id: "gmail", name: "Gmail", color: "#EA4335", steps: [
+    "เปิด Gmail (เว็บ) → รูปเฟือง ⚙️ มุมขวาบน → \"See all settings\"",
+    "แท็บ \"Forwarding and POP/IMAP\" → \"Add a forwarding address\"",
+    "ใส่อีเมลกลางด้านบน (inbox.jomonbey+...@gmail.com) → กด Next → Proceed",
+    "Gmail จะส่งรหัสยืนยันไปที่กล่องเมลกลาง (ขอรหัสจากแอดมินได้เลย) เอามาใส่ในนี้",
+    "ยืนยันแล้วกลับมาติ๊ก \"Forward a copy of incoming mail to...\" แล้วเลือกอีเมลกลาง → Save Changes",
+  ] },
+  { id: "outlook", name: "Outlook / Hotmail", color: "#0072C6", steps: [
+    "เปิด Outlook (เว็บ) → รูปเฟือง ⚙️ → Mail → Forwarding",
+    "เปิด \"Enable forwarding\" → ใส่อีเมลกลางด้านบน",
+    "แนะนำติ๊ก \"Keep a copy of forwarded messages\" ไว้ด้วย จะได้เห็นในกล่องตัวเองด้วย",
+    "กด Save (ใช้เมนู Forwarding เท่านั้น อย่าใช้ Rules เพราะ Outlook บล็อค Rules สำหรับบัญชีส่วนตัวแบบเงียบๆ)",
+  ] },
 ];
 
 function BankConnectModal({ t, lang, userId, authProfile, setAuthProfile, close }) {
   const isEn = lang === "en";
-  const [openBank, setOpenBank] = useState("scb");
+  const [openBank, setOpenBank] = useState("gmail");
   const [copied, setCopied] = useState(false);
   const [verifyCode, setVerifyCode] = useState(null);
   const [genBusy, setGenBusy] = useState(false);
@@ -3373,7 +3382,7 @@ function BankConnectModal({ t, lang, userId, authProfile, setAuthProfile, close 
           <div style={{ ...card(t), padding: 16, marginBottom: 14 }}>
             <div style={{ fontSize: 12.5, fontWeight: 800, color: t.text, marginBottom: 4 }}>💸 {isEn ? "Money out — auto from bank emails" : "เงินออก — อ่านจากอีเมลธนาคารอัตโนมัติ"}</div>
             <div style={{ fontSize: 11.5, color: t.sub, lineHeight: 1.6, marginBottom: 12 }}>
-              {isEn ? "Set this as your notification email in each bank app below. Every transfer out gets logged here automatically." : "ตั้งอีเมลนี้เป็นอีเมลรับแจ้งเตือนในแอปธนาคารแต่ละเจ้าด้านล่าง ทุกครั้งที่มีเงินโอนออก ระบบจะบันทึกให้อัตโนมัติ"}
+              {isEn ? "This is your bank notification email already — no need to change anything at the bank. Just set up a forward rule in your own email pointing to the address below." : "อีเมลที่ธนาคารส่งแจ้งเตือนหาคุณอยู่แล้วคืออีเมลของคุณเอง ไม่ต้องไปแตะอะไรในแอปธนาคารเลย แค่ตั้ง Forward จากอีเมลของคุณมาที่อีเมลด้านล่างนี้ก็พอ"}
             </div>
             <div style={{ background: t.inputBg, borderRadius: 12, padding: "10px 12px", display: "flex", alignItems: "center", gap: 8 }}>
               <div style={{ fontFamily: "monospace", fontSize: 12.5, color: t.accent, wordBreak: "break-all", flex: 1, fontWeight: 700 }}>{forwardEmail}</div>
@@ -3417,12 +3426,12 @@ function BankConnectModal({ t, lang, userId, authProfile, setAuthProfile, close 
           </div>
 
           {/* คำแนะนำตั้งค่าทีละธนาคาร */}
-          <div style={{ fontSize: 10.5, fontWeight: 800, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>{isEn ? "Setup per bank" : "ตั้งค่าทีละธนาคาร"}</div>
+          <div style={{ fontSize: 10.5, fontWeight: 800, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>{isEn ? "Set up forwarding by email provider" : "ตั้งค่า Forward ตามผู้ให้บริการอีเมล"}</div>
           <div style={{ marginBottom: 8 }}>
-            {BANK_SETUP_STEPS.map((b) => (
+            {EMAIL_FORWARD_STEPS.map((b) => (
               <div key={b.id} style={{ ...card(t), overflow: "hidden", marginBottom: 8 }}>
                 <button onClick={() => setOpenBank(openBank === b.id ? null : b.id)} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "12px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
-                  <div style={{ width: 34, height: 34, borderRadius: 10, background: t.inputBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 10, fontWeight: 800, color: b.color }}>{b.id.toUpperCase()}</div>
+                  <div style={{ width: 34, height: 34, borderRadius: 10, background: t.inputBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 7.5, fontWeight: 800, color: b.color, textAlign: "center", lineHeight: 1.1 }}>{b.name.split(" ")[0].toUpperCase()}</div>
                   <span style={{ fontSize: 13, fontWeight: 600, color: t.text, flex: 1 }}>{b.name}</span>
                   <ChevronDown size={16} color={t.faint} style={{ transform: openBank === b.id ? "rotate(180deg)" : "none", transition: "transform .2s" }} />
                 </button>
