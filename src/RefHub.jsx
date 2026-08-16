@@ -3337,6 +3337,12 @@ function BankConnectModal({ t, lang, userId, authProfile, setAuthProfile, close 
   const [openBank, setOpenBank] = useState("gmail");
   const [copied, setCopied] = useState(false);
   const [verifyCode, setVerifyCode] = useState(null);
+  const [codeCopied, setCodeCopied] = useState(false);
+  const copyCode = async () => {
+    try { await navigator.clipboard.writeText(verifyCode); } catch (e) {}
+    setCodeCopied(true);
+    setTimeout(() => setCodeCopied(false), 1800);
+  };
   const [genBusy, setGenBusy] = useState(false);
   const forwardEmail = `inbox.jomonbey+${authProfile?.email_alias || "..."}@gmail.com`;
   const lineConnected = !!authProfile?.line_user_id;
@@ -3412,8 +3418,13 @@ function BankConnectModal({ t, lang, userId, authProfile, setAuthProfile, close 
               </>
             ) : verifyCode ? (
               <div style={{ background: t.inputBg, borderRadius: 12, padding: 14, textAlign: "center" }}>
-                <div style={{ fontFamily: "monospace", fontSize: 26, fontWeight: 800, letterSpacing: 5, color: t.accent }}>{verifyCode}</div>
-                <div style={{ fontSize: 11, color: t.sub, marginTop: 6, lineHeight: 1.6 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+                  <div style={{ fontFamily: "monospace", fontSize: 26, fontWeight: 800, letterSpacing: 5, color: t.accent }}>{verifyCode}</div>
+                  <button onClick={copyCode} style={{ flexShrink: 0, background: codeCopied ? "#2E9E6B" : t.accent, color: "#1A1200", border: "none", borderRadius: 10, padding: "7px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+                    {codeCopied ? (isEn ? "Copied ✓" : "คัดลอกแล้ว ✓") : <Copy size={13} />}
+                  </button>
+                </div>
+                <div style={{ fontSize: 11, color: t.sub, marginTop: 10, lineHeight: 1.6 }}>
                   {isEn ? "Open the LINE chat that already sends you transaction cards, and send this code as a message." : "เปิดแชท LINE บอทตัวเดียวกับที่ส่งการ์ดแจ้งเตือนธุรกรรมอยู่แล้ว แล้วพิมพ์รหัสนี้ส่งไป"}
                 </div>
                 <div style={{ fontSize: 10, color: t.faint, marginTop: 6 }}>{isEn ? "Checking automatically..." : "กำลังเช็คให้อัตโนมัติ..."}</div>
