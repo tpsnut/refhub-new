@@ -1304,6 +1304,7 @@ export default function RefHub() {
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   const [langModalOpen, setLangModalOpen] = useState(false);
   const [securityOpen, setSecurityOpen] = useState(false);
+  const [bankConnectOpen, setBankConnectOpen] = useState(false); // 🏦 ตั้งค่าเชื่อมต่อธนาคาร (อีเมล forward เงินออก + เชื่อม LINE สำหรับสลิปเงินเข้า)
   const [helpOpen, setHelpOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [myActivityOpen, setMyActivityOpen] = useState(false);
@@ -2493,6 +2494,9 @@ export default function RefHub() {
                   <Languages size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "menu_lang")}</span>
                   <span style={{ marginLeft: "auto", fontSize: 11, color: t.faint, fontWeight: 700 }}>{lang === "th" ? "ไทย" : "EN"}</span>
                 </button>
+                <button onClick={() => { setBankConnectOpen(true); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "13px 14px", background: "none", border: "none", borderBottom: `1px solid ${t.border}`, cursor: "pointer", textAlign: "left" }}>
+                  <Wallet size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{lang === "en" ? "Bank Connection" : "เชื่อมต่อธนาคาร"}</span>
+                </button>
                 <button onClick={() => { setSecurityOpen(true); setHamburgerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "13px 14px", background: "none", border: "none", borderBottom: `1px solid ${t.border}`, cursor: "pointer", textAlign: "left" }}>
                   <ShieldCheck size={18} color={t.sub} /><span style={{ fontSize: 14, color: t.text }}>{L(lang, "menu_security")}</span>
                 </button>
@@ -2512,6 +2516,7 @@ export default function RefHub() {
           </ModalPortal>
         )}
         {langModalOpen && <LanguageModal t={t} lang={lang} setLang={setLang} close={() => setLangModalOpen(false)} />}
+        {bankConnectOpen && <BankConnectModal t={t} lang={lang} userId={userId} authProfile={authProfile} setAuthProfile={setAuthProfile} close={() => setBankConnectOpen(false)} />}
         {securityOpen && <SecurityModal t={t} lang={lang} userId={userId} session={session} setAccountSettingsOpen={setAccountSettingsOpen} close={() => setSecurityOpen(false)} />}
         {helpOpen && <HelpFaqModal t={t} lang={lang} close={() => setHelpOpen(false)} />}
         {aboutOpen && <AboutAppModal t={t} lang={lang} close={() => setAboutOpen(false)} />}
@@ -3304,6 +3309,128 @@ function LanguageModal({ t, lang, setLang, close }) {
             ))}
           </div>
           <div style={{ fontSize: 10.5, color: t.faint, marginTop: 12, lineHeight: 1.6 }}>{lang === "th" ? "ตอนนี้แปลครบเมนูหลัก/หัวข้อแต่ละหน้าแล้ว ส่วนเนื้อหาลึกในแต่ละฟีเจอร์กำลังทยอยแปลเพิ่มต่อไป" : "Core menus and page headers are translated. Deeper content inside each feature is being translated progressively."}</div>
+        </div>
+      </div>
+    </ModalPortal>
+  );
+}
+
+// 🏦 ตั้งค่าเชื่อมต่อธนาคาร — อีเมล forward สำหรับเงินออก (auto จากอีเมลธนาคาร) + เชื่อม LINE สำหรับเงินเข้า (ส่งรูปสลิปให้บอทอ่าน)
+const BANK_SETUP_STEPS = [
+  { id: "scb", name: "ธนาคารไทยพาณิชย์ (SCB Easy)", color: "#5B2D90", steps: ["เปิดแอป SCB Easy → เมนู \"อื่นๆ\" → \"การตั้งค่า\"", "เลือก \"การจัดการการแจ้งเตือน\"", "เปิด \"แจ้งเตือนทางอีเมล\" แล้วใส่ที่อยู่อีเมลด้านบน"] },
+  { id: "kbank", name: "ธนาคารกสิกรไทย (K PLUS)", color: "#0B8442", steps: ["เปิดแอป K PLUS → \"ตั้งค่า\" → \"การแจ้งเตือน\"", "เลือกช่องทาง \"อีเมล\"", "ใส่ที่อยู่อีเมลด้านบน แล้วกดยืนยัน"] },
+  { id: "bbl", name: "ธนาคารกรุงเทพ", color: "#1E4FA3", steps: ["เปิดแอป Bualuang mBanking → \"จัดการบัญชี\"", "เลือกบัญชี → \"SMS/Email Alert\"", "ใส่ที่อยู่อีเมลด้านบน"] },
+  { id: "ktb", name: "ธนาคารกรุงไทย (Krungthai NEXT)", color: "#00A9E0", steps: ["เปิดแอป Krungthai NEXT → \"ตั้งค่า\"", "เลือก \"การแจ้งเตือนทางอีเมล\"", "ใส่ที่อยู่อีเมลด้านบน"] },
+];
+
+function BankConnectModal({ t, lang, userId, authProfile, setAuthProfile, close }) {
+  const isEn = lang === "en";
+  const [openBank, setOpenBank] = useState("scb");
+  const [copied, setCopied] = useState(false);
+  const [verifyCode, setVerifyCode] = useState(null);
+  const [genBusy, setGenBusy] = useState(false);
+  const forwardEmail = `inbox.jomonbey+${authProfile?.email_alias || "..."}@gmail.com`;
+  const lineConnected = !!authProfile?.line_user_id;
+
+  const copyEmail = async () => {
+    try { await navigator.clipboard.writeText(forwardEmail); } catch (e) {}
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1800);
+  };
+
+  const generateVerifyCode = async () => {
+    setGenBusy(true);
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const { data } = await supabase.from("profiles").update({ line_verify_code: code }).eq("id", userId).select().single();
+    if (data) setAuthProfile(data);
+    setVerifyCode(code);
+    setGenBusy(false);
+  };
+
+  // ระหว่างที่โชว์รหัสอยู่ เช็คทุก 4 วิว่าเชื่อมสำเร็จหรือยัง (ไม่ต้องให้ผู้ใช้ปิด-เปิด modal ใหม่เอง)
+  useEffect(() => {
+    if (!verifyCode) return;
+    const id = setInterval(async () => {
+      const { data } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+      if (data?.line_user_id) { setAuthProfile(data); setVerifyCode(null); }
+    }, 4000);
+    return () => clearInterval(id);
+  }, [verifyCode, userId]);
+
+  return (
+    <ModalPortal>
+      <div style={overlayHi} onClick={close}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: t.page, borderRadius: "24px 24px 0 0", padding: 20, maxHeight: "88vh", overflowY: "auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>{isEn ? "Bank Connection" : "เชื่อมต่อธนาคาร"}</div>
+              <div style={{ fontSize: 11.5, color: t.sub, marginTop: 2 }}>{isEn ? "Let the app log your money in & out automatically" : "ให้แอปบันทึกเงินเข้า-ออกให้อัตโนมัติ"}</div>
+            </div>
+            <button onClick={close} style={ghost}><X size={20} color={t.sub} /></button>
+          </div>
+
+          {/* เงินออก: อีเมล forward */}
+          <div style={{ ...card(t), padding: 16, marginBottom: 14 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 800, color: t.text, marginBottom: 4 }}>💸 {isEn ? "Money out — auto from bank emails" : "เงินออก — อ่านจากอีเมลธนาคารอัตโนมัติ"}</div>
+            <div style={{ fontSize: 11.5, color: t.sub, lineHeight: 1.6, marginBottom: 12 }}>
+              {isEn ? "Set this as your notification email in each bank app below. Every transfer out gets logged here automatically." : "ตั้งอีเมลนี้เป็นอีเมลรับแจ้งเตือนในแอปธนาคารแต่ละเจ้าด้านล่าง ทุกครั้งที่มีเงินโอนออก ระบบจะบันทึกให้อัตโนมัติ"}
+            </div>
+            <div style={{ background: t.inputBg, borderRadius: 12, padding: "10px 12px", display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ fontFamily: "monospace", fontSize: 12.5, color: t.accent, wordBreak: "break-all", flex: 1, fontWeight: 700 }}>{forwardEmail}</div>
+              <button onClick={copyEmail} style={{ flexShrink: 0, background: copied ? "#2E9E6B" : t.accent, color: "#1A1200", border: "none", borderRadius: 10, padding: "7px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
+                {copied ? (isEn ? "Copied ✓" : "คัดลอกแล้ว ✓") : <Copy size={13} />}
+              </button>
+            </div>
+          </div>
+
+          {/* เงินเข้า: LINE */}
+          <div style={{ ...card(t), padding: 16, marginBottom: 14 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+              <MessageCircle size={20} color="#06C755" />
+              <div style={{ fontSize: 12.5, fontWeight: 800, color: t.text }}>{isEn ? "Money in — send a slip photo to LINE" : "เงินเข้า — ส่งรูปสลิปเข้า LINE"}</div>
+            </div>
+            <div style={{ fontSize: 11.5, color: t.sub, lineHeight: 1.6, marginBottom: 12 }}>
+              {isEn ? "Banks don't email for money coming in, so send the slip photo to our LINE bot instead — it reads the amount and logs it for you." : "ธนาคารไม่ส่งอีเมลตอนเงินเข้า เลยต้องส่งรูปสลิปเข้า LINE บอทแทน — บอทจะอ่านยอดแล้วบันทึกให้เอง"}
+            </div>
+            {lineConnected ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, fontWeight: 700, color: "#2E9E6B", background: "#2E9E6B1E", borderRadius: 20, padding: "6px 12px", width: "fit-content" }}>
+                <CheckCircle2 size={14} /> {isEn ? "Connected — ready to receive slips" : "เชื่อมต่อแล้ว — พร้อมรับสลิป"}
+              </div>
+            ) : verifyCode ? (
+              <div style={{ background: t.inputBg, borderRadius: 12, padding: 14, textAlign: "center" }}>
+                <div style={{ fontFamily: "monospace", fontSize: 26, fontWeight: 800, letterSpacing: 5, color: t.accent }}>{verifyCode}</div>
+                <div style={{ fontSize: 11, color: t.sub, marginTop: 6, lineHeight: 1.6 }}>
+                  {isEn ? "Open the LINE chat that already sends you transaction cards, and send this code as a message." : "เปิดแชท LINE บอทตัวเดียวกับที่ส่งการ์ดแจ้งเตือนธุรกรรมอยู่แล้ว แล้วพิมพ์รหัสนี้ส่งไป"}
+                </div>
+                <div style={{ fontSize: 10, color: t.faint, marginTop: 6 }}>{isEn ? "Checking automatically..." : "กำลังเช็คให้อัตโนมัติ..."}</div>
+              </div>
+            ) : (
+              <button onClick={generateVerifyCode} disabled={genBusy} style={{ width: "100%", background: t.accent, color: "#1A1200", border: "none", borderRadius: 12, padding: 12, fontSize: 13, fontWeight: 700, cursor: genBusy ? "default" : "pointer" }}>
+                {genBusy ? (isEn ? "Generating..." : "กำลังสร้างรหัส...") : (isEn ? "Connect LINE" : "เชื่อมต่อ LINE")}
+              </button>
+            )}
+          </div>
+
+          {/* คำแนะนำตั้งค่าทีละธนาคาร */}
+          <div style={{ fontSize: 10.5, fontWeight: 800, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>{isEn ? "Setup per bank" : "ตั้งค่าทีละธนาคาร"}</div>
+          <div style={{ marginBottom: 8 }}>
+            {BANK_SETUP_STEPS.map((b) => (
+              <div key={b.id} style={{ ...card(t), overflow: "hidden", marginBottom: 8 }}>
+                <button onClick={() => setOpenBank(openBank === b.id ? null : b.id)} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "12px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
+                  <div style={{ width: 34, height: 34, borderRadius: 10, background: t.inputBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 10, fontWeight: 800, color: b.color }}>{b.id.toUpperCase()}</div>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: t.text, flex: 1 }}>{b.name}</span>
+                  <ChevronDown size={16} color={t.faint} style={{ transform: openBank === b.id ? "rotate(180deg)" : "none", transition: "transform .2s" }} />
+                </button>
+                {openBank === b.id && (
+                  <div style={{ padding: "0 14px 14px 14px" }}>
+                    <ol style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: t.sub, lineHeight: 1.9 }}>
+                      {b.steps.map((s, i) => <li key={i}>{s}</li>)}
+                    </ol>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </ModalPortal>
