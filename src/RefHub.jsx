@@ -3347,12 +3347,12 @@ function BankConnectModal({ t, lang, userId, authProfile, setAuthProfile, close 
     setGenBusy(false);
   };
 
-  // ระหว่างที่โชว์รหัสอยู่ เช็คทุก 4 วิว่าเชื่อมสำเร็จหรือยัง (ไม่ต้องให้ผู้ใช้ปิด-เปิด modal ใหม่เอง)
+  // ระหว่างที่โชว์รหัสอยู่ เช็คทุก 4 วิว่ารหัสถูกใช้ไปหรือยัง (เช็คจาก line_verify_code ถูกเคลียร์ ไม่ใช่เช็คแค่ line_user_id เพราะกรณี "ทดสอบซ้ำ" คนนี้เชื่อมอยู่แล้วตั้งแต่ต้น เช็คจาก line_user_id เฉยๆ จะจับผิดว่าสำเร็จทันที)
   useEffect(() => {
     if (!verifyCode) return;
     const id = setInterval(async () => {
       const { data } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
-      if (data?.line_user_id) { setAuthProfile(data); setVerifyCode(null); }
+      if (data && data.line_verify_code !== verifyCode) { setAuthProfile(data); setVerifyCode(null); }
     }, 4000);
     return () => clearInterval(id);
   }, [verifyCode, userId]);
@@ -3392,10 +3392,15 @@ function BankConnectModal({ t, lang, userId, authProfile, setAuthProfile, close 
             <div style={{ fontSize: 11.5, color: t.sub, lineHeight: 1.6, marginBottom: 12 }}>
               {isEn ? "Banks don't email for money coming in, so send the slip photo to our LINE bot instead — it reads the amount and logs it for you." : "ธนาคารไม่ส่งอีเมลตอนเงินเข้า เลยต้องส่งรูปสลิปเข้า LINE บอทแทน — บอทจะอ่านยอดแล้วบันทึกให้เอง"}
             </div>
-            {lineConnected ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, fontWeight: 700, color: "#2E9E6B", background: "#2E9E6B1E", borderRadius: 20, padding: "6px 12px", width: "fit-content" }}>
-                <CheckCircle2 size={14} /> {isEn ? "Connected — ready to receive slips" : "เชื่อมต่อแล้ว — พร้อมรับสลิป"}
-              </div>
+            {lineConnected && !verifyCode ? (
+              <>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, fontWeight: 700, color: "#2E9E6B", background: "#2E9E6B1E", borderRadius: 20, padding: "6px 12px", width: "fit-content" }}>
+                  <CheckCircle2 size={14} /> {isEn ? "Connected — ready to receive slips" : "เชื่อมต่อแล้ว — พร้อมรับสลิป"}
+                </div>
+                <button onClick={generateVerifyCode} disabled={genBusy} style={{ marginTop: 10, background: "none", border: "none", padding: 0, fontSize: 11, color: t.faint, textDecoration: "underline", cursor: genBusy ? "default" : "pointer" }}>
+                  {isEn ? "Test the connect steps again" : "อยากลองดูขั้นตอนอีกที? ทดสอบขั้นตอนอีกครั้ง"}
+                </button>
+              </>
             ) : verifyCode ? (
               <div style={{ background: t.inputBg, borderRadius: 12, padding: 14, textAlign: "center" }}>
                 <div style={{ fontFamily: "monospace", fontSize: 26, fontWeight: 800, letterSpacing: 5, color: t.accent }}>{verifyCode}</div>
