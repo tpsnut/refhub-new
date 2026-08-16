@@ -3338,6 +3338,12 @@ function BankConnectModal({ t, lang, userId, authProfile, setAuthProfile, close 
   const [copied, setCopied] = useState(false);
   const [verifyCode, setVerifyCode] = useState(null);
   const [codeCopied, setCodeCopied] = useState(false);
+  const [lineIdCopied, setLineIdCopied] = useState(false);
+  const copyLineId = async () => {
+    try { await navigator.clipboard.writeText("@871pthhi"); } catch (e) {}
+    setLineIdCopied(true);
+    setTimeout(() => setLineIdCopied(false), 1800);
+  };
   const copyCode = async () => {
     try { await navigator.clipboard.writeText(verifyCode); } catch (e) {}
     setCodeCopied(true);
@@ -3396,6 +3402,33 @@ function BankConnectModal({ t, lang, userId, authProfile, setAuthProfile, close 
                 {copied ? (isEn ? "Copied ✓" : "คัดลอกแล้ว ✓") : <Copy size={13} />}
               </button>
             </div>
+          </div>
+
+          {/* แอด LINE บอท */}
+          <div style={{ ...card(t), padding: 16, marginBottom: 14 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+              <MessageCircle size={20} color="#06C755" />
+              <div style={{ fontSize: 12.5, fontWeight: 800, color: t.text }}>{isEn ? "Add the LINE bot as a friend" : "แอด LINE บอทเป็นเพื่อนก่อน"}</div>
+            </div>
+            <div style={{ fontSize: 11.5, color: t.sub, lineHeight: 1.6, marginBottom: 12 }}>
+              {isEn ? "Needed once, to link your account and receive notification cards / send slip photos." : "ต้องแอดก่อนถึงจะเชื่อมบัญชีและรับการ์ดแจ้งเตือน/ส่งรูปสลิปได้"}
+            </div>
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
+              <img
+                src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=https://line.me/R/ti/p/%40871pthhi"
+                alt="LINE QR"
+                style={{ width: 150, height: 150, borderRadius: 12, background: "#fff", padding: 8 }}
+              />
+            </div>
+            <div style={{ background: t.inputBg, borderRadius: 12, padding: "10px 12px", display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <div style={{ fontFamily: "monospace", fontSize: 13.5, color: t.accent, flex: 1, fontWeight: 700 }}>@871pthhi</div>
+              <button onClick={copyLineId} style={{ flexShrink: 0, background: lineIdCopied ? "#2E9E6B" : t.accent, color: "#1A1200", border: "none", borderRadius: 10, padding: "7px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
+                {lineIdCopied ? (isEn ? "Copied ✓" : "คัดลอกแล้ว ✓") : <Copy size={13} />}
+              </button>
+            </div>
+            <a href="https://line.me/R/ti/p/%40871pthhi" target="_blank" rel="noreferrer" style={{ display: "block", textAlign: "center", background: "#06C755", color: "#fff", borderRadius: 12, padding: 12, fontSize: 13, fontWeight: 700, textDecoration: "none" }}>
+              {isEn ? "Open LINE & Add Friend" : "เปิด LINE แล้วแอดเพื่อนเลย"}
+            </a>
           </div>
 
           {/* เงินเข้า: LINE */}
