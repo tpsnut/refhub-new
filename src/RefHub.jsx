@@ -3423,6 +3423,9 @@ function BankConnectModal({ t, lang, userId, authProfile, setAuthProfile, close 
                 <div style={{ fontSize: 10.5, color: t.faint, marginTop: 6 }}>{isEn ? "Paste this into Gmail's forwarding confirmation box." : "เอาไปกรอกในหน้ายืนยัน Forward ของ Gmail ได้เลย"}</div>
               </div>
             )}
+            <a href="https://mail.google.com/mail/u/0/#settings/fwdandpop" target="_blank" rel="noreferrer" style={{ display: "block", textAlign: "center", background: t.inputBg, color: t.accent, borderRadius: 12, padding: "11px 0", fontSize: 12.5, fontWeight: 700, textDecoration: "none", marginTop: 10 }}>
+              {isEn ? "Open Gmail Forwarding settings →" : "เปิดหน้าตั้งค่า Forward ของ Gmail เลย →"}
+            </a>
           </div>
 
           {/* แอด LINE บอท */}
