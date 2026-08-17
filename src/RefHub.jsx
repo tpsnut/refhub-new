@@ -3378,6 +3378,15 @@ function BankConnectModal({ t, lang, userId, authProfile, setAuthProfile, close 
     return () => clearInterval(id);
   }, [verifyCode, userId]);
 
+  // เช็คทุก 5 วิว่ามีรหัสยืนยัน Gmail forward เด้งเข้ามาใหม่ไหม (n8n ดักอัตโนมัติแล้วเขียนลง pending_forward_code)
+  useEffect(() => {
+    const id = setInterval(async () => {
+      const { data } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+      if (data && data.pending_forward_code !== authProfile?.pending_forward_code) setAuthProfile(data);
+    }, 5000);
+    return () => clearInterval(id);
+  }, [userId, authProfile?.pending_forward_code]);
+
   return (
     <ModalPortal>
       <div style={overlayHi} onClick={close}>
@@ -3402,6 +3411,18 @@ function BankConnectModal({ t, lang, userId, authProfile, setAuthProfile, close 
                 {copied ? (isEn ? "Copied ✓" : "คัดลอกแล้ว ✓") : <Copy size={13} />}
               </button>
             </div>
+            {authProfile?.pending_forward_code && (
+              <div style={{ background: t.inputBg, borderRadius: 12, padding: "12px 14px", marginTop: 10 }}>
+                <div style={{ fontSize: 11, color: t.sub, marginBottom: 6 }}>
+                  {isEn ? "Gmail sent a confirmation code for this forward — caught it automatically:" : "Gmail ส่งรหัสยืนยันสำหรับ forward นี้มา — ดักได้อัตโนมัติแล้ว:"}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ fontFamily: "monospace", fontSize: 20, fontWeight: 800, color: t.accent, letterSpacing: 2 }}>{authProfile.pending_forward_code}</div>
+                  <button onClick={async () => { try { await navigator.clipboard.writeText(authProfile.pending_forward_code); } catch (e) {} }} style={{ flexShrink: 0, background: t.accent, color: "#1A1200", border: "none", borderRadius: 10, padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}><Copy size={12} /></button>
+                </div>
+                <div style={{ fontSize: 10.5, color: t.faint, marginTop: 6 }}>{isEn ? "Paste this into Gmail's forwarding confirmation box." : "เอาไปกรอกในหน้ายืนยัน Forward ของ Gmail ได้เลย"}</div>
+              </div>
+            )}
           </div>
 
           {/* แอด LINE บอท */}
