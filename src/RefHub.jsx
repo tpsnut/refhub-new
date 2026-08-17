@@ -7514,7 +7514,12 @@ function MemberDetailModal({ t, m, isSelf, isOnline, session, setApproved, setRo
     if (!/^[0-9]{4,6}$/.test(newPinVal)) { setResetPinMsg("PIN ต้องเป็นตัวเลข 4-6 หลัก"); return; }
     setResettingPin(true);
     try {
-      const r = await fetch("/api/admin-create-user", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "reset_pin", targetUserId: m.id, newPin: newPinVal, callerToken: session?.access_token }) });
+      let freshToken = session?.access_token;
+      try {
+        const { data: sess } = await supabase.auth.getSession();
+        if (sess?.session?.access_token) freshToken = sess.session.access_token;
+      } catch (e) {}
+      const r = await fetch("/api/admin-create-user", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "reset_pin", targetUserId: m.id, newPin: newPinVal, callerToken: freshToken }) });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error);
       setResetPinMsg("✅ ตั้ง PIN ใหม่ให้แล้ว แจ้ง " + (m.name || "สมาชิก") + " ให้ใช้ PIN ใหม่นี้ล็อกอินได้เลย");
@@ -8257,9 +8262,15 @@ function AdminAddPinMember({ t, session, onCreated }) {
     if (!name.trim() || !username.trim() || !pin) { setErr("กรอกให้ครบทุกช่อง"); return; }
     setLoading(true);
     try {
+      // ดึง token สดจาก session ปัจจุบันก่อนเสมอ (token เก่าใน prop อาจหมดอายุ -> "ยืนยันตัวตนไม่สำเร็จ")
+      let freshToken = session?.access_token;
+      try {
+        const { data: sess } = await supabase.auth.getSession();
+        if (sess?.session?.access_token) freshToken = sess.session.access_token;
+      } catch (e) {}
       const r = await fetch("/api/admin-create-user", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, username, pin, callerToken: session?.access_token }),
+        body: JSON.stringify({ name, username, pin, callerToken: freshToken }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "สร้างบัญชีไม่สำเร็จ");
