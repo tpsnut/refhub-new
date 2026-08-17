@@ -7213,6 +7213,7 @@ function AdminPage({ t, lang, session, userId, adminAlerts, setAdminAlerts, auth
   };
   const setRole = async (id, role) => { await supabase.from("profiles").update({ role }).eq("id", id); loadMembers(); };
   const setCanChat = async (id, can_chat) => { await supabase.from("profiles").update({ can_chat }).eq("id", id); loadMembers(); };
+  const setCanUseAutoImport = async (id, can_use_auto_import) => { await supabase.from("profiles").update({ can_use_auto_import }).eq("id", id); loadMembers(); };
   const setCanUseCommunity = async (id, can_use_community) => { await supabase.from("profiles").update({ can_use_community }).eq("id", id); loadMembers(); };
   const setCanViewLocations = async (id, can_view_locations) => { const { error } = await supabase.from("profiles").update({ can_view_locations }).eq("id", id); if (error) { alert("ตั้งสิทธิ์ดูตำแหน่งไม่สำเร็จ: " + error.message); console.error(error); } loadMembers(); };
   const remindNotification = async (id) => { await supabase.from("profiles").update({ notif_reminder_at: new Date().toISOString() }).eq("id", id); loadMembers(); };
@@ -7491,7 +7492,7 @@ function AdminPage({ t, lang, session, userId, adminAlerts, setAdminAlerts, auth
           <MemberDetailModal
             t={t} m={detailMember} isSelf={detailMember.id === userId} session={session}
             isOnline={isOnline(detailMember.last_seen)}
-            setApproved={setApproved} setRole={setRole} setCanChat={setCanChat} setCanUseCommunity={setCanUseCommunity} setCanViewLocations={setCanViewLocations} remindNotification={remindNotification} setPremiumAi={setPremiumAi}
+            setApproved={setApproved} setRole={setRole} setCanChat={setCanChat} setCanUseAutoImport={setCanUseAutoImport} setCanUseCommunity={setCanUseCommunity} setCanViewLocations={setCanViewLocations} remindNotification={remindNotification} setPremiumAi={setPremiumAi}
             setMentorLimit={setMentorLimit} setTopicLimit={setTopicLimit} setDailyArticleLimit={setDailyArticleLimit} setCanRefreshArticles={setCanRefreshArticles} resetMentorPick={resetMentorPick}
             removeMember={removeMember}
             close={() => setDetailMember(null)}
@@ -7502,7 +7503,7 @@ function AdminPage({ t, lang, session, userId, adminAlerts, setAdminAlerts, auth
   );
 }
 
-function MemberDetailModal({ t, m, isSelf, isOnline, session, setApproved, setRole, setCanChat, setCanUseCommunity, setCanViewLocations, setMentorLimit, setTopicLimit, setDailyArticleLimit, setCanRefreshArticles, resetMentorPick, removeMember, remindNotification, setPremiumAi, close }) {
+function MemberDetailModal({ t, m, isSelf, isOnline, session, setApproved, setRole, setCanChat, setCanUseAutoImport, setCanUseCommunity, setCanViewLocations, setMentorLimit, setTopicLimit, setDailyArticleLimit, setCanRefreshArticles, resetMentorPick, removeMember, remindNotification, setPremiumAi, close }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [resetPinOpen, setResetPinOpen] = useState(false);
   const [newPinVal, setNewPinVal] = useState("");
@@ -7618,6 +7619,9 @@ function MemberDetailModal({ t, m, isSelf, isOnline, session, setApproved, setRo
             <div style={{ fontSize: 11.5, fontWeight: 800, color: t.faint, textTransform: "uppercase", letterSpacing: 0.5, margin: "18px 0 4px" }}>สิทธิ์การใช้งาน</div>
             <Row label="แชท">
               <button onClick={() => setCanChat(m.id, !m.can_chat)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 10, border: `1px solid ${m.can_chat ? "#2E9E6B" : t.border}`, cursor: "pointer", background: m.can_chat ? "#2E9E6B18" : "none", color: m.can_chat ? "#2E9E6B" : t.sub, fontSize: 12, fontWeight: 700 }}><MessageCircle size={13} /> {m.can_chat ? "เปิดใช้งานอยู่" : "ปิดอยู่ (กดเพื่อเปิด)"}</button>
+            </Row>
+            <Row label="บันทึกเงินอัตโนมัติ (อีเมล/สลิป LINE)">
+              <button onClick={() => setCanUseAutoImport(m.id, !m.can_use_auto_import)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 10, border: `1px solid ${m.can_use_auto_import ? "#2E9E6B" : t.border}`, cursor: "pointer", background: m.can_use_auto_import ? "#2E9E6B18" : "none", color: m.can_use_auto_import ? "#2E9E6B" : t.sub, fontSize: 12, fontWeight: 700 }}><Wallet size={13} /> {m.can_use_auto_import ? "เปิดใช้งานอยู่" : "ปิดอยู่ (กดเพื่อเปิด)"}</button>
             </Row>
             <Row label="ชุมชน (Community)">
               <button onClick={() => setCanUseCommunity(m.id, !m.can_use_community)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 10, border: `1px solid ${m.can_use_community ? "#F2872E" : t.border}`, cursor: "pointer", background: m.can_use_community ? "#F2872E1A" : "none", color: m.can_use_community ? "#F2872E" : t.sub, fontSize: 12, fontWeight: 700 }}>🌐 {m.can_use_community ? "ปลดล็อกแล้ว" : "ล็อกอยู่ (กดเพื่อปลด)"}</button>
