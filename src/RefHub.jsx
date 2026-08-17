@@ -11112,9 +11112,14 @@ function TxDetailModal({ t, x, categories, onEdit, onOpenReceipt, close }) {
             </button>
           )}
 
-          <div style={{ ...card(t), padding: 14, marginBottom: meta || receiptItems ? 12 : 0 }}>
+          <div style={{ ...card(t), padding: 14, marginBottom: 12 }}>
             <div style={{ fontSize: 11, color: t.faint, marginBottom: 4 }}>รายละเอียด</div>
             <div style={{ fontSize: 14, color: t.text }}>{x.note}</div>
+          </div>
+
+          <div style={{ ...card(t), padding: 14, marginBottom: meta || receiptItems ? 12 : 0 }}>
+            <div style={{ fontSize: 11, color: t.faint, marginBottom: 4 }}>บันทึกเพิ่มเติมของคุณ</div>
+            <div style={{ fontSize: 14, color: x.memo ? t.text : t.faint, fontStyle: x.memo ? "normal" : "italic" }}>{x.memo || "ยังไม่มีโน้ต — กด \"แก้ไขรายการนี้\" เพื่อเขียนเพิ่ม"}</div>
           </div>
 
           {meta && (
@@ -11158,6 +11163,7 @@ function EditTxModal({ t, x, categories, userId, setTx, onOpenReceipt, close }) 
   const [cat, setCat] = useState(x.cat);
   const [amount, setAmount] = useState(String(x.amount));
   const [note, setNote] = useState(x.note);
+  const [memo, setMemo] = useState(x.memo || "");
   const [date, setDate] = useState(x.date);
   const [busy, setBusy] = useState(false);
   const timeLabel = x.created_at ? new Date(x.created_at).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) + " น." : null;
@@ -11167,7 +11173,7 @@ function EditTxModal({ t, x, categories, userId, setTx, onOpenReceipt, close }) 
     const a = parseFloat(amount);
     if (!a || a <= 0) return;
     setBusy(true);
-    const updated = { type, cat, amount: a, note: note.trim() || findCat(categories, cat).label, date };
+    const updated = { type, cat, amount: a, note: note.trim() || findCat(categories, cat).label, memo: memo.trim() || null, date };
     setTx((l) => l.map((y) => (y.id === x.id ? { ...y, ...updated } : y)));
     if (userId) await supabase.from("transactions").update(updated).eq("id", x.id);
     logAudit(userId, "finance", "edit", "แก้ไขรายการการเงิน");
@@ -11207,6 +11213,9 @@ function EditTxModal({ t, x, categories, userId, setTx, onOpenReceipt, close }) 
 
           <div style={fieldLabel}>รายละเอียด</div>
           <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="รายละเอียด" style={input(t)} />
+
+          <div style={fieldLabel}>บันทึกเพิ่มเติมของคุณ (ไม่บังคับ)</div>
+          <textarea value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="เช่น ซื้อของฝากวันเกิดแม่, รอเพื่อนโอนคืน..." rows={2} style={{ ...input(t), resize: "vertical", fontFamily: "inherit" }} />
 
           <div style={fieldLabel}>วันที่</div>
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={input(t)} />
