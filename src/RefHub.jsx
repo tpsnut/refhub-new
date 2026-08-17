@@ -6435,11 +6435,17 @@ function FinancePage({ t, lang, tx, setTx, categories, openAdd, openExport, user
         <div key={d} style={{ marginBottom: 14 }}>
           <div style={{ fontSize: 11.5, fontWeight: 700, color: t.faint, marginBottom: 6 }}>{dateLabel(d)}</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {groups[d].map((x) => { const C = findCat(categories, x.cat); const Ic = ICONS[C.iconKey] || Wallet; return (
+            {groups[d].map((x) => { const C = findCat(categories, x.cat); const Ic = ICONS[C.iconKey] || Wallet; const catUnconfirmed = x.items && !Array.isArray(x.items) && x.items.cat_unconfirmed === true; return (
               <div key={x.id} onClick={() => setViewingTx(x)} style={{ ...card(t), padding: "11px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0 }}>
                   <div style={{ width: 36, height: 36, borderRadius: 11, background: `${C.color}22`, display: "grid", placeItems: "center", flexShrink: 0 }}><Ic size={17} color={C.color} /></div>
-                  <div style={{ minWidth: 0 }}><div style={{ fontSize: 13.5, fontWeight: 600, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.note}</div><div style={{ fontSize: 11, color: t.sub }}>{C.label}</div></div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 600, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.note}</div>
+                    <div style={{ fontSize: 11, color: t.sub, display: "flex", alignItems: "center", gap: 5 }}>
+                      {C.label}
+                      {catUnconfirmed && <span style={{ fontSize: 9.5, fontWeight: 700, color: "#C9A227", background: "#C9A22722", padding: "1px 6px", borderRadius: 20 }}>เดาไว้ ยังไม่ยืนยัน</span>}
+                    </div>
+                  </div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
                   <div style={{ fontSize: 14.5, fontWeight: 800, color: x.type === "in" ? "#2E9E6B" : t.text, whiteSpace: "nowrap", flexShrink: 0 }}>{x.type === "in" ? "+" : "−"}{x.amount.toLocaleString()}</div>
@@ -11091,6 +11097,11 @@ function TxDetailModal({ t, x, categories, onEdit, onOpenReceipt, close }) {
             {x.doc_type === "bank_slip_auto" && (
               <div style={{ fontSize: 11, fontWeight: 700, color: "#06C755", background: "#06C75518", padding: "3px 10px", borderRadius: 20, marginTop: 2 }}>
                 ตรวจจับอัตโนมัติจากสลิป LINE
+              </div>
+            )}
+            {x.items && !Array.isArray(x.items) && x.items.cat_unconfirmed === true && (
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#C9A227", background: "#C9A22718", padding: "3px 10px", borderRadius: 20, marginTop: 2 }}>
+                ⚠️ หมวดหมู่นี้ระบบเดาไว้ ยังไม่ยืนยัน — กด "แก้ไขรายการนี้" เพื่อเลือกให้ถูก
               </div>
             )}
           </div>
