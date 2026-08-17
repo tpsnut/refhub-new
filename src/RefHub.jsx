@@ -6436,22 +6436,23 @@ function FinancePage({ t, lang, tx, setTx, categories, openAdd, openExport, user
           <div style={{ fontSize: 11.5, fontWeight: 700, color: t.faint, marginBottom: 6 }}>{dateLabel(d)}</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {groups[d].map((x) => { const C = findCat(categories, x.cat); const Ic = ICONS[C.iconKey] || Wallet; const catUnconfirmed = x.items && !Array.isArray(x.items) && x.items.cat_unconfirmed === true; return (
-              <div key={x.id} onClick={() => setViewingTx(x)} style={{ ...card(t), padding: "11px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
+              <div key={x.id} onClick={() => setViewingTx(x)} style={{ ...card(t), position: "relative", overflow: "hidden", padding: "13px 16px 13px 19px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", boxShadow: "0 2px 10px rgba(0,0,0,.2)" }}>
+                <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: C.color, opacity: 0.85 }} />
                 <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0 }}>
-                  <div style={{ width: 36, height: 36, borderRadius: 11, background: `${C.color}22`, display: "grid", placeItems: "center", flexShrink: 0 }}><Ic size={17} color={C.color} /></div>
+                  <div style={{ width: 38, height: 38, borderRadius: 12, background: `${C.color}22`, display: "grid", placeItems: "center", flexShrink: 0 }}><Ic size={18} color={C.color} /></div>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 600, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.note}</div>
-                    <div style={{ fontSize: 11, color: t.sub, display: "flex", alignItems: "center", gap: 5 }}>
-                      {C.label}
-                      {catUnconfirmed && <span style={{ fontSize: 9.5, fontWeight: 700, color: "#C9A227", background: "#C9A22722", padding: "1px 6px", borderRadius: 20 }}>เดาไว้ ยังไม่ยืนยัน</span>}
+                    <div style={{ fontSize: 13.5, fontWeight: 650, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.note}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
+                      <span style={{ fontSize: 10.5, fontWeight: 700, color: C.color, background: `${C.color}1C`, padding: "2px 8px", borderRadius: 20 }}>{C.label}</span>
+                      {catUnconfirmed && <span style={{ fontSize: 10, fontWeight: 700, color: "#C9A227" }}>· ยังไม่ยืนยัน</span>}
                     </div>
                   </div>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
-                  <div style={{ fontSize: 14.5, fontWeight: 800, color: x.type === "in" ? "#2E9E6B" : t.text, whiteSpace: "nowrap", flexShrink: 0 }}>{x.type === "in" ? "+" : "−"}{x.amount.toLocaleString()}</div>
-                  {x.receipt_path && <button onClick={() => openReceipt(x.receipt_path)} style={{ ...ghost, background: `${t.accent}1E`, borderRadius: 9, padding: 6, boxShadow: `0 0 0 1.5px ${t.accent}70, 0 0 8px ${t.accent}55` }} title="ดูรูปสลิป/ใบเสร็จ"><Receipt size={15} color={t.accent} /></button>}
-                  <button onClick={() => setEditingTx(x)} style={ghost} title="แก้ไข"><Pencil size={15} color={t.faint} /></button>
-                  <button onClick={() => askConfirm(`ลบรายการ "${x.note || (x.type === "in" ? "รายรับ" : "รายจ่าย")}" ฿${x.amount.toLocaleString()} เลยไหม?`, () => { setTx((l) => l.filter((y) => y.id !== x.id)); if (userId) { supabase.from("transactions").delete().eq("id", x.id).then(() => {}, () => {}); logAudit(userId, "finance", "delete", "ลบรายการการเงิน"); } })} style={ghost}><Trash2 size={15} color={t.faint} /></button>
+                <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: x.type === "in" ? "#2E9E6B" : t.text, whiteSpace: "nowrap", flexShrink: 0, marginRight: 4 }}>{x.type === "in" ? "+" : "−"}{x.amount.toLocaleString()}</div>
+                  {x.receipt_path && <button onClick={() => openReceipt(x.receipt_path)} style={{ ...ghost, padding: 5 }} title="ดูรูปสลิป/ใบเสร็จ"><Receipt size={16} color={t.accent} style={{ filter: `drop-shadow(0 0 4px ${t.accent}) drop-shadow(0 0 7px ${t.accent}aa)` }} /></button>}
+                  <button onClick={() => setEditingTx(x)} style={{ ...ghost, padding: 5 }} title="แก้ไข"><Pencil size={14} color={t.faint} /></button>
+                  <button onClick={() => askConfirm(`ลบรายการ "${x.note || (x.type === "in" ? "รายรับ" : "รายจ่าย")}" ฿${x.amount.toLocaleString()} เลยไหม?`, () => { setTx((l) => l.filter((y) => y.id !== x.id)); if (userId) { supabase.from("transactions").delete().eq("id", x.id).then(() => {}, () => {}); logAudit(userId, "finance", "delete", "ลบรายการการเงิน"); } })} style={{ ...ghost, padding: 5 }}><Trash2 size={14} color={t.faint} /></button>
                 </div>
               </div>
             ); })}
@@ -11107,8 +11108,8 @@ function TxDetailModal({ t, x, categories, onEdit, onOpenReceipt, close }) {
           </div>
 
           {x.receipt_path && (
-            <button onClick={() => onOpenReceipt(x.receipt_path)} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px 0", borderRadius: 14, border: "none", marginBottom: 12, background: "linear-gradient(135deg, #F2872E22, #F2872E10)", boxShadow: `0 0 0 1.5px ${t.accent}55, 0 0 14px ${t.accent}30`, color: t.accent, fontWeight: 700, fontSize: 13.5, cursor: "pointer" }}>
-              <Receipt size={17} /> ดูรูปสลิป/ใบเสร็จ
+            <button onClick={() => onOpenReceipt(x.receipt_path)} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px 0", borderRadius: 14, border: "none", marginBottom: 12, background: `${t.accent}14`, color: t.accent, fontWeight: 700, fontSize: 13.5, cursor: "pointer" }}>
+              <Receipt size={17} style={{ filter: `drop-shadow(0 0 5px ${t.accent}) drop-shadow(0 0 9px ${t.accent}aa)` }} /> ดูรูปสลิป/ใบเสร็จ
             </button>
           )}
 
@@ -11191,8 +11192,8 @@ function EditTxModal({ t, x, categories, userId, setTx, onOpenReceipt, close }) 
           </div>
 
           {x.receipt_path && (
-            <button onClick={() => onOpenReceipt(x.receipt_path)} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "11px 0", borderRadius: 14, border: "none", marginBottom: 14, background: "linear-gradient(135deg, #F2872E22, #F2872E10)", boxShadow: `0 0 0 1.5px ${t.accent}55, 0 0 14px ${t.accent}30`, color: t.accent, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
-              <Receipt size={16} /> ดูรูปสลิป/ใบเสร็จ
+            <button onClick={() => onOpenReceipt(x.receipt_path)} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "11px 0", borderRadius: 14, border: "none", marginBottom: 14, background: `${t.accent}14`, color: t.accent, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+              <Receipt size={16} style={{ filter: `drop-shadow(0 0 5px ${t.accent}) drop-shadow(0 0 9px ${t.accent}aa)` }} /> ดูรูปสลิป/ใบเสร็จ
             </button>
           )}
 
