@@ -97,9 +97,9 @@ function Coachmark({ t, show, text, onDismiss, placement = "bottom", align = "le
 
 // 🖥️ ===== เช็คว่าจอกว้างพอจะโชว์เวอร์ชันเดสก์ท็อปไหม (>=1024px) อัปเดตสดตอน resize/ย่อ-ขยายหน้าต่าง =====
 function useIsDesktop() {
-  const [isDesktop, setIsDesktop] = useState(() => (typeof window !== "undefined" ? window.innerWidth >= 1024 : false));
+  const [isDesktop, setIsDesktop] = useState(() => (typeof window !== "undefined" ? window.innerWidth >= 900 : false));
   useEffect(() => {
-    const onResize = () => setIsDesktop(window.innerWidth >= 1024);
+    const onResize = () => setIsDesktop(window.innerWidth >= 900);
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
