@@ -95,6 +95,17 @@ function Coachmark({ t, show, text, onDismiss, placement = "bottom", align = "le
   );
 }
 
+// 🖥️ ===== เช็คว่าจอกว้างพอจะโชว์เวอร์ชันเดสก์ท็อปไหม (>=1024px) อัปเดตสดตอน resize/ย่อ-ขยายหน้าต่าง =====
+function useIsDesktop() {
+  const [isDesktop, setIsDesktop] = useState(() => (typeof window !== "undefined" ? window.innerWidth >= 1024 : false));
+  useEffect(() => {
+    const onResize = () => setIsDesktop(window.innerWidth >= 1024);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  return isDesktop;
+}
+
 // ✅ ===== ระบบถามยืนยันก่อนทำ (ลบ/แก้ไข) ใช้ร่วมกันได้ทุกหน้า — ห่อด้วย ModalPortal เองในตัว ปลอดภัยไม่ว่าจะเรียกจากที่ไหนในแอป =====
 function useConfirm(t) {
   const [pending, setPending] = useState(null); // { message, confirmLabel, onConfirm }
@@ -1246,6 +1257,7 @@ export default function RefHub() {
   });
   const dbFontScaleHydratedRef = useRef(false); // 🔒 กันบั๊ก: ค่าจาก DB (font_scale) เคยไปทับค่าที่เพิ่งเลือกไว้ในเครื่องนี้ทุกครั้งที่ authProfile โหลดใหม่ — ให้ดึงจาก DB มาทับได้แค่ "ครั้งแรก" ตอน hydrate เท่านั้น และเฉพาะตอนที่เครื่องนี้ไม่มีค่าอยู่ในเครื่องอยู่แล้ว (เครื่องใหม่/ล้าง storage)
   const [page, setPage] = useState(() => { try { return sessionStorage.getItem("refhub:page") || "home"; } catch (e) { return "home"; } });
+  const isDesktop = useIsDesktop(); // 🖥️ เวอร์ชันเดสก์ท็อป (เริ่มจากหน้า Home ก่อน หน้าอื่นยังคงโชว์แบบมือถือกึ่งกลางจอไปก่อน)
   // 🔗 Deep link จาก LINE (แจ้งเตือนธุรกรรม auto-import) — อ่านตอนโหลดแอปครั้งแรกครั้งเดียว เช่น jomonbey.com/?tx=xxx&action=view
   const [deepLinkTx, setDeepLinkTx] = useState(() => {
     try {
@@ -2197,6 +2209,19 @@ export default function RefHub() {
   if (passwordRecovery) return <SetNewPasswordPage onDone={() => setPasswordRecovery(false)} />;
   if (!authProfileChecked) return <AuthLoadingScreen />;
   if (!authProfile || !authProfile.approved) return <PendingApprovalScreen profile={authProfile} onLogout={() => supabase.auth.signOut()} />;
+
+  // 🖥️ ===== เวอร์ชันเดสก์ท็อป — เริ่มจากหน้า Home ก่อน (แผนขยายทีละหน้า) หน้าอื่นยังคง fallback ไปแบบมือถือกึ่งกลางจอตามปกติด้านล่าง =====
+  if (isDesktop && page === "home") {
+    return (
+      <>
+        <DesktopHome
+          t={t} lang={lang} authProfile={authProfile} balance={balance} tx={tx} goals={goals} notes={notes}
+          setPage={setPage} setAddOpen={setAddOpen} onLogout={() => supabase.auth.signOut()}
+        />
+        {addOpen && <AddTxModal t={t} tx={tx} setTx={setTx} categories={categories} reorderCategoriesForKind={reorderCategoriesForKind} deleteCategory={deleteCategory} addCategory={addCategory} userId={userId} session={session} close={() => setAddOpen(false)} />}
+      </>
+    );
+  }
 
   return (
     <div style={{ minHeight: vvh ? `${vvh}px` : "100dvh", background: t.page, display: "flex", justifyContent: "center", fontFamily: "'IBM Plex Sans Thai','Segoe UI','Helvetica Neue',system-ui,sans-serif" }}>
@@ -5965,6 +5990,146 @@ function WidgetOrderModal({ t, title, hint, selected, setSelected, close, catCol
     {colorEditKey && <ColorPickerModal t={t} value={catColors[colorEditKey] || "#888888"} onChange={(hex) => setCatColors((cc) => ({ ...cc, [colorEditKey]: hex }))} close={() => setColorEditKey(null)} />}
     {heroUploadOpen && <HeroBgUploadModal t={t} userId={userId} close={() => setHeroUploadOpen(false)} onDone={(url, type) => { setHeroCustomUrl(url); setHeroCustomType(type); setHeroTheme("custom"); }} />}
   </div></div></ModalPortal>);
+}
+
+// 🖥️ ===== DesktopHome — เวอร์ชันเว็บเดสก์ท็อปของหน้า Home (เมนูข้าง + ใช้พื้นที่จอกว้างเต็มที่) =====
+// ธีมสี/ฟอนต์อ้างอิงจากดีไซน์เดิมของแอปทั้งหมด (t.* tokens, Kanit/IBM Plex Sans Thai) — ไม่ได้คิดจานสีใหม่ แค่ขยายไปใช้จอกว้าง
+function DesktopHome({ t, lang, authProfile, balance, tx, goals, notes, setPage, setAddOpen, onLogout }) {
+  const isEn = lang === "en";
+  const hour = new Date().getHours();
+  const greeting = hour < 5 ? (isEn ? "Still up" : "ยังไม่นอนอีกเหรอ") : hour < 12 ? (isEn ? "Good morning" : "สวัสดีตอนเช้า") : hour < 18 ? (isEn ? "Good afternoon" : "สวัสดีตอนบ่าย") : (isEn ? "Good evening" : "สวัสดีตอนเย็น");
+  const todayStr2 = new Date().toLocaleDateString(isEn ? "en-US" : "th-TH", { weekday: "long", day: "numeric", month: "long" });
+  const monthStartStr = new Date().toISOString().slice(0, 7) + "-01";
+  const monthTx = tx.filter((x) => x.date >= monthStartStr);
+  const monthIn = monthTx.filter((x) => x.type === "in").reduce((s, x) => s + x.amount, 0);
+  const monthOut = monthTx.filter((x) => x.type === "out").reduce((s, x) => s + x.amount, 0);
+  const todayNet = tx.filter((x) => x.date === todayStr()).reduce((s, x) => s + (x.type === "in" ? x.amount : -x.amount), 0);
+  const recent = [...tx].sort((a, b) => (b.created_at || "").localeCompare(a.created_at || "")).slice(0, 6);
+  const latestNote = notes?.[0];
+  const doneGoalsToday = (goals || []).filter((g) => g.done).length;
+
+  const NAV = [
+    { id: "home", label: isEn ? "Home" : "หน้าแรก", icon: Home },
+    { id: "ledger", label: isEn ? "Finance" : "การเงิน", icon: Wallet },
+    { id: "goalsReport", label: isEn ? "Goals" : "เป้าหมาย", icon: Target },
+    { id: "vault", label: isEn ? "Vault" : "ตู้เซฟส่วนตัว", icon: Lock },
+  ];
+
+  const sidebarBtn = { display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "11px 16px", borderRadius: 12, border: "none", background: "none", cursor: "pointer", textAlign: "left", fontSize: 14, fontFamily: "inherit" };
+  const glow = `radial-gradient(600px circle at 15% 20%, ${t.accent}22, transparent 60%)`;
+
+  return (
+    <div style={{ minHeight: "100vh", background: t.page, display: "flex", justifyContent: "center", fontFamily: "'IBM Plex Sans Thai','Segoe UI',system-ui,sans-serif" }}>
+      <div style={{ display: "flex", width: "100%", maxWidth: 1360, minHeight: "100vh" }}>
+
+        {/* ===== Sidebar ===== */}
+        <div style={{ width: 248, flexShrink: 0, background: t.bg, borderRight: `1px solid ${t.border}`, display: "flex", flexDirection: "column", padding: "26px 14px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 10px", marginBottom: 32 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: t.accent, display: "grid", placeItems: "center", fontFamily: "Kanit", fontWeight: 800, color: t.onAccent, fontSize: 15 }}>J</div>
+            <div style={{ fontFamily: "Kanit", fontWeight: 800, fontSize: 17, color: t.text }}>Jomonbey</div>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            {NAV.map((n) => {
+              const active = n.id === "home";
+              const Ic = n.icon;
+              return (
+                <button key={n.id} onClick={() => setPage(n.id)} style={{ ...sidebarBtn, background: active ? `${t.accent}18` : "none", color: active ? t.accent : t.sub, fontWeight: active ? 700 : 500 }}>
+                  <Ic size={18} /> {n.label}
+                </button>
+              );
+            })}
+            <button onClick={() => setPage("chat")} style={{ ...sidebarBtn, color: t.sub }}><MessageCircle size={18} /> {isEn ? "Coach chat" : "แชทโค้ช"}</button>
+          </div>
+
+          <div style={{ marginTop: "auto", paddingTop: 20, borderTop: `1px solid ${t.border}` }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", marginBottom: 6 }}>
+              <div style={{ width: 30, height: 30, borderRadius: "50%", background: `${t.accent}30`, display: "grid", placeItems: "center", fontSize: 12.5, fontWeight: 700, color: t.accent, flexShrink: 0 }}>{(authProfile?.name || "?").slice(0, 1).toUpperCase()}</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{authProfile?.name || "—"}</div>
+            </div>
+            <button onClick={onLogout} style={{ ...sidebarBtn, color: t.faint, fontSize: 12.5 }}><LogOut size={15} /> {isEn ? "Log out" : "ออกจากระบบ"}</button>
+          </div>
+        </div>
+
+        {/* ===== Main content ===== */}
+        <div style={{ flex: 1, padding: "36px 44px", overflowY: "auto" }}>
+          <div style={{ marginBottom: 28 }}>
+            <div style={{ fontFamily: "Kanit", fontWeight: 700, fontSize: 24, color: t.text }}>{greeting}{authProfile?.name ? `, ${authProfile.name}` : ""}</div>
+            <div style={{ fontSize: 13.5, color: t.sub, marginTop: 3 }}>{todayStr2}</div>
+          </div>
+
+          {/* Hero balance */}
+          <div style={{ position: "relative", overflow: "hidden", borderRadius: 24, background: t.surface, border: `1px solid ${t.border}`, padding: "32px 36px", marginBottom: 20, backgroundImage: glow }}>
+            <div style={{ fontSize: 12.5, color: t.sub, fontWeight: 600 }}>{isEn ? "Total balance" : "ยอดคงเหลือทั้งหมด"}</div>
+            <div style={{ fontFamily: "Kanit", fontWeight: 800, fontSize: 52, color: t.text, marginTop: 6, letterSpacing: -1 }}>฿{Math.round(balance).toLocaleString()}</div>
+            <div style={{ fontSize: 13, color: todayNet >= 0 ? "#2E9E6B" : "#D9534F", marginTop: 8, fontWeight: 600 }}>
+              {todayNet >= 0 ? "▲" : "▼"} ฿{Math.abs(Math.round(todayNet)).toLocaleString()} {isEn ? "today" : "วันนี้"}
+            </div>
+            <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
+              <button onClick={() => setAddOpen(true)} style={{ display: "flex", alignItems: "center", gap: 6, background: t.accent, color: t.onAccent, border: "none", borderRadius: 12, padding: "10px 18px", fontWeight: 700, fontSize: 13.5, cursor: "pointer" }}><Plus size={16} /> {isEn ? "Add transaction" : "เพิ่มรายการ"}</button>
+              <button onClick={() => setPage("ledger")} style={{ background: "none", border: `1px solid ${t.border}`, color: t.sub, borderRadius: 12, padding: "10px 18px", fontWeight: 600, fontSize: 13.5, cursor: "pointer" }}>{isEn ? "View all" : "ดูทั้งหมด"}</button>
+            </div>
+          </div>
+
+          {/* Stat row */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 20 }}>
+            <div style={{ ...card(t), padding: 20 }}>
+              <div style={{ fontSize: 12, color: t.sub }}>{isEn ? "Income this month" : "รายรับเดือนนี้"}</div>
+              <div style={{ fontFamily: "Kanit", fontWeight: 700, fontSize: 22, color: "#2E9E6B", marginTop: 4 }}>฿{Math.round(monthIn).toLocaleString()}</div>
+            </div>
+            <div style={{ ...card(t), padding: 20 }}>
+              <div style={{ fontSize: 12, color: t.sub }}>{isEn ? "Spent this month" : "รายจ่ายเดือนนี้"}</div>
+              <div style={{ fontFamily: "Kanit", fontWeight: 700, fontSize: 22, color: t.text, marginTop: 4 }}>฿{Math.round(monthOut).toLocaleString()}</div>
+            </div>
+            <div style={{ ...card(t), padding: 20 }}>
+              <div style={{ fontSize: 12, color: t.sub }}>{isEn ? "Goals done today" : "เป้าหมายสำเร็จวันนี้"}</div>
+              <div style={{ fontFamily: "Kanit", fontWeight: 700, fontSize: 22, color: t.accent, marginTop: 4 }}>{doneGoalsToday} {isEn ? "" : "ข้อ"}</div>
+            </div>
+          </div>
+
+          {/* Two column: recent tx + note */}
+          <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 16 }}>
+            <div style={{ ...card(t), padding: 22 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                <div style={{ fontFamily: "Kanit", fontWeight: 700, fontSize: 15, color: t.text }}>{isEn ? "Recent transactions" : "รายการล่าสุด"}</div>
+                <button onClick={() => setPage("ledger")} style={{ background: "none", border: "none", color: t.accent, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>{isEn ? "See all →" : "ดูทั้งหมด →"}</button>
+              </div>
+              {recent.length === 0 ? (
+                <div style={{ fontSize: 13, color: t.faint, padding: "20px 0", textAlign: "center" }}>{isEn ? "No transactions yet" : "ยังไม่มีรายการ"}</div>
+              ) : recent.map((x) => (
+                <div key={x.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `1px solid ${t.border}` }}>
+                  <div style={{ fontSize: 13.5, color: t.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 260 }}>{x.note}</div>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: x.type === "in" ? "#2E9E6B" : t.text, flexShrink: 0 }}>{x.type === "in" ? "+" : "−"}฿{x.amount.toLocaleString()}</div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div style={{ ...card(t), padding: 22 }}>
+                <div style={{ fontFamily: "Kanit", fontWeight: 700, fontSize: 15, color: t.text, marginBottom: 10 }}>{isEn ? "Latest note" : "โน้ตล่าสุด"}</div>
+                {latestNote ? (
+                  <div style={{ fontSize: 13, color: t.sub, lineHeight: 1.6, maxHeight: 90, overflow: "hidden" }}>{(latestNote.title || latestNote.content || "").slice(0, 140)}</div>
+                ) : (
+                  <div style={{ fontSize: 13, color: t.faint }}>{isEn ? "No notes yet" : "ยังไม่มีโน้ต"}</div>
+                )}
+              </div>
+              <div style={{ ...card(t), padding: 22 }}>
+                <div style={{ fontFamily: "Kanit", fontWeight: 700, fontSize: 15, color: t.text, marginBottom: 12 }}>{isEn ? "Quick actions" : "ทางลัด"}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <button onClick={() => setPage("goalsReport")} style={{ display: "flex", alignItems: "center", gap: 8, background: "none", border: `1px solid ${t.border}`, borderRadius: 10, padding: "9px 12px", color: t.text, fontSize: 12.5, cursor: "pointer", textAlign: "left" }}><Target size={14} color={t.accent} /> {isEn ? "View all goals" : "ดูเป้าหมายทั้งหมด"}</button>
+                  <button onClick={() => setPage("chat")} style={{ display: "flex", alignItems: "center", gap: 8, background: "none", border: `1px solid ${t.border}`, borderRadius: 10, padding: "9px 12px", color: t.text, fontSize: 12.5, cursor: "pointer", textAlign: "left" }}><MessageCircle size={14} color={t.accent} /> {isEn ? "Talk to coach" : "คุยกับโค้ช"}</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ fontSize: 11, color: t.faint, marginTop: 28, textAlign: "center" }}>
+            {isEn ? "Desktop version — Home page only for now, more pages coming soon" : "เวอร์ชันเดสก์ท็อป — ตอนนี้รองรับแค่หน้า Home ก่อน หน้าอื่นกำลังทยอยทำเพิ่ม"}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function HomePage({ t, lang, M, quote, isNight, setMentorPick, balance, tx, goals, allGoals, goalDone, goalPct, setGoals, goalTemplates, setGoalTemplates, notes, setPage, setChatOpen, setMusicOpen, userId, authProfile, playlist, setCommunityOpen, reminders, openReminder, setLeaderboardOpen, setGoalTimerTarget, setWorkoutTimerTarget, setAddGoalOpen, setScoreRulesOpen, cardShape, homeLayout, walletWidgets, setWalletWidgets, bentoWidgets, setBentoWidgets, classicWidgets, setClassicWidgets, catColors, setCatColors, heroShortcuts, setHeroShortcuts, heroTheme, setHeroTheme, heroCustomUrl, setHeroCustomUrl, heroCustomType, setHeroCustomType }) {
