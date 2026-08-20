@@ -5994,6 +5994,37 @@ function WidgetOrderModal({ t, title, hint, selected, setSelected, close, catCol
 
 // 🖥️ ===== DesktopHome — เวอร์ชันเว็บเดสก์ท็อปของหน้า Home (เมนูข้าง + ใช้พื้นที่จอกว้างเต็มที่) =====
 // ธีมสี/ฟอนต์อ้างอิงจากดีไซน์เดิมของแอปทั้งหมด (t.* tokens, Kanit/IBM Plex Sans Thai) — ไม่ได้คิดจานสีใหม่ แค่ขยายไปใช้จอกว้าง
+// 🖥️ ===== แถบไอคอนข้าง ใช้ร่วมกันทุกหน้าเดสก์ท็อป =====
+function DesktopRail({ t, lang, authProfile, activeId, setPage, onLogout }) {
+  const isEn = lang === "en";
+  const NAV = [
+    { id: "home", label: isEn ? "Home" : "หน้าแรก", icon: Home },
+    { id: "ledger", label: isEn ? "Finance" : "การเงิน", icon: Wallet },
+    { id: "goalsReport", label: isEn ? "Goals" : "เป้าหมาย", icon: Target },
+    { id: "vault", label: isEn ? "Vault" : "ตู้เซฟส่วนตัว", icon: Lock },
+    { id: "chat", label: isEn ? "Coach" : "แชทโค้ช", icon: MessageCircle },
+  ];
+  const accentSoft = `${t.accent}18`;
+  return (
+    <div style={{ width: 76, flexShrink: 0, background: t.page, borderRight: `1px solid ${t.border}`, display: "flex", flexDirection: "column", alignItems: "center", padding: "26px 0" }}>
+      <div style={{ width: 38, height: 38, borderRadius: 12, background: t.accent, display: "grid", placeItems: "center", fontFamily: "Kanit", fontWeight: 800, color: t.onAccent, fontSize: 16, marginBottom: 36 }}>J</div>
+      {NAV.map((n) => {
+        const active = n.id === activeId;
+        const Ic = n.icon;
+        return (
+          <button key={n.id} onClick={() => setPage(n.id)} title={n.label} style={{ width: 44, height: 44, borderRadius: 12, display: "grid", placeItems: "center", marginBottom: 6, cursor: "pointer", border: "none", background: active ? accentSoft : "none", color: active ? t.accent : t.faint }}>
+            <Ic size={19} />
+          </button>
+        );
+      })}
+      <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+        <div style={{ width: 34, height: 34, borderRadius: "50%", background: accentSoft, color: t.accent, display: "grid", placeItems: "center", fontSize: 13, fontWeight: 700 }} title={authProfile?.name}>{(authProfile?.name || "?").slice(0, 1).toUpperCase()}</div>
+        <button onClick={onLogout} title={isEn ? "Log out" : "ออกจากระบบ"} style={{ width: 34, height: 34, borderRadius: 10, display: "grid", placeItems: "center", border: "none", background: "none", color: t.faint, cursor: "pointer" }}><LogOut size={16} /></button>
+      </div>
+    </div>
+  );
+}
+
 function DesktopHome({ t, lang, authProfile, balance, tx, goals, notes, setPage, setAddOpen, onLogout }) {
   const isEn = lang === "en";
   const hour = new Date().getHours();
@@ -6035,38 +6066,13 @@ function DesktopHome({ t, lang, authProfile, balance, tx, goals, notes, setPage,
     { label: isEn ? "Earlier" : "ก่อนหน้านั้น", items: recent.filter((x) => x.date !== todayStr() && x.date !== yesterdayStr) },
   ].filter((g) => g.items.length > 0);
 
-  const NAV = [
-    { id: "home", label: isEn ? "Home" : "หน้าแรก", icon: Home },
-    { id: "ledger", label: isEn ? "Finance" : "การเงิน", icon: Wallet },
-    { id: "goalsReport", label: isEn ? "Goals" : "เป้าหมาย", icon: Target },
-    { id: "vault", label: isEn ? "Vault" : "ตู้เซฟส่วนตัว", icon: Lock },
-    { id: "chat", label: isEn ? "Coach" : "แชทโค้ช", icon: MessageCircle },
-  ];
-
   const R = 21, CIRC = 2 * Math.PI * R;
-  const accentSoft = `${t.accent}18`;
 
   return (
     <div style={{ minHeight: "100vh", background: t.page, display: "flex", justifyContent: "center", fontFamily: "'IBM Plex Sans Thai','Segoe UI',system-ui,sans-serif" }}>
       <div style={{ display: "flex", width: "100%", maxWidth: 1360, minHeight: "100vh" }}>
 
-        {/* ===== แถบไอคอนบาง แทนเมนูข้างแบบเต็ม ===== */}
-        <div style={{ width: 76, flexShrink: 0, background: t.page, borderRight: `1px solid ${t.border}`, display: "flex", flexDirection: "column", alignItems: "center", padding: "26px 0" }}>
-          <div style={{ width: 38, height: 38, borderRadius: 12, background: t.accent, display: "grid", placeItems: "center", fontFamily: "Kanit", fontWeight: 800, color: t.onAccent, fontSize: 16, marginBottom: 36 }}>J</div>
-          {NAV.map((n) => {
-            const active = n.id === "home";
-            const Ic = n.icon;
-            return (
-              <button key={n.id} onClick={() => setPage(n.id)} title={n.label} style={{ width: 44, height: 44, borderRadius: 12, display: "grid", placeItems: "center", marginBottom: 6, cursor: "pointer", border: "none", background: active ? accentSoft : "none", color: active ? t.accent : t.faint }}>
-                <Ic size={19} />
-              </button>
-            );
-          })}
-          <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
-            <div style={{ width: 34, height: 34, borderRadius: "50%", background: accentSoft, color: t.accent, display: "grid", placeItems: "center", fontSize: 13, fontWeight: 700 }} title={authProfile?.name}>{(authProfile?.name || "?").slice(0, 1).toUpperCase()}</div>
-            <button onClick={onLogout} title={isEn ? "Log out" : "ออกจากระบบ"} style={{ width: 34, height: 34, borderRadius: 10, display: "grid", placeItems: "center", border: "none", background: "none", color: t.faint, cursor: "pointer" }}><LogOut size={16} /></button>
-          </div>
-        </div>
+        <DesktopRail t={t} lang={lang} authProfile={authProfile} activeId="home" setPage={setPage} onLogout={onLogout} />
 
         {/* ===== เนื้อหาหลัก ===== */}
         <div style={{ flex: 1, padding: "44px 56px 60px", maxWidth: 1180 }}>
