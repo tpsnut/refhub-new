@@ -1258,6 +1258,18 @@ export default function RefHub() {
   useEffect(() => {
     if (deepLinkTx) setPage("ledger"); // มี deep link ธุรกรรม -> พาไปหน้าการเงินทันที ไม่ว่าจะอยู่หน้าไหนอยู่ก่อน
   }, [deepLinkTx]);
+  // 📤 Web Share Target — แชร์ลิงก์ YouTube/TikTok/X/IG/Facebook จากแอปอื่นมาที่ Jomonbey (เลือกจากเมนู Share ของเครื่องได้เลย) อ่านตอนโหลดแอปครั้งแรกครั้งเดียว
+  const [sharedMediaUrl, setSharedMediaUrl] = useState(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const raw = params.get("shared_url") || params.get("shared_text") || "";
+      const match = raw.match(/https?:\/\/\S+/);
+      return match ? match[0] : null;
+    } catch (e) { return null; }
+  });
+  useEffect(() => {
+    if (sharedMediaUrl) setMusicOpen(true); // มีลิงก์แชร์เข้ามา -> เปิดหน้าสื่อทันที ระบบจะบันทึกให้อัตโนมัติในนั้น
+  }, [sharedMediaUrl]);
   const contentScrollRef = useRef(null); // 📜 container หลักที่ scroll ของทุกหน้า — ใช้เด้งกลับขึ้นบนตอนเปลี่ยนหน้า + ปุ่มเลื่อนขึ้น/ลง
   // 📱 ติดตามความสูง viewport จริงผ่าน VisualViewport API — บาง Android WebView/PWA ไม่อัปเดต CSS dvh ตอนคีย์บอร์ดเปิด
   // ทำให้เหลือพื้นที่ว่างด้านล่างค้างอยู่เท่าความสูงคีย์บอร์ด (container คิดว่ายังมีพื้นที่เท่าเดิมทั้งที่คีย์บอร์ดมาบังไปแล้ว)
@@ -2550,7 +2562,7 @@ export default function RefHub() {
         {editProfile && <EditProfile t={t} M={M} profile={profile} setProfile={setProfile} userId={userId} authProfile={authProfile} setAuthProfile={setAuthProfile} close={() => setEditProfile(false)} />}
         {profileLightbox && profile.avatar && <ImageLightbox src={profile.avatar} onClose={() => setProfileLightbox(false)} />}
         {searchOpen && <SearchOverlay t={t} notes={notes} goals={goals} tx={tx} categories={categories} setPage={setPage} close={() => setSearchOpen(false)} />}
-        {musicOpen && <MusicModal {...{ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, toggleFavorite, renameTrack, volume, setVolume, userId, setPage, close: () => setMusicOpen(false) }} />}
+        {musicOpen && <MusicModal {...{ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, toggleFavorite, renameTrack, volume, setVolume, userId, setPage, initialSharedUrl: sharedMediaUrl, clearSharedMediaUrl: () => { setSharedMediaUrl(null); try { window.history.replaceState(null, "", window.location.pathname); } catch (e) {} }, close: () => setMusicOpen(false) }} />}
         {addOpen && <AddTxModal t={t} tx={tx} setTx={setTx} categories={categories} reorderCategoriesForKind={reorderCategoriesForKind} deleteCategory={deleteCategory} addCategory={addCategory} userId={userId} session={session} close={() => setAddOpen(false)} />}
         {billManagerOpen && <BillManagerModal t={t} billReminders={billReminders} billPayments={billPayments} addBillReminder={addBillReminder} deleteBillReminder={deleteBillReminder} markBillPaid={markBillPaid} unmarkBillPaid={unmarkBillPaid} close={() => setBillManagerOpen(false)} />}
         {leaderboardOpen && <LeaderboardModal t={t} userId={userId} close={() => setLeaderboardOpen(false)} />}
@@ -4061,7 +4073,7 @@ function FolderManageRow({ t, folder, handleProps, priming, onRename, onDelete }
   );
 }
 
-function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, toggleFavorite, renameTrack, volume, setVolume, userId, setPage, close }) {
+function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, playing, playTrack, togglePlay, stopAll, toggleFavorite, renameTrack, volume, setVolume, userId, setPage, initialSharedUrl, clearSharedMediaUrl, close }) {
   const [askConfirm, ConfirmUI] = useConfirm(t);
   const scrollRef = useRef(null); // 📜 เลื่อนขึ้นบนสุดอัตโนมัติตอนกดเล่น (ผู้เล่น/การ์ด embed อยู่บนสุดเสมอ)
   const [ytUrl, setYtUrl] = useState("");
@@ -4139,6 +4151,23 @@ function MusicModal({ t, M, playlist, setPlaylist, folders, setFolders, curId, p
     if (userId) supabase.from("playlists").insert({ id: track.id, user_id: userId, kind: track.kind, platform: track.platform, name: track.name, url: track.url, yt_id: track.ytId, persist: true, sort_order: sortOrder }).then(({ error }) => { if (error) { console.error("บันทึกสื่อไม่สำเร็จ:", error.message); alert("บันทึกไม่สำเร็จ: " + error.message + " (เช็คว่ารัน SQL media_platforms_setup.sql แล้วหรือยัง)"); } }, () => {});
     setYtUrl(""); setPendingYt(null); flashSaved();
   };
+  // 📤 ลิงก์ที่แชร์มาจากแอปอื่น -> เติมช่องวางลิงก์ + กดบันทึกให้ครบอัตโนมัติ ไม่ต้องให้ผู้ใช้กดยืนยันเอง
+  const [autoSharing, setAutoSharing] = useState(false);
+  useEffect(() => {
+    if (!initialSharedUrl) return;
+    setYtUrl(initialSharedUrl);
+    setAutoSharing(true);
+  }, [initialSharedUrl]);
+  useEffect(() => {
+    if (autoSharing && ytUrl === initialSharedUrl && !ytLoading && !pendingYt) addMedia();
+  }, [autoSharing, ytUrl, ytLoading]);
+  useEffect(() => {
+    if (autoSharing && pendingYt) {
+      confirmAddYt();
+      setAutoSharing(false);
+      clearSharedMediaUrl?.();
+    }
+  }, [pendingYt, autoSharing]);
   const addFileInner = (e) => {
     const f = e.target.files?.[0]; if (!f) return;
     const small = f.size < 1.5 * 1024 * 1024;
